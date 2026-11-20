@@ -924,8 +924,8 @@ class TestUndo:
         commit(wiki, "p", "# P\n")
         assert rename(client, door, "p", "q")
         assert "rename it back" in undo(client, door, git(wiki, "rev-parse", "HEAD").strip())
-        client.post("/api/tasks", json={"title": "A task"}, headers=HOST)
-        assert "changed tasks too" in undo(client, door, git(wiki, "rev-parse", "HEAD").strip())
+        assert client.post("/tasks/new-list", data={"name": "shop"}, headers=HOST).status_code == 302   # a list's registry
+        assert "changed a list or a task's files too" in undo(client, door, git(wiki, "rev-parse", "HEAD").strip())
         (wiki / "_assets").mkdir(exist_ok=True)
         (wiki / "_assets/x.txt").write_text("x")
         mixed = commit(wiki, "r", "# R\n")                              # git add -A: the file with it
@@ -975,3 +975,200 @@ class TestUndoAnothersPages:
         else:
             assert not mcp(client, "undo_changes", "alice-token", versions=[guide], guides=ids)[1]
         assert not (wiki / "wiki-guide.md").exists()
+
+
+# ── Undo of tasks: the same operation puts the tasks a change changed back ──
+
+def head(wiki):
+    return git(wiki, "rev-parse", "HEAD").strip()
+
+
+def all_tasks(wiki):
+    """Every task in the wiki's task files, by id, with where it is kept."""
+    out = {}
+    for path in sorted(wiki.rglob("_tasks/**/*.json")):
+        if path.name == "lists.json":
+            continue
+        for t in json.loads(path.read_text() or "[]"):
+            out[t["id"]] = {**t, "file": str(path.relative_to(wiki))}
+    return out
+
+
+def new_task(client, **fields):
+    resp = client.post("/api/tasks", json={"title": "A task", **fields}, headers=HOST)
+    assert resp.status_code == 201, resp.data
+    return resp.get_json()
+
+
+def put_task(client, id, **fields):
+    resp = client.put(f"/api/tasks/{id}", json=fields, headers=HOST)
+    assert resp.status_code == 200, resp.data
+    return resp.get_json()
+
+
+@pytest.mark.parametrize("door", DOORS)
+class TestUndoTasks:
+
+    def test_an_edit(self, client, wiki, door):
+        t = new_task(client, title="Water the beds", tags=["garden"])
+        before = all_tasks(wiki)[t["id"]]
+        put_task(client, t["id"], title="Water the beds and the pots", due_date="2030-01-02")
+        edit = head(wiki)
+        assert undo(client, door, edit) is True
+        assert all_tasks(wiki)[t["id"]] == before                     # as it was, its history too
+        assert subjects(wiki)[0] == f"Undo {edit[:7]}: Update task" + (" (MCP)" if door == "mcp" else "")
+        assert f"Task: {t['id']}" in git(wiki, "log", "-n1", "--format=%B")
+        assert git(wiki, "status", "--porcelain").strip() == ""
+        # The undo is a change: undone, the edit is back.
+        assert undo(client, door, head(wiki)) is True
+        assert all_tasks(wiki)[t["id"]]["title"] == "Water the beds and the pots"
+
+    def test_a_made_task_goes_and_a_deleted_one_comes_back(self, client, wiki, door):
+        t = new_task(client, title="Made by mistake")
+        assert undo(client, door, head(wiki)) is True and t["id"] not in all_tasks(wiki)
+        kept = new_task(client, title="Kept", tags=["x"])
+        before = all_tasks(wiki)[kept["id"]]
+        assert client.delete(f"/api/tasks/{kept['id']}", headers=HOST).status_code == 204
+        assert undo(client, door, head(wiki)) is True
+        assert all_tasks(wiki)[kept["id"]] == before                  # its id, its fields, its file
+
+    def test_a_completion_is_reopened_without_its_next_occurrence(self, client, wiki, door):
+        t = new_task(client, title="Weekly review", due_date="2031-01-06", rec_type="weekly", rec_interval=1)
+        before = all_tasks(wiki)
+        put_task(client, t["id"], completed=True)
+        after = all_tasks(wiki)
+        spawned = [i for i in after if i not in before]
+        assert len(spawned) == 1 and after[t["id"]]["closed_at"] and after[spawned[0]]["spawned_from"] == t["id"]
+        assert undo(client, door, head(wiki)) is True
+        assert all_tasks(wiki) == before
+
+    def test_a_move_between_lists_goes_back(self, client, wiki, door):
+        for name in ("shop", "home"):
+            assert client.post("/tasks/new-list", data={"name": name}, headers=HOST).status_code == 302
+        t = new_task(client, title="Milk", list="shop")
+        before = all_tasks(wiki)[t["id"]]
+        put_task(client, t["id"], list="home")
+        assert all_tasks(wiki)[t["id"]]["file"] == "_tasks/lists/home/tasks.json"
+        assert undo(client, door, head(wiki)) is True
+        assert all_tasks(wiki)[t["id"]] == before and before["file"] == "_tasks/lists/shop/tasks.json"
+        # The list it goes back to has to be there.
+        put_task(client, t["id"], list="home")
+        moved = head(wiki)
+        client.post("/tasks/delete-list", data={"list": "shop", "to": ""}, headers=HOST)
+        assert not (wiki / "_tasks/lists/shop").exists() and "shop" not in (wiki / "_tasks/lists.json").read_text()
+        assert "isn't there any more" in undo(client, door, moved)
+
+    def test_not_what_was_changed_again(self, client, wiki, door):
+        t = new_task(client, title="One")
+        put_task(client, t["id"], title="Two")
+        two = head(wiki)
+        put_task(client, t["id"], title="Three")
+        three = head(wiki)
+        before = head(wiki)
+        assert "changed again since" in undo(client, door, two)
+        # Another task in the same file changed meanwhile is no matter.
+        other = new_task(client, title="Other")
+        assert undo(client, door, three) is True and all_tasks(wiki)[t["id"]]["title"] == "Two"
+        assert other["id"] in all_tasks(wiki)
+        # The changes of a task together, back to before the first.
+        assert "changed between these changes" in undo(client, door, two, head(wiki))   # not without Three between
+        assert undo(client, door, two, three, head(wiki)) is True         # Two, Three and the undo of Three
+        assert all_tasks(wiki)[t["id"]]["title"] == "One"
+        # Not across a change in between that isn't among them.
+        put_task(client, t["id"], title="Four")
+        four = head(wiki)
+        put_task(client, t["id"], due_date="2030-05-05")
+        put_task(client, t["id"], title="Five")
+        assert "changed between these changes" in undo(client, door, four, head(wiki))
+        assert before != head(wiki) and all_tasks(wiki)[t["id"]]["title"] == "Five"
+
+    def test_pages_and_tasks_of_one_change_together(self, client, wiki, door):
+        commit(wiki, "p", "# P\n\none\n")
+        t = new_task(client, title="Task one")
+        write_page(wiki, "p", "# P\n\ntwo\n")
+        path = wiki / all_tasks(wiki)[t["id"]]["file"]
+        path.write_text(path.read_text().replace("Task one", "Task two"))
+        git(wiki, "add", "-A")
+        git(wiki, "commit", "-q", "-m", "Both by hand")
+        both = head(wiki)
+        assert undo(client, door, both) is True
+        assert (wiki / "p.md").read_text() == "# P\n\none\n" and all_tasks(wiki)[t["id"]]["title"] == "Task one"
+        assert sorted(git(wiki, "show", "--name-only", "--format=", "HEAD").split()) == [path.relative_to(wiki).as_posix(), "p.md"]
+
+    def test_not_a_list_nor_a_tasks_file(self, client, wiki, door):
+        assert client.post("/tasks/new-list", data={"name": "shop"}, headers=HOST).status_code == 302
+        assert "changed a list or a task's files too" in undo(client, door, head(wiki))
+        (wiki / "_tasks/files/1234abcd/_assets").mkdir(parents=True)
+        (wiki / "_tasks/files/1234abcd/_assets/scan.png").write_bytes(b"x")
+        git(wiki, "add", "-A")
+        git(wiki, "commit", "-q", "-m", "Upload by hand")
+        assert "changed a list or a task's files too" in undo(client, door, head(wiki))
+
+    def test_nothing_to_undo(self, client, wiki, door):
+        t = new_task(client, title="One")
+        put_task(client, t["id"], title="Two")
+        two = head(wiki)
+        put_task(client, t["id"], title="One")                           # back by hand, as it was
+        assert "already are as they were before" in undo(client, door, two)
+
+
+class TestUndoAnothersTasks:
+    """With users: a change of tasks is undone by who may write each of
+    them back, and seen only by who sees them all."""
+
+    @pytest.fixture(autouse=True)
+    def users(self, client, wiki, monkeypatch):
+        monkeypatch.setattr(settings, "MCP_TOKEN", "")
+        monkeypatch.setattr(settings, "USERS", {"alice": ("alice-pw", "alice-token"), "bob": ("bob-pw", "bob-token"),
+                                                "carol": ("carol-pw", "carol-token")})
+        monkeypatch.setattr(settings, "USER_SETTINGS", {"carol": {"role": "viewer"}})
+
+    def sign_in(self, client, name):
+        client.post("/logout", headers=HOST)
+        assert client.post("/login", data={"username": name, "password": f"{name}-pw"}, headers=HOST).status_code == 302
+
+    @pytest.mark.parametrize("door", DOORS)
+    def test_a_task_made_goes_only_as_deleting_it_would(self, client, wiki, door):
+        self.sign_in(client, "alice")
+        assert client.post("/tasks/new-list", data={"name": "team"}, headers=HOST).status_code == 302
+        self.sign_in(client, "bob")
+        t = new_task(client, title="Bob's", list="team")
+        made = head(wiki)
+        self.sign_in(client, "alice")
+        said = undo(client, door, made, token="alice-token")
+        assert "only who made a task, or an admin, deletes it" in said and t["id"] in all_tasks(wiki)
+        self.sign_in(client, "bob")
+        assert undo(client, door, made, token="bob-token") is True and t["id"] not in all_tasks(wiki)
+
+    @pytest.mark.parametrize("door", DOORS)
+    def test_who_doesnt_see_them_all_finds_no_change(self, client, wiki, door):
+        self.sign_in(client, "alice")
+        t = new_task(client, title="Alice's own")                         # her Inbox: private
+        assert all_tasks(wiki)[t["id"]]["file"].startswith("private/alice/")
+        put_task(client, t["id"], title="Alice's own, renamed")
+        hers = head(wiki)
+        self.sign_in(client, "bob")
+        said = undo(client, door, hers, token="bob-token")
+        assert said == "404" if door == "browser" else "No change" in said
+        assert all_tasks(wiki)[t["id"]]["title"] == "Alice's own, renamed"
+
+    @pytest.mark.parametrize("door", DOORS)
+    def test_a_viewer_undoes_nothing(self, client, wiki, door):
+        self.sign_in(client, "alice")
+        assert client.post("/tasks/new-list", data={"name": "team"}, headers=HOST).status_code == 302
+        t = new_task(client, title="Shared", list="team")
+        put_task(client, t["id"], title="Shared, renamed")
+        edit = head(wiki)
+        self.sign_in(client, "carol")
+        said = undo(client, door, edit, token="carol-token")
+        assert said == "403" if door == "browser" else said is not True
+        assert all_tasks(wiki)[t["id"]]["title"] == "Shared, renamed"
+
+    def test_a_shared_task_stays_shared(self, client, wiki):
+        self.sign_in(client, "alice")
+        assert client.post("/tasks/new-list", data={"name": "team"}, headers=HOST).status_code == 302
+        t = new_task(client, title="Mine first")
+        put_task(client, t["id"], list="team", share=True)
+        assert all_tasks(wiki)[t["id"]]["file"] == "_tasks/lists/team/tasks.json"
+        assert "a shared task stays shared" in undo(client, "browser", head(wiki))
+        assert all_tasks(wiki)[t["id"]]["file"] == "_tasks/lists/team/tasks.json"

@@ -689,23 +689,31 @@ const undoMost = 50
 
 // undone: what an undo did: the pages put back as they were (their text
 // before the changes, a deleted page brought back) and those taken away
-// (made by the changes), by slug.
-type undone struct{ back, gone []string }
+// (made by the changes), by slug; and the tasks put back as they were,
+// taken away and brought back, each by its title in quotes (taskUndo.title).
+type undone struct {
+	back, gone                          []string
+	tasksBack, tasksGone, tasksReturned []string
+}
 
 func (u *undone) pages() []string { return append(slices.Clone(u.back), u.gone...) }
 
 // undoChangesOp undoes changes of the wiki, commits by their versions:
-// every page they changed is as it was before them, in one commit ("Undo
-// <version>: <what it said>", "Undo N changes: …"), which is a change like
-// any other and can be undone too. A change is undone whole or not at all,
-// and only where that loses nothing and is the user's to do:
-//   - it changed only pages, each one user sees and may write (a change
-//     user doesn't see all of is no change to them: refused as missing);
+// every page they changed is as it was before them, and every task, in one
+// commit ("Undo <version>: <what it said>", "Undo N changes: …"), which is
+// a change like any other and can be undone too. A change is undone whole
+// or not at all, and only where that loses nothing and is the user's to do:
+//   - it changed only pages and tasks' files (taskfiles.Store.FileOwner;
+//     not a list's registry, a task's files, an upload), each one user
+//     sees (a change user doesn't see all of is no change to them: refused
+//     as missing), each page one they may write;
 //   - it moved no page (a rename is undone by renaming back, which asks
 //     who may: checkReaders);
 //   - no page it changed was changed since by a commit that isn't among
 //     those undone, or holds text not committed yet: the undo would take
-//     that along.
+//     that along;
+//   - each task it changed is as the changes left it, and is the user's to
+//     put back (taskUndoLocked, mayUndoTask).
 //
 // check, when given, is asked with the pages before anything is written
 // (the MCP tool's guides).
@@ -716,11 +724,13 @@ func undoChangesOp(user asker, versions []string, suffix string, check func(slug
 	if len(versions) == 0 || len(versions) > undoMost {
 		return nil, refuse(fmt.Sprintf("Name one change to undo, or up to %d", undoMost))
 	}
-	// The changes, and for each file which of them changed it and how.
+	// The changes, and for each page which of them changed it and how; for
+	// each change its task files.
 	type commit struct{ sha, subject string }
 	var commits []commit
 	how := map[string]map[string]byte{} // file → commit → A, M or D
 	var files []string
+	taskChanges := map[string][]fileChange{} // commit → the task files it changed
 	for _, v := range versions {
 		none := refuseAs(refusedNotFound, "No change "+strconv.Quote(v)+"; history lists them.")
 		sha, subject, ok := commitOf(strings.ToLower(strings.TrimSpace(v)))
@@ -742,13 +752,17 @@ func undoChangesOp(user asker, versions []string, suffix string, check func(slug
 		}
 		kinds := ""
 		for _, c := range changes {
+			if _, isTasks := taskFiles.FileOwner(c.Path); isTasks {
+				taskChanges[sha] = append(taskChanges[sha], c)
+				continue
+			}
 			slug, isPage := strings.CutSuffix(c.Path, ".md")
 			if !isPage || safePath(slug) == "" {
 				what := "files"
 				if isTaskFile(c.Path) {
-					what = "tasks"
+					what = "a list or a task's files"
 				}
-				return nil, refuse("Change " + short + " changed " + what + " too, which Undo doesn't put back: only changes of pages alone are undone.")
+				return nil, refuse("Change " + short + " changed " + what + " too, which Undo doesn't put back: only changes of pages and tasks are undone.")
 			}
 			if !canWrite(user, slug) {
 				return nil, notWritable(user, slug, "No change "+strconv.Quote(v)+"; history lists them.")
@@ -814,7 +828,26 @@ func undoChangesOp(user asker, versions []string, suffix string, check func(slug
 		steps = append(steps, step{slug: slug, path: path, text: &before})
 		done.back = append(done.back, slug)
 	}
-	if len(steps) == 0 {
+	// The tasks: each as before the first of these changes that changed it,
+	// read from the history now (taskUndoPlan); whether it still is as they
+	// left it is asked under the task files' lock (taskUndoLocked).
+	var plan []*taskUndo
+	if len(taskChanges) > 0 {
+		var shas []string
+		for _, c := range commits {
+			if taskChanges[c.sha] != nil {
+				shas = append(shas, c.sha)
+			}
+		}
+		var err error
+		if plan, err = taskUndoPlan(shas, taskChanges); err != nil {
+			return nil, err
+		}
+	}
+	if len(steps) == 0 && len(plan) == 0 {
+		if len(taskChanges) > 0 {
+			return nil, refuseAs(refusedUnchanged, "The pages and tasks already are as they were before.")
+		}
 		return nil, refuseAs(refusedUnchanged, "The pages already are as they were before.")
 	}
 	if check != nil {
@@ -830,6 +863,22 @@ func undoChangesOp(user asker, versions []string, suffix string, check func(slug
 		}
 		message = fmt.Sprintf("Undo %d changes: %s", len(commits), strings.Join(shas, " "))
 	}
+	var tw *taskUndoWrite
+	if len(plan) > 0 {
+		// The task files' lock before the first page is written (pagesMu,
+		// then taskFiles.Lock, then commitMu): the tasks are checked
+		// exactly, and the pages go into the tasks' commit.
+		taskFiles.Lock()
+		defer taskFiles.Unlock()
+		var err error
+		if tw, err = taskUndoLocked(user, plan); err != nil {
+			return nil, err
+		}
+		if len(steps) == 0 && len(tw.back)+len(tw.gone)+len(tw.returned) == 0 {
+			return nil, refuseAs(refusedUnchanged, "The pages and tasks already are as they were before.")
+		}
+		done.tasksBack, done.tasksGone, done.tasksReturned = tw.back, tw.gone, tw.returned
+	}
 	paths := make([]string, len(steps))
 	for i, s := range steps {
 		paths[i] = s.path
@@ -843,7 +892,12 @@ func undoChangesOp(user asker, versions []string, suffix string, check func(slug
 			return nil, err
 		}
 	}
-	forgetUsage()
+	if len(steps) > 0 {
+		forgetUsage()
+	}
+	if tw != nil {
+		return done, taskFiles.WriteBothLocked(user, tw.active, tw.closed, message+suffix, paths...)
+	}
 	return done, notCommitted(gitCommit(user.Name, message+suffix, paths...))
 }
 

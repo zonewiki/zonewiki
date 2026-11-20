@@ -529,26 +529,37 @@ An undo comes back to the list as it was filtered.
 
 ### Undo
 
-**Undo** (on a row of Changes; `POST /changes/undo`, `undoChangesOp` in `go/pageops.go`; an assistant's `undo_changes`) takes a change back whole: every page it changed is as it was before it, a page it made is deleted again, a page it deleted is back, in one commit, "Undo 1a2b3c4: Update garden".
+**Undo** (on a row of Changes; `POST /changes/undo`, `undoChangesOp` in `go/pageops.go`; an assistant's `undo_changes`) takes a change back whole: every page it changed is as it was before it, a page it made is deleted again, a page it deleted is back;
+every task it changed is as it was before it (an edit reverted, a completion reopened and the series' next occurrence it made gone again, a move between lists or places moved back), a task it made is deleted again, a task it deleted is back with its id;
+in one commit, "Undo 1a2b3c4: Update garden", and a change of pages and tasks together (a commit made by hand, say) in one commit too.
 One click and no question: the undo is a change like any other, at the top of the list, and undoing it brings the change back.
+The list then says what it did ("Undone: garden as before; the task “Water the beds” as before.").
 A page's History calls it "Undid the change of <time>".
+
+#### Undoing a change of tasks
+
+The tasks a change changed and what they were before it are read from the history only when it is undone (`tasksOfCommit` in `go/tasks.go`: its task files, `taskfiles.Store.FileOwner`, at the commit and its parent), never to list Changes; several changes of one task together go back to before the first of them, in the order of the history (`taskUndoPlan`, `newestFirst`).
+Under the task files' lock (after `pagesMu`, before `commitMu`), each task has to be as the changes left it, alike in its file and kept in the same place (`taskUndoLocked`), and goes back whole, its history too: the task's History reads as it did before the change, as after the task app's own undo (Undo leaves no trace in `docs/spec/tasks.md`), and the undo is in Changes and in git, with the tasks it put back named (The tasks a commit changed), where it can be undone in its turn.
+A task that already is as it was is left; the commit is made by the task store, the pages written before in it (`WriteBothLocked` with them).
+No mail goes out for a task given back to someone by an undo.
 
 #### What can be undone
 
 **What can be undone**, and what the operation refuses otherwise, saying why:
 
-- a change of pages alone (one that changed tasks or files too is not: Undo doesn't put those back);
-- each page one its reader sees and may write (a guide: an admin; a viewer: none; a change they don't see all of is answered as no change at all, 404);
+- a change of pages and tasks (one that changed a list's registry, a task's files, an upload or any other file too is not: Undo doesn't put those back; a list is renamed or deleted back by hand);
+- each page and task one its reader sees, each page one they may write (a guide: an admin; a viewer: none; a change they don't see all of is answered as no change at all, 404, whoever's task or group's list it touched);
+- each task one they may write back where it was, as any write of tasks asks (`mayUndoTask`): its list still there and theirs to write (`canWriteList`), or their own Inbox; a task the change made goes only as deleting it goes (who made it, an admin: `mayDeleteTask`), which also makes it the one way an assistant takes a task away, and that undoable; a shared task never back into a private place ("a shared task stays shared"); back into a list fewer people see only by who made it or an admin (`mayNarrowTask`, as a move there: Moving a task to fewer or more people in `docs/spec/tasks.md`);
 - no page moved (a rename is undone by renaming back, which asks who may);
-- and no page changed again since, by a commit or by text not committed yet: the undo would take that along.
-  The page's History restores any version instead.
+- and no page changed again since, by a commit or by text not committed yet, and no task changed again since (it isn't as the change left it, by anyone), nor between changes undone together by one not among them: the undo would take that along.
+  The page's History restores any version instead; a task's text is in git.
 
-Changes shows the buttons from what the list knows (`undoOffers`: the kinds of files, who may write, the wiki's latest 1,000 commits for "changed again", `undoWindow`); the operation checks again, exactly, so an offer that no longer holds is refused and said ("Not undone. garden was changed again since …").
+Changes shows the buttons from what the list knows (`undoOffers`: the kinds of files, who may write, the wiki's latest 1,000 commits for "changed again", `undoWindow`; for tasks the commits' Task trailers, no task file read: a change of tasks is offered when it names every task it changed, the reader sees each, and no later commit among those names one of them or changed one of its task files without naming all it changed); the operation checks again, exactly, so an offer that no longer holds is refused and said ("Not undone. garden was changed again since …", "Not undone. The task “Mow” was changed again since …").
 
 #### An assistant's run
 
 **An assistant's run of work together**: the commits an assistant made for one user through one connection, none more than 30 minutes after the one before (`sessionGap`; other people's commits between them don't end it), are a run.
-The latest of them offers **Undo all N** when the run can be undone as one: nothing but the run's own commits changed its pages since the first of them.
+The latest of them offers **Undo all N** when the run can be undone as one: nothing but the run's own commits changed its pages since the first of them, nor its tasks (as for one change, above).
 It asks first, saying how many, by which assistant and from when to when; the result is one commit, "Undo 3 changes: …".
 
 ## How a page is rendered

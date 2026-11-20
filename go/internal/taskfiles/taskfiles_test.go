@@ -1428,3 +1428,25 @@ func TestACommitNamesTheTasksItChanged(t *testing.T) {
 		t.Errorf("left over: %v", got)
 	}
 }
+
+// Whose a task file is, by its path as git names it; nothing else is one.
+func TestFileOwner(t *testing.T) {
+	f := newStore(t, "alice")
+	f.GroupsDir = "groups"
+	for rel, want := range map[string]string{
+		"_tasks/tasks.json": "", "_tasks/closed-2026-05.json": "", "_tasks/lists/shop/closed.json": "",
+		"private/alice/_tasks/tasks.json": "alice", "private/alice/_tasks/lists/diary/closed-2025-01.json": "alice",
+		"groups/dev/_tasks/lists/ops/tasks.json": "@dev",
+	} {
+		if got, ok := f.FileOwner(rel); !ok || got != want {
+			t.Errorf("%s: %q %v, want %q", rel, got, ok, want)
+		}
+	}
+	for _, rel := range []string{"_tasks/lists.json", "_tasks/files/1a2b/_assets/scan.png", "tasks.json", "notes/_tasks/tasks.json",
+		"private/alice/_tasks/lists.json", "_tasks/lists/shop/x/tasks.json", "_tasks/closed-26.json", "_tasks/closed-2025.json", "groups/_tasks/tasks.json",
+		"private/@dev/_tasks/tasks.json", "_tasks/lists/.hidden/tasks.json"} {
+		if got, ok := f.FileOwner(rel); ok {
+			t.Errorf("%s is %q's task file", rel, got)
+		}
+	}
+}

@@ -13,6 +13,7 @@ import json
 import re
 import subprocess
 import time
+from urllib.parse import unquote_plus
 
 import pytest
 
@@ -967,3 +968,33 @@ def test_a_tags_rename_counts_only_the_tasks_he_sees(client, wiki):
     out = mcp(client, "bob", "rename_task_tag", tag="offers", new_tag="deals")
     assert "in one commit: 1 task." in out, out
     assert "deals" in (wiki / FOLDER / "tasks.json").read_text()
+
+
+@pytest.mark.parametrize("door", ["browser", "mcp"])
+def test_an_undo_takes_a_task_back_to_fewer_people_as_a_move_does(client, wiki, door):
+    """Carol moves alice's task out of the group's list into everyone's
+    team, which anyone who may write does; undoing that takes it back to
+    fewer people, which only who made it (or an admin) does, as a move
+    there is: carol is refused and says why, alice undoes it. Bob, outside
+    the group, sees the change as no change at all."""
+    sign_in(client, "carol")
+    assert client.put(f"/api/tasks/{IDS['open']}", json={"list": "team"}, headers=HOST).status_code == 200
+    moved = git(wiki, "rev-parse", "HEAD").strip()
+    assert IDS["open"] not in (wiki / FOLDER / "tasks.json").read_text()
+
+    def undo(who):
+        if door == "browser":
+            sign_in(client, who)
+            resp = client.post("/changes/undo", data={"sha": moved}, headers=HOST)
+            if resp.status_code != 303:
+                return str(resp.status_code)
+            return "done" if "undone=" in resp.headers["Location"] else unquote_plus(resp.headers["Location"])
+        text = mcp(client, who, "undo_changes", versions=[moved])
+        return "done" if text.startswith("Undone:") else text
+    assert "would no longer see the task" in undo("carol") and "Only who made a task, or an admin" in undo("carol")
+    said = undo("bob")
+    assert said == "404" if door == "browser" else "No change" in said
+    assert IDS["open"] not in (wiki / FOLDER / "tasks.json").read_text()
+    assert undo("alice") == "done"
+    assert IDS["open"] in (wiki / FOLDER / "tasks.json").read_text()
+    assert IDS["open"] not in (wiki / "_tasks/lists/team/tasks.json").read_text()

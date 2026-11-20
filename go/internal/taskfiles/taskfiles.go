@@ -210,6 +210,32 @@ func (s *Store) Dir(owner string) string {
 	return filepath.Join(base, DirName)
 }
 
+// FileOwner: whose task file rel is (slash-separated, relative to Root, as
+// git names it): a file of open or closed tasks (tasks.json, closed.json,
+// closed-YYYY-MM.json) in an owner's _tasks/ folder or in
+// a list's folder there; "" the shared ones, a user's name, "@<group>" a
+// group's (Dir's places). False for any other file: a registry
+// (lists.json), a task's files, a page.
+func (s *Store) FileOwner(rel string) (owner string, ok bool) {
+	parts := strings.Split(rel, "/")
+	name, dir := parts[len(parts)-1], parts[:len(parts)-1]
+	if name != "tasks.json" && name != "closed.json" && !archiveNameRE.MatchString(name) {
+		return "", false
+	}
+	if n := len(dir); n >= 3 && dir[n-2] == ListsDirName && dir[n-3] == DirName && listDirRE.MatchString(dir[n-1]) {
+		dir = dir[:n-2]
+	}
+	switch {
+	case len(dir) == 1 && dir[0] == DirName:
+		return "", true
+	case len(dir) == 3 && dir[2] == DirName && dir[0] == s.PrivateDir && dir[1] != "" && !strings.HasPrefix(dir[1], "@"):
+		return dir[1], true
+	case len(dir) == 3 && dir[2] == DirName && dir[0] == s.GroupsDir && s.GroupsDir != "" && dir[1] != "":
+		return GroupOwner(dir[1]), true
+	}
+	return "", false
+}
+
 // GroupOwner: a group's lists and tasks as an owner: "@dev" (no user's name
 // starts with @).
 func GroupOwner(group string) string { return "@" + group }

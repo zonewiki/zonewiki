@@ -79,7 +79,7 @@ What each file and folder of the repository is for.
 │   ├── lastchange.go       # Who changed each page last (its last commit's author, whether an assistant and which), kept in memory from one scan of the history and the commits since, for search results
 │   ├── quicknotes.go       # Notes: create, Move to wiki, Append to page (the routes and MCP share it)
 │   ├── merge.go            # Several editors on one page: drafts' authors, the bases, the three-way merge, texts left in conflict
-│   ├── tasks.go            # Task writes (create, change, comment, tag, move in the manual order, delete), as functions the routes and the MCP tools share
+│   ├── tasks.go            # Task writes (create, change, comment, tag, move in the manual order, delete; the tasks an undo from Changes puts back), as functions the routes and the MCP tools share
 │   ├── tasklists.go        # Task lists: the lists a user sees (taskLists, refs), their pins, My tasks (the home view's rule, mineFilter, and its settings), and the list operations (make, rename, delete, share, pin, settings)
 │   ├── tasksetup.go        # What a start does over the task files (filed by month and list, Zone's format, a shared task in no list into #general), and the mark that lets later starts skip it
 │   ├── wikiformat.go       # The format of the wiki's files, .zone-format at its root (in git): read at start, a newer one refused, written into a new wiki

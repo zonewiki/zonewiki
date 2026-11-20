@@ -795,7 +795,7 @@
  {
   "name": "undo_changes",
   "title": "Undo changes",
-  "description": "Undo changes (history lists them) whole: the pages they changed are as before them, in one commit. Only changes of pages alone, none moved, none changed since.",
+  "description": "Undo changes (history lists them) whole: the pages and tasks they changed are as before them, in one commit. Not a change of other files, a moved page, or one changed since.",
   "inputSchema": {
    "type": "object",
    "properties": {

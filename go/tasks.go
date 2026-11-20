@@ -1310,3 +1310,267 @@ func reorderTasks(user asker, ids []string, pos orderPos, message string) ([]*Ta
 	}
 	return moved, taskFiles.WriteOpenLocked(user, active, message)
 }
+
+// ---- undoing changes of tasks (Changes' Undo, undo_changes) ----
+
+// taskUndo: a task an undo puts back: as it was before the changes undone
+// (to; nil: they made it, and it goes) and as they left it (left; nil:
+// they deleted it, and it comes back), each with its owner, from the file
+// it was in (taskfiles.Store.FileOwner).
+type taskUndo struct {
+	id       string
+	to, left *Task
+}
+
+// title: the task as an undo names it: its title in quotes, as the undo
+// puts it back (as the changes left it, for one they made).
+func (u *taskUndo) title() string {
+	t := u.to
+	if t == nil {
+		t = u.left
+	}
+	return "“" + taskLabel(t) + "”"
+}
+
+// sameTask: a and b are the same task, alike in their file and kept by
+// the same owner; or both none.
+func sameTask(a, b *Task) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return a.Owner == b.Owner && a.Same(b)
+}
+
+// tasksOfCommit: the tasks the commit sha changed in its task files
+// (files: the commit's changes of them), each as it was before it and as
+// it left it, read from the history (git show of the commit and its
+// parent): only at undo time, never to list Changes. A task that only
+// went into another file unchanged (its month's archive) is none of them.
+func tasksOfCommit(sha string, files []fileChange) (map[string]*taskUndo, error) {
+	before, after := map[string]*Task{}, map[string]*Task{}
+	read := func(rev, rel string, into map[string]*Task) error {
+		owner, _ := taskFiles.FileOwner(rel)
+		text, ok := gitShow(rev, filepath.Join(cfg.Data, rel))
+		if !ok {
+			return refuseAs(refusedConflict, "Change "+runePrefix(sha, 7)+": its tasks can't be read from the history.")
+		}
+		if strings.TrimSpace(text) == "" {
+			return nil
+		}
+		tasks, ok := taskmodel.Parse([]byte(text))
+		if !ok {
+			return refuseAs(refusedConflict, "Change "+runePrefix(sha, 7)+": its tasks can't be read from the history.")
+		}
+		for _, t := range tasks {
+			if into[t.ID] == nil {
+				t.Owner = owner
+				into[t.ID] = t
+			}
+		}
+		return nil
+	}
+	for _, f := range files {
+		if f.Kind != 'A' {
+			if err := read(sha+"^", f.Path, before); err != nil {
+				return nil, err
+			}
+		}
+		if f.Kind != 'D' {
+			if err := read(sha, f.Path, after); err != nil {
+				return nil, err
+			}
+		}
+	}
+	out := map[string]*taskUndo{}
+	for id, b := range before {
+		if a := after[id]; !sameTask(a, b) {
+			out[id] = &taskUndo{id: id, to: b, left: a}
+		}
+	}
+	for id, a := range after {
+		if before[id] == nil {
+			out[id] = &taskUndo{id: id, left: a}
+		}
+	}
+	return out, nil
+}
+
+// taskUndoPlan: what undoing the commits shas (files: each one's task
+// files) does to tasks: each task they changed as it was before the first
+// of them that changed it, and as the last of them left it. Refused where
+// a commit that isn't among them changed one of the tasks in between:
+// what a later one found isn't what an earlier one left, and the undo
+// would take that along.
+func taskUndoPlan(shas []string, files map[string][]fileChange) ([]*taskUndo, error) {
+	type step struct {
+		sha string
+		u   *taskUndo
+	}
+	byTask := map[string][]step{}
+	var ids []string
+	for _, sha := range shas {
+		changed, err := tasksOfCommit(sha, files[sha])
+		if err != nil {
+			return nil, err
+		}
+		for id, u := range changed {
+			if byTask[id] == nil {
+				ids = append(ids, id)
+			}
+			byTask[id] = append(byTask[id], step{sha, u})
+		}
+	}
+	slices.Sort(ids)
+	var at map[string]int // newest first, read when a task was changed by several of them
+	var plan []*taskUndo
+	for _, id := range ids {
+		steps := byTask[id]
+		if len(steps) > 1 {
+			if at == nil {
+				at = newestFirst(undoWindow)
+			}
+			for _, s := range steps {
+				if _, ok := at[s.sha]; !ok {
+					return nil, refuse("Change " + runePrefix(s.sha, 7) + " is too far back to undo together with later changes of its tasks: undo it on its own.")
+				}
+			}
+			slices.SortFunc(steps, func(a, b step) int { return cmp.Compare(at[b.sha], at[a.sha]) }) // oldest first
+			for i := 1; i < len(steps); i++ {
+				if !sameTask(steps[i].u.to, steps[i-1].u.left) {
+					return nil, refuseAs(refusedConflict, "The task "+steps[i].u.title()+" was changed between these changes: undoing them would take that along.")
+				}
+			}
+		}
+		plan = append(plan, &taskUndo{id: id, to: steps[0].u.to, left: steps[len(steps)-1].u.left})
+	}
+	return plan, nil
+}
+
+// taskUndoWrite: what an undo writes of the tasks (taskUndoLocked): the
+// open and closed tasks as they will be, and the titles of those put back
+// as before, taken away (the changes made them) and brought back (the
+// changes deleted them).
+type taskUndoWrite struct {
+	active, closed       []*Task
+	back, gone, returned []string
+}
+
+// taskUndoLocked: the tasks of plan put back (under taskFiles.Lock), as
+// the write that does it: each that is as the changes left it (Same, and
+// kept by the same owner: not changed again since, by anyone), back as it
+// was before them, whole, its history too (an undo from Changes is a
+// change like any other, in Changes; the task's history reads as it did
+// before the change); one that already is as it was, left. Refused, before
+// anything is written, where a task was changed again since, or isn't the
+// user's to put back (mayUndoTask).
+func taskUndoLocked(user asker, plan []*taskUndo) (*taskUndoWrite, error) {
+	if err := mayWriteTasks(user); err != nil {
+		return nil, err
+	}
+	ids := map[string]bool{}
+	for _, u := range plan {
+		ids[u.id] = true
+	}
+	active, closed, err := taskFiles.ReadTasksForWriteLocked(user, ids)
+	if err != nil {
+		return nil, err
+	}
+	current := map[string]*Task{}
+	for _, t := range slices.Concat(active, closed) {
+		if ids[t.ID] {
+			current[t.ID] = t
+		}
+	}
+	var every map[string]bool // every owner's ids: read when a task is to come back
+	lists := taskLists(user)
+	tw := &taskUndoWrite{}
+	put := map[string]bool{}
+	for _, u := range plan {
+		cur := current[u.id]
+		if cur == nil && u.left == nil {
+			if every == nil {
+				every = taskFiles.IDsLocked()
+			}
+			if every[strings.ToLower(u.id)] { // there again, where user doesn't see it
+				return nil, refuseAs(refusedConflict, "The task "+u.title()+" was changed again since: undoing would take that along.")
+			}
+		}
+		switch {
+		case sameTask(cur, u.to):
+			continue // as it was already
+		case !sameTask(cur, u.left):
+			return nil, refuseAs(refusedConflict, "The task "+u.title()+" was changed again since: undoing would take that along.")
+		}
+		if err := mayUndoTask(user, u, cur, lists); err != nil {
+			return nil, err
+		}
+		put[u.id] = true
+		switch {
+		case u.to == nil:
+			tw.gone = append(tw.gone, u.title())
+		case u.left == nil:
+			tw.returned = append(tw.returned, u.title())
+		default:
+			tw.back = append(tw.back, u.title())
+		}
+	}
+	tw.active, tw.closed = withoutIDs(active, put), withoutIDs(closed, put)
+	for _, u := range plan {
+		if put[u.id] && u.to != nil {
+			if t := u.to.Clone(); t.IsOpen() {
+				tw.active = append(tw.active, t)
+			} else {
+				tw.closed = append(tw.closed, t)
+			}
+		}
+	}
+	return tw, nil
+}
+
+// mayUndoTask: user may put the task u back where it was, as it was
+// (cur: as it is now, as the changes left it): the rules of any write of
+// tasks, asked of the place it goes back to and the one it leaves. A task
+// the changes made goes as deleting it goes (mayDeleteTask); one goes back
+// into its list only while that list is there and is the user's to write
+// (canWriteList), or into its user's own Inbox; a shared task never into
+// a private place, and into a list fewer people see only by who made it or
+// an admin (mayNarrowTask), as a move takes it there (applyList).
+func mayUndoTask(user asker, u *taskUndo, cur *Task, lists map[string]ListInfo) error {
+	if u.to == nil {
+		if !mayDeleteTask(user, cur) {
+			return refuse("The change made the task " + u.title() + ", and undoing it would delete it: only who made a task, or an admin, deletes it.")
+		}
+		return nil
+	}
+	to := u.to
+	if privateOwner(to.Owner) && lacksPrivate(user) {
+		return refuse(noPrivateMsg)
+	}
+	if to.List != "" {
+		l, ok := lists[taskList(to, lists)]
+		if !ok {
+			return refuseAs(refusedConflict, "The task "+u.title()+" was in the list #"+to.List+", which isn't there any more: undoing would leave it in none.")
+		}
+		if !canWriteList(user, l) {
+			return errReadOnly
+		}
+	} else if settings().Users != nil && !ownerPlace(to.Owner).own(user) {
+		return refuse("The task " + u.title() + " was in no list: a shared task is always in one, and Undo doesn't put it back so.")
+	}
+	if cur == nil {
+		return nil
+	}
+	if l, ok := lists[taskList(cur, lists)]; ok && cur.List != "" && !canWriteList(user, l) {
+		return errReadOnly
+	}
+	switch fromPrivate, toPrivate := privateOwner(cur.Owner), privateOwner(to.Owner); {
+	case toPrivate && !fromPrivate:
+		return refuse("The change shared the task " + u.title() + ": a shared task stays shared, others have seen it, and Undo doesn't make it private again.")
+	case !toPrivate && !fromPrivate:
+		if lost := taskLosers(cur.Owner, to.Owner); len(lost) > 0 && !mayNarrowTask(user, cur) {
+			return refuse(namesOr(lost, 3, "") + " would no longer see the task " + u.title() + ": it was in #" + to.List +
+				", which is for fewer people than it is seen by now. Only who made a task, or an admin, moves it there")
+		}
+	}
+	return nil
+}

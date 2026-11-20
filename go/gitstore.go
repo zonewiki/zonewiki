@@ -772,18 +772,41 @@ func lastCommitsOf(rel string, n int) []string {
 	return strings.Fields(runGit("log", "-n", strconv.Itoa(n), "--format=%H", "--", rel).Stdout)
 }
 
-// latestCommits: for each file changed in the wiki's n latest commits,
-// those commits, newest first.
-func latestCommits(n int) map[string][]string {
-	out := map[string][]string{}
-	for _, record := range logRecords(runGit("log", "-z", "-n", strconv.Itoa(n), "--name-only", "--no-renames", "--format=%x1e%H").Stdout) {
+// recentCommits: the wiki's latest commits as Changes asks them whether
+// something was changed again (undoOffers): files, for each file they
+// changed, those of them that did, newest first; tasks, the tasks each
+// names (its taskMark), by sha.
+type recentCommits struct {
+	files map[string][]string
+	tasks map[string]taskMark
+}
+
+// latestCommits: the wiki's n latest commits, as recentCommits.
+func latestCommits(n int) recentCommits {
+	out := recentCommits{files: map[string][]string{}, tasks: map[string]taskMark{}}
+	r := runGit("log", "-z", "-n", strconv.Itoa(n), "--name-only", "--no-renames", "--format=%x1e%H\x1f"+tasksFormat)
+	for _, record := range logRecords(r.Stdout) {
+		sha, rest, _ := strings.Cut(record.head, "\x1f")
+		ids, more, _ := strings.Cut(rest, "\x1f")
+		out.tasks[sha] = taskMarkOf(ids, more)
 		for _, name := range record.fields {
 			if name != "" {
-				out[name] = append(out[name], record.head)
+				out.files[name] = append(out.files[name], sha)
 			}
 		}
 	}
 	return out
+}
+
+// newestFirst: where each of the wiki's n latest commits stands among
+// them, newest first, children before their parents (--topo-order: commits
+// of one second are in their order too).
+func newestFirst(n int) map[string]int {
+	at := map[string]int{}
+	for i, sha := range strings.Fields(runGit("rev-list", "--topo-order", "-n", strconv.Itoa(n), "HEAD", "--").Stdout) {
+		at[sha] = i
+	}
+	return at
 }
 
 // isUncommitted: the file differs from its last commit (or was never

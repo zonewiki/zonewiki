@@ -879,7 +879,7 @@ It asks first, has no undo, and takes the task out of its file in a commit ("Del
 Who may (`mayDeleteTask` in `go/tasks.go`; `DELETE /api/tasks/<id>` and `batch-delete` answer 403 "Only who made a task, or an admin, deletes it" otherwise): without users anyone; with users who made the task (`created_by`), an admin, its user for a private one, and anyone for a task nobody is known to have made (no `created_by`: one made without users, or written by hand).
 Others have seen a shared task, so anyone else closes it.
 The same routes take back what was just made: the tasks the page editor created (their maker's), and an import's (what a user imported is theirs to delete while Zone runs: `noteBrought`).
-An assistant (MCP) deletes no task.
+An assistant (MCP) deletes no task, but for one a change of its user's made, by undoing that change (`undo_changes`), which is itself undone as easily.
 
 ### Setting dates quickly
 
@@ -1139,6 +1139,11 @@ With users (`docs/spec/users.md`) each event records who did it (`by`, the user 
 a recurring task's `repeat` is by whoever completed the occurrence before it.
 
 A recurring task's next occurrence carries the series' history on (with the `done` or `skipped` just logged) plus a `repeat` entry ("Repeats: next Oct 3"), so the series reads as one log; it gets no `created` of its own.
+
+### An undo from Changes
+
+Undo on Changes (and an assistant's `undo_changes`) puts a task a change changed back as it was before it, whole, its history too (Undo in `docs/spec/rendering.md`): the task's History then reads as it did before the change, no "reopened" for a completion undone, no entry for the undo.
+The undo is a commit like any other, in Changes with the task named, and can be undone, which brings the change, and its entries, back.
 
 ### Undo leaves no trace
 

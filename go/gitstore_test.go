@@ -390,7 +390,7 @@ func TestGitLogsNameFilesAsTheyAre(t *testing.T) {
 		if !slices.Contains(files, name) {
 			t.Errorf("gitLogAll: %q not in %q", name, files)
 		}
-		if latestCommits(10)[name] == nil {
+		if latestCommits(10).files[name] == nil {
 			t.Errorf("latestCommits: no %q", name)
 		}
 	}

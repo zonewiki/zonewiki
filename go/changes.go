@@ -291,8 +291,9 @@ func changesView(w http.ResponseWriter, r *http.Request) {
 	if limit != changesShown {
 		shown = limit
 	}
+	ct := tasksOfChanges(rq.user, entries, rq.sharing)
 	v := &changesPageView{Of: of, Users: users, Vias: changesVias(rq.user, of, entries),
-		Days: changeDays(entries, time.Now(), undoOffers(rq.user, entries), tasksOfChanges(rq.user, entries, rq.sharing)),
+		Days: changeDays(entries, time.Now(), undoOffers(rq.user, entries, ct), ct),
 		Back: changesURL(of, shown), Undone: q.Get("undone"), UndoError: q.Get("undo_error"),
 		Filtered:       of.Since != "" || of.Under != "" || of.By != "" || of.Via != "" || of.Assistant || of.Outside,
 		BreadcrumbHTML: breadcrumb(rq, []crumb{{"Changes", ""}}, "", false, "", "")}
@@ -419,32 +420,52 @@ const sessionGap = 30 * time.Minute
 
 // undoOffers: for each of the commits (newest first, as user sees them)
 // what Changes offers to undo, by sha. It offers what undoChangesOp will
-// most likely do, cheaply, from what the list knows; the operation checks
+// most likely do, cheaply, from what the list knows (the commits' files
+// and the tasks they name, ct: those user sees now); the operation checks
 // again, and exactly.
-func undoOffers(user asker, entries []LogEntry) map[string]undoOffer {
+func undoOffers(user asker, entries []LogEntry, ct changedTasks) map[string]undoOffer {
 	offers := map[string]undoOffer{}
 	if len(entries) == 0 || changesNothing(user) || user.Name == visitor {
 		return offers
 	}
 	latest := latestCommits(undoWindow)
-	// pagesOnly: a commit of the kind an undo takes: pages alone, all of
-	// them seen and the user's to write, none moved.
-	pagesOnly := func(e LogEntry) bool {
+	// undoable: a commit of the kind an undo takes: pages and tasks' files
+	// alone, all of them seen, the pages the user's to write and none
+	// moved, the tasks named, each one they see (or one deleted for good).
+	undoable := func(e LogEntry) bool {
 		if e.Hidden > 0 || len(e.Files) == 0 || strings.Contains(e.Kinds, "A") && strings.Contains(e.Kinds, "D") {
 			return false
 		}
+		tasks := false
 		for _, f := range e.Files {
-			slug, isPage := strings.CutSuffix(f, ".md")
-			if !isPage || safePath(slug) == "" || !canWrite(user, slug) || latest[f] == nil {
+			if latest.files[f] == nil {
+				return false
+			}
+			if _, ok := taskFiles.FileOwner(f); ok {
+				tasks = true
+				continue
+			}
+			if slug, isPage := strings.CutSuffix(f, ".md"); !isPage || safePath(slug) == "" || !canWrite(user, slug) {
+				return false
+			}
+		}
+		if tasks && (mayWriteTasks(user) != nil || len(e.Tasks) == 0 || e.MoreTasks > 0) {
+			return false
+		}
+		for _, id := range e.Tasks {
+			if ct.seen[id] == nil && !ct.gone[id] {
 				return false
 			}
 		}
 		return true
 	}
 	// together: nothing but these commits changed their pages since the
-	// oldest of them did.
+	// oldest of them did, nor the tasks they name: a later commit that
+	// changed one of their task files names none of their tasks, and names
+	// every task it changed.
 	together := func(run []LogEntry) bool {
 		touched := map[string]map[string]bool{} // file → the run's commits that changed it
+		names := map[string]bool{}              // the tasks the run names
 		for _, e := range run {
 			for _, f := range e.Files {
 				if touched[f] == nil {
@@ -452,15 +473,39 @@ func undoOffers(user asker, entries []LogEntry) map[string]undoOffer {
 				}
 				touched[f][e.Sha] = true
 			}
+			for _, id := range e.Tasks {
+				names[id] = true
+			}
 		}
 		for f, ours := range touched {
-			if len(latest[f]) < len(ours) {
+			if len(latest.files[f]) < len(ours) {
 				return false
 			}
-			for _, sha := range latest[f][:len(ours)] {
-				if !ours[sha] {
+			if _, isTasks := taskFiles.FileOwner(f); !isTasks {
+				for _, sha := range latest.files[f][:len(ours)] {
+					if !ours[sha] {
+						return false
+					}
+				}
+				continue
+			}
+			// A task file: other commits change other tasks in it. Those
+			// after the oldest of ours, newest first until it.
+			left := len(ours)
+			for _, sha := range latest.files[f] {
+				if ours[sha] {
+					if left--; left == 0 {
+						break
+					}
+					continue
+				}
+				m := latest.tasks[sha]
+				if len(m.Tasks) == 0 || m.MoreTasks > 0 || slices.ContainsFunc(m.Tasks, func(id string) bool { return names[id] }) {
 					return false
 				}
+			}
+			if left > 0 {
+				return false
 			}
 		}
 		return true
@@ -483,7 +528,7 @@ func undoOffers(user asker, entries []LogEntry) map[string]undoOffer {
 		delete(runs, key)
 	}
 	for _, e := range entries {
-		if !pagesOnly(e) {
+		if !undoable(e) {
 			continue
 		}
 		if together([]LogEntry{e}) {
@@ -552,6 +597,14 @@ func undoneSays(u *undone) string {
 	if len(u.gone) > 0 {
 		parts = append(parts, strings.Join(u.gone, ", ")+" deleted again")
 	}
+	tasks := func(titles []string, did string) {
+		if len(titles) > 0 {
+			parts = append(parts, "the "+plural(len(titles), "task")+" "+strings.Join(titles, ", ")+" "+did)
+		}
+	}
+	tasks(u.tasksBack, "as before")
+	tasks(u.tasksGone, "deleted again")
+	tasks(u.tasksReturned, "back")
 	return "Undone: " + strings.Join(parts, "; ") + "."
 }
 

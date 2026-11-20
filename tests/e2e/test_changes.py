@@ -69,3 +69,16 @@ def test_undo_one_change_and_an_assistants_run(page, wiki):
     rows.first.get_by_role("button", name="Undo", exact=True).click()
     page.wait_for_url("**/changes?undone=**")
     assert "A pond." in wiki.read("garden")
+
+
+def test_a_task_named_and_its_change_undone(page, wiki):
+    page.goto("/page/index")
+    made = page.request.post("/api/tasks", data={"title": "Water the beds"})
+    assert made.ok
+    page.goto("/changes")
+    row = page.locator(".changes-row").first
+    expect(row.get_by_role("link", name="Water the beds")).to_have_attribute("href", f"/tasks?task={made.json()['id']}&view=open")
+    row.get_by_role("button", name="Undo", exact=True).click()
+    page.wait_for_url("**/changes?undone=**")
+    expect(page.get_by_role("status")).to_contain_text("Undone: the task “Water the beds” deleted again.")
+    assert made.json()["id"] not in (wiki.root / "_tasks/tasks.json").read_text()

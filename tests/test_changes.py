@@ -379,8 +379,8 @@ def test_undo_is_offered_where_it_can_be_done(client, wiki_dir):
     garden = [one for what, one, _ in listed if what == "Update garden"]
     assert garden == [[git(wiki_dir, "log", "-n1", "--format=%H", "--", "garden.md").strip()], []]   # the later save; the earlier was changed again
     rows = {what: one for what, one, _ in listed if what != "Update garden"}
-    assert rows["Create task"] == [] and rows["Rename shed to barn"] == [] and rows["Update shed"] == []
-    assert rows["Initial import"] == []
+    assert rows["Rename shed to barn"] == [] and rows["Update shed"] == [] and rows["Initial import"] == []
+    assert len(rows["Create task"]) == 1                                  # a task's change is undone too
 
 
 def test_undo_from_the_list_and_back_to_it(client, wiki_dir):
@@ -429,6 +429,43 @@ def test_no_run_where_someone_else_changed_a_page_in_between(client, wiki_dir):
     tool(client, "append_to_page", slug="shed", content="Tools.")
     rows = offers(client)
     assert rows[0][1] and not rows[0][2]                                # the last change alone, not the run
+
+
+def test_undo_of_tasks_is_offered_where_it_can_be_done(client, wiki_dir):
+    """Changes offers Undo for a change of tasks while no later change in the
+    wiki's latest commits names one of its tasks (their trailers: no task
+    file read), whoever changed other tasks in the same files meanwhile."""
+    a = create_task(client, title="Water").get_json()
+    b = create_task(client, title="Mow").get_json()
+    client.put(f"/api/tasks/{a['id']}", json={"title": "Water the beds"}, headers=HOST)
+    client.put(f"/api/tasks/{b['id']}", json={"title": "Mow the lawn"}, headers=HOST)
+    listed = offers(client)
+    assert [(what, bool(one)) for what, one, _ in listed[:4]] == [
+        ("Update task", True), ("Update task", True), ("Create task", False), ("Create task", False)]
+    # Undone from the list, it says which tasks are as before.
+    resp = client.post("/changes/undo", data={"sha": listed[1][1]}, headers=HOST)
+    said = client.get(resp.headers["Location"], headers=HOST).get_data(as_text=True)
+    assert "Undone: the task “Water” as before." in html.unescape(said)
+    # A change of tasks by hand, which names none, is offered no Undo.
+    (wiki_dir / "_tasks/tasks.json").write_text((wiki_dir / "_tasks/tasks.json").read_text().replace("Mow the lawn", "Mow"))
+    git(wiki_dir, "commit", "-q", "-am", "By hand")
+    assert offers(client)[0] == ("By hand", [], [])
+    assert offers(client)[3][1] == []                                    # nor the change it may have changed again
+
+
+def test_an_assistants_run_of_task_changes_is_undone_together(client, wiki_dir):
+    tool(client, "create_task", title="Order mulch")
+    tid = re.search(r"Task: ([0-9a-f-]{36})", git(wiki_dir, "log", "-n1", "--format=%B")).group(1)
+    tool(client, "update_task", id=tid, due="2030-03-01")
+    tool(client, "update_task", id=tid, comment="From the newsletter.")
+    rows = offers(client)
+    assert rows[0][0] == "Comment on task" and len(rows[0][2]) == 3
+    body = client.get("/changes", headers=HOST).get_data(as_text=True)
+    assert "Every page and task they changed goes back" in body
+    resp = client.post("/changes/undo", data={"sha": rows[0][2]}, headers=HOST)
+    said = html.unescape(client.get(resp.headers["Location"], headers=HOST).get_data(as_text=True))
+    assert "Undone: the task “Order mulch” deleted again." in said
+    assert tid not in (wiki_dir / "_tasks/tasks.json").read_text()
 
 
 def test_a_viewer_is_offered_no_undo(client, wiki_dir, monkeypatch):
