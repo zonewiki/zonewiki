@@ -4453,6 +4453,13 @@ def test_one_line_per_task(page, wiki):
     passport = card(page, "Renew passport")
     for view in ("focus", "plan", "closed", "open"):
         open_tab(page, view)
+        if view == "closed":
+            # Completed loads from the server after the click: until it has,
+            # the open list is still there, and on a slow machine the card
+            # was measured while it was being replaced. An open task isn't
+            # in it, so wait for the card to go.
+            expect(passport).to_have_count(0)
+            continue
         if not passport.count():
             continue
         # One line: title, tags, the notes marker and the deadline side by side.
