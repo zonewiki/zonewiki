@@ -141,8 +141,30 @@ func revokeLink(name string) (found bool, err error) {
 	return found, err
 }
 
-// findLink: the open link token opens, nil if none does (wrong, used or
-// expired: the same).
+// madeByAdmin: the link is as good as who made it: an admin still, or the
+// host (By "": zonewiki user invite or reset, and a sign-up's, which
+// Zone made). A link gives what its maker may give, so one whose maker
+// was demoted, disabled or removed since lets no one in (an invite as an
+// admin least of all).
+func madeByAdmin(s *Settings, l welcomeLink) bool { return l.By == "" || s.isAdmin(l.By) }
+
+// endFormerAdminsLinks drops the links whose maker is no admin in s, for
+// good: made admin again, they don't bring them back. At start and with
+// every change of the settings (applySettings), whoever made it.
+func endFormerAdminsLinks(s *Settings) {
+	stale := func(l welcomeLink) bool { return !madeByAdmin(s, l) }
+	if links, err := readLinks(); err != nil || !slices.ContainsFunc(links, stale) {
+		return
+	}
+	if err := changeLinks(func(links []welcomeLink) ([]welcomeLink, error) {
+		return slices.DeleteFunc(links, stale), nil
+	}); err != nil {
+		logf("ending the links of who is no admin any more: %v", err)
+	}
+}
+
+// findLink: the open link token opens, nil if none does (wrong, used,
+// expired or made by who is no admin any more: the same).
 func findLink(token string) *welcomeLink {
 	if token == "" {
 		return nil
@@ -153,7 +175,7 @@ func findLink(token string) *welcomeLink {
 		return nil
 	}
 	for i := range links {
-		if tokenMatches(token, links[i].Hash) {
+		if tokenMatches(token, links[i].Hash) && madeByAdmin(settings(), links[i]) {
 			return &links[i]
 		}
 	}
@@ -189,7 +211,7 @@ func openLinks() []linkRow {
 	if err != nil {
 		logf("%v", err)
 	}
-	links = slices.DeleteFunc(links, func(l welcomeLink) bool { return l.Kind == "signup" })
+	links = slices.DeleteFunc(links, func(l welcomeLink) bool { return l.Kind == "signup" || !madeByAdmin(settings(), l) })
 	sort.Slice(links, func(i, j int) bool { return links[i].User < links[j].User })
 	var rows []linkRow
 	for _, l := range links {

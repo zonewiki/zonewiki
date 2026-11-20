@@ -241,6 +241,7 @@ Opening the link alone changes nothing, so a mail scanner can't use it up.
 
 Open links are listed under **Open links**, with **Revoke** to take one back.
 A new link for the same name replaces the old one.
+A link stops working when the admin who made it is no longer an admin (made an editor, disabled or removed), and stays ended if they become admin again: make a new one then.
 
 ### Sign-up
 

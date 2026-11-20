@@ -771,4 +771,5 @@ func applySettings(old, s *Settings) {
 	noshareMu.Lock()
 	clear(noshareCache)
 	noshareMu.Unlock()
+	endFormerAdminsLinks(s)
 }

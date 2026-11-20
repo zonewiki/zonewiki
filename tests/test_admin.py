@@ -368,6 +368,35 @@ class TestLinks:
         body = client.get(f"/welcome/{token}", headers=HOST).data.decode()
         assert "This link doesn't work" in body
 
+    @pytest.mark.parametrize("change", [("role", {"role": "editor"}), ("disable", {}), ("remove", {}), ("by hand", {})])
+    def test_a_link_ends_when_its_maker_is_no_admin(self, client, users, git_wiki_dir, monkeypatch, change):
+        """A link gives what its maker may give: carol's invite of an admin
+        and her reset of bob's password stop working when she is demoted,
+        disabled or removed (on the Users tab, or in the settings file by
+        hand), and stay ended when she is an admin again."""
+        monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"role": "admin"}, "carol": {"role": "admin"}})
+        login(client, "carol")
+        links = [make_link(client, "/admin/users/invite", name="dave", role="admin"), make_link(client, "/admin/users/bob/reset")]
+        login(client, "alice")
+        host = make_link(client, "/admin/users/invite", name="erin", role="editor")   # alice's stays
+        kind, data = change
+        if kind == "by hand":
+            monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"role": "admin"}})
+        else:
+            assert post(client, f"/admin/users/carol/{kind}", **data).status_code == 303
+        client.post("/logout", headers=HOST)
+        for link in links:
+            assert client.get(link, headers=HOST).status_code == 404, kind
+            resp = post(client, link, password="taken-over", again="taken-over")
+            assert resp.status_code == 404 and section(git_wiki_dir, "dave") is None
+        assert client.get(host, headers=HOST).status_code == 200
+        assert '"by": "carol"' not in (git_wiki_dir / ".zone/links").read_text()
+        if kind == "role":
+            login(client, "alice")
+            assert post(client, "/admin/users/carol/role", role="admin").status_code == 303
+            client.post("/logout", headers=HOST)
+            assert all(client.get(link, headers=HOST).status_code == 404 for link in links)
+
     def test_wrong_links_are_throttled(self, client, users):
         for _ in range(5):
             assert client.get("/welcome/" + "0" * 64, headers=HOST).status_code == 404

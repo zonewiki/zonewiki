@@ -150,6 +150,7 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
+	endFormerAdminsLinks(s) // demoted or removed while Zone was down
 	if publicDir = *public; publicDir == "" {
 		publicDir = findPublic()
 	}

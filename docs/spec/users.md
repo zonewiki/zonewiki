@@ -751,6 +751,8 @@ While an invite is open its name is taken: `user add` of it is refused.
 A link is valid 7 days (an invite) or 24 hours (a reset), **once**.
 A new link for the same name replaces the old one; **Revoke** on the Users tab (open links: for whom, what, by whom, until when) deletes it.
 Expired links go at the next change.
+**A link is as good as its maker**: one an admin made on the Users tab ends when they are an admin no longer (demoted, disabled or removed, on the Users tab, by a command or in the settings file by hand), for good, so making them admin again doesn't bring it back (`madeByAdmin`, `endFormerAdminsLinks`, at start and with every change of the settings); otherwise an invite as an admin outlived the admin who made it.
+A link made on the host (`zonewiki user invite`, `reset`) has no maker and stays.
 The Users tab makes 10 links per admin in an hour at most (`linksPerHour`, in memory; 429 "You made 10 links in the last hour: try again later."), so a stolen session can't fill the list; the commands aren't capped.
 
 ### The welcome page
@@ -764,7 +766,7 @@ a reset sets the new password, which ends every session of the old one (`passwor
 either way the change is logged as that user's, the link is gone, and they are signed in (a session made with the new hash, `setSessionHash`, as the settings take effect only once the request has ended).
 A user who was removed (reset), or a name someone took meanwhile (invite), is refused, as is a wiki that has no users any more.
 
-**A link that doesn't work**, wrong, used, expired or replaced, gets one page for all ("This link doesn't work", 404), and a client trying them is throttled as for wrong passwords (`welcomeThrottle`).
+**A link that doesn't work**, wrong, used, expired, replaced or its maker no admin any more, gets one page for all ("This link doesn't work", 404), and a client trying them is throttled as for wrong passwords (`welcomeThrottle`).
 
 ### How links are kept
 
