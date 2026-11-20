@@ -2,11 +2,11 @@
 
 **One memory for you, your team and your AI assistants, in plain files you own.**
 
-Zone is a self-hosted wiki with built-in tasks and quick notes.
+Zone is a self-hosted wiki with built-in tasks and quick notes, for one person or a team.
 Your pages are plain Markdown files in a folder you choose, and every change is a git commit.
 Edit them in the browser or in any editor.
-AI assistants of any maker work with them [over MCP](#connect-an-ai-assistant), acting as you: they see and change only what you may, and you can review and undo every edit they make.
-One Go binary, no database, no frontend build, no cloud.
+Any AI assistant that speaks MCP can [work with them](#connect-an-ai-assistant), acting as you: it sees and changes only what you may, and you can review and undo every edit it makes.
+One Go binary, no database, nothing leaves your server.
 
 > [!NOTE]
 > **Zone is a beta (0.x).**
