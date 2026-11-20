@@ -21,6 +21,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"unicode"
 	"unicode/utf8"
 )
@@ -323,8 +324,13 @@ const (
 // try past them waits its turn, briefly, rather than fail.
 var keySlots = make(chan struct{}, max(1, runtime.NumCPU()/2))
 
+// keysDerived counts the key derivations, for the tests that a login
+// checks one password whatever the account's state (TestOneCheckATry).
+var keysDerived atomic.Int64
+
 // deriveKey: pbkdf2.Key with SHA-256, in one of the keySlots.
 func deriveKey(password string, salt []byte, iterations, length int) ([]byte, error) {
+	keysDerived.Add(1)
 	keySlots <- struct{}{}
 	defer func() { <-keySlots }()
 	return pbkdf2.Key(sha256.New, password, salt, iterations, length)
@@ -372,19 +378,16 @@ var dummyHash = fmt.Sprintf("%s:%d:%s:%s", hashScheme, hashIterations,
 	base64.RawStdEncoding.EncodeToString(make([]byte, 16)),
 	base64.RawStdEncoding.EncodeToString(make([]byte, hashLen)))
 
-// authenticate: the user name and password belong together; the user, or
-// nil. A disabled user is returned too: the login says they are disabled
-// (only to whoever knows their password).
-func authenticate(name, password string) *User {
+// authenticate: the user name names (nil if none) and whether password is
+// theirs, in one check: a disabled user is returned too (the login says
+// they are disabled, only to whoever knows their password).
+func authenticate(name, password string) (named *User, right bool) {
 	u := settings().Users[strings.ToLower(strings.TrimSpace(name))]
 	if u == nil {
 		checkPassword(password, dummyHash)
-		return nil
+		return nil, false
 	}
-	if !checkPassword(password, u.PasswordHash) {
-		return nil
-	}
-	return u
+	return u, checkPassword(password, u.PasswordHash)
 }
 
 // askPassword asks for a new password twice; false (and why, on stderr) if

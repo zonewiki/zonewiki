@@ -1,6 +1,9 @@
 package main
 
 import (
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"runtime"
 	"strings"
 	"testing"
@@ -32,11 +35,47 @@ func TestPasswordHash(t *testing.T) {
 func TestAuthenticate(t *testing.T) {
 	testWiki(t, nil)
 	settings().Users = map[string]*User{"alice": {Name: "alice", PasswordHash: hashPassword("pw")}}
-	if u := authenticate(" Alice ", "pw"); u == nil || u.Name != "alice" {
+	if u, right := authenticate(" Alice ", "pw"); u == nil || u.Name != "alice" || !right {
 		t.Error("alice")
 	}
-	if authenticate("alice", "nope") != nil || authenticate("bob", "pw") != nil || authenticate("", "") != nil {
-		t.Error("let in")
+	for _, c := range [][2]string{{"alice", "nope"}, {"bob", "pw"}, {"", ""}} {
+		if _, right := authenticate(c[0], c[1]); right {
+			t.Errorf("%q let in", c)
+		}
+	}
+}
+
+// A login checks one password, whoever it names: an unknown name, a
+// wrong or right password, a disabled or a waiting user's (whose login
+// said so with a second check, which told by its time which names are
+// disabled).
+func TestOneCheckATry(t *testing.T) {
+	testWiki(t, nil)
+	hash := hashPassword("pw")
+	s := settings()
+	s.Users = map[string]*User{"alice": {Name: "alice", PasswordHash: hash},
+		"dora": {Name: "dora", PasswordHash: hash, Disabled: true},
+		"pat":  {Name: "pat", PasswordHash: hash, Disabled: true, Pending: true}}
+	loginThrottle = newThrottle()
+	t.Cleanup(func() { loginThrottle = newThrottle() })
+	for _, c := range []struct{ name, password, says string }{
+		{"nobody", "pw", "Incorrect user name"}, {"alice", "nope", "Incorrect user name"}, {"alice", "pw", ""},
+		{"dora", "nope", "Incorrect user name"}, {"dora", "pw", "is disabled"}, {"pat", "nope", "Incorrect user name"},
+		{"pat", "pw", "waits for an admin"},
+	} {
+		form := url.Values{"username": {c.name}, "password": {c.password}}
+		r := httptest.NewRequest("POST", "/login", strings.NewReader(form.Encode()))
+		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		r.RemoteAddr = "203.0.113." + itoa(len(c.name)+len(c.password)) + ":1"
+		w := httptest.NewRecorder()
+		before := keysDerived.Load()
+		login(w, r)
+		if n := keysDerived.Load() - before; n != 1 {
+			t.Errorf("%s/%s: %d checks", c.name, c.password, n)
+		}
+		if c.says == "" && w.Code != http.StatusFound || c.says != "" && !strings.Contains(w.Body.String(), c.says) {
+			t.Errorf("%s/%s: %d %q", c.name, c.password, w.Code, w.Body.String())
+		}
 	}
 }
 
