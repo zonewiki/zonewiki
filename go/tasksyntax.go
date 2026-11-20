@@ -3,6 +3,7 @@
 package main
 
 import (
+	"maps"
 	"net/url"
 	"regexp"
 	"slices"
@@ -241,6 +242,23 @@ func checkEmbedSettings(set map[string]string, keys []string) (map[string]string
 		out[k] = v
 	}
 	return out, nil
+}
+
+// validSettings: of the settings set as a registry holds them, those
+// checkEmbedSettings takes, each on its own: a value that is wrong (a
+// registry edited by hand, a name from before) is left out and logged, the
+// settings beside it stay. where: the file, for the log.
+func validSettings(set map[string]string, keys []string, where string) map[string]string {
+	out := map[string]string{}
+	for _, k := range slices.Sorted(maps.Keys(set)) {
+		one, err := checkEmbedSettings(map[string]string{k: set[k]}, keys)
+		if err != nil {
+			logf("%s: %v", where, err)
+			continue
+		}
+		out[k] = one[k]
+	}
+	return out
 }
 
 // setEmbedArgs: an embed's params as written with those of set changed: a

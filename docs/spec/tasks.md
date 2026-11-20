@@ -1985,6 +1985,7 @@ So a list can be added or changed by hand in one line, and a commit shows the li
 | `order` | The manual order of My tasks, as task ids (the same owner as `mine`) |
 
 `"mine": true` (an older registry's) reads as no settings and is written back no more.
+A setting in `mine` or `all` whose value is none of its values (`"view": "focus"`, a name from before, written by hand) is left out and logged, the settings beside it stay (`validSettings`: My tasks keeps its limit and its mail with a wrong tab); the next save of those settings writes them without it.
 It is read leniently (a value of another kind as text, a list without a name left out, a name twice once, unknown keys kept and written back A–Z) and written in one format; a file that is there but unreadable refuses every write (`ReadListsStrict`: never an empty registry, which would drop every list).
 A registry keeps the version it has when it is written; a new one gets the current one.
 

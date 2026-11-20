@@ -270,13 +270,10 @@ func noListHTML(rq *Req, name string, instance int) string {
 
 // allTasksParams: the params of All tasks (/tasks), which no page's
 // [[tasks: …]] holds: they are in the shared registry ("all": the params
-// an embed would have, allSettingKeys). None when they can't be read.
+// an embed would have, allSettingKeys). A value that can't be read is left
+// out, the others stay (validSettings).
 func allTasksParams() TasksParams {
-	set, err := checkEmbedSettings(taskFiles.ReadLists("").All, allSettingKeys)
-	if err != nil {
-		logf("%s: %v", taskFiles.ListsPath(""), err)
-		set = nil
-	}
+	set := validSettings(taskFiles.ReadLists("").All, allSettingKeys, taskFiles.ListsPath(""))
 	raw := setEmbedArgs("", set)
 	p := parseTasksParams(raw)
 	p.src = &embedSrc{-1, raw}

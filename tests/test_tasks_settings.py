@@ -2,6 +2,8 @@
 task app has its settings, and POST /api/tasks/settings, which rewrites a
 page's [[tasks: …]], a list's own settings or those of All tasks."""
 
+import json
+
 from tests.conftest import HOST, list_page, make_list, preview, rendered, write_page
 
 
@@ -144,6 +146,24 @@ class TestSave:
         assert not (wiki_dir / "_tasks" / "settings.json").exists()
         # The tasks are as they were.
         assert client.get("/api/tasks", headers=HOST).get_json() == []
+
+    def test_a_wrong_value_leaves_the_others(self, client, wiki_dir):
+        # A registry's settings of My tasks or All tasks with a value that
+        # is none (a name from before, written by hand): that one is left
+        # out, not every setting beside it.
+        make_list(client, "shop", headers=HOST)
+        registry = wiki_dir / "_tasks" / "lists.json"
+        data = json.loads(registry.read_text())
+        data["mine"] = {"view": "focus", "limit": "5", "labels": "Backlog,Now"}
+        data["all"] = {"group": "week", "limit": "7"}
+        registry.write_text(json.dumps(data))
+        html = client.get("/tasks?mine=1", headers=HOST).get_data(as_text=True)
+        assert 'data-settings-raw="limit=5 labels=Backlog,Now"' in html and 'data-init-limit="5"' in html and ">Backlog</button>" in html
+        html = client.get("/tasks", headers=HOST).get_data(as_text=True)
+        assert 'data-settings-raw="limit=7"' in html and 'data-init-limit="7"' in html
+        # Saved from what the dialog saw, the wrong one goes from the file.
+        assert save(client, mine=True, was="limit=5 labels=Backlog,Now", set={"limit": "6"}).status_code == 200
+        assert json.loads(registry.read_text())["mine"] == {"limit": "6", "labels": "Backlog,Now"}
 
 
 def test_a_save_is_one_commit(client, git_wiki_dir):

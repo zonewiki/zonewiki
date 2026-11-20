@@ -296,13 +296,10 @@ func mineRegistry(user asker) *taskfiles.Registry {
 
 // mineParams: the params of My tasks (/tasks?mine=1) for user: its own
 // settings ("mine" in mineOwner's registry: the tab, Plan, the limit, the
-// tabs' names), of the scope mine=1. None when they can't be read.
+// tabs' names), of the scope mine=1. A value that can't be read is left
+// out, the others stay (validSettings).
 func mineParams(user asker) TasksParams {
-	set, err := checkEmbedSettings(mineRegistry(user).Mine, mineSettingKeys)
-	if err != nil {
-		logf("%s: %v", taskFiles.ListsPath(mineOwner(user)), err)
-		set = nil
-	}
+	set := validSettings(mineRegistry(user).Mine, mineSettingKeys, taskFiles.ListsPath(mineOwner(user)))
 	raw := setEmbedArgs("", set)
 	p := parseTasksParams(raw).With("mine", "1")
 	p.src = &embedSrc{-1, raw}
