@@ -352,3 +352,30 @@ def test_the_default_wiki_is_zonewiki_in_the_home_folder(sandbox, tmp_path):
     (repo / ".env").write_text("TZ=UTC\n")
     r = subprocess.run(["./run.sh", "up"], cwd=repo, env=env, capture_output=True, text=True)
     assert r.returncode == 0 and f"Zone data: {tmp_path / 'home' / 'zonewiki'}" in r.stdout, r.stderr
+
+
+def test_pre_push_runs_the_clones_own_hook(worktree):
+    """core.hooksPath has git look only in .githooks/: the pre-push hook
+    there runs .git/hooks/pre-push, from a worktree too, with its arguments
+    and input, and its refusal refuses the push."""
+    repo, tree, env, log = worktree
+    shutil.copy(REPO / ".githooks" / "pre-push", tree / ".githooks" / "pre-push")
+    remote = repo.parent / "remote.git"
+    assert _git(repo, "init", "-q", "--bare", str(remote)).returncode == 0
+    _git(tree, "remote", "add", "out", str(remote))
+    # Without a hook of its own the push goes through.
+    assert _git(tree, "push", "-q", "out", "feature", env=env).returncode == 0
+    seen = repo.parent / "seen.txt"
+    own = repo / ".git" / "hooks" / "pre-push"
+    own.write_text(f'#!/bin/sh\n{{ echo "$1 $2"; cat; }} > "{seen}"\nexit "${{REFUSE:-0}}"\n')
+    own.chmod(0o755)
+    (tree / "notes.txt").write_text("pushed\n")
+    _git(tree, "commit", "-q", "--no-verify", "-am", "more")
+    head = _git(tree, "rev-parse", "HEAD").stdout.strip()
+    r = _git(tree, "push", "-q", "out", "feature", env={**env, "REFUSE": "1"})
+    assert r.returncode != 0
+    assert _git(remote, "rev-parse", "feature").stdout.strip() != head
+    first, refs = seen.read_text().split("\n", 1)
+    assert first == f"out {remote}" and f"refs/heads/feature {head} refs/heads/feature" in refs
+    assert _git(tree, "push", "-q", "out", "feature", env=env).returncode == 0
+    assert _git(remote, "rev-parse", "feature").stdout.strip() == head

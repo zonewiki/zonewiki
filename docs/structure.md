@@ -25,6 +25,7 @@ What each file and folder of the repository is for.
 ├── Containerfile.tools     # Tools image: Go (and gcc, for its race detector), Playwright + Chromium, the tests' Python packages, Node for tasks-core tests, gitleaks, git, pngquant
 ├── run.sh                  # Helper script: build/up/down/logs, user/config (via compose), test/e2e/bench/retrieval/binaries/leaks (CI runs these too); bash 3.2-compatible (macOS)
 ├── .githooks/pre-commit    # Refuses a commit with a secret in it (gitleaks); on with git config core.hooksPath .githooks
+├── .githooks/pre-push      # Runs the clone's own .git/hooks/pre-push, if any (core.hooksPath would skip it)
 ├── .gitleaks.toml          # gitleaks: the default rules; the generic key rule skips public/vendor/ (minified names)
 ├── .gitattributes          # LF line endings for *.sh and .githooks/* (Windows checkouts)
 ├── .env.example            # Template for .env: every setting, commented

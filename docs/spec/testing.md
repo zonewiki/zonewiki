@@ -217,7 +217,7 @@ Prefer an API test when the behaviour shows through a route, a Go test when it d
 | `tests/test_rendering.py` | rendering.md | Rendering through the server: wikilinks, image widths, callouts, autolinks, a heading's id and its link's anchor |
 | `tests/test_roles.py` | users.md | Viewers: every write refused, the interface; guides written by admins only |
 | `tests/test_routes.py` | routes.md, editor.md, security.md, deployment.md | The wiki's routes: pages, save and merge, uploads, search, Host and Origin checks, body limits, `TestUsage`, the binary started on its own (`TestTheBinaryAlone`) |
-| `tests/test_run_sh.py` | deployment.md | `run.sh`'s container calls and the pre-commit hook against a stub engine |
+| `tests/test_run_sh.py` | deployment.md | `run.sh`'s container calls and the pre-commit hook against a stub engine; the pre-push hook |
 | `tests/test_section_editing.py` | editor.md | Section editing over HTTP: a stale ✎, Keep mine |
 | `tests/test_semantic.py` | search.md | Semantic search through the server with the fake embedder |
 | `tests/test_setup.py` | security.md | The first-run page (`/setup`) |
@@ -365,6 +365,8 @@ No secret goes into the repo (No secrets in the repo in `docs/spec/security.md`)
 - **The pre-commit hook** `.githooks/pre-commit` (on once per clone: `git config core.hooksPath .githooks`) runs gitleaks over the staged changes, with a local gitleaks or else `./run.sh leaks --pre-commit --staged` in the tools image; a leak (exit 3) refuses the commit, a scan that can't run only warns.
   For `commit -a` and `commit <path>` git hands the hook a temporary index (`GIT_INDEX_FILE`, a host path); `run.sh leaks` passes it into the container as a `/repo/…` path, so those changes are scanned too (an index outside the repo: exit 2, a warning).
   On the first run `run.sh` says it is building the tools image.
+- **The pre-push hook** `.githooks/pre-push` runs the clone's own `.git/hooks/pre-push` when it has one (executable), with the same arguments and input, and refuses the push when it does.
+  `core.hooksPath` has git look only in `.githooks/`, so without it a check of one's own, kept outside the repo in `.git/hooks/` and shared by the clone's worktrees, would never run.
 - **In a git worktree** `.git` is a file that names the repo's own `.git` by its host path, where the worktree's index is too: `run.sh leaks` mounts that folder into the container at the same path, read-only, so the hook and the scan of the history work there as in the repo.
 - **CI's leaks job** scans every commit (`./run.sh leaks`). gitleaks is a pinned release, checked against its published checksums in `Containerfile.tools`.
 - Tests: `tests/test_run_sh.py` (Where tests live).
