@@ -251,6 +251,39 @@ def test_a_write_through_a_connection_names_its_assistant(client, wiki_dir, conn
     assert "(by alice through Claude)" in tool(client, "history", token="alice-token", slug="garden")
 
 
+def test_filter_by_connection_and_by_text_from_outside(client, wiki_dir, connected):
+    """Changes' filters by which assistant (its Assistant trailer) and for
+    text from elsewhere (its Source trailer), the same at both doors: the
+    tool history takes them as the page does, from the same function."""
+    save(client, "garden", "# Garden\n")
+    tool(client, "append_to_page", token=connected, slug="garden", content="Beds.", source="https://example.org/beds")
+    tool(client, "append_to_page", token=connected, slug="garden", content="Paths.")
+    tool(client, "append_to_page", token="alice-token", slug="garden", content="Mine.", source="a mail from Bob")
+    tool(client, "write_page", token="alice-token", slug="shed", content="# Shed\n")
+    assert [r[0] for r in changes(client, via="Claude")] == ["Append to garden", "Append to garden"]
+    assert [r[0] for r in changes(client, via="MCP token")] == ["Create shed", "Append to garden"]
+    assert [r[0] for r in changes(client, outside="1")] == ["Append to garden", "Append to garden"]
+    assert badges(client, via="Claude", outside="1") == ["through Claude"]
+    assert changes(client, via="Gemini") == []
+    body = client.get("/changes", query_string={"via": "Claude"}, headers=HOST).get_data(as_text=True)
+    assert '<option value="Claude" selected>Claude</option>' in body and '<option value="MCP token">MCP token</option>' in body
+    assert 'href="/changes" class="changes-all"' in body
+    assert 'name="outside" value="1" checked' in client.get("/changes?outside=1", headers=HOST).get_data(as_text=True)
+    # The tool history, through the same filters.
+    rows = lambda **args: re.findall(r"^\S+ \S+ \| \w{7} \| (.*?) \| ", tool(client, "history", token="alice-token", **args), re.M)
+    assert rows(assistant="Claude") == ["Append to garden (by alice through Claude)",
+                                        "Append to garden (by alice through Claude; from https://example.org/beds)"]
+    assert rows(assistant="MCP token") == ["Create shed (by alice through an assistant)",
+                                           "Append to garden (by alice through an assistant; from a mail from Bob)"]
+    assert len(rows(assistant="any")) == 4 and len(rows(outside=True)) == 2
+    assert tool(client, "history", token="alice-token", assistant="Gemini").startswith("No changes through Gemini.")
+    # Connect an assistant leads to each connection's changes; an undo comes back to the list as filtered.
+    assert 'href="/changes?user=alice&amp;via=Claude"' in client.get("/assistant", headers=HOST).get_data(as_text=True)
+    sha = git(wiki_dir, "log", "-n1", "--format=%H").strip()
+    resp = client.post("/changes/undo", data={"sha": sha, "back": "/changes?via=MCP+token&outside=1"}, headers=HOST)
+    assert resp.headers["Location"].startswith("/changes?outside=1&undone=") and "via=MCP+token" in resp.headers["Location"]
+
+
 def test_the_name_is_the_connections_not_the_callers(client, wiki_dir, connected):
     """An argument can't name the assistant, and neither can a summary's line breaks."""
     resp = client.post("/mcp", headers={**HOST, "Authorization": "Bearer alice-token"}, json={

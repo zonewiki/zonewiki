@@ -329,6 +329,7 @@ type grantRow struct {
 	Reach                            reach  // Change…'s choices (assistantData)
 	Open                             bool   // Change… comes back open: a change was refused (Error)
 	Error                            string // why
+	Changes                          string // what it changed, on Changes (assistantData); "" without git
 }
 
 // userGrant: the connection id of user's, if there is one.

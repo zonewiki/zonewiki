@@ -1777,6 +1777,7 @@ kbd {
 .assistant-connections :is(th, td):last-child { text-align: right; }
 .assistant-connections td { vertical-align: middle; }
 .assistant-sees { display: block; font-size: .8rem; color: var(--muted); }
+.assistant-conn-changes { display: block; font-size: .8rem; font-weight: normal; color: var(--link); }
 .assistant-conn-actions { white-space: nowrap; }
 .assistant-conn-actions form { display: inline-block; }
 /* A connection's Change…: the choices Allow offered (partials/reach.html), in

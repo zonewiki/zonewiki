@@ -72,8 +72,9 @@ class TestToolDefinitions:
         # short descriptions; read_guides explains the gate once.
         tools = {t["name"]: t for t in self.tools(client)}
         # (29250 until rename_page got narrow, 29400 until undo_changes, 30200 until source,
-        # 30750 until a task's place; go/mcp_test.go caps the file.)
-        assert len(json.dumps(list(tools.values()))) < 31400
+        # 30750 until a task's place, 31400 until history's assistant and outside;
+        # go/mcp_test.go caps the file.)
+        assert len(json.dumps(list(tools.values()))) < 31700
         props = tools["write_page"]["inputSchema"]["properties"]
         assert len(props["summary"]["description"]) < 100 and len(props["guides"]["description"]) < 100
         assert "refused until its id" in tools["read_guides"]["description"]

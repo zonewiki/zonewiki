@@ -84,6 +84,9 @@ func assistantData(r *http.Request) *assistantView {
 		c := &v.Connections[i]
 		c.Reach, _ = chooseReach(s, userOf(r), c.had, nil)
 		c.Reach.Change = true
+		if cfg.GitEnabled {
+			c.Changes = changesURL(changesOf{By: name, Via: clientName(c.Client)}, 0)
+		}
 	}
 	if cfg.GitEnabled {
 		v.Changes = changesURL(changesOf{By: name, Assistant: true}, 0)

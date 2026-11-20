@@ -80,12 +80,14 @@ The filters above the list narrow it down; click **Show** to apply them.
 |---|---|
 | **By** | the changes of one person (with users) |
 | **Only by an assistant** | the changes AI assistants made |
+| **Through** | the changes one assistant made: a name it gave when it was connected, or **MCP token** for one that uses a token |
+| **Only text from outside** | the changes whose text an assistant said came from elsewhere, a web page or a mail |
 | **In the folder** | changes to pages in one folder, such as `projects` |
 | **Since** | changes from that day on |
 
 **All changes** clears the filters.
 A filtered list has its own address, so you can bookmark "what my assistant did this week".
-**Connect an assistant** links straight to your assistants' changes.
+**Connect an assistant** links straight to your assistants' changes, and **its changes** beside each connection to what that one changed.
 
 ## Undoing a change
 

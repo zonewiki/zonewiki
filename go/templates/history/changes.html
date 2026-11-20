@@ -14,6 +14,10 @@
   <label>By <select name="user"><option value="">anyone</option>{{range .Users}}<option value="{{.}}"{{if eq . $.Of.By}} selected{{end}}>{{.}}</option>{{end}}</select></label>
   {{- end}}
   <label class="changes-check"><input type="checkbox" name="assistant" value="1"{{if .Of.Assistant}} checked{{end}}> Only by an assistant</label>
+  {{- if .Vias}}
+  <label>Through <select name="via"><option value="">any connection</option>{{range .Vias}}<option value="{{.}}"{{if eq . $.Of.Via}} selected{{end}}>{{.}}</option>{{end}}</select></label>
+  {{- end}}
+  <label class="changes-check" title="What an assistant wrote from a web page, a mail or a file, as it said"><input type="checkbox" name="outside" value="1"{{if .Of.Outside}} checked{{end}}> Only text from outside</label>
   <label>In the folder <input type="text" name="under" value="{{.Of.Under}}" placeholder="any" autocomplete="off" spellcheck="false" size="12"></label>
   <label>Since <input type="date" name="since" value="{{.Of.Since}}"></label>
   <button type="submit" class="btn">Show</button>

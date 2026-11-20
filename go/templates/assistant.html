@@ -59,7 +59,7 @@
   <tbody>
   {{- range .Connections}}
   <tr>
-    <td>{{.Client}}</td><td>{{.Redirect}}</td><td class="assistant-may">{{if or .ReadOnly $.Viewer}}Only read{{else}}Read and change{{end}}{{with .Sees}}<span class="assistant-sees">Sees only: {{.}}</span>{{end}}</td><td>{{.Made}}</td><td>{{.Used}}</td>
+    <td>{{.Client}}</td><td>{{.Redirect}}</td><td class="assistant-may">{{if or .ReadOnly $.Viewer}}Only read{{else}}Read and change{{end}}{{with .Sees}}<span class="assistant-sees">Sees only: {{.}}</span>{{end}}</td><td>{{.Made}}</td><td>{{.Used}}{{with .Changes}}<a href="{{.}}" class="assistant-conn-changes" title="What it changed, on Changes">its changes</a>{{end}}</td>
     <td class="assistant-conn-actions">
       <details class="assistant-change"{{if .Open}} open{{end}}>
         <summary class="btn" title="What it may do and see">Change…</summary>

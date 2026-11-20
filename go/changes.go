@@ -216,12 +216,22 @@ func fromWhere(source string) string {
 
 // changesOf: which of the wiki's commits to list. Since a day (YYYY-MM-DD),
 // Under a folder, By a user (the commit's author), Assistant: only what an
-// assistant wrote; each empty or false for all. Sharing: the browser is in
-// sharing mode, which leaves out a commit that changed a page not for
-// sharing.
+// assistant wrote; Via: only what one wrote through this connection (its
+// Assistant trailer, as commitMarkOf reads it: a client's name, tokenVia,
+// noClientName); Outside: only what an assistant said its text is from
+// (its Source trailer); each empty or false for all. Sharing: the browser
+// is in sharing mode, which leaves out a commit that changed a page not
+// for sharing.
 type changesOf struct {
-	Since, Under, By   string
-	Assistant, Sharing bool
+	Since, Under, By, Via       string
+	Assistant, Outside, Sharing bool
+}
+
+// takes: of says to list a commit with this author and mark (the filters
+// asked of each commit as it is read: gitLogAll's keep).
+func (of changesOf) takes(author string, m commitMark) bool {
+	return (of.By == "" || author == of.By) && (!of.Assistant || m.ByAssistant()) &&
+		(of.Via == "" || m.Assistant == of.Via) && (!of.Outside || m.Source != "")
 }
 
 // wikiChanges: the wiki's latest commits, newest first, as user sees them,
@@ -238,10 +248,7 @@ func wikiChanges(user asker, of changesOf, limit int) []LogEntry {
 		slug, isPage := strings.CutSuffix(path, ".md")
 		return !(of.Sharing && isPage && isNoshare(slug))
 	}
-	keep := func(e LogEntry) bool {
-		return (of.By == "" || e.Author == of.By) && (!of.Assistant || e.ByAssistant()) &&
-			!(of.Sharing && e.Hidden > 0)
-	}
+	keep := func(e LogEntry) bool { return of.takes(e.Author, e.commitMark) && !(of.Sharing && e.Hidden > 0) }
 	entries := gitLogAll(of.Since, of.Under, limit, see, keep)
 	for i := range entries {
 		entries[i].Msg = hideNames(user, entries[i].Msg, entries[i].hidden)
@@ -257,7 +264,7 @@ const (
 var dayRE = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 
 // changesView: the page /changes. Its filters are the query: user, under,
-// since, assistant=1; n how many to show.
+// since, assistant=1, via, outside=1; n how many to show.
 func changesView(w http.ResponseWriter, r *http.Request) {
 	rq := newReq(r)
 	if !cfg.GitEnabled {
@@ -266,7 +273,8 @@ func changesView(w http.ResponseWriter, r *http.Request) {
 	}
 	q := r.URL.Query()
 	of := changesOf{Under: cleanFolder(q.Get("under")), By: strings.TrimSpace(q.Get("user")),
-		Assistant: q.Get("assistant") != "", Sharing: rq.sharing}
+		Via: onOneLine(q.Get("via"), clientNameMost), Assistant: q.Get("assistant") != "", Outside: q.Get("outside") != "",
+		Sharing: rq.sharing}
 	if since := strings.TrimSpace(q.Get("since")); dayRE.MatchString(since) {
 		of.Since = since
 	}
@@ -283,15 +291,43 @@ func changesView(w http.ResponseWriter, r *http.Request) {
 	if limit != changesShown {
 		shown = limit
 	}
-	v := &changesPageView{Of: of, Users: users, Days: changeDays(entries, time.Now(), undoOffers(rq.user, entries),
-		tasksOfChanges(rq.user, entries, rq.sharing)),
+	v := &changesPageView{Of: of, Users: users, Vias: changesVias(rq.user, of, entries),
+		Days: changeDays(entries, time.Now(), undoOffers(rq.user, entries), tasksOfChanges(rq.user, entries, rq.sharing)),
 		Back: changesURL(of, shown), Undone: q.Get("undone"), UndoError: q.Get("undo_error"),
-		Filtered:       of.Since != "" || of.Under != "" || of.By != "" || of.Assistant,
+		Filtered:       of.Since != "" || of.Under != "" || of.By != "" || of.Via != "" || of.Assistant || of.Outside,
 		BreadcrumbHTML: breadcrumb(rq, []crumb{{"Changes", ""}}, "", false, "", "")}
 	if len(entries) == limit && limit < changesMost {
 		v.More = changesURL(of, min(2*limit, changesMost))
 	}
 	page(w, rq, http.StatusOK, "history/changes.html", "Changes", shell{}, v)
+}
+
+// changesVias: the connections Changes offers to filter by, A–Z: user's
+// own (grantsOf, and tokenVia when they have an MCP token: the wiki's,
+// without users), the ones the commits listed name (which user sees on
+// them), and the one asked for. None where there are none.
+func changesVias(user asker, of changesOf, entries []LogEntry) []string {
+	var names []string
+	add := func(name string) {
+		if name != "" && !slices.Contains(names, name) {
+			names = append(names, name)
+		}
+	}
+	if user.Name != visitor {
+		for _, g := range grantsOf(user.Name) {
+			add(clientName(g.Client))
+		}
+		s := settings()
+		if u := s.Users[user.Name]; s.Users == nil && s.MCPToken != "" || u != nil && u.MCPToken != "" {
+			add(tokenVia)
+		}
+	}
+	for _, e := range entries {
+		add(e.Assistant)
+	}
+	add(of.Via)
+	sort.Strings(names)
+	return names
 }
 
 // userNames: the wiki's users by name, sorted; none without users.
@@ -315,8 +351,12 @@ func changesURL(of changesOf, n int) string {
 	set("user", of.By)
 	set("under", of.Under)
 	set("since", of.Since)
+	set("via", of.Via)
 	if of.Assistant {
 		q.Set("assistant", "1")
+	}
+	if of.Outside {
+		q.Set("outside", "1")
 	}
 	if n > 0 {
 		q.Set("n", strconv.Itoa(n))
@@ -332,6 +372,7 @@ type changesPageView struct {
 	view
 	Of             changesOf
 	Users          []string // for the filter by user; none without users
+	Vias           []string // for the filter by connection (changesVias)
 	Days           []changeDay
 	Filtered       bool   // a filter is set
 	More           string // where the list goes on: the same with more commits
@@ -480,7 +521,7 @@ func undoChangesRoute(w http.ResponseWriter, r *http.Request) {
 	// Back to the list as it was: only its own filters, read as it reads them.
 	back := url.Values{}
 	if u, err := url.Parse(r.PostForm.Get("back")); err == nil {
-		for _, key := range []string{"user", "under", "since", "assistant", "n"} {
+		for _, key := range []string{"user", "under", "since", "via", "assistant", "outside", "n"} {
 			if v := u.Query().Get(key); v != "" {
 				back.Set(key, v)
 			}

@@ -516,12 +516,16 @@ The tool `history` names them alike, `"Water the beds" (task 1a2b3c4d)`, with th
 | Filter | Parameter | |
 |---|---|---|
 | **By** a user | `?user=` | with users; the commit's author; a name no user has is ignored |
-| **Only by an assistant** | `?assistant=1` | |
+| **Only by an assistant** | `?assistant=1` | its `Assistant` trailer, Which assistant in `docs/spec/mcp.md` |
+| **Through** a connection | `?via=` | the `Assistant` trailer's value: a client's name, `MCP token`, `An MCP client`; offered: the reader's own connections, `MCP token` when they have one, the names on the commits listed (`changesVias`); shown when there is one |
+| **Only text from outside** | `?outside=1` | an assistant said where its text is from (its `Source` trailer, Where the text is from in `docs/spec/mcp.md`) |
 | **In the folder** | `?under=` | as the tools' `under` |
 | **Since** a day | `?since=YYYY-MM-DD` | anything else is ignored |
 
 **All changes** drops them.
-A filter is asked of each commit as it is read (`keep` in `gitLogAll`), so a filtered list is as long as an unfiltered one.
+A filter is asked of each commit as it is read (`changesOf.takes`, `keep` in `gitLogAll`), so a filtered list is as long as an unfiltered one.
+The tool `history` takes the same filters (`since`, `under`, `assistant`, `outside`) into the same `changesOf`, so both doors list the same commits; Connect an assistant links each connection to its changes (`?user=<you>&via=<its name>`).
+An undo comes back to the list as it was filtered.
 
 ### Undo
 

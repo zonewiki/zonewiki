@@ -123,9 +123,11 @@ func TestMCPToolDefinitions(t *testing.T) {
 	// From 35100 for source on the tools that write text (2026-11): where an
 	// assistant's words are from, when not from its user. From 35800 for
 	// a task's place in the manual order (2026-11): what a drop in a list
-	// does, an assistant does too.
+	// does, an assistant does too. From 36600 for history's assistant and
+	// outside (2026-11): Changes' filters by connection and by text from
+	// elsewhere, at both doors.
 	// tests/test_mcp.py caps what is served (the same list, compact).
-	if len(mcpToolsJSON) > 36600 {
+	if len(mcpToolsJSON) > 36900 {
 		t.Errorf("the definitions grew to %d bytes: every session loads them", len(mcpToolsJSON))
 	}
 }

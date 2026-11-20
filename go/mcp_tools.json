@@ -236,6 +236,14 @@
      "type": "string",
      "description": "Recent changes in this folder only, e.g. 'tickets'."
     },
+    "assistant": {
+     "type": "string",
+     "description": "Only changes through this assistant ('MCP token': a token's; 'any': every assistant's)."
+    },
+    "outside": {
+     "type": "boolean",
+     "description": "Only changes whose text an assistant said is from elsewhere."
+    },
     "limit": {
      "type": "integer",
      "minimum": 1,

@@ -334,7 +334,21 @@ func history(args jsonObj, base string, user asker) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		return recentChanges(since, under, limit, user), nil
+		via, err := strArg(args, "assistant", false)
+		if err != nil {
+			return "", err
+		}
+		outside, err := boolArg(args, "outside")
+		if err != nil {
+			return "", err
+		}
+		of := changesOf{Since: since, Under: under, Outside: outside}
+		if via = onOneLine(via, clientNameMost); strings.EqualFold(via, "any") {
+			of.Assistant = true
+		} else {
+			of.Via = via
+		}
+		return recentChanges(of, limit, user), nil
 	}
 	slug, err := pageOrSeenSlug(raw, user) // a deleted page has a history too
 	if err != nil {
@@ -405,10 +419,12 @@ func pageChange(slug, path string, entries []GitEntry, version string) (string, 
 	return slug + ", version " + runePrefix(e.Sha, 7) + " of " + e.Time + ": " + e.Msg + "\n\n" + diff, nil
 }
 
-// recentChanges: the wiki's latest commits, as user sees them (wikiChanges),
-// after the files with changes not committed yet.
-func recentChanges(since, under string, limit int, user asker) string {
-	entries := wikiChanges(user, changesOf{Since: since, Under: under}, limit)
+// recentChanges: the wiki's latest commits of, as user sees them
+// (wikiChanges, Changes' filters), after the files with changes not
+// committed yet.
+func recentChanges(of changesOf, limit int, user asker) string {
+	since, under := of.Since, of.Under
+	entries := wikiChanges(user, of, limit)
 	var out, pending []string
 	for _, f := range gitUncommittedFiles() {
 		if !canSeePath(user, f.Filepath) {
@@ -426,6 +442,15 @@ func recentChanges(since, under string, limit int, user asker) string {
 		out = append(out, "Not committed yet (edited in the browser or on disk): "+strings.Join(pending, ", "))
 	}
 	where, when := underWhere(under), ""
+	switch {
+	case of.Via != "":
+		where = " through " + of.Via + where
+	case of.Assistant:
+		where = " by an assistant" + where
+	}
+	if of.Outside {
+		where = " with text from outside" + where
+	}
 	if since != "" {
 		when = " since " + since
 	}

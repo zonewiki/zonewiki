@@ -60,7 +60,7 @@ A wrong password is a 403 ("Incorrect password: no token was made."), and counts
 
 #### Connections
 
-With OAuth, the page says how an assistant signs in (the address to paste; the line for Claude Code, `claude mcp add --transport http zone <url>`), and lists the assistants its user allowed: the name each gave, the host its answer went to, what it may do (Read and change, or Only read) and, when that is less than its user, what it sees ("Sees only: …"), since when, the day it was last used, newest first.
+With OAuth, the page says how an assistant signs in (the address to paste; the line for Claude Code, `claude mcp add --transport http zone <url>`), and lists the assistants its user allowed: the name each gave, the host its answer went to, what it may do (Read and change, or Only read) and, when that is less than its user, what it sees ("Sees only: …"), since when, the day it was last used with **its changes** under it (Changes by the user through that connection, `?user=<name>&via=<client>`: Filtering Changes in `docs/spec/rendering.md`), newest first.
 
 - **Change…** sets what one may do and see, with the choices its user had on Allow (Change what a connection may do and see, below).
 - **End** (`POST /assistant/connections/<id>/revoke`, no password) ends one: its tokens are refused from then on (`?done=disconnect`); another user's is a 404.
@@ -278,7 +278,7 @@ Git history, three ways:
 
 | Called with | Gives |
 |-------------|-------|
-| no `slug` | Recent commits across the wiki (`wikiChanges`, the list the browser's Changes shows: `when \| version \| message \| pages and tasks`, a page by its slug, a task it changed by its title and short id, `"Water the beds" (task 1a2b3c4d)`, as Changes names it, else "tasks": The tasks a commit changed in `docs/spec/rendering.md`), from the day `since` (YYYY-MM-DD) or in a folder (`under`), after a line naming the files with uncommitted changes (`gitUncommittedFiles`). |
+| no `slug` | Recent commits across the wiki (`wikiChanges`, the list the browser's Changes shows: `when \| version \| message \| pages and tasks`, a page by its slug, a task it changed by its title and short id, `"Water the beds" (task 1a2b3c4d)`, as Changes names it, else "tasks": The tasks a commit changed in `docs/spec/rendering.md`), from the day `since` (YYYY-MM-DD) or in a folder (`under`), after a line naming the files with uncommitted changes (`gitUncommittedFiles`); `assistant` and `outside` filter as Changes' **Through** and **Only text from outside** do (`changesOf`, one function for both doors: Filtering Changes in `docs/spec/rendering.md`), `assistant: "any"` as **Only by an assistant**. |
 | `slug` | That page's versions (`gitLog`, across renames: `version \| when \| +added -removed \| message`), a deleted page's too, saying so, and saying when the page has uncommitted changes newer than the first one. |
 | `slug` and `version` | What that version changed, as `gitDiff` with the rename handling of the browser's Changes view. |
 
@@ -723,7 +723,7 @@ so text is said once: the parameters many tools share (`summary`, `guides`) have
 `read_guides` explains the guide gate,
 and `update_task`'s `due`/`start` refer to `create_task`'s,
 which carry the date rules.
-Tests keep the total under 31,400 characters as a client gets it (`test_they_stay_small`) and the file under 36,600 bytes (`TestMCPToolDefinitions`): a new parameter raises them by what it costs, not more.
+Tests keep the total under 31,700 characters as a client gets it (`test_they_stay_small`) and the file under 36,900 bytes (`TestMCPToolDefinitions`): a new parameter raises them by what it costs, not more.
 
 ### Retrieval
 
