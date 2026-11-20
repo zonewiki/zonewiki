@@ -484,7 +484,7 @@ Each row shows:
 - the time, what the commit says, who made it (with users);
 - an **assistant** mark where an assistant wrote it (its `Assistant` trailer, `commitMarkOf`, never its message, which a page's name can end in `(MCP)` too; the mark replaces the `(MCP)` an assistant's message ends in, and says **through Claude** where the commit names its connection: Which assistant in `docs/spec/mcp.md`);
 - where its text is from when the assistant said ("from https://…": Where the text is from, there);
-- then what it changed: each page by its slug, a link to what the commit changed on it (`/diff/<slug>/<sha>`), **Tasks** for the task files, any other file (an upload) by its path.
+- then what it changed: each page by its slug, a link to what the commit changed on it (`/diff/<slug>/<sha>`), any other file (an upload) by its path, and each task it changed by its title as it is now, a link to the task (`/tasks?task=<id>…`, `taskLink`; The tasks a commit changed, below).
 
 Found in the search modal's list (pinned above the pages, before Deleted Pages), from a page's History ("Changes across the wiki") and from Connect an assistant ("your assistants' changes": the list by you, only by an assistant).
 Not for a public wiki's visitor.
@@ -492,6 +492,22 @@ Not for a public wiki's visitor.
 It is the list the MCP tool `history` gives without a slug, from the same function (`wikiChanges`), so both doors show a commit alike:
 only the files its reader may see (`canSeePath`), not a commit that changed none of them (it doesn't count toward the 50 either), and its message without the names of what they don't see (`hideNames`).
 In sharing mode a commit shows only when nothing it changed is hidden: its message names what it changed.
+
+#### The tasks a commit changed
+
+A commit of tasks names the tasks it changed in its trailers, `Task: <id>` a task (`taskTrailers` in `go/changes.go`), written when the task store commits (`commitTasks`): the store knows which tasks its write changed, as it compares what each file held with what it writes (`Store.Touched` in `go/internal/taskfiles`: a task made, deleted or changed, wherever it went; not one whose file was written for another's sake, nor one that only went into its month's archive).
+At most 20 are named (`taskTrailersMost`), the rest counted, `More-Tasks: 3`; an id that is no plain word (a file edited by hand) is counted, never written into a line.
+So listing Changes reads no task file: the trailers come with the log (`taskMarkOf`), and the tasks they name are looked up once for the whole list among the search's records (`tasksOfChanges`, `tasksOfIDs`), which are kept current file by file.
+
+What a row shows of them, for its reader:
+
+- each task they see now by its title now (plain, at most 80 characters), linked to it in its list, open or on Closed;
+- **Tasks** where the commit changed task files and names none they see: one from before 2026-11-20, a write of every user's task files that doesn't name them (a tag or a list renamed, a page's rename followed in the tasks), a task's file uploaded, a task deleted for good since;
+- **other tasks** beside the named ones where it changed more than it names, or one of them was deleted for good;
+- nothing of a task they don't see (another user's private one, a group's they aren't in, one moved there since): not its title, its id, nor that it was there (`canSeeTask`).
+
+In sharing mode a task in a list that is not for sharing, or in no list (with users a user's Inbox), isn't named either, as the list switcher leaves those lists out.
+The tool `history` names them alike, `"Water the beds" (task 1a2b3c4d)`, with the short id its task tools take.
 
 #### Filtering Changes
 

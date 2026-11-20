@@ -44,7 +44,7 @@ def changes(client, **query):
     for row in re.findall(r'<li class="hist-row changes-row">(.*?)</li>', resp.get_data(as_text=True), re.S):
         what = re.search(r'<span class="changes-what">([^<]*)', row).group(1)
         who = re.search(r'<span class="hist-by"> · ([^<]*)</span>', row)
-        items = [(html.unescape(label), href) for href, label in re.findall(
+        items = [(html.unescape(label), html.unescape(href)) for href, label in re.findall(
             r'<(?:a href="([^"]*)"|span)>([^<]*)</(?:a|span)>', row.split('<span class="changes-items">')[1])]
         rows.append((html.unescape(what).strip(), who.group(1) if who else "", "changes-assistant" in row, items))
     return rows
@@ -53,14 +53,14 @@ def changes(client, **query):
 def test_the_wikis_commits_newest_first_with_what_each_changed(client, wiki_dir):
     save(client, "garden", "# Garden\n\nBeds.\n")
     tool(client, "write_page", slug="trips/rome", content="# Rome\n\nPlan.\n", summary="from the mail")
-    create_task(client, title="Water the beds")
+    task = create_task(client, title="Water the beds").get_json()
     rows = changes(client)
     assert [r[0] for r in rows[:3]] == ["Create task", "Create trips/rome: from the mail", "Update garden"]
     assert [r[2] for r in rows[:3]] == [False, True, False]          # the assistant's, marked
     assert all(who == "" for _, who, _, _ in rows)                   # no users: no names
     sha = git(wiki_dir, "log", "-n1", "--format=%H", "--", "trips/rome.md").strip()
     assert rows[1][3] == [("trips/rome", f"/diff/trips/rome/{sha}")]
-    assert rows[0][3] == [("Tasks", "/tasks")]
+    assert rows[0][3] == [("Water the beds", f"/tasks?task={task['id']}&view=open")]
     save(client, "tasks", "# A page called tasks\n")                 # a page, not the task files
     assert changes(client)[0][3][0][1].startswith("/diff/tasks/")
     # A page's link opens what that commit changed on it.
@@ -77,6 +77,61 @@ def test_the_same_list_as_the_assistants_history(client, wiki_dir):
     listed = re.findall(r"^\S+ \S+ \| \w{7} \| (.*?) \| ", tool(client, "history"), re.M)
     assert [m.removesuffix(" (through an assistant)") for m in listed] == [r[0] for r in changes(client)]
     assert listed[0] == "Append to garden (through an assistant)"
+
+
+# ── The tasks a commit changed ──────────────────────────────────────────────
+
+def test_a_commit_names_the_tasks_it_changed(client, wiki_dir):
+    """Each commit of tasks names them in its trailers, as the store wrote
+    them (no task file read to list Changes), and Changes shows each by its
+    title as it is now, linked to it; the tool history too, with its id."""
+    a = create_task(client, title="Water the beds").get_json()
+    b = create_task(client, title="Mow").get_json()
+    assert git(wiki_dir, "log", "-n1", "--format=%B").strip() == f"Create task\n\nTask: {b['id']}"
+    client.put(f"/api/tasks/{a['id']}", json={"title": "Water the [[garden]] beds"}, headers=HOST)
+    client.put(f"/api/tasks/{b['id']}", json={"completed": True}, headers=HOST)
+    tool(client, "update_task", id=a["id"], comment="Done half of it.")
+    rows = changes(client)
+    href = lambda t, view="open": f"/tasks?task={t['id']}&view={view}"
+    assert [(r[0], r[3]) for r in rows[:5]] == [
+        ("Comment on task", [("Water the garden beds", href(a))]),
+        ("Complete task", [("Mow", href(b, "closed"))]),
+        ("Update task", [("Water the garden beds", href(a))]),          # its title now, plain
+        ("Create task", [("Mow", href(b, "closed"))]),
+        ("Create task", [("Water the garden beds", href(a))])]
+    listed = tool(client, "history")
+    assert f'| Comment on task (through an assistant) | "Water the garden beds" (task {a["id"][:8]})' in listed
+    assert "pages and tasks:" in listed
+    # A task deleted for good is no task to name: its commits say Tasks.
+    assert client.delete(f"/api/tasks/{b['id']}", headers=HOST).status_code == 204
+    assert [(r[0], r[3]) for r in changes(client)[:3]] == [
+        ("Delete task", [("Tasks", "/tasks")]), ("Comment on task", [("Water the garden beds", href(a))]),
+        ("Complete task", [("Tasks", "/tasks")])]
+    # So does a commit from before the trailers, made by hand here.
+    (wiki_dir / "_tasks/tasks.json").write_text((wiki_dir / "_tasks/tasks.json").read_text().replace("Water", "Wet"))
+    git(wiki_dir, "commit", "-q", "-am", "Update task")
+    assert changes(client)[0][3] == [("Tasks", "/tasks")]
+
+
+def test_a_commit_of_many_tasks_names_some_and_counts_the_rest(client, wiki_dir):
+    ids = [create_task(client, title=f"T{i:02d}").get_json()["id"] for i in range(23)]
+    assert client.post("/api/tasks/batch-tag", json={"ids": ids, "add": ["many"]}, headers=HOST).status_code == 200
+    message = git(wiki_dir, "log", "-n1", "--format=%B")
+    assert message.count("\nTask: ") == 20 and message.strip().endswith("More-Tasks: 3")
+    items = changes(client)[0][3]
+    assert len(items) == 21 and items[-1] == ("other tasks", "/tasks") and all(i[1].startswith("/tasks?task=") for i in items[:20])
+
+
+def test_sharing_mode_names_no_task_of_a_list_not_for_sharing(client, wiki_dir):
+    assert client.post("/tasks/new-list", data={"name": "secret"}, headers=HOST).status_code == 302
+    assert client.post("/tasks/new-list", data={"name": "open"}, headers=HOST).status_code == 302
+    assert client.post("/api/tasks/settings", json={"list": "secret", "set": {"noshare": "1"}}, headers=HOST).status_code == 200
+    create_task(client, title="Hidden thing", list="secret")
+    create_task(client, title="Shown thing", list="open")
+    assert "Hidden thing" in client.get("/changes", headers=HOST).get_data(as_text=True)
+    client.set_cookie("zone-sharing", "1")
+    body = client.get("/changes", headers=HOST).get_data(as_text=True)
+    assert "Shown thing" in body and "Hidden thing" not in body
 
 
 def test_filters(client, wiki_dir):
@@ -191,7 +246,7 @@ def test_a_write_through_a_connection_names_its_assistant(client, wiki_dir, conn
     assert history.count(" · alice through Claude</span>") == 1 and history.count(" · alice</span>") == 1
     assert history.count(" · alice through an assistant</span>") == 1
     listed = tool(client, "history", token="alice-token")
-    assert "Create task (by alice through Claude) | tasks" in listed
+    assert 'Create task (by alice through Claude) | "Water" (task ' in listed
     assert "Append to garden (by alice through an assistant) | garden" in listed
     assert "(by alice through Claude)" in tool(client, "history", token="alice-token", slug="garden")
 
@@ -368,8 +423,8 @@ def test_a_write_says_where_its_text_is_from(client, wiki_dir, connected):
     # In the commit: a trailer after the first line, beside the connection's.
     assert git(wiki_dir, "log", "-n1", "--skip=2", "--format=%B").strip() == \
         "Append to garden: from the newsletter (MCP)\n\nAssistant: Claude\nSource: https://example.org/garden-news?id=7"
-    assert git(wiki_dir, "log", "-n1", "--skip=1", "--format=%B").strip().endswith(
-        "(MCP)\n\nAssistant: MCP token\nSource: a mail from Bob")
+    assert re.fullmatch(r"Create task \(MCP\)\n\nAssistant: MCP token\nSource: a mail from Bob\nTask: [0-9a-f-]{36}",
+                        git(wiki_dir, "log", "-n1", "--skip=1", "--format=%B").strip())
     body = client.get("/changes", headers=HOST).get_data(as_text=True)
     sources = [html.unescape(s) for s in re.findall(r'<span class="changes-source"[^>]*>from ([^<]*)</span>', body)]
     assert sources == ["a mail from Bob", "https://example.org/garden-news?id=7"]
@@ -378,7 +433,7 @@ def test_a_write_says_where_its_text_is_from(client, wiki_dir, connected):
     assert history.count(" · from https://example.org/garden-news?id=7</span>") == 1 and history.count(" · from ") == 1
     listed = tool(client, "history", token="alice-token")
     assert "(by alice through Claude; from https://example.org/garden-news?id=7) | garden" in listed
-    assert "(by alice through an assistant; from a mail from Bob) | tasks" in listed
+    assert '(by alice through an assistant; from a mail from Bob) | "Order mulch" (task ' in listed
     assert "Append to garden (by alice through an assistant) | garden" in listed
 
 

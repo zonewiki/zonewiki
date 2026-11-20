@@ -1996,6 +1996,10 @@ What needs every task reads everything still: an import and the undo of a delete
 
 **A write writes only its user's places** (`byOwner` in `go/internal/taskfiles`): a write hands over every open task its user sees, each with its owner, and one of an owner that isn't the user's (`Store.Owners`: the shared files, their own, their groups') is refused: no question per list.
 
+**A commit names the tasks it changed** (`Store.Touched`, handed to `Commit` with the files): as a write replaces or removes a file, the store keeps what the file held (as it knows it, no read: `note`) and what it writes, and at the commit the tasks whose two differ (`Task.Same`), or that are in only one, are the write's: a task made, deleted, changed or moved to another list or owner; not one that only went into its month's archive.
+Zone writes them into the commit's trailers, `Task: <id>` (The tasks a commit changed in `docs/spec/rendering.md`), so Changes names them without reading a task file, and Undo knows which tasks a later commit changed.
+A write that writes task files itself (a tag's rename, a list's, a page's rename followed in the tasks) names none.
+
 **A file whose tasks a write didn't touch costs a comparison** (`holds` in `go/internal/taskfiles`): the store knows each file's tasks as it parsed or wrote them (`writeTasks`), and a write compares what it would write with that (`Task.Same`) before it reads or encodes anything.
 Changing an open task doesn't read or encode the closed files.
 

@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"zonewiki/internal/mdtext"
 )
 
 // assistantMark ends the first line of a commit an assistant made (mcpMark),
@@ -145,6 +146,66 @@ func commitWhat(subject string, m commitMark) string {
 	return strings.TrimSpace(strings.TrimSuffix(subject, assistantMark))
 }
 
+// taskTrailerKey names the trailers of a commit that changed tasks, a task
+// each, by its id (taskTrailers): which tasks Changes names for it, and
+// whether a later commit changed one of them again (undoOffers), without a
+// task file read. The task store knows which tasks a write changed
+// (taskfiles.Store.Touched); a commit names at most taskTrailersMost, and
+// says how many more it changed (moreTasksTrailerKey).
+const (
+	taskTrailerKey      = "Task"
+	moreTasksTrailerKey = "More-Tasks"
+	taskTrailersMost    = 20
+)
+
+// taskTrailers: the trailer lines naming the tasks ids a commit changed:
+// "Task: <id>" for each of the first taskTrailersMost whose id is one plain
+// word (taskFolderRE: what Zone makes, an import keeps; nothing that could
+// start a line of its own), "More-Tasks: N" for the rest.
+func taskTrailers(ids []string) []string {
+	var lines []string
+	more := 0
+	for _, id := range ids {
+		if len(lines) < taskTrailersMost && taskFolderRE.MatchString(id) {
+			lines = append(lines, taskTrailerKey+": "+id)
+		} else {
+			more++
+		}
+	}
+	if more > 0 {
+		lines = append(lines, moreTasksTrailerKey+": "+strconv.Itoa(more))
+	}
+	return lines
+}
+
+// tasksFormat: a commit's Task trailers in a git log format, for
+// taskMarkOf: their values with a comma between them, a \x1f, and its
+// More-Tasks trailer's.
+const tasksFormat = "%(trailers:key=" + taskTrailerKey + ",valueonly,separator=%x2C)\x1f" +
+	"%(trailers:key=" + moreTasksTrailerKey + ",valueonly,separator=%x2C)"
+
+// taskMark: which tasks a commit says it changed (its Task trailers), by
+// id, and how many more it changed than it names. A commit that changed
+// task files and names none is from before 2026-11-20, or a write of every
+// owner's files that doesn't name them (a tag or list renamed).
+type taskMark struct {
+	Tasks     []string
+	MoreTasks int
+}
+
+// taskMarkOf: the task mark of a commit whose Task and More-Tasks trailers
+// have these values (as tasksFormat gives them).
+func taskMarkOf(ids, more string) taskMark {
+	var m taskMark
+	for _, id := range strings.Split(ids, ",") {
+		if id = strings.TrimSpace(id); taskFolderRE.MatchString(id) && !slices.Contains(m.Tasks, id) {
+			m.Tasks = append(m.Tasks, id)
+		}
+	}
+	m.MoreTasks, _ = strconv.Atoi(strings.TrimSpace(more))
+	return m
+}
+
 // fromWhere: "; from https://…" after who a commit is by; "" for none.
 func fromWhere(source string) string {
 	if source == "" {
@@ -222,7 +283,8 @@ func changesView(w http.ResponseWriter, r *http.Request) {
 	if limit != changesShown {
 		shown = limit
 	}
-	v := &changesPageView{Of: of, Users: users, Days: changeDays(entries, time.Now(), undoOffers(rq.user, entries)),
+	v := &changesPageView{Of: of, Users: users, Days: changeDays(entries, time.Now(), undoOffers(rq.user, entries),
+		tasksOfChanges(rq.user, entries, rq.sharing)),
 		Back: changesURL(of, shown), Undone: q.Get("undone"), UndoError: q.Get("undo_error"),
 		Filtered:       of.Since != "" || of.Under != "" || of.By != "" || of.Assistant,
 		BreadcrumbHTML: breadcrumb(rq, []crumb{{"Changes", ""}}, "", false, "", "")}
@@ -453,12 +515,53 @@ func undoneSays(u *undone) string {
 }
 
 // changeItem: something a commit changed: a page (Href: what the commit
-// changed on it), the tasks, or another file by its path (no Href).
-type changeItem struct{ Label, Href string }
+// changed on it), a task (Task: its id; Href: the task in its list), the
+// tasks without a name, or another file by its path (no Href).
+type changeItem struct{ Label, Href, Task string }
+
+// changedTasks: the tasks a list of commits names (their Task trailers) as
+// their reader sees them now: seen, those they see, as they are now (the
+// search's records, tasksOfIDs: no task file read for them); gone, the ids
+// no task has any more (deleted for good); and the lists they see, for a
+// task's link. A task someone else sees is in neither: it isn't named,
+// nor counted.
+type changedTasks struct {
+	seen  map[string]*Task
+	gone  map[string]bool
+	lists map[string]ListInfo
+}
+
+// tasksOfChanges: the tasks the commits name, as user sees them. In
+// sharing mode not one in a list that is not for sharing, nor one in no
+// list (with users a user's Inbox), as the list switcher leaves them out
+// (listHidden).
+func tasksOfChanges(user asker, entries []LogEntry, sharing bool) changedTasks {
+	ids := map[string]bool{}
+	for _, e := range entries {
+		for _, id := range e.Tasks {
+			ids[id] = true
+		}
+	}
+	ct := changedTasks{seen: map[string]*Task{}, gone: map[string]bool{}}
+	if len(ids) == 0 {
+		return ct
+	}
+	ct.seen, ct.gone = tasksOfIDs(user, ids)
+	ct.lists = taskLists(user)
+	if sharing {
+		for id, t := range ct.seen {
+			l, ok := ct.lists[taskList(t, ct.lists)]
+			if ok && l.NoShare || !ok && settings().Users != nil {
+				delete(ct.seen, id)
+			}
+		}
+	}
+	return ct
+}
 
 // changeDays: commits, newest first, as the rows of their days, each with
-// what it offers to undo.
-func changeDays(entries []LogEntry, now time.Time, offers map[string]undoOffer) []changeDay {
+// what it offers to undo and the tasks it changed as ct has them.
+func changeDays(entries []LogEntry, now time.Time, offers map[string]undoOffer, ct changedTasks) []changeDay {
 	today, yesterday := now.Format("2006-01-02"), now.AddDate(0, 0, -1).Format("2006-01-02")
 	var days []changeDay
 	last := ""
@@ -475,28 +578,65 @@ func changeDays(entries []LogEntry, now time.Time, offers map[string]undoOffer) 
 			days, last = append(days, changeDay{Label: label}), day
 		}
 		row := changeRow{Time: clock, Rel: e.Rel, Author: e.Author, Assistant: e.ByAssistant(), Via: e.Via(), Source: e.Source,
-			undoOffer: offers[e.Sha], What: commitWhat(e.Msg, e.commitMark), Items: changeItems(e)}
+			undoOffer: offers[e.Sha], What: commitWhat(e.Msg, e.commitMark), Items: changeItems(e, ct)}
 		days[len(days)-1].Rows = append(days[len(days)-1].Rows, row)
 	}
 	return days
 }
 
 // changeItems: what a commit changed, each thing once: its pages by slug,
-// "Tasks" for the task files, any other file (an upload) by its path.
-func changeItems(e LogEntry) []changeItem {
+// any other file (an upload) by its path, then the tasks it names that its
+// reader sees (ct), each by its title now; "Tasks" for its task files when
+// it names none of them ("other tasks" beside those it names when it
+// changed more than it names, or one deleted for good since). A task the
+// reader doesn't see adds nothing.
+func changeItems(e LogEntry, ct changedTasks) []changeItem {
 	var items []changeItem
 	seen := map[string]bool{}
-	for _, f := range e.Files {
-		item := changeItem{Label: f}
-		if slug, isPage := strings.CutSuffix(f, ".md"); isTaskFile(f) {
-			item = changeItem{Label: "Tasks", Href: "/tasks"}
-		} else if isPage && safePath(slug) != "" {
-			item = changeItem{Label: slug, Href: pathURL("diff", slug) + "/" + e.Sha}
-		}
+	add := func(item changeItem) {
 		if key := item.Label + "\x00" + item.Href; !seen[key] {
 			seen[key] = true
 			items = append(items, item)
 		}
 	}
+	tasks := false
+	for _, f := range e.Files {
+		if isTaskFile(f) {
+			tasks = true
+			continue
+		}
+		item := changeItem{Label: f}
+		if slug, isPage := strings.CutSuffix(f, ".md"); isPage && safePath(slug) != "" {
+			item = changeItem{Label: slug, Href: pathURL("diff", slug) + "/" + e.Sha}
+		}
+		add(item)
+	}
+	if !tasks {
+		return items
+	}
+	named, unnamed := 0, len(e.Tasks) == 0 || e.MoreTasks > 0
+	for _, id := range e.Tasks {
+		if t := ct.seen[id]; t != nil {
+			add(changeItem{Label: taskLabel(t), Href: taskLink(t, taskList(t, ct.lists)), Task: t.ID})
+			named++
+		} else if ct.gone[id] {
+			unnamed = true
+		}
+	}
+	if named == 0 || unnamed {
+		label := "Tasks"
+		if named > 0 {
+			label = "other tasks"
+		}
+		add(changeItem{Label: label, Href: "/tasks"})
+	}
 	return items
+}
+
+// taskLabel: a task as Changes names it: its title, plain and short.
+func taskLabel(t *Task) string {
+	if title := cutRunes(mdtext.PlainTaskTitle(t.Title), 80, "…"); title != "" {
+		return title
+	}
+	return "a task"
 }

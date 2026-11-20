@@ -278,7 +278,7 @@ Git history, three ways:
 
 | Called with | Gives |
 |-------------|-------|
-| no `slug` | Recent commits across the wiki (`wikiChanges`, the list the browser's Changes shows: `when \| version \| message \| pages`, a page by its slug, `_tasks/` files as "tasks"), from the day `since` (YYYY-MM-DD) or in a folder (`under`), after a line naming the files with uncommitted changes (`gitUncommittedFiles`). |
+| no `slug` | Recent commits across the wiki (`wikiChanges`, the list the browser's Changes shows: `when \| version \| message \| pages and tasks`, a page by its slug, a task it changed by its title and short id, `"Water the beds" (task 1a2b3c4d)`, as Changes names it, else "tasks": The tasks a commit changed in `docs/spec/rendering.md`), from the day `since` (YYYY-MM-DD) or in a folder (`under`), after a line naming the files with uncommitted changes (`gitUncommittedFiles`). |
 | `slug` | That page's versions (`gitLog`, across renames: `version \| when \| +added -removed \| message`), a deleted page's too, saying so, and saying when the page has uncommitted changes newer than the first one. |
 | `slug` and `version` | What that version changed, as `gitDiff` with the rename handling of the browser's Changes view. |
 

@@ -663,6 +663,7 @@ func gitLog(path string, max int) []GitEntry {
 type LogEntry struct {
 	Sha, Time, Rel, Msg, Author string
 	commitMark                  // whether an assistant wrote it, which, and where its text is from
+	taskMark                    // which tasks it says it changed
 	Files                       []string
 	Kinds                       string
 	Hidden                      int
@@ -688,7 +689,7 @@ func gitLogAll(since, under string, limit int, see func(path string) bool, keep 
 	var entries []LogEntry
 	for skip := 0; len(entries) < limit; skip, batch = skip+batch, 2*batch {
 		args := []string{"log", "-z", "-n", strconv.Itoa(batch), "--skip", strconv.Itoa(skip), "--name-status", "--no-renames",
-			"--date=format:%Y-%m-%d %H:%M", "--format=\x1e%H\x1f%ad\x1f%ar\x1f%an\x1f" + markFormat + "\x1f%s"}
+			"--date=format:%Y-%m-%d %H:%M", "--format=\x1e%H\x1f%ad\x1f%ar\x1f%an\x1f" + markFormat + "\x1f" + tasksFormat + "\x1f%s"}
 		if since != "" {
 			args = append(args, "--since="+since+" 00:00")
 		}
@@ -697,12 +698,12 @@ func gitLogAll(since, under string, limit int, see func(path string) bool, keep 
 		}
 		records := logRecords(runGit(args...).Stdout)
 		for _, record := range records {
-			parts := strings.SplitN(record.head, "\x1f", 7)
-			if len(parts) != 7 {
+			parts := strings.SplitN(record.head, "\x1f", 9)
+			if len(parts) != 9 {
 				continue
 			}
-			e := LogEntry{Sha: parts[0], Time: parts[1], Rel: parts[2], Author: commitAuthor(parts[3]), Msg: parts[6],
-				commitMark: commitMarkOf(parts[4], parts[5])}
+			e := LogEntry{Sha: parts[0], Time: parts[1], Rel: parts[2], Author: commitAuthor(parts[3]), Msg: parts[8],
+				commitMark: commitMarkOf(parts[4], parts[5]), taskMark: taskMarkOf(parts[6], parts[7])}
 			for i := 0; i+1 < len(record.fields); i += 2 {
 				kind, n := record.fields[i], record.fields[i+1]
 				switch {

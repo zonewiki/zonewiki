@@ -36,9 +36,15 @@ func init() {
 		MayWrite:   mayWriteTasks,
 		GroupsDir:  groupsDir,
 		Groups:     taskGroups,
-		Commit:     gitCommit,
+		Commit:     commitTasks,
 		Now:        func() time.Time { return now() },
 	}
+}
+
+// commitTasks: the task store's commits (gitCommit), each naming the tasks
+// it changed in its trailers (taskTrailers).
+func commitTasks(user, message string, tasks []string, paths ...string) error {
+	return gitCommit(user, withTrailers(message, taskTrailers(tasks)), paths...)
 }
 
 // taskGroups: the groups whose lists and tasks user reads and writes (the
@@ -854,6 +860,34 @@ func resolveTaskRefs(user asker, refs []string) map[string]*Task {
 		out[ref] = task
 	}
 	return out
+}
+
+// tasksOfIDs: of the tasks ids, those user sees, by id, as the search keeps
+// them (records, taskSearchDocs: to read only, without a task file read
+// for them), and the ids no task has any more (deleted for good). A task
+// someone else sees is in neither: it is not to be named, nor counted.
+func tasksOfIDs(user asker, ids map[string]bool) (seen map[string]*Task, gone map[string]bool) {
+	seen, gone = map[string]*Task{}, map[string]bool{}
+	if len(ids) == 0 {
+		return seen, gone
+	}
+	found := map[string]bool{}
+	for _, d := range taskSearchDocs() {
+		id := d.Task.ID
+		if !ids[id] {
+			continue
+		}
+		found[id] = true
+		if canSeeTask(user, d.Task) && (seen[id] == nil || d.Task.IsOpen()) {
+			seen[id] = d.Task
+		}
+	}
+	for id := range ids {
+		if !found[id] {
+			gone[id] = true
+		}
+	}
+	return seen, gone
 }
 
 // findTasks: every task user sees whose id starts with prefix (lowercase);

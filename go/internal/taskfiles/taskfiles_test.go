@@ -20,9 +20,10 @@ import (
 type fixture struct {
 	*Store
 	root    string
-	commits []string  // "user|message|file file"
-	viewer  string    // who may not write
-	now     time.Time // the clock
+	commits []string   // "user|message|file file"
+	touched [][]string // the tasks each commit named, by id
+	viewer  string     // who may not write
+	now     time.Time  // the clock
 }
 
 func newStore(t *testing.T, users ...string) *fixture {
@@ -41,7 +42,8 @@ func newStore(t *testing.T, users ...string) *fixture {
 			}
 			return nil
 		},
-		Commit: func(user, message string, paths ...string) error {
+		Commit: func(user, message string, tasks []string, paths ...string) error {
+			f.touched = append(f.touched, tasks)
 			var rel []string
 			for _, p := range paths {
 				r, _ := filepath.Rel(f.root, p)
@@ -1266,7 +1268,7 @@ func TestIdleArchivesAreForgotten(t *testing.T) {
 func TestAReadDoesntWaitForACommit(t *testing.T) {
 	f := newStore(t)
 	committing, done := make(chan bool), make(chan bool)
-	f.Store.Commit = func(user, message string, paths ...string) error {
+	f.Store.Commit = func(user, message string, tasks []string, paths ...string) error {
 		committing <- true
 		<-done
 		return nil
@@ -1355,4 +1357,74 @@ func (s *Store) Snapshot(user asker.Asker) (open, done []*Task) {
 	s.view.RLock()
 	defer s.view.RUnlock()
 	return s.readOpen(user), append(s.readClosed(user), s.readArchived(user, s.Owners(user))...)
+}
+
+// A commit names the tasks its write changed (Commit's tasks, Touched): one
+// made, changed, completed (from one file into another), moved to another
+// list's or owner's files, deleted; not one whose file was written for
+// another's sake, nor one that only went to its month's archive.
+func TestACommitNamesTheTasksItChanged(t *testing.T) {
+	f := newStore(t, "alice")
+	f.write(t, "alice", []*Task{task("a", "", ""), task("b", "", ""), in("shop", task("c", "", ""))},
+		[]*Task{task("d", "", "2026-06-01T09:00:00")}, "Write")
+	if got := slices.Sorted(slices.Values(f.touched[0])); !reflect.DeepEqual(got, []string{"a", "b", "c", "d"}) {
+		t.Errorf("made: %v", got)
+	}
+	last := func() []string { return f.touched[len(f.touched)-1] }
+	f.one(t, "alice", "a", "Retitle", func(active, closed []*Task) ([]*Task, []*Task) {
+		for _, x := range active {
+			if x.ID == "a" {
+				x.Title = "Another"
+			}
+		}
+		return active, closed
+	})
+	if got := last(); !reflect.DeepEqual(got, []string{"a"}) {
+		t.Errorf("one changed beside another in its file: %v", got)
+	}
+	f.one(t, "alice", "b", "Done and moved", func(active, closed []*Task) ([]*Task, []*Task) {
+		var keep []*Task
+		for _, x := range active {
+			switch x.ID {
+			case "b":
+				x.ClosedAt = "2026-06-01T10:00:00"
+				closed = append(closed, x)
+				continue
+			case "c":
+				x.List, x.Owner = "", "alice"
+			}
+			keep = append(keep, x)
+		}
+		return keep, closed
+	})
+	if got := slices.Sorted(slices.Values(last())); !reflect.DeepEqual(got, []string{"b", "c"}) {
+		t.Errorf("completed, and moved to alice's files: %v", got)
+	}
+	f.rewrite(t, "alice", "Delete", func(active, closed []*Task) ([]*Task, []*Task) {
+		return slices.DeleteFunc(active, func(x *Task) bool { return x.ID == "a" }), closed
+	})
+	if got := last(); !reflect.DeepEqual(got, []string{"a"}) {
+		t.Errorf("deleted: %v", got)
+	}
+	// A month's end files d into its archive, changing nothing of it.
+	n := len(f.touched)
+	f.now = time.Date(2026, 7, 2, 12, 0, 0, 0, time.UTC)
+	f.ArchiveOldClosed()
+	if len(f.touched) != n+1 || len(last()) != 0 || !strings.Contains(f.text(t, "_tasks/closed-2026-06.json"), `"d"`) {
+		t.Errorf("archived: %v, commits %q", f.touched[n:], f.commits)
+	}
+	// Nothing lingers for the next write after one that wasn't committed.
+	f.Lock()
+	active, _, err := f.ReadForWriteLocked(asker.User("alice"))
+	if err == nil {
+		active[0].Title = "Changed, not committed"
+		_, err = f.writeOpenLocked(asker.User("alice"), active)
+	}
+	f.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := f.Touched(); len(got) != 0 {
+		t.Errorf("left over: %v", got)
+	}
 }

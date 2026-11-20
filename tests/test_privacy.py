@@ -329,6 +329,28 @@ def test_her_archives_by_month_are_hers(client, wiki, tmp_path_factory):
     sign_in(client, "bob")
     assert "private/alice" not in mcp(client, "history") and "1997" not in mcp(client, "history")
 
+def test_changes_name_only_the_tasks_bob_sees(client, wiki):
+    """A commit that changed a shared task and one of alice's own names both
+    (its Task trailers), and bob sees the commit for the shared one: Changes
+    and the tool history give him that task's title, and nothing of hers,
+    not her title, her id, nor that there was one more."""
+    sign_in(client, "alice")
+    shared = client.post("/api/tasks", json={"title": "Order chairs", "list": "team"}, headers=HOST).get_json()
+    resp = client.post("/api/tasks/batch-tag", json={"ids": [shared["id"], TASK_ID], "add": ["both"]}, headers=HOST)
+    assert resp.status_code == 200
+    message = git(wiki, "log", "-n1", "--format=%B")
+    assert f"Task: {TASK_ID}" in message and f"Task: {shared['id']}" in message
+    assert "Order chairs" in client.get("/changes", headers=HOST).get_data(as_text=True)
+    assert SECRET in client.get("/changes", headers=HOST).get_data(as_text=True)          # hers, to her
+    sign_in(client, "bob")
+    body = client.get("/changes", headers=HOST).get_data(as_text=True)
+    row = re.findall(r'<li class="hist-row changes-row">(.*?)</li>', body, re.S)[0]
+    assert "Tag tasks" in row and f"task={shared['id']}" in row and "Order chairs" in row
+    assert SECRET not in body and TASK_ID not in body and "other tasks" not in row and ">Tasks<" not in row
+    text = mcp(client, "history")
+    assert '"Order chairs" (task ' in text and SECRET not in text and TASK_ID[:8] not in text and "other tasks" not in text
+
+
 def test_alice_is_offered_the_changes_she_left(alice, wiki):
     body = alice.get("/edit/plans", headers=HOST).get_data(as_text=True)
     assert 'id="left-draft"' in body and SECRET in body

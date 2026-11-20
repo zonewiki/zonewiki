@@ -66,10 +66,11 @@ Each row shows:
 - who made it, with users;
 - an **assistant** mark if an AI assistant made it, or **through Claude** (the name it gave when it was connected);
 - **from …** with an address, if the assistant said where its text came from;
-- what it changed: each page as a link to what changed on it, **Tasks** for changes to tasks, and the names of other files such as uploads.
+- what it changed: each page as a link to what changed on it, each task by its name as it is now, a link to the task, and the names of other files such as uploads.
+  A change that named no task it changed (one from before November 2026, a tag renamed everywhere), or one whose task was deleted since, says **Tasks**.
 
 **Show more** at the bottom loads older changes.
-You only see changes to pages and files you're allowed to see.
+You only see changes to pages, tasks and files you're allowed to see: a task you don't see isn't named.
 
 ### Filtering changes
 

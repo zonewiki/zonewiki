@@ -1722,7 +1722,7 @@ class TestHistory:
         assert not err
         rows = text.splitlines()
         assert rows[0].startswith("Changes, newest first (")
-        assert re.fullmatch(r"\d{4}-\d\d-\d\d \d\d:\d\d \| [0-9a-f]{7} \| Create task \(through an assistant\) \| tasks", rows[1])
+        assert re.fullmatch(r"\d{4}-\d\d-\d\d \d\d:\d\d \| [0-9a-f]{7} \| Create task \(through an assistant\) \| \"A task\" \(task [0-9a-f]{8}\)", rows[1])
         assert rows[2].endswith("| Create other (through an assistant) | other")
         assert rows[4].endswith("| Create notes/p: first (through an assistant) | notes/p")
         assert call(client, "history", under="notes")[0].count("\n") == 2

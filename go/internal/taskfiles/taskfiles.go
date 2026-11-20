@@ -73,8 +73,10 @@ type Store struct {
 	// are in them: the group's place is theirs); for Everyone every group.
 	// nil: no groups. Every read and write of a user's asks, through Owners.
 	Groups func(user asker.Asker) []string
-	// Commit commits the files a write changed, by user ("": Zone itself).
-	Commit func(user, message string, paths ...string) error
+	// Commit commits the files a write changed, by user ("": Zone itself);
+	// tasks: the ids of the tasks the write changed (Touched), for the
+	// commit to name.
+	Commit func(user, message string, tasks []string, paths ...string) error
 	// Now: the clock (which year closed tasks belong to the archives).
 	Now func() time.Time
 
@@ -93,6 +95,17 @@ type Store struct {
 	// nil: it read every one (ReadForWriteLocked). Lives as long as the lock
 	// is held.
 	scope map[string]bool
+	// touched: the tasks the write in progress changed (note, Touched).
+	// Lives as long as the lock is held, or until the write's commit.
+	touched touchedTasks
+}
+
+// touchedTasks: of each task a write's files held or hold, by id, what the
+// first file that held it had (was) and what the file that holds it has now
+// (now), and the ids in the order they came.
+type touchedTasks struct {
+	was, now map[string]*Task
+	order    []string
 }
 
 // Lock serializes every read-modify-write of the task files: two concurrent
@@ -105,8 +118,57 @@ type Store struct {
 func (s *Store) Lock() { s.mu.Lock(); s.locked = true }
 func (s *Store) Unlock() {
 	s.Release()
-	s.scope, s.locked = nil, false
+	s.scope, s.locked, s.touched = nil, false, touchedTasks{}
 	s.mu.Unlock()
+}
+
+// note: the write in progress is about to write tasks into the file at
+// path, or remove it (tasks nil): what the file held and what it will hold
+// are kept for Touched. What it held is what the store knows of it, which
+// the write read (peekFile: no copy, nothing of it changed).
+func (s *Store) note(path string, tasks []*Task) {
+	t := &s.touched
+	if t.was == nil {
+		t.was, t.now = map[string]*Task{}, map[string]*Task{}
+	}
+	add := func(id string) {
+		if _, ok := t.was[id]; !ok {
+			if _, ok := t.now[id]; !ok {
+				t.order = append(t.order, id)
+			}
+		}
+	}
+	if old, _, ok := peekFile(path); ok {
+		for _, x := range old {
+			add(x.ID)
+			if _, ok := t.was[x.ID]; !ok {
+				t.was[x.ID] = x
+			}
+		}
+	}
+	for _, x := range tasks {
+		add(x.ID)
+		t.now[x.ID] = x
+	}
+}
+
+// Touched: the ids of the tasks the write in progress changed so far, in
+// the order it came to them, and forgets them (for its commit): a task it
+// made, deleted or changed (Same), wherever it is kept now; not one that
+// only moved between files (a month's archive) or whose file was written
+// for another's sake.
+func (s *Store) Touched() []string {
+	t := s.touched
+	s.touched = touchedTasks{}
+	var out []string
+	for _, id := range t.order {
+		was, wok := t.was[id]
+		now, nok := t.now[id]
+		if !wok || !nok || !now.Same(was) {
+			out = append(out, id)
+		}
+	}
+	return out
 }
 
 // Hold: the write in progress (under Lock) is about to change task files or
@@ -1106,6 +1168,9 @@ func (s *Store) writeOpenOf(who asker.Asker, owner string, tasks []*Task, reform
 		}
 		raw, rerr := os.ReadFile(p)
 		if len(in[d]) == 0 && !own {
+			if rerr == nil {
+				s.note(p, nil)
+			}
 			if rerr == nil && os.Remove(p) == nil {
 				forget(p)
 				changed = append(changed, p)
@@ -1120,6 +1185,7 @@ func (s *Store) writeOpenOf(who asker.Asker, owner string, tasks []*Task, reform
 		if rerr == nil && string(raw) == text || errors.Is(rerr, os.ErrNotExist) && (owner != "" || !create) && len(in[d]) == 0 {
 			continue
 		}
+		s.note(p, in[d])
 		if err := writeTasks(p, in[d], text); err != nil {
 			return changed, err
 		}
@@ -1203,6 +1269,7 @@ func (s *Store) writeClosed(who asker.Asker, owner string, closed []*Task, refor
 		// A file that holds no task anymore goes: a month's whose tasks were
 		// all reopened; a list's closed.json.
 		if err == nil && len(tasks) == 0 && p != keep {
+			s.note(p, nil)
 			if os.Remove(p) == nil {
 				forget(p)
 				changed = append(changed, p)
@@ -1217,6 +1284,7 @@ func (s *Store) writeClosed(who asker.Asker, owner string, closed []*Task, refor
 		if err == nil && (string(raw) == text || !reformat && sameTasks(raw, text)) {
 			continue
 		}
+		s.note(p, tasks)
 		if err := writeTasks(p, tasks, text); err != nil {
 			return changed, err
 		}
@@ -1235,11 +1303,13 @@ func sameTasks(raw []byte, text string) bool {
 	return err == nil && have == text
 }
 
-// CommitFiles commits the task files a write changed, by user.
+// CommitFiles commits the task files a write changed, by user, naming the
+// tasks it changed (Touched).
 func (s *Store) CommitFiles(user asker.Asker, message string, changed []string) {
 	s.Release()
+	touched := s.Touched()
 	if len(changed) > 0 {
-		_ = s.Commit(user.Name, message, changed...)
+		_ = s.Commit(user.Name, message, touched, changed...)
 	}
 }
 
@@ -1308,7 +1378,7 @@ func (s *Store) ArchiveOldClosed() {
 	if moved {
 		msg = "Archive closed tasks"
 	}
-	_ = s.Commit("", msg, changed...)
+	_ = s.Commit("", msg, s.Touched(), changed...)
 }
 
 // FileByListLocked files every task of owners' that is in another folder

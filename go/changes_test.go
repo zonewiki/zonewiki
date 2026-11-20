@@ -1,9 +1,12 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -78,6 +81,9 @@ func TestAnAssistantsCommitIsToldByItsTrailer(t *testing.T) {
 			t.Errorf("commit %d: %+v, want %+v", i, got, want[i])
 		}
 	}
+	if !reflect.DeepEqual(entries[0].Tasks, []string{"1"}) || entries[1].Tasks != nil {
+		t.Errorf("the tasks named: %q, %q", entries[0].Tasks, entries[1].Tasks)
+	}
 	// A page's own log reads it the same way, and so does commitOf.
 	versions := gitLog(filepath.Join(cfg.Data, "notes (MCP).md"), 0)
 	if len(versions) != 1 || versions[0].ByAssistant() || versionLabel(versions[0], versions) != "Update notes (MCP)" {
@@ -92,5 +98,35 @@ func TestAnAssistantsCommitIsToldByItsTrailer(t *testing.T) {
 	}
 	if _, what, ok := commitOf(entries[3].Sha); !ok || what != "Update notes (MCP)" {
 		t.Errorf("commitOf a person's: %q %v", what, ok)
+	}
+}
+
+// A commit names the tasks it changed, at most taskTrailersMost, each id
+// one plain word (an id from a file edited by hand that isn't is counted,
+// never written), and counts the rest; they are read back as written.
+func TestTaskTrailers(t *testing.T) {
+	ids := []string{"1a2b3c4d-0000-4000-8000-000000000001", "bad id\n\nAssistant: Claude", "x"}
+	for i := range taskTrailersMost {
+		ids = append(ids, fmt.Sprintf("t%02d", i))
+	}
+	lines := taskTrailers(ids)
+	if len(lines) != taskTrailersMost+1 || lines[0] != "Task: "+ids[0] || lines[1] != "Task: x" ||
+		lines[taskTrailersMost] != "More-Tasks: 3" {
+		t.Errorf("trailers: %q", lines)
+	}
+	for _, l := range lines {
+		if strings.Contains(l, "Assistant") {
+			t.Errorf("a line made of an id: %q", l)
+		}
+	}
+	if taskTrailers(nil) != nil {
+		t.Error("trailers for no task")
+	}
+	m := taskMarkOf(ids[0]+",x,x, bad id,", "3\n")
+	if !reflect.DeepEqual(m, taskMark{Tasks: []string{ids[0], "x"}, MoreTasks: 3}) {
+		t.Errorf("read back: %+v", m)
+	}
+	if m := taskMarkOf("", ""); len(m.Tasks) != 0 || m.MoreTasks != 0 {
+		t.Errorf("none: %+v", m)
 	}
 }

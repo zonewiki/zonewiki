@@ -433,11 +433,17 @@ func recentChanges(since, under string, limit int, user asker) string {
 		return strings.Join(append(out, "No changes"+where+when+"."), "\n\n")
 	}
 	var rows []string
+	ct := tasksOfChanges(user, entries, false)
 	for _, e := range entries {
 		var labels []string
-		for _, f := range e.Files {
-			if l := fileLabel(f); !slices.Contains(labels, l) {
-				labels = append(labels, l)
+		for _, item := range changeItems(e, ct) {
+			switch {
+			case item.Task != "":
+				labels = append(labels, strconv.Quote(item.Label)+" (task "+shortID(item.Task)+")")
+			case item.Href == "/tasks":
+				labels = append(labels, strings.ToLower(item.Label))
+			default:
+				labels = append(labels, item.Label)
 			}
 		}
 		rows = append(rows, e.Time+" | "+runePrefix(e.Sha, 7)+" | "+commitWhat(e.Msg, e.commitMark)+byAuthor(e.Author, e.commitMark)+" | "+
@@ -448,7 +454,7 @@ func recentChanges(since, under string, limit int, user asker) string {
 		theLimit = ", the limit"
 	}
 	out = append(out, fmt.Sprintf("Changes%s%s, newest first (%d%s); when | version | what (\"through …\" after it: written by "+
-		"an assistant) | pages:\n", where, when, len(rows), theLimit)+strings.Join(rows, "\n"))
+		"an assistant) | pages and tasks:\n", where, when, len(rows), theLimit)+strings.Join(rows, "\n"))
 	return strings.Join(out, "\n\n")
 }
 
