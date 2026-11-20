@@ -105,7 +105,7 @@ go/zonewiki
 The wiki is then the folder `zonewiki` in your home folder, made at the first start; set `ZONE_DATA` to use another (`ZONE_DATA=/path/to/wiki go/zonewiki`).
 The commands are `zonewiki user …`, `zonewiki group …` and `zonewiki config …`, on the same wiki.
 `zonewiki --help` lists them all.
-Run by hand, Zone listens on every interface, so set a login before other machines can reach it.
+Run by hand, Zone listens only on the machine it runs on; `ZONE_ALLOW_REMOTE=1` opens it to the network, and it then asks for a login first.
 See [Without a container](../spec/deployment.md#without-a-container), and for a Unix socket or systemd, [A Unix socket](../spec/deployment.md#a-unix-socket).
 
 ## Where settings live
@@ -176,7 +176,7 @@ To keep a wiki on the network open on purpose, without a login: `./run.sh config
 By default Zone listens only on the machine it runs on.
 To reach it from your phone or another computer on the same network:
 
-1. Set `ZONE_ALLOW_REMOTE=1` in `.env`.
+1. Set `ZONE_ALLOW_REMOTE=1` in `.env` (with the downloaded binary, start it as `ZONE_ALLOW_REMOTE=1 ./zonewiki`).
 2. Run `./run.sh up` again.
 3. Open `http://<the machine's address>:5000`, such as `http://192.168.1.20:5000`.
 

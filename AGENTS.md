@@ -273,4 +273,5 @@ Where a guard is named, it fails for a forgotten step; where none is, only the r
 - **One process**: the locks, caches, throttles and the semantic worker live in memory, so two processes on one wiki lose writes.
 - **The data format** (`.zone-format`, `wikiFormat` in `go/wikiformat.go`): a change to what Zone keeps in git that an older Zone would misread raises it, with a start-up step that writes the new number in its own commit (The data format in `docs/spec/deployment.md`).
 - `index.md` always exists and can't be deleted or renamed; a rename re-points every link to the page, on pages and in tasks, in one commit.
-- `ZONE_ALLOW_REMOTE` is the one knob for network access with `run.sh`; unset, the port is bound to loopback.
+- `ZONE_ALLOW_REMOTE` is the one knob for network access, with `run.sh` and for the binary; unset, the port is bound to loopback (compose's mapping; the binary's `--addr :PORT` on `127.0.0.1`, `listenAddr`).
+  The container itself listens on every interface (the `Containerfile`'s `--addr 0.0.0.0:5000`); don't make the binary's default do so.

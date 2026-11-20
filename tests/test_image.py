@@ -131,7 +131,9 @@ def test_mermaids_notices_are_for_the_vendored_bundle():
 def test_the_binary_is_zonewiki():
     final = CONTAINERFILE[CONTAINERFILE.rindex("\nFROM "):]
     assert "COPY --from=build /zonewiki ./zonewiki" in final
-    assert 'CMD ["/app/zonewiki"]' in final
+    # Every interface in the container, for its network bridge: the binary's
+    # default port alone would be the container's localhost, out of reach.
+    assert 'CMD ["/app/zonewiki", "--addr", "0.0.0.0:5000"]' in final
     for compose in ("compose.yaml", "compose.nas.yaml"):
         assert '"/app/zonewiki", "health"' in (REPO / compose).read_text(encoding="utf-8")
 

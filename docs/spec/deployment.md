@@ -49,7 +49,8 @@ The image has:
   `/app/THIRD_PARTY_LICENSES` (Go, the Go modules, the model) and `/app/licenses/onnxruntime/`
   (the vendored libraries' are in the binary, with its copy of `public/vendor/`: `zonewiki licenses` prints them all;
   Mermaid's bundled packages in `public/vendor/mermaid/THIRD_PARTY_LICENSES`, written by `docs/licenses/mermaid_notices.py`);
-- `HOME=/tmp` (Zone may run as a UID without an account).
+- `HOME=/tmp` (Zone may run as a UID without an account);
+- the command `/app/zonewiki --addr 0.0.0.0:5000`: every interface, so the container's network bridge reaches Zone (the binary's default port alone would be the container's localhost); what the host exposes is the port mapping's (Network access, below).
 
 Build args: `ZONE_SEMANTIC_SEARCH` and `ZONE_BUILD` (last layer).
 The image is about 0.23 GB, 0.9 GB with the model.
@@ -220,6 +221,8 @@ go/zonewiki                          # the wiki in ~/zonewiki; ZONE_DATA=/path/t
 
 In Windows PowerShell: `cd go; go build -o zonewiki.exe .; cd ..`, then `$env:ZONE_DATA="$HOME\zonewiki"; go\zonewiki.exe`.
 For semantic search, onnxruntime's library must be where the loader finds it (`docs/spec/search.md`).
+It listens on localhost only: a port alone in `--addr` (`:5000`, the default; `:5001`) is `127.0.0.1`'s unless `ZONE_ALLOW_REMOTE` is set, which opens it on every interface (`listenAddr` in `go/server.go`).
+An address with a host is taken as written (`--addr 0.0.0.0:5000`), and asks for a login first, as `ZONE_ALLOW_REMOTE` does (First run in `docs/spec/security.md`).
 A port another program has stops Zone with what to do (`portTaken` in `go/server.go`): on a Mac, AirPlay Receiver listens on 5000, so `--addr :5001`.
 `zonewiki --help` lists the flags, the commands (`user`, `group`, `config`, `eval`, `health`, `manual`, `licenses`; each takes `--help` too) and the environment.
 
@@ -271,8 +274,8 @@ How to use one is in the manual (Download the binary in `docs/manual/self-hostin
 - Built without cgo (`CGO_ENABLED=0`), so statically linked on Linux and without semantic search: it searches by keywords (`go/embed_nocgo.go`), as the images CI publishes do for now (Semantic search paused, below).
 - 22 to 24 MB each (`-trimpath -ldflags="-s -w"`); the build string is the tagged commit and its date, from `go build`'s own record of the checkout (`sourceBuild`, Version below).
 - It needs git at run time, for the wiki's history: Zone looks for it on `PATH` at start (`exec.LookPath`) and without it runs with no history, versions or undo.
-- Started with nothing set, the wiki is `~/zonewiki`, made at the first start (Data directory, below), and it listens on port 5000, printing where to open it.
-  On localhost it needs no login; reached from other devices it shows only its first-run page until one is set, as ever (First run in `docs/spec/security.md`).
+- Started with nothing set, the wiki is `~/zonewiki`, made at the first start (Data directory, below), and it listens on port 5000 of localhost only (`127.0.0.1:5000`), printing where to open it.
+  There it needs no login; opened to other devices (`ZONE_ALLOW_REMOTE=1`) it shows only its first-run page until one is set, as ever (First run in `docs/spec/security.md`).
 - It isn't signed or notarized: macOS keeps a downloaded one from starting until the quarantine mark is taken off (`xattr -d com.apple.quarantine zonewiki`).
   The arm64 Mac binary carries the ad-hoc signature Go's linker gives every darwin/arm64 binary, which Apple silicon requires to run code at all.
 - No Windows binary yet: a slug would take Windows' `\` from a page's path.
@@ -490,7 +493,7 @@ A new package on ghcr.io is private: make it public once in its settings on GitH
 
 ## Network access
 
-`ZONE_ALLOW_REMOTE` is the single knob for network access (with `run.sh`).
+`ZONE_ALLOW_REMOTE` is the single knob for network access, with `run.sh` and for the binary run by hand.
 
 - Unset, `run.sh` exports `ZONE_BIND=127.0.0.1`, so the container's port 5000 is only exposed on the host's loopback interface, and the host-header check rejects any `Host` header but localhost and the settings file's `hosts`.
 - With `ZONE_ALLOW_REMOTE=1`, `run.sh` exports `ZONE_BIND=0.0.0.0` (LAN-accessible port binding),
@@ -498,6 +501,9 @@ A new package on ghcr.io is private: make it public once in its settings on GitH
   a name it is opened by goes in `hosts`.
 
 `compose.yaml` maps `${ZONE_BIND:-127.0.0.1}:5000:5000`; used without `run.sh`, `ZONE_BIND=0.0.0.0` must be set in `.env` alongside `ZONE_ALLOW_REMOTE=1`.
+
+The binary run by hand listens on `127.0.0.1` unless `ZONE_ALLOW_REMOTE=1` (`ZONE_ALLOW_REMOTE=1 ./zonewiki`), which opens a port alone in `--addr` on every interface.
+The `Host` check alone wouldn't keep the network out: a client on the LAN sends `Host: localhost`.
 
 ### A Unix socket
 

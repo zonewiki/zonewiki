@@ -36,7 +36,7 @@ type Config struct {
 	Build       string
 	HostData    string // the wiki folder as the host sees it
 	AllowRemote bool   // listen on the LAN: no Host check unless Hosts is set
-	Published   bool   // the container's port is open to the network (ZONE_BIND, from compose)
+	Published   bool   // open to the network: the container's port (ZONE_BIND, from compose), or --addr beyond loopback
 	// PortMapped: compose publishes Zone's port (ZONE_BIND is set), maybe
 	// as another one (compose.nas.yaml: 5080), so the address Zone listens
 	// on isn't the one to open it at (openURL).

@@ -2,12 +2,14 @@
 devices can reach, with no login yet, shows and changes nothing until a
 password is set in the browser."""
 
+import http.client
 import re
 
 import pytest
 
 from tests import settings
 from tests.conftest import HOST, write_page
+from tests.goserver import GoServer, _flags, _settings
 
 FORM = {"username": "", "password": "correct horse", "again": "correct horse"}
 
@@ -19,6 +21,17 @@ def fresh(client, git_wiki_dir, monkeypatch):
     monkeypatch.setattr(settings, "NO_LOGIN", False)
     write_page(git_wiki_dir, "plans", "# Plans\n\nsecret words\n")
     return git_wiki_dir
+
+
+def by_hand(server, path):
+    """A GET to a Zone started on its own (GoServer), as localhost: status, Location."""
+    conn = http.client.HTTPConnection("127.0.0.1", server.port, timeout=5)
+    try:
+        conn.request("GET", path, headers=HOST)
+        resp = conn.getresponse()
+        return resp.status, resp.getheader("Location")
+    finally:
+        conn.close()
 
 
 def config(wiki):
@@ -129,6 +142,27 @@ class TestWhenThereIsNoPage:
         monkeypatch.setattr(settings, "ENV", {"ZONE_BIND": bind})
         resp = client.get("/page/plans", headers=HOST)
         assert (resp.status_code, resp.headers.get("Location")) == ((302, "/setup") if page else (200, None))
+
+    def test_started_by_hand_a_port_alone_is_localhost_only(self, fresh, tmp_path, monkeypatch):
+        # The downloaded binary, run as the README says: on the network it would
+        # have no login, and the Host check is no door (a client sends Host: localhost).
+        monkeypatch.setattr(settings, "ZONE_ALLOW_REMOTE", False)
+        server = GoServer(_settings(), tmp_path / "server.log", ":0", _flags())
+        try:
+            assert server.host == "127.0.0.1"
+            assert by_hand(server, "/page/plans") == (200, None)
+        finally:
+            server.stop()
+
+    def test_started_by_hand_open_to_the_network_asks_for_a_login(self, fresh, tmp_path, monkeypatch):
+        for remote, addr in [(True, ":0"), (False, "0.0.0.0:0")]:
+            monkeypatch.setattr(settings, "ZONE_ALLOW_REMOTE", remote)
+            server = GoServer(_settings(), tmp_path / "server.log", addr, _flags())
+            try:
+                assert server.host in ("[::]", "0.0.0.0"), addr
+                assert by_hand(server, "/page/plans") == (302, "/setup"), addr
+            finally:
+                server.stop()
 
     def test_names_in_hosts_count(self, client, fresh, monkeypatch):
         monkeypatch.setattr(settings, "ZONE_ALLOW_REMOTE", False)

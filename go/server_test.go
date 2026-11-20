@@ -31,6 +31,38 @@ func TestHealthURL(t *testing.T) {
 	}
 }
 
+// --addr: a port alone is localhost's unless ZONE_ALLOW_REMOTE, so a Zone
+// started by hand with no login isn't on the network; what is beyond
+// loopback counts as reachable (a login first).
+func TestListenAddr(t *testing.T) {
+	for _, c := range []struct {
+		addr   string
+		remote bool
+		want   string
+		beyond bool
+	}{
+		{":5000", false, "127.0.0.1:5000", false},
+		{":5000", true, ":5000", true},
+		{":0", false, "127.0.0.1:0", false},
+		{"0.0.0.0:5000", false, "0.0.0.0:5000", true},
+		{"[::]:5000", false, "[::]:5000", true},
+		{"192.168.1.5:5000", false, "192.168.1.5:5000", true},
+		{"wiki.local:5000", false, "wiki.local:5000", true},
+		{"127.0.0.1:5001", false, "127.0.0.1:5001", false},
+		{"127.0.0.1:5001", true, "127.0.0.1:5001", false},
+		{"[::1]:5000", false, "[::1]:5000", false},
+		{"localhost:5000", false, "localhost:5000", false},
+		{"unix:/run/zone.sock", false, "unix:/run/zone.sock", false},
+		{"fd:3", false, "fd:3", false},
+		{"nonsense", false, "nonsense", false},
+	} {
+		got := listenAddr(c.addr, c.remote)
+		if got != c.want || beyondLoopback(got) != c.beyond {
+			t.Errorf("%q remote=%v: %q, beyond loopback %v", c.addr, c.remote, got, beyondLoopback(got))
+		}
+	}
+}
+
 // --addr unix:PATH: Zone answers on a socket anyone who reaches the path may
 // connect to, zonewiki health asks over it, and a socket file a killed Zone
 // left is replaced, but not one still listened on, nor another file.

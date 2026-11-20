@@ -134,4 +134,4 @@ ENV HOME=/tmp
 
 EXPOSE 5000
 
-CMD ["/app/zonewiki"]
+CMD ["/app/zonewiki", "--addr", "0.0.0.0:5000"]

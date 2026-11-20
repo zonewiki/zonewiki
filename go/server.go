@@ -17,6 +17,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -37,8 +38,8 @@ func logf(format string, args ...any) {
 }
 
 const usage = `Usage: zonewiki [--addr ADDRESS] [--public FOLDER] [--docs FOLDER]
-  serve the wiki in ZONE_DATA (http://localhost:5000; --addr unix:PATH: on a Unix socket,
-  for a reverse proxy on this machine)
+  serve the wiki in ZONE_DATA (http://localhost:5000, this machine alone unless ZONE_ALLOW_REMOTE;
+  --addr unix:PATH: on a Unix socket, for a reverse proxy on this machine)
 
 Commands:
   user COMMAND               the wiki's users (add, passwd, token, role, email, group, disable,
@@ -54,7 +55,8 @@ Commands:
 Environment:
   ZONE_DATA                  the wiki's folder (default ~/zonewiki, made at the first start; a folder
                              that is set must exist)
-  ZONE_ALLOW_REMOTE          1: answer to every host name, not only localhost (unless hosts is set)
+  ZONE_ALLOW_REMOTE          1: open Zone to the network: --addr :PORT on every interface, not only
+                             localhost, and every IP address let in (unless hosts is set)
   ZONE_BIND                  the address the container's port is published on (compose sets it): not
                              localhost's, and no login yet, Zone asks for a password in the browser first
   ZONE_HOST_DATA             the wiki's folder as the host sees it, for the MCP tools' file: lines
@@ -102,7 +104,7 @@ func isHelp(arg string) bool {
 }
 
 func main() {
-	addr := flag.String("addr", ":5000", "the `address` to listen on (127.0.0.1:0: a free port; unix:PATH: a Unix socket; fd:3: the socket systemd hands over)")
+	addr := flag.String("addr", ":5000", "the `address` to listen on (:PORT: on localhost, on every interface with ZONE_ALLOW_REMOTE; 0.0.0.0:PORT: every interface; 127.0.0.1:0: a free port; unix:PATH: a Unix socket; fd:3: the socket systemd hands over)")
 	public := flag.String("public", "", "the `folder` of the browser code (default: public/ next to the binary or in its checkout, else the copy built into it)")
 	flag.StringVar(&docsDir, "docs", "", "the `folder` of README.md and docs/ (the manual, the spec), for /help and zone_help (default: beside the browser code's folder, else the copy built into the binary)")
 	semanticTest := flag.String("semantic-test", "", "the tests' embedder and index state, as `JSON` (embedtest.go)")
@@ -145,6 +147,10 @@ func main() {
 		fatal(err)
 	}
 	cfg = c
+	*addr = listenAddr(*addr, cfg.AllowRemote)
+	if !cfg.PortMapped && beyondLoopback(*addr) {
+		cfg.Published = true // started by hand on the network: a login first (needsSetup)
+	}
 	startSettings(s)
 	format, err := checkWikiFormat() // a wiki a newer Zone wrote isn't touched (wikiformat.go)
 	if err != nil {
@@ -206,10 +212,11 @@ func main() {
 		semantic.start()
 	}
 
-	// All interfaces by default, so the container's network bridge can
-	// forward connections; exposure is the port mapping's (compose.yaml:
-	// ZONE_BIND, 127.0.0.1 = localhost only), the Host check the
-	// DNS-rebinding defence. Or a Unix socket, for a reverse proxy.
+	// Localhost by default (listenAddr); in the container every interface
+	// (the Containerfile's --addr 0.0.0.0:5000), so its network bridge can
+	// forward connections, and exposure is the port mapping's (compose.yaml:
+	// ZONE_BIND, 127.0.0.1 = localhost only). The Host check is the
+	// DNS-rebinding defence, not a door. Or a Unix socket, for a reverse proxy.
 	ln, err := listen(*addr)
 	if err != nil {
 		fatal(portTaken(err))
@@ -289,6 +296,38 @@ var onSocket bool
 // (0666, as a port on localhost is to every local user) and the folder it is
 // in decides. A socket file a Zone that was killed left is replaced; one
 // something still listens on, or a file that is no socket, is refused.
+// listenAddr: the address Zone listens on for --addr. A port alone
+// (":5000", the default) is this machine's alone (127.0.0.1), unless
+// ZONE_ALLOW_REMOTE opens Zone to the network: a Zone started by hand has
+// no login, and the Host check wouldn't keep the network out (a client on
+// the LAN sends Host: localhost). An address with a host, a socket or a
+// handed one (fd:N) is taken as written.
+func listenAddr(addr string, remote bool) string {
+	if remote || strings.HasPrefix(addr, fdPrefix) || strings.HasPrefix(addr, socketPrefix) {
+		return addr
+	}
+	if host, port, err := net.SplitHostPort(addr); err == nil && host == "" {
+		return net.JoinHostPort("127.0.0.1", port)
+	}
+	return addr
+}
+
+// beyondLoopback: whether other devices can reach Zone listening on addr
+// (as listenAddr made it): a TCP address that isn't this machine's
+// loopback, every interface (no host) or a name included. A socket, or one
+// handed over, is its owner's to open, and isn't counted.
+func beyondLoopback(addr string) bool {
+	if strings.HasPrefix(addr, fdPrefix) || strings.HasPrefix(addr, socketPrefix) {
+		return false
+	}
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil || strings.EqualFold(host, "localhost") {
+		return false // net.Listen refuses what doesn't split
+	}
+	ip, err := netip.ParseAddr(host)
+	return err != nil || !ip.IsLoopback()
+}
+
 func listen(addr string) (net.Listener, error) {
 	if fd, handed := strings.CutPrefix(addr, fdPrefix); handed {
 		return handedListener(fd)

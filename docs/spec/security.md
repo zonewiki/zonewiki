@@ -55,9 +55,10 @@ A new feature is checked against them, and a protection that breaks one is a bug
 
 What someone running Zone should know (the README sends them here).
 
-Out of the box (`run.sh`, compose) Zone listens on localhost only.
+Out of the box Zone listens on localhost only:
+with `run.sh` and compose, the container's port is published on the host's loopback (`ZONE_BIND=127.0.0.1`);
+the binary run by hand listens on `127.0.0.1:5000`, as a port alone in `--addr` (`:5000`, the default) means localhost unless `ZONE_ALLOW_REMOTE` is set (`listenAddr` in `go/server.go`).
 It refuses a foreign `Host` header (DNS rebinding) and cross-site writes.
-The binary run by hand listens on every interface (`--addr :5000`), but answers only a `Host` the check lets in.
 Anything reachable beyond localhost belongs behind HTTPS, with a login (`./run.sh config passwd`, or users).
 
 ### Self-hosting behind HTTPS
@@ -223,10 +224,11 @@ The Host check is no login: a client on the LAN sends `Host: localhost`.
 - `ZONE_ALLOW_REMOTE` is set,
 - `hosts` names a host,
 - the container's port is published beyond localhost, which compose tells Zone in `ZONE_BIND` (`Config.Published`).
-  `compose.yaml` hands on its own `${ZONE_BIND:-127.0.0.1}`; `compose.nas.yaml`, whose port is on every interface, says `0.0.0.0`.
+  `compose.yaml` hands on its own `${ZONE_BIND:-127.0.0.1}`; `compose.nas.yaml`, whose port is on every interface, says `0.0.0.0`,
+- without `ZONE_BIND`, Zone listens beyond loopback: `--addr` names every interface (`0.0.0.0:5000`, `[::]:5000`), another address of the machine, or a name (`beyondLoopback`, also `Config.Published`).
+  The image's own command is `--addr 0.0.0.0:5000`, so a container started without compose (`docker run -p 5000:5000`) asks for a login too.
 
-On localhost alone Zone needs no login.
-A Zone run by hand without `ZONE_BIND` isn't known to be reachable, though it listens on every interface: set `ZONE_BIND=0.0.0.0` beside `ZONE_ALLOW_REMOTE`, or a login.
+On localhost alone Zone needs no login: a port alone in `--addr` listens on `127.0.0.1`, and a socket (`unix:PATH`, `fd:N`) is its owner's to open.
 
 **The form** (`GET`/`POST /setup`, `setup.html`) takes a password twice (at least 8 characters, `passwordMin`) and, optionally, a user name.
 Without a name the wiki gets its password (as `zonewiki config passwd`); with one, its first user, an admin (as `zonewiki user add`; a wiki MCP token gives way).
