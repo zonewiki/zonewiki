@@ -19,12 +19,12 @@ One Go binary, no database, nothing leaves your server.
 ## Why Zone
 
 - **Your files, not a silo.** Pages are Markdown, tasks are JSON beside them, history is git. Grep them, back them up with `git push`, or stop using Zone and keep everything.
-- **First-class for people and for AI.** A wiki you'd enjoy with no assistant at all: a quick editor with live preview, a Today view and a plan board, search as you type, on a laptop or a phone. And everything you do in the browser, your assistant can do too, through the same operations, never as an afterthought.
-- **A memory for your assistants, under your rules.** An assistant can do what you can, never more. You can connect one that only reads, or keep it out of your private pages. Its edits are commits you can undo one at a time or all at once. Zone brings no model of its own.
-- **Pages, notes and tasks in one place**, sharing links, search and history.
+- **Good to use for humans and AI.** For you, a quick editor with live preview, search as you type, a Today view and a plan board for tasks, in any browser on a laptop or a phone, with nothing to install. For your assistant, everything you do in the browser, over MCP, through the same operations, never as an afterthought.
+- **A memory for your assistants, under your rules.** An assistant can do what you can, never more. Connect one that only reads, or keep it out of your private pages. Its edits are commits you can undo one at a time or all at once. Zone brings no model of its own: use the assistant you already have.
+- **Private, shared or a group's.** Each user has private pages and tasks, groups get their own folders, and one permission model decides who sees what: in the browser, in search and for assistants alike.
+- **Pages, notes and tasks in one place.** They share links, search and history: link a task from a page, and find both with one search.
 - **Nothing gets lost.** Every version of every page, one-click restore, deleted pages brought back, and links that follow a rename.
-- **Any browser, laptop or phone.** Nothing to install on the client.
-- **Simple to run.** One binary, one process, no database, no plugins, no npm.
+- **Simple to run.** One binary on a laptop, a NAS or a small server; no database, no plugins, no npm.
 
 ## Features
 
