@@ -257,7 +257,9 @@ def test_make_a_group_say_who_is_in_it_and_rename_it(page, wiki, monkeypatch):
     page.get_by_role("combobox", name="Who else is in it").press("Enter")              # the user offered: a pill
     expect(page.locator(".groups-new .pick-pill")).to_have_attribute("data-name", "alice")
     page.get_by_role("button", name="Make the group").click()
-    expect(page.locator(".users-done")).to_contain_text("Made the group apollo")
+    page.wait_for_url("**/page/groups/apollo/index")                                   # on to its home, which asks what it is for
+    expect(page.locator(".page-content em").first).to_have_text("What is this group for? A team, a project: say it here in a line or two.")
+    page.goto("/groups")
     row = page.locator('.groups-list li[data-group="apollo"]')
     expect(row.locator(".group-who")).to_contain_text("alice, bob")
     expect(row.locator(".group-who")).to_contain_text("owned by bob")
@@ -327,8 +329,9 @@ def test_a_name_field_takes_only_users_and_groups_there_are(page, wiki, monkeypa
     expect(form.locator(".pick-pill")).to_have_count(2)
     assert form.locator('input[name="people"]').input_value() == "bob, carol"
     form.get_by_role("button", name="Make the group").click()
-    expect(page.locator(".users-done")).to_contain_text("Made the group apollo")
-    wait_ready(page)   # the form's answer is a new page: its pickers take focus once its code runs
+    page.wait_for_url("**/page/groups/apollo/index")
+    page.goto("/groups")
+    wait_ready(page)   # a new page: its pickers take focus once its code runs
     assert "groups = apollo" in (wiki.root / ".zone/config").read_text().split("[user carol]")[1]
     # An admin's Everyone in: the groups there are, less the group itself.
     row = page.locator('.groups-list li[data-group="dev"]')

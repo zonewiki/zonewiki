@@ -81,7 +81,7 @@
 <h1>Groups</h1>
 {{- with .Done}}<p class="users-done" role="status">{{.}}</p>{{end}}
 {{- with .Error}}<p class="users-error" role="alert">{{.}}</p>{{end}}
-<p class="users-help">The groups you are in. A group's pages are in its folder: whoever is in the group sees and changes them, and no one else in this wiki. A task list can be for a group too.</p>
+<p class="users-help">The groups you are in. A group is a team's or a project's own place: its pages are in its folder, and task lists can be for it. Whoever is in the group sees and changes them, and no one else in this wiki.</p>
 {{- if .Groups}}
 <ul class="groups-list">
   {{- range .Groups}}{{template "group" (dict "G" . "Admin" $.Admin "Writes" $.MayMake)}}{{end}}
@@ -96,7 +96,7 @@
   <input type="text" name="people" value="{{.NewPeople}}" placeholder="with: anna, bo" list="group-people" data-pick="users" autocomplete="off" autocapitalize="none" spellcheck="false" aria-label="Who else is in it">
   <button type="submit" class="btn btn-primary">Make the group</button>
 </form>
-<p class="users-help">For a project or a few people: you are in it and own it, so you say who else is, and can hand it on. Only its people see its pages and the task lists that are for it (its folder is <code>groups/&lt;name&gt;/</code>).</p>
+<p class="users-help">For a team, or a project only some should see: only its people see its pages and the task lists that are for it (its folder is <code>groups/&lt;name&gt;/</code>). You are in it and own it, so you say who else is, and can hand it on. You go to its home page next: say there what it is for.A project everyone may see needs no group: give it a page in the wiki.</p>
 <datalist id="group-people">{{range .People}}<option value="{{.}}">{{end}}</datalist>
 {{- end}}
 {{- if .Admin}}

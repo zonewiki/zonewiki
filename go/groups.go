@@ -903,7 +903,7 @@ func moveGroupFolder(user asker, old, name string) error {
 		_ = os.Remove(dirs[i]) // fails when not empty
 	}
 	if home := filepath.Join(newDir, "index.md"); exists(home) {
-		if text, err := readText(home); err == nil && text == groupHomeText(old) {
+		if text, err := readText(home); err == nil && isGroupHomeText(text, old) {
 			if err := writeText(home, groupHomeText(name)); err == nil {
 				rest = append(rest, home)
 			}
@@ -947,7 +947,9 @@ func dropOwner(f *settingsfile.File, user string) {
 	}
 }
 
-// newGroupRoute: POST /groups: a new group, name and people (makeGroupOp).
+// newGroupRoute: POST /groups: a new group, name and people (makeGroupOp),
+// and then its home, where its first page and list are started (groupRoute,
+// which makes the home; ?made says the group was just made).
 func newGroupRoute(w http.ResponseWriter, r *http.Request) {
 	if noGroupsHere(w, r) {
 		return
@@ -957,7 +959,7 @@ func newGroupRoute(w http.ResponseWriter, r *http.Request) {
 		refuseGroups(w, r, err, r.PostFormValue("name"), r.PostFormValue("people"))
 		return
 	}
-	http.Redirect(w, r, "/groups?done=made&group="+url.QueryEscape(name), http.StatusSeeOther)
+	http.Redirect(w, r, "/groups/"+url.PathEscape(name)+"?made", http.StatusSeeOther)
 }
 
 // groupPeopleRoute: POST /groups/{group}/people: who is in the group by

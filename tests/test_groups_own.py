@@ -80,10 +80,14 @@ def test_whoever_may_write_makes_a_group(client, wiki):
     assert "You are in no group." in body and 'action="/groups"' in body
     assert 'class="menu-groups">Groups</a>' in body                      # the user menu's way here
     resp = make(client, "Apollo", "bob")
-    assert resp.status_code == 303 and resp.headers["Location"] == "/groups?done=made&group=apollo"
+    assert resp.status_code == 303 and resp.headers["Location"] == "/groups/apollo?made"   # on to its home
     assert section(wiki, "user alice") == ["groups = apollo"] and section(wiki, "user bob") == ["groups = apollo"]
     assert section(wiki, "group apollo") == ["owners = alice"]
-    body = page(client, resp.headers["Location"])
+    home = client.get(resp.headers["Location"], headers=HOST)
+    assert home.status_code == 302 and home.headers["Location"] == "/page/groups/apollo/index"
+    text = (wiki / "groups/apollo/index.md").read_text()
+    assert text.startswith("# apollo\n\n_What is this group for?") and "whoever is in the group @apollo" in text
+    body = page(client, "/groups?done=made&group=apollo")
     assert "Made the group apollo" in body and "alice, bob" in body and "owned by alice" in body
     assert 'action="/groups/apollo/people"' in body and 'name="people" value="alice, bob"' in body
     # Its folder is theirs from the next request, as any group's.
@@ -258,6 +262,22 @@ def apollo(client, wiki):
     git(wiki, "commit", "-q", "-m", "The group's files")
     sign_in(client, "alice")
     return task["id"]
+
+
+def test_a_rename_rewrites_a_home_an_older_zone_wrote(client, wiki, apollo):
+    """A home as Zone wrote it before it asked what the group is for is
+    Zone's still: a rename writes the new name's; one its people changed
+    stays as they wrote it."""
+    (wiki / "groups/apollo/index.md").write_text(
+        "# apollo\n\nPages in this folder are seen and changed by whoever is in the group @apollo, and by no one else in this wiki.\n\n## Links\n\n")
+    git(wiki, "commit", "-qam", "The home as it was")
+    assert client.post("/groups/apollo/rename", data={"name": "artemis"}, headers=HOST).status_code == 303
+    text = (wiki / "groups/artemis/index.md").read_text()            # what Zone writes now, of the new name
+    assert text.startswith("# artemis\n\n_What is this group for?") and "whoever is in the group @artemis," in text
+    (wiki / "groups/artemis/index.md").write_text("# artemis\n\nOur launch.\n")
+    git(wiki, "commit", "-qam", "Said what it is for")
+    assert client.post("/groups/artemis/rename", data={"name": "hermes"}, headers=HOST).status_code == 303
+    assert (wiki / "groups/hermes/index.md").read_text() == "# artemis\n\nOur launch.\n"
 
 
 def test_a_rename_takes_what_is_the_groups_along(client, wiki, apollo):

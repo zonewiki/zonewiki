@@ -548,6 +548,10 @@ A group without a section is its name on users, as above.
 A project is six names from three teams, and nobody should wait for an admin to have a place for it (`go/groups.go`, `groups.html`).
 On **Groups** (`/groups`: the user menu's entry, **All your groups** in the pill's menu, a link in the shortcuts dialog) whoever may write makes a group: a name, and who else is in it.
 They are in it and are its **owner**; from the next request `groups/<name>/` is its people's and a task list can be for `@<name>`, as with any group.
+**Make the group** then goes to the group's home (`/groups/<name>?made`, which makes it: A group's home in Group pages, below), where they say what the group is for and start its first page.
+Should the settings not be in effect yet (they change between requests, and another request may still run), `?made` goes to `/groups` instead, saying "Made the group …" (`groupsDone`, of a group there is only), never to a 404.
+The page says what a group is for in the words people use: a team's or a project's own place, which only its people see;
+and that a project everyone may see needs no group, only a page in the wiki, since a group's pages are hidden from everyone else.
 Not for a viewer (who changes nothing: 403), a visitor, or a wiki without users (404); a disabled user gets a 404 from every `/groups` route (`noGroupsHere`).
 What it doesn't do: change what a group includes (an admin's).
 
@@ -1122,7 +1126,8 @@ There is nothing to set up for the folder itself: it is the folder of the group 
 ### A group's home
 
 The way in (`go/private.go`) is a pill in the switcher, for whoever is in a group (Modules in `docs/spec/navigation.md`; **g g**): called by the group for who is in one, **Groups** with a menu of them for who is in several.
-`/groups/<group>` opens the group's home, `groups/<group>/index`, and makes it on the first visit of someone in the group who may write, from a small template (`# dev`, a line that the pages in this folder are seen and changed by whoever is in the group, a `## Links` heading; committed in their name, `Create groups/dev/index`).
+`/groups/<group>` opens the group's home, `groups/<group>/index`, and makes it on the first visit of someone in the group who may write, from a small template (`# dev`, a line in italics that asks what the group is for, a team or a project, a line that the pages in this folder are seen and changed by whoever is in the group, a `## Links` heading; committed in their name, `Create groups/dev/index`; `groupHomeText`).
+A rename rewrites a home that is still the template, as Zone writes it now or wrote it before it asked (`isGroupHomeText`), and leaves one its people changed.
 It is an ordinary page of the group; like the wiki's home and a private one it can't be renamed or deleted (`isGroupHome`, `isProtected`).
 To anyone not in the group the address is a 404 that makes nothing, and so it is to a member who may not write (a viewer) while the home isn't made yet.
 

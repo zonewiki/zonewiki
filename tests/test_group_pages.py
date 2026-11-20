@@ -639,6 +639,9 @@ def test_a_groups_home_is_made_by_a_member_and_stays(client, wiki):
     for who in OUTSIDERS + ("vera",):       # vera is in the group, and a viewer: she makes nothing
         sign_in(client, who)
         assert client.get("/groups/dev", headers=HOST).status_code == 404
+        if who != "vera":                   # ?made, after Make the group: the Groups page, which shows nothing of dev's pages
+            resp = client.get("/groups/dev?made", headers=HOST)
+            assert resp.status_code == 303 and resp.headers["Location"] == "/groups?done=made&group=dev"
         body = client.get("/groups", headers=HOST).get_data(as_text=True)   # their groups: vera's one, the others' none
         mine, others = (body.split('id="others"', 1) + [""])[:2]
         assert ("👥 dev" in mine) == (who == "vera") and SECRET not in body

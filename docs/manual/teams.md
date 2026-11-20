@@ -99,8 +99,9 @@ Tasks follow the same idea, by list rather than folder:
 
 ## Groups
 
-A **group** is a set of users with a name, such as `dev` or `q3-plan`.
-What is for a group is its folder of pages and the task lists made for it.
+A **group** is a set of users with a name, such as `dev` or `q3-plan`: a team's or a project's own place.
+What is for a group is its folder of pages and the task lists made for it, and only its people see them.
+A project everyone may see needs no group: give it a page in the wiki, such as `projects/garden-shed`.
 A group can also be made of other groups.
 
 ### Seeing your groups
@@ -115,6 +116,7 @@ Anyone who may write can make a group, without waiting for an admin.
 Under **Make a group**, type a name (lowercase letters, digits and hyphens, at most 40), pick the other people, and click **Make the group**.
 
 You are in the group and are its **owner**, so you say who else is in it.
+Zone then opens the group's home page, which asks what the group is for: edit it to say so in a line or two, for its people and their assistants.
 A name that is taken can't be used again, including the former name of a renamed group.
 
 People are picked rather than typed blind: as you type, Zone offers matching users, and each pick becomes a pill with × to remove it.

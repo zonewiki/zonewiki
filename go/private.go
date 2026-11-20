@@ -81,9 +81,19 @@ func privateRoute(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, pathURL("page", slug), http.StatusFound)
 }
 
-// groupHomeText is what a new group's home holds.
+// groupHomeText is what a new group's home holds: a line that asks what
+// the group is for (a team, a project), and who sees its pages.
 func groupHomeText(group string) string {
-	return "# " + group + "\n\nPages in this folder are seen and changed by whoever is in the group @" + group +
+	return "# " + group + "\n\n_What is this group for? A team, a project: say it here in a line or two._\n\n" +
+		"Pages in this folder are seen and changed by whoever is in the group @" + group +
+		", and by no one else in this wiki.\n\n## Links\n\n"
+}
+
+// isGroupHomeText: text is what Zone wrote on group's home, now or before
+// the home asked what the group is for; a rename writes the new name's.
+func isGroupHomeText(text, group string) bool {
+	return text == groupHomeText(group) || text == "# "+group+
+		"\n\nPages in this folder are seen and changed by whoever is in the group @"+group+
 		", and by no one else in this wiki.\n\n## Links\n\n"
 }
 
@@ -107,6 +117,14 @@ func groupRoute(w http.ResponseWriter, r *http.Request) {
 	user, group := userOf(r), r.PathValue("group")
 	slug := groupHomeSlug(group)
 	if p := placeOf(slug); p.group() != group || !p.sees(user) {
+		// Just made (?made, after Make the group): settings take effect
+		// between requests, so with another request still running the maker
+		// may not be in it yet. The Groups page then says it was made, of a
+		// group there is only (groupsDone), and nothing of its pages.
+		if r.URL.Query().Has("made") && groupNameRE.MatchString(group) {
+			http.Redirect(w, r, "/groups?done=made&group="+url.QueryEscape(group), http.StatusSeeOther)
+			return
+		}
 		http.NotFound(w, r)
 		return
 	}
