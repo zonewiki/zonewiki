@@ -208,11 +208,10 @@ func existingPage(args jsonObj, name string, user asker) (string, string, error)
 	return slug, safePath(slug), nil
 }
 
-// newSlug: the slug a new page gets from a name or slug ("Tickets/BUG
-// 1234" → "tickets/bug-1234"), refused when it would be outside the wiki or
-// in a folder Zone skips (_assets, _tasks, .git …), or in private/ outside
-// user's own folder.
-func newSlug(raw string, user asker) (string, error) {
+// pageName: the slug a page of a name or slug has ("Tickets/BUG 1234" →
+// "tickets/bug-1234"), whether or not it is there; refused when it would be
+// outside the wiki or in a folder Zone skips (_assets, _tasks, .git …).
+func pageName(raw string) (string, error) {
 	raw = strings.TrimSuffix(strings.Trim(slugInput(raw), "/"), ".md")
 	slug := mdtext.ToSlug(raw)
 	if slug == "" || slices.Contains(strings.Split(slug, "/"), "") {
@@ -220,6 +219,17 @@ func newSlug(raw string, user asker) (string, error) {
 	}
 	if safePath(slug) == "" {
 		return "", toolErr(strconv.Quote(slug) + ": pages can't go in folders starting with '_' or '.'")
+	}
+	return slug, nil
+}
+
+// newSlug: the slug a new page gets from a name or slug (pageName), also
+// refused where user may not write: in private/ outside their own folder,
+// a guide for anyone but an admin, anything for a viewer.
+func newSlug(raw string, user asker) (string, error) {
+	slug, err := pageName(raw)
+	if err != nil {
+		return "", err
 	}
 	if readOnly(user, slug) {
 		return "", toolErr(readOnlyWhy(user, slug))
@@ -289,12 +299,28 @@ func normTitle(text string) string {
 func lastPart(slug string) string { return slug[strings.LastIndex(slug, "/")+1:] }
 
 // pageOrNewSlug: the existing page raw names, else the slug a new page of
-// that name would get (a deleted page's, say).
+// that name would get (a deleted page's, say), for a tool that writes it.
 func pageOrNewSlug(raw string, user asker) (string, error) {
 	if slug := mcpPageSlug(raw, user); slug != "" {
 		return slug, nil
 	}
 	return newSlug(raw, user)
+}
+
+// pageOrSeenSlug: pageOrNewSlug for a tool that only reads (a deleted
+// page's history, the guides for a page not yet written): a slug user may
+// see, not one they may write, so a viewer or a connection that only reads
+// asks too. One they may not see is refused as newSlug refuses it, saying
+// nothing of whether it is there.
+func pageOrSeenSlug(raw string, user asker) (string, error) {
+	if slug := mcpPageSlug(raw, user); slug != "" {
+		return slug, nil
+	}
+	slug, err := pageName(raw)
+	if err == nil && !canSee(user, slug) {
+		return "", toolErr(notYours(slug, user))
+	}
+	return slug, err
 }
 
 // notYours: the refusal of a page in private/ that isn't in user's own

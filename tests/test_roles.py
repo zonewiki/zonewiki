@@ -313,6 +313,16 @@ class TestWhatTheyAreTold:
         assert "shared words" in client.get("/page/plans", headers=HOST).data.decode()
         assert any(t["id"] == IDS["task"] for t in client.get("/api/tasks", headers=HOST).get_json())
 
+    def test_her_assistant_reads_a_deleted_pages_history(self, client, wiki):
+        """Reading a page's history, or the guides for a page not yet
+        written, asks only that she sees it, not that she may write it."""
+        git(wiki, "rm", "-q", "folder/a.md")
+        git(wiki, "commit", "-qm", "Delete folder/a")
+        text = mcp(client, "history", slug="folder/a")
+        assert "Versions of folder/a (deleted" in text and "Delete folder/a" in text
+        assert mcp(client, "read_guides", slug="folder/new-page").startswith("No guides apply to folder/new-page")
+        assert "only your own folder" in mcp(client, "history", slug="private/alice/x")
+
     def test_she_has_no_inbox_to_fill(self, client, wiki):
         """A viewer makes no task, so the switcher offers her no Inbox; what
         she captured as an editor is still hers, in her My tasks."""

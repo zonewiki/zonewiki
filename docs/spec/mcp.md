@@ -265,6 +265,7 @@ Git history, three ways:
 
 `(MCP)` in a message marks an assistant's change (Which assistant).
 Without git, a tool error.
+A page that isn't there (deleted) is named as `read_guides` names a page not yet written (`pageOrSeenSlug`): it asks only that the asker may see it, so a viewer and a connection that only reads read a deleted page's history too; one in a place they don't see is refused as a write there is, saying nothing of whether it was ever there.
 
 #### `zone_help`
 

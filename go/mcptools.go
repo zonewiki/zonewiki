@@ -335,7 +335,7 @@ func history(args jsonObj, base string, user asker) (string, error) {
 		}
 		return recentChanges(since, under, limit, user), nil
 	}
-	slug, err := pageOrNewSlug(raw, user) // a deleted page has a history too
+	slug, err := pageOrSeenSlug(raw, user) // a deleted page has a history too
 	if err != nil {
 		return "", err
 	}

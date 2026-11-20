@@ -286,7 +286,7 @@ func readGuides(args jsonObj, base string, user asker) (string, error) {
 	}):
 		slug = folder + "/page"
 	default:
-		if slug, err = pageOrNewSlug(folder, user); err != nil {
+		if slug, err = pageOrSeenSlug(folder, user); err != nil {
 			return "", err
 		}
 	}
