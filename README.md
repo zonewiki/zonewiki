@@ -73,7 +73,7 @@ On Windows, run the Linux file in WSL2: there is no Windows binary.
 mv zonewiki-macos-arm64 zonewiki      # the file you downloaded
 chmod +x zonewiki
 ./zonewiki                            # your wiki: ~/zonewiki
-ZONE_DATA=~/notes ./zonewiki          # or: a folder of Markdown notes you already have
+ZONE_DATA=~/notes ./zonewiki --init   # or: a folder of Markdown notes you already have
 ```
 
 On a Mac, see [With the binary](docs/manual/self-hosting.md#with-the-binary) first: the binary isn't signed.

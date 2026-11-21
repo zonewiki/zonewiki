@@ -37,7 +37,7 @@ func logf(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, "Zone: "+format+"\n", args...)
 }
 
-const usage = `Usage: zonewiki [--addr ADDRESS] [--public FOLDER] [--docs FOLDER]
+const usage = `Usage: zonewiki [--addr ADDRESS] [--init] [--public FOLDER] [--docs FOLDER]
   serve the wiki in ZONE_DATA (http://localhost:5000, this machine alone unless ZONE_ALLOW_REMOTE;
   --addr unix:PATH: on a Unix socket, for a reverse proxy on this machine)
 
@@ -55,6 +55,7 @@ Commands:
 Environment:
   ZONE_DATA                  the wiki's folder (default ~/zonewiki, made at the first start; a folder
                              that is set must exist)
+  ZONE_INIT                  1: make the wiki's folder a wiki though it holds files already (--init)
   ZONE_ALLOW_REMOTE          1: open Zone to the network: --addr :PORT on every interface, not only
                              localhost, and every IP address let in (unless hosts is set)
   ZONE_BIND                  the address the container's port is published on (compose sets it): not
@@ -107,6 +108,7 @@ func main() {
 	addr := flag.String("addr", ":5000", "the `address` to listen on (:PORT: on localhost, on every interface with ZONE_ALLOW_REMOTE; 0.0.0.0:PORT: every interface; 127.0.0.1:0: a free port; unix:PATH: a Unix socket; fd:3: the socket systemd hands over)")
 	public := flag.String("public", "", "the `folder` of the browser code (default: public/ next to the binary or in its checkout, else the copy built into it)")
 	flag.StringVar(&docsDir, "docs", "", "the `folder` of README.md and docs/ (the manual, the spec), for /help and zone_help (default: beside the browser code's folder, else the copy built into the binary)")
+	initWiki := flag.Bool("init", false, "make the wiki's folder a wiki though it holds files already (ZONE_INIT=1 does the same): its files become the wiki's pages and its first commit")
 	semanticTest := flag.String("semantic-test", "", "the tests' embedder and index state, as `JSON` (embedtest.go)")
 	flag.Usage = printUsage
 	if len(os.Args) > 1 {
@@ -147,9 +149,13 @@ func main() {
 		fatal(err)
 	}
 	cfg = c
+	cfg.Init = cfg.Init || *initWiki
 	// Before Zone writes anything in the wiki's folder (.zone/, _assets/):
 	// a folder it won't use is left as it was.
 	if err := wikiFolderError(); err != nil {
+		fatal(err)
+	}
+	if err := newWikiError(); err != nil {
 		fatal(err)
 	}
 	_ = os.Mkdir(cfg.Uploads, 0o777)

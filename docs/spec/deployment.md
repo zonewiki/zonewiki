@@ -156,6 +156,7 @@ Zone itself reads no `.env` file, only its environment: `run.sh` and compose pas
 | Setting | What it sets |
 |---------|--------------|
 | `ZONE_DATA` | The wiki's folder (default `~/zonewiki`; Data directory, below) |
+| `ZONE_INIT` | `1`: make a folder that holds files a wiki, as `--init` does (A new wiki, below) |
 | `ZONE_ALLOW_REMOTE` | Network access (Network access, below) |
 | `TZ` | The timezone |
 | `ZONE_SEMANTIC_SEARCH` | Semantic search at build time |
@@ -703,6 +704,18 @@ ZONE_DATA=~/zonewiki    # or /home/user/my-wiki, /mnt/nas/wiki, etc.
 ```
 
 Inside the container it is always mounted at `/wiki-data`.
+
+### A new wiki
+
+A folder is a wiki when it has a `.git` or a `.zone-format`.
+A start on one that isn't makes it one: a home page, `_assets/`, `.zone/`, `.zone-format`, and, with git, a repository whose first commit holds its files as they are.
+An empty folder (or one with only `.zone/`, which the commands write before a first start, and `_assets/`) is made a wiki without asking.
+A folder that holds files is made one only with `--init` or `ZONE_INIT=1` (`newWikiError`):
+otherwise Zone doesn't start, leaves the folder as it was, and names the first files it found, how to go on (`--init`, `ZONE_INIT=1` in `.env` for the container), and that ZONE_DATA may name another folder.
+That is what a folder of Markdown notes wants once, and what a mistyped `ZONE_DATA` (the home folder, `~/Documents`) must never get: all its files committed.
+After the first start the folder is a wiki, so `ZONE_INIT` may stay set.
+A folder kept in git already needs no `--init`: the wiki's history goes on from it.
+The check runs at start before Zone writes anything in the folder, after the one for a folder inside another repository (Layout, below).
 
 ### Layout
 

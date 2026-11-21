@@ -61,6 +61,8 @@ def _settings() -> dict[str, str]:
         "ZONE_BUILD": settings.ZONE_BUILD,
         "ZONE_HOST_DATA": settings.ZONE_HOST_DATA,
         "ZONE_ALLOW_REMOTE": "1" if settings.ZONE_ALLOW_REMOTE else "",
+        # The tests' wikis are made with their files before the first start.
+        "ZONE_INIT": "1",
         **settings.ENV,
     }
     if not settings.GIT_ENABLED:

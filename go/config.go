@@ -48,6 +48,7 @@ type Config struct {
 	Data       string // the wiki (ZONE_DATA)
 	Uploads    string // Data/_assets
 	GitEnabled bool
+	Init       bool       // ZONE_INIT, --init: the folder becomes a wiki though it holds files already (newWikiError)
 	Signup     bool       // ZONE_SIGNUP: people may make an account themselves (signup.go)
 	Public     string     // ZONE_PUBLIC: who isn't signed in reads the wiki (publicView) or edits its pages too (publicEdit); "": signs in first
 	Mail       mailConfig // ZONE_SMTP_HOST …, ZONE_MAIL_FROM: how Zone sends mail (mail.go); Host "": it sends none
@@ -173,6 +174,7 @@ func loadWiki(getenv func(string) string) (*Config, error) {
 				"as 15m or 1h (a second at least), or off", v)
 		}
 	}
+	c.Init = truthy(getenv("ZONE_INIT"))
 	if c.Signup = truthy(getenv("ZONE_SIGNUP")); c.Signup && c.Mail.Host == "" {
 		return nil, fmt.Errorf("ZONE_SIGNUP needs mail, for the link that confirms an address: " +
 			"set ZONE_SMTP_HOST and ZONE_MAIL_FROM (see .env.example)")
@@ -211,6 +213,52 @@ func defaultData(getenv func(string) string) (string, error) {
 	}
 	logf("ZONE_DATA isn't set: made a new wiki at %s", data)
 	return data, nil
+}
+
+// newWikiError: why Zone doesn't make the wiki's folder a wiki without
+// being asked (--init, ZONE_INIT): it isn't one yet (no .git, no
+// .zone-format) and holds files, which a start would make the wiki's
+// pages and, with git, commit, all of them. That is what a folder of
+// notes wants once, and what a mistyped ZONE_DATA (the home folder, a
+// Documents folder) must never get. An empty folder needs nothing, nor
+// one with only what Zone's own commands write before a first start
+// (.zone/, the settings file) or an older start made (_assets/). Asked at
+// start before Zone writes anything in the folder.
+func newWikiError() error {
+	if cfg.Init {
+		return nil
+	}
+	for _, marker := range []string{".git", formatFileName} {
+		if _, err := os.Lstat(filepath.Join(cfg.Data, marker)); err == nil {
+			return nil
+		}
+	}
+	entries, err := os.ReadDir(cfg.Data)
+	if err != nil {
+		return nil // what can't be read fails where it is read
+	}
+	var names []string
+	for _, e := range entries {
+		if e.Name() == stateDirName || e.Name() == "_assets" {
+			continue
+		}
+		name := e.Name()
+		if e.IsDir() {
+			name += "/"
+		}
+		names = append(names, name)
+	}
+	if len(names) == 0 {
+		return nil
+	}
+	shown := strings.Join(names[:min(len(names), 3)], ", ")
+	if len(names) > 3 {
+		shown += fmt.Sprintf(" and %d more", len(names)-3)
+	}
+	return fmt.Errorf("%s holds files (%s) but isn't a wiki yet. Zone would make it one: its files become the wiki's "+
+		"pages and the first commit of its history. If that is what you want, start Zone once with --init "+
+		"(or ZONE_INIT=1, in .env for the container); else set ZONE_DATA to an empty folder or to your wiki.",
+		cfg.Data, shown)
 }
 
 // published: ZONE_BIND, the address compose publishes Zone's port on

@@ -2626,14 +2626,17 @@ class TestVersion:
         assert "· &lt;b&gt;</p>" in body
 
     @staticmethod
-    def _start(wiki: Path | str | None, home: Path | None = None) -> subprocess.CompletedProcess:
-        """Start Zone with ZONE_DATA=wiki (None: unset), and HOME=home if given, until it listens."""
+    def _start(wiki: Path | str | None, home: Path | None = None, *args: str,
+               **more_env: str) -> subprocess.CompletedProcess:
+        """Start Zone with ZONE_DATA=wiki (None: unset), HOME=home if given,
+        the flags args and the environment more_env, until it listens."""
         env = {k: v for k, v in os.environ.items() if not k.startswith("ZONE_")}
         if wiki is not None:
             env["ZONE_DATA"] = str(wiki)
         if home is not None:
             env["HOME"] = str(home)
-        proc = subprocess.Popen([str(binary()), "--addr", "127.0.0.1:0"], env=env, text=True,
+        env.update(more_env)
+        proc = subprocess.Popen([str(binary()), "--addr", "127.0.0.1:0", *args], env=env, text=True,
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         out = proc.stdout.readline()
         if " listening on " in out:
@@ -2701,6 +2704,52 @@ class TestVersion:
         assert r.returncode != 0
         assert f"{docs} is inside the git repository {outer}, which doesn't ignore it" in r.stderr
         assert sorted(p.name for p in docs.iterdir()) == ["readme.md"]
+
+    def test_a_folder_with_files_is_made_a_wiki_only_when_asked(self, tmp_path):
+        # A folder that holds files and isn't a wiki yet (a mistyped
+        # ZONE_DATA: the home folder) is refused, untouched, and the message
+        # names what is in it and how to go on.
+        wiki = Path(os.path.realpath(tmp_path)) / "notes"
+        (wiki / "projects").mkdir(parents=True)
+        for name in ("a.md", "b.md", "c.md"):
+            (wiki / name).write_text("# Note\n", encoding="utf-8")
+        r = self._start(wiki, home=tmp_path)
+        assert r.returncode != 0
+        assert f"{wiki} holds files (a.md, b.md, c.md and 1 more) but isn't a wiki yet" in r.stderr
+        assert "--init" in r.stderr and "ZONE_INIT=1" in r.stderr
+        assert sorted(p.name for p in wiki.iterdir()) == ["a.md", "b.md", "c.md", "projects"]
+
+        # --init: its files are the wiki's, in its first commit; the next
+        # start needs nothing.
+        r = self._start(wiki, tmp_path, "--init")
+        assert r.returncode == 0, r.stderr
+        assert f"made {wiki} a git repository" in r.stderr
+        listed = subprocess.run(["git", "ls-files"], cwd=wiki, capture_output=True, text=True, check=True).stdout
+        assert "a.md" in listed.split() and (wiki / ".zone-format").exists()
+        r = self._start(wiki, home=tmp_path)
+        assert r.returncode == 0, r.stderr
+
+    def test_zone_init_makes_a_folder_with_files_a_wiki(self, tmp_path):
+        (tmp_path / "a.md").write_text("# Note\n", encoding="utf-8")
+        r = self._start(tmp_path, tmp_path, ZONE_INIT="1")
+        assert r.returncode == 0, r.stderr
+        assert (tmp_path / "index.md").exists()
+
+    def test_a_folder_that_is_a_repository_needs_no_init(self, tmp_path):
+        # Notes kept in git already: the wiki's history goes on from it.
+        subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+        (tmp_path / "a.md").write_text("# Note\n", encoding="utf-8")
+        r = self._start(tmp_path, home=tmp_path)
+        assert r.returncode == 0, r.stderr
+
+    def test_settings_written_before_the_first_start_need_no_init(self, tmp_path):
+        # zonewiki user add before the first start writes .zone/config:
+        # the folder holds no files of its own yet.
+        (tmp_path / ".zone").mkdir()
+        (tmp_path / ".zone" / "config").write_text("", encoding="utf-8")
+        (tmp_path / "_assets").mkdir()
+        r = self._start(tmp_path, home=tmp_path)
+        assert r.returncode == 0, r.stderr
 
     def test_starts_with_an_empty_wiki_folder(self, tmp_path):
         r = self._start(tmp_path)

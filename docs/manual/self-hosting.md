@@ -47,11 +47,14 @@ On a Mac, `xcode-select --install` installs it (or `brew install git`); on Linux
 3. Open <http://localhost:5000>.
 
 Your wiki is the folder `zonewiki` in your home folder, made at the first start; the terminal says where.
-To keep it elsewhere, or to use a folder of Markdown notes you already have, start Zone with that folder:
+To keep it elsewhere, start Zone with that folder.
+To use a folder of Markdown notes you already have, add `--init` the first time:
 
 ```bash
-ZONE_DATA=~/Documents/notes ./zonewiki
+ZONE_DATA=~/Documents/notes ./zonewiki --init
 ```
+
+Without it, Zone won't start on a folder that holds files and isn't a wiki yet, and says what it found there: a typo in the folder's name could otherwise make your home folder a wiki.
 
 Zone runs as long as the terminal is open; `Ctrl+C` stops it, and your wiki stays as it is.
 
@@ -98,7 +101,7 @@ Beside `compose.yaml` it runs the prebuilt image; in a checkout of the repositor
 To run compose without it, see [Without run.sh](../spec/deployment.md#without-runsh).
 
 The wiki folder must exist before Zone starts: Zone won't create one where a typo points.
-To use a folder of Markdown notes you already have, set `ZONE_DATA` in `.env` to it.
+To use a folder of Markdown notes you already have, set `ZONE_DATA` in `.env` to it, and `ZONE_INIT=1` for the first start.
 Zone makes it a git repository if it isn't one, and adds a home page.
 A folder inside another git repository (a folder of a project you keep in git) needs that repository to ignore it first, in its `.gitignore`: otherwise Zone doesn't start, and says so.
 What ends up in the folder is described in [Your data](your-data.md).
@@ -206,6 +209,7 @@ A running Zone then keeps the settings it had and says so in its log; a Zone sta
 | Setting | Where | What it does |
 |---------|-------|--------------|
 | `ZONE_DATA` | Environment | The wiki folder (default `~/zonewiki`) |
+| `ZONE_INIT` | Environment | `1`: make a folder that holds files a wiki (or `--init`) |
 | `TZ` | Environment | The timezone, such as `Europe/Berlin` (default: the host's) |
 | `ZONE_ALLOW_REMOTE` | Environment | `1`: other devices on the network reach Zone |
 | `ZONE_PUBLIC` | Environment | `view` or `edit`: people read, or edit, without signing in |
