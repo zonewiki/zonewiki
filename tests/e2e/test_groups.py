@@ -6,7 +6,7 @@ import re
 import pytest
 from playwright.sync_api import expect
 
-from conftest import wait_ready
+from conftest import box_of, wait_ready
 from tests import settings
 
 
@@ -202,7 +202,7 @@ def test_several_groups_are_listed(page, wiki, monkeypatch):
     expect(pill).to_have_attribute("aria-expanded", "true")
     expect(menu.get_by_role("menuitem")).to_have_text(["👥 dev", "👥 ops", "👥 product", "All your groups"])
     expect(menu.get_by_role("menuitem").first).to_be_focused()
-    b, m = pill.bounding_box(), menu.bounding_box()
+    b, m = box_of(pill), box_of(menu)
     assert m["y"] >= b["y"] + b["height"] and abs(m["x"] - b["x"]) < 4      # under the pill
     page.keyboard.press("ArrowDown")
     expect(menu.get_by_role("menuitem", name="👥 ops")).to_be_focused()
@@ -231,8 +231,8 @@ def test_the_phones_bar_has_groups(alice, wiki):
     bar = alice.locator(".action-buttons .action-module")
     expect(bar).to_have_count(5)
     expect(bar.nth(1)).to_have_text("Groups")          # the tab's word stays short, whatever the group is called
-    box = alice.locator(".action-buttons").bounding_box()
-    last = alice.locator(".action-buttons .action-search").bounding_box()
+    box = box_of(alice.locator(".action-buttons"))
+    last = box_of(alice.locator(".action-buttons .action-search"))
     assert last["x"] + last["width"] <= box["x"] + box["width"] + 1 and box["width"] <= 391     # nothing pushed off the screen
     alice.locator('.action-buttons .action-module[data-module="groups"]').click()
     alice.wait_for_url("**/page/groups/dev/index")

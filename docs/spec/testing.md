@@ -89,10 +89,18 @@ Without Playwright installed they skip, so plain `pytest tests/` is unaffected.
 - The page catches up with the server: Zone writes before it answers, so a test that saw a change in the API or on disk could act on a page that hadn't had the answer yet (a menu still offering Follow, a dialog opened from the task as it was, a box ticked and the page reloaded before its request went through).
   So `wait_until`, `page.goto` and `page.reload` first settle (`settle(page)` in `conftest.py`): they wait until the page's own fetch and XHR requests of its current document have their answers and the page has handled them, and fail naming a request that never ends.
   A test that holds a request back in a route passes `settled=False` (to `wait_until`, `goto` or `reload`).
-- Where things are: a test that measures boxes first calls `still(page)`, which settles, then waits for the fonts (the serif heading font moves what is under it when it arrives) and for transitions and animations to end (on a phone the uncommitted badge comes with its request's answer and moves the page down).
+  A request of a page that is gone is not waited for: the harness forgets a document's requests when the next one is asked for and again when it is there, since a page sends on until then (the uncommitted count, asked while the browser was sent to another host, never said it ended).
+- Where things are: a test measures with `box_of(locator)` from `conftest.py`, never with Playwright's `locator.bounding_box()` (a guard fails for one: Guards, below).
+  `box_of` first calls `still(page)`, which settles, then waits for the fonts (the serif heading font moves what is under it when it arrives) and for transitions and animations to end (on a phone the uncommitted badge comes with its request's answer and moves the page down).
+  It never returns `None`: a list drawn again by a late answer replaces its cards, and a card found before and measured after had no box, which a busy machine met as `'NoneType' object is not subscriptable`; an element that isn't shown fails in `box_of`, by its name.
+  `box_of(locator, moving=True)` measures at once, for a test that looks while something moves, or that stopped the page's clock or holds a request back (`still` would wait for what the test stopped).
+  A pointer is put where a thing is, so the same holds before a `hover()` on what CSS shows only under the pointer: `still(page)` first.
+- A view opened is there: `open_tab(page, view)` returns once the view has what it asked the server for (it settles).
+  Completed loads after its link's click and draws the list again; `data-loaded` is from the page's load and says nothing of it.
   A test that looks between two steps of a gesture that a timer ends (the open card closing 400 ms after a press on another) stops the page's clock meanwhile (`page.clock.pause_at`, then `resume`), or a slow machine runs the timer out between the looks.
 - The pace of a touch: a swipe or quick move starts with `quick_touch(page, cdp, start, first_move)`, which sends the finger down and its first move again when this process took longer between them than a long press would allow (`LONG_PRESS_MS`): a busy machine otherwise turned the swipe into a drag.
 - No test is run again when it fails (no rerun plugin): a test that fails now and then waits for the wrong thing, and a rerun would hide that.
+  Such a test is found, and its fix shown to hold, with `./run.sh flaky` (A test that fails now and then, below).
 - Touch: `new_page(**TOUCH_PHONE)` gives a phone context with touch input, `hover: none` and `pointer: coarse` (use `.tap()`).
   Long-press drags are sent as CDP touch events.
   Full-page screenshots of such a context lose the touch/hover emulation (Playwright re-renders with changed device metrics), so assert on computed styles/sizes rather than on a full-page image.
@@ -130,6 +138,7 @@ Tests that fail when a change forgets a step elsewhere: a new route, tool, setti
 | `tests/test_image.py` | Base images and CI actions pinned by hash; the model's revision and hashes are `go/embed.go`'s; both images build with the same Go and fetch the modules with the root's `go.mod`; the build stage copies what `zonefiles.go` builds in, and the image no copy beside the binary; the image ships the licenses; a `v*` tag releases the four binaries `./run.sh binaries` builds; `THIRD_PARTY_LICENSES` names what is pinned; every `public/vendor/` library has a `LICENSE`; Mermaid's notices match the vendored bundle | Update the pin, hash or notice that drifted (Dependencies in `AGENTS.md`; for Mermaid `python3 docs/licenses/mermaid_notices.py VERSION`) |
 | `tests/test_env_example.py` | `.env.example` lists every setting the source, `run.sh` and the compose files read, and nothing else | Add the new variable to `.env.example`, or to `INTERNAL` if no user sets it (run, build, test or bench only) |
 | `TestUsage` (`tests/test_routes.py`) | `zonewiki --help` names its commands, environment and flags (with two dashes); each command answers `--help` with exit 0 and without a wiki | Fix the usage text; a new command goes in the test's list |
+| `tests/test_e2e_harness.py` | No browser test calls `locator.bounding_box()`: `box_of` in `conftest.py` is the one place | Measure with `box_of(locator)` (`moving=True` while something moves) |
 | Browser harness (`tests/e2e/conftest.py`) | No request to another host, no uncaught JS error, no CSP violation | Load from `public/vendor/`, fix the error, move inline script into Zone's script files |
 
 `TestWhatIsTheirsIsAskedInOnePlace` is a regex over the lines of `go/*.go`, so it catches only those written its way: `owner == user.Name` or `user.Name != t.Owner` (a name ending in `owner`/`Owner`, `==` or `!=`) and `memberOf(…)`/`groupsOf(…)`, each with the asker named `user`, `rq.user`, `rq.who()` or `userOf(r)`.
@@ -199,6 +208,7 @@ Prefer an API test when the behaviour shows through a route, a Go test when it d
 | `tests/test_changes.py` | rendering.md, search.md | Changes (`/changes`): filters, which assistant, `source`, what it offers to undo; who changed a page last in search results |
 | `tests/test_config.py` | users.md | The settings file through the server: reloads, a broken file, kept out of git |
 | `tests/test_env_example.py` | deployment.md | Guard (above) |
+| `tests/test_e2e_harness.py` | testing.md | Guard (above) |
 | `tests/test_git.py` | rendering.md | Every git path: commit on write, history, diffs, restore, deleted pages, uncommitted, no git |
 | `tests/test_group_pages.py` | users.md | A group's pages: the privacy probes, members, moves, Share…, its home |
 | `tests/test_groups_own.py` | users.md | Groups made in the browser: names, owners, leaving, ending, renaming |
@@ -295,6 +305,7 @@ The `*_cases.json` files are edited by hand: add the case, then change both side
 |---------|------|
 | `./run.sh test` | gofmt, go vet, `go test -race ./...`, then the API tests (pytest), in the tools image with the repo mounted; extra args go to pytest |
 | `./run.sh e2e` | The browser tests and the Node tests (`tests/test_tasks_core.py`) in the tools image |
+| `./run.sh flaky [N] [pytest args]` | The chosen browser tests N times each (20) on a machine made busy |
 | `./run.sh bench` | `tests/bench_tasks.py` with its budgets, then against a race-built server |
 | `./run.sh retrieval` | Search on `tests/retrieval/` by keywords and by meaning, in the app's image with the model |
 | `./run.sh leaks` | gitleaks over the git history |
@@ -308,6 +319,13 @@ The `*_cases.json` files are edited by hand: add the case, then change both side
 Both `./run.sh test` and `./run.sh e2e` run in parallel with pytest-xdist: `test` with `-n auto` (a worker per CPU), `e2e` with a worker per two CPUs (each runs its own Chromium; at one per CPU the browsers starve and timing-sensitive tests fail).
 An `-n` in the extra args overrides it (`-n 0`: one process, e.g. to debug one test).
 Workers are separate processes: each has its own temp wikis, servers (`base_url`) and browser, so the fixtures need no locking; a test must keep its files under `tmp_path`.
+
+### A test that fails now and then
+
+A browser test that fails once in fifty runs fails on a busy machine: a CI runner with a second run beside it gives a browser a third of the CPU it has alone, and what was drawn in one frame takes several.
+`./run.sh flaky [N] [pytest args]` makes the machine that busy on purpose: the chosen tests N times each (20 without a number; `ZONE_E2E_REPEAT` in `tests/e2e/conftest.py`), a worker per CPU (twice `e2e`'s) and four busy loops per CPU beside them.
+`./run.sh flaky 50 -k one_line_per_task` before a fix shows the failure and how often it comes, and after it that it is gone; without `-k` it is the whole suite N times, which finds the tests nobody suspects.
+A test that fails there waits for the wrong thing (Browser tests, above): fix what it waits for, never the number of tries.
 
 ### The race detector
 

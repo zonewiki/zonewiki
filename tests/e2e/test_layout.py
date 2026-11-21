@@ -12,7 +12,7 @@ from datetime import date
 import pytest
 from playwright.sync_api import expect
 
-from conftest import DESKTOP, PHONE, SCREENSHOT_DIR, TOUCH_PHONE, open_tab
+from conftest import DESKTOP, PHONE, SCREENSHOT_DIR, TOUCH_PHONE, box_of, open_tab, still
 from tests import settings
 
 # A page that stresses every wide element: long unbroken words/URLs, a wide
@@ -122,7 +122,7 @@ def test_version_bottom_left_only_beside_the_column(new_page, wiki):
     build = wide.locator(".zone-build")
     expect(build).to_be_visible()
     expect(build).to_have_text(re.compile(r"^Zone \d+\.\d+\.\d+"))
-    box, col = build.bounding_box(), wide.locator("main").bounding_box()
+    box, col = box_of(build), box_of(wide.locator("main"))
     assert box["x"] < 20 and box["y"] + box["height"] > DESKTOP["height"] - 20, "bottom left"
     assert box["x"] + box["width"] < col["x"] + 40, "left of the text column"
     wide.goto("/edit/index")
@@ -141,12 +141,12 @@ def test_tldr_toggle_reveals_text_below_tags(page, wiki):
     tldr = page.locator(".page-tldr")
     label = page.locator("label.tldr-label")
     expect(tldr).to_be_hidden()
-    before = label.bounding_box()
+    before = box_of(label)
     label.click()
     expect(tldr).to_be_visible()
-    after = label.bounding_box()
+    after = box_of(label)
     assert (before["x"], before["y"]) == (after["x"], after["y"]), "label must not move"
-    assert tldr.bounding_box()["y"] > after["y"] + after["height"] - 1, "text goes below the row"
+    assert box_of(tldr)["y"] > after["y"] + after["height"] - 1, "text goes below the row"
 
 
 def test_tldr_text_lines_up_with_the_row_beside_side_columns(new_page, wiki):
@@ -155,8 +155,8 @@ def test_tldr_text_lines_up_with_the_row_beside_side_columns(new_page, wiki):
     pg = new_page(viewport={"width": 1440, "height": 900})
     pg.goto("/page/stress")
     pg.locator("label.tldr-label").click()
-    row = pg.locator(".page-meta-wrapper").bounding_box()
-    tldr = pg.locator(".page-tldr").bounding_box()
+    row = box_of(pg.locator(".page-meta-wrapper"))
+    tldr = box_of(pg.locator(".page-tldr"))
     assert abs(tldr["x"] - row["x"]) < 1 and abs(tldr["width"] - row["width"]) < 1
 
 
@@ -252,7 +252,7 @@ def test_backlinks_chip_tap_opens_list_without_scrolling(new_page, wiki):
     expect(tip).to_be_visible()
     assert phone.evaluate("scrollY") == 0
     # Links are finger-sized.
-    assert all(a.bounding_box()["height"] >= 36 for a in tip.locator("a").all())
+    assert all(box_of(a)["height"] >= 36 for a in tip.locator("a").all())
     chip.tap()                                  # a second tap closes it
     expect(tip).to_be_hidden()
     chip.tap()
@@ -268,6 +268,10 @@ def test_backlinks_chip_desktop_hover_and_click(page, wiki):
     page.goto("/page/target")
     tip = page.locator(".bl-tooltip")
     expect(tip).to_be_hidden()
+    # The tooltip shows while the pointer is over the chip (CSS :hover), and
+    # the pointer is moved there once: a chip that a late font or badge moves
+    # afterwards leaves it behind, and the tooltip never shows.
+    still(page)
     page.locator(".bl-count").hover()
     expect(tip).to_be_visible()
     page.locator(".bl-count").click()           # desktop click still jumps to the section
@@ -283,7 +287,7 @@ PHONE_HEADER_PARTS = ["#tasks-tabs", ".tasks-search-btn", "#task-add-btn"]
 def tasks_header_rows(pg, parts=TASKS_HEADER_PARTS) -> int:
     """Number of distinct lines the Open tab's header controls sit on."""
     centres = sorted(
-        (lambda b: b["y"] + b["height"] / 2)(pg.locator(sel).bounding_box())
+        (lambda b: b["y"] + b["height"] / 2)(box_of(pg.locator(sel)))
         for sel in parts)
     return 1 + sum(1 for a, b in zip(centres, centres[1:]) if b - a > 8)
 
@@ -314,7 +318,7 @@ def test_tasks_all_tab_header_is_compact(new_page, wiki, ctx, rows):
         field.fill("zzz")
         pg.locator("#tasks-list").tap(position={"x": 5, "y": 5})
         expect(field).to_be_visible()
-    assert field.bounding_box()["width"] >= 100
+    assert box_of(field)["width"] >= 100
     assert horizontal_overflow(pg) <= 0
 
 
@@ -346,9 +350,9 @@ def test_long_breadcrumb_trail_fits_on_phone(new_page, wiki):
     water.tap()     # opens
     modal = pg.locator("#task-edit-modal")
     expect(modal).to_be_visible()
-    box = modal.bounding_box()
+    box = box_of(modal)
     assert box["x"] >= 0 and box["x"] + box["width"] <= PHONE["width"] + 0.5, box
-    save = modal.get_by_role("button", name="Save").bounding_box()
+    save = box_of(modal.get_by_role("button", name="Save"))
     assert save["x"] + save["width"] <= PHONE["width"] and save["y"] + save["height"] <= PHONE["height"], save
 
 
@@ -365,10 +369,10 @@ def test_editor_toolbar_fits_on_phone_with_long_title(new_page, wiki, slug, titl
     pg = new_page(**TOUCH_PHONE)
     pg.goto(f"/edit/{slug}")
     assert horizontal_overflow(pg) <= 0
-    done = pg.get_by_role("button", name="Done").bounding_box()
+    done = box_of(pg.get_by_role("button", name="Done"))
     assert done["x"] >= 0 and done["x"] + done["width"] <= PHONE["width"], done
     # One line: the slug is cut off rather than wrapped into a tall column.
-    assert pg.locator(".editor-toolbar").bounding_box()["height"] < 60
+    assert box_of(pg.locator(".editor-toolbar"))["height"] < 60
 
 
 def test_desktop_keeps_the_full_breadcrumb_trail(page, wiki):
@@ -468,13 +472,13 @@ def test_side_columns_on_big_screens(new_page, wiki):
     # The sections at the end and the breadcrumb's backlinks chip are gone.
     expect(page.locator(".page-foot")).to_be_hidden()
     expect(page.locator(".bl-count")).to_be_hidden()
-    t, c, r = (page.locator(s).bounding_box() for s in (".rail-left", ".page-content", ".rail-context"))
+    t, c, r = (box_of(page.locator(s)) for s in (".rail-left", ".page-content", ".rail-context"))
     assert t["x"] + t["width"] < c["x"] and c["x"] + c["width"] < r["x"]
     assert abs(c["width"] - 46 * 16) < 2                    # the reading width
     # Both columns stay in view while the page scrolls.
     page.mouse.wheel(0, 2500)
     page.wait_for_timeout(200)
-    assert 0 <= toc.bounding_box()["y"] < 100 and 0 <= links.bounding_box()["y"] < 100
+    assert 0 <= box_of(toc)["y"] < 100 and 0 <= box_of(links)["y"] < 100
 
 
 def test_side_toc_marks_the_section_being_read(new_page, wiki):
@@ -498,16 +502,16 @@ def test_wide_code_and_tables_grow_short_ones_dont(new_page, wiki):
     _side_wiki(wiki)
     page = new_page(viewport=BIG)
     page.goto("/page/release")
-    text = page.locator(".page-content > p").first.bounding_box()
-    short, long_ = (b.bounding_box() for b in page.locator(".page-content > pre").all())
-    small, wide = (b.bounding_box() for b in page.locator(".page-content > table").all())
+    text = box_of(page.locator(".page-content > p").first)
+    short, long_ = (box_of(b) for b in page.locator(".page-content > pre").all())
+    small, wide = (box_of(b) for b in page.locator(".page-content > table").all())
     for box in (short, small):                         # as wide as the text
         assert abs(box["x"] - text["x"]) < 1 and abs(box["width"] - text["width"]) < 1
     centre = text["x"] + text["width"] / 2
     for box in (long_, wide):                          # wider, centred on the text
         assert box["width"] > text["width"] + 100
         assert abs(box["x"] + box["width"] / 2 - centre) < 1
-        assert box["width"] <= page.locator(".page-col").bounding_box()["width"] + 1
+        assert box["width"] <= box_of(page.locator(".page-col"))["width"] + 1
 
 
 def test_a_pages_sheet_is_as_wide_as_other_views_unless_it_needs_room(new_page, wiki):
@@ -517,16 +521,16 @@ def test_a_pages_sheet_is_as_wide_as_other_views_unless_it_needs_room(new_page, 
     wiki.write("plain", "# Plain\n\nJust text, and [[Release]].\n")
     page = new_page(viewport=BIG)
     page.goto("/notes")
-    notes = page.locator(".sheet").bounding_box()
+    notes = box_of(page.locator(".sheet"))
     page.goto("/page/plain")
-    plain = page.locator(".page-col").bounding_box()
+    plain = box_of(page.locator(".page-col"))
     assert abs(plain["width"] - notes["width"]) < 1 and abs(plain["x"] - notes["x"]) < 1
     page.goto("/page/release")
     expect(page.locator(".page-col")).to_have_class(re.compile(r"\bsheet-wide\b"))
-    wide = page.locator(".page-col").bounding_box()
+    wide = box_of(page.locator(".page-col"))
     assert wide["width"] > notes["width"] + 100
     for el in page.locator(".page-content > :is(pre, table)").all():
-        box = el.bounding_box()
+        box = box_of(el)
         assert box["x"] >= wide["x"] and box["x"] + box["width"] <= wide["x"] + wide["width"]
 
 
@@ -538,9 +542,9 @@ def test_no_side_columns_below_1320(new_page, wiki):
     expect(page.locator(".rail-context")).to_be_hidden()
     expect(page.locator(".page-foot .backlinks a", has_text="Plans")).to_be_visible()
     expect(page.locator(".bl-count")).to_be_visible()
-    text = page.locator(".page-content > p").first.bounding_box()
+    text = box_of(page.locator(".page-content > p").first)
     for el in page.locator(".page-content > :is(pre, table)").all():
-        assert el.bounding_box()["width"] <= page.locator(".page-content").bounding_box()["width"] + 1
+        assert box_of(el)["width"] <= box_of(page.locator(".page-content"))["width"] + 1
     assert text["width"] < 800
 
 
@@ -553,8 +557,8 @@ def test_top_row_stays_put_across_views_on_big_screens(new_page, wiki):
     rows = []
     for url in ("/page/release", "/notes", "/tasks"):
         page.goto(url)
-        sw, ta = page.locator(".breadcrumb .module-switch").bounding_box(), page.locator(".top-actions").bounding_box()
-        h1 = page.locator("h1").first.bounding_box()
+        sw, ta = box_of(page.locator(".breadcrumb .module-switch")), box_of(page.locator(".top-actions"))
+        h1 = box_of(page.locator("h1").first)
         rows.append((round(sw["x"]), round(ta["x"] + ta["width"]), round(h1["x"])))
     assert len(set(rows)) == 1, rows
 
@@ -567,12 +571,12 @@ def test_editor_badges_clear_of_the_breadcrumb(page, wiki):
     page.goto("/edit/draft")
     badge = page.locator("#uncommitted-badge")
     expect(badge).to_be_visible()
-    b = badge.bounding_box()
+    b = box_of(badge)
     for sel in (".editor-pane .breadcrumb > *", ".editor-toolbar button, .editor-toolbar a", "#editor-textarea"):
         for el in page.locator(sel).all():
-            box = el.bounding_box()
-            if box:
-                assert (b["x"] + b["width"] <= box["x"] or box["x"] + box["width"] <= b["x"] or
+            if el.is_visible():      # a button the toolbar hides has no box
+                box = box_of(el)
+                assert(b["x"] + b["width"] <= box["x"] or box["x"] + box["width"] <= b["x"] or
                         b["y"] + b["height"] <= box["y"] or box["y"] + box["height"] <= b["y"]), sel
 
 
@@ -590,7 +594,7 @@ def test_long_side_toc_fades_and_follows(new_page, wiki):
     active = page.locator(".rail-toc a.active")
     expect(active).to_have_text("Section 30")
     expect(rail).to_have_class(re.compile(r"\brail-more-above\b"))
-    a, r = active.bounding_box(), rail.bounding_box()
+    a, r = box_of(active), box_of(rail)
     assert r["y"] <= a["y"] and a["y"] + a["height"] <= r["y"] + r["height"]
     assert page.locator(".rail-context").evaluate("el => el.className").count("rail-more") == 0
 
@@ -618,11 +622,11 @@ def test_page_actions_stay_in_the_header_when_scrolled(new_page, wiki):
     page = new_page(viewport=BIG)
     page.goto("/page/release")
     actions = page.locator(".page-header-actions")
-    before = actions.bounding_box()
+    before = box_of(actions)
     page.evaluate("window.scrollTo(0, 1500)")
     scrolled = page.evaluate("window.scrollY")
     assert scrolled > before["y"] + before["height"]    # the header is out of view
-    after = actions.bounding_box()
+    after = box_of(actions)
     assert after["x"] == before["x"] and after["y"] == before["y"] - scrolled
     expect(page.locator(".rail-context").get_by_role("link", name="Edit")).to_have_count(0)
     expect(page.locator(".page-menu-btn")).to_have_count(1)
@@ -713,16 +717,16 @@ def test_wide_images_use_the_middle_column(new_page, wiki):
                        "In a sentence ![wide](/_assets/wide.svg) stays.\n\n[[tasks:]]\n")
     page = new_page(viewport=BIG)
     page.goto("/page/pics")
-    text = page.locator(".page-content > p").first.bounding_box()
-    col = page.locator(".page-col").bounding_box()
+    text = box_of(page.locator(".page-content > p").first)
+    col = box_of(page.locator(".page-col"))
     imgs = page.locator(".page-content img")
     expect(imgs.first).to_have_js_property("complete", True)
-    wide, small, inline = (i.bounding_box() for i in imgs.all())
+    wide, small, inline = (box_of(i) for i in imgs.all())
     assert wide["width"] > text["width"] + 100 and wide["width"] <= col["width"] + 1
     assert abs(wide["x"] + wide["width"] / 2 - (text["x"] + text["width"] / 2)) < 1
     assert small["width"] == 200 and abs(small["x"] - text["x"]) < 1
     assert inline["width"] <= text["width"] + 1
-    tasks = page.locator(".tasks-app").bounding_box()     # a task list keeps the text's width
+    tasks = box_of(page.locator(".tasks-app"))     # a task list keeps the text's width
     assert abs(tasks["width"] - text["width"]) < 1 and abs(tasks["x"] - text["x"]) < 1
 
 
@@ -738,15 +742,15 @@ def test_tasks_quicknote_and_wiki_content_share_one_width(new_page, wiki):
         page = new_page(viewport=viewport)
         boxes = {}
         page.goto("/page/release")
-        boxes["text"] = page.locator(".page-content").bounding_box()
+        boxes["text"] = box_of(page.locator(".page-content"))
         page.goto("/page/tasks")
-        boxes["embed"] = page.locator(".tasks-app").bounding_box()
+        boxes["embed"] = box_of(page.locator(".tasks-app"))
         page.goto("/tasks")
-        boxes["tasks"] = page.locator(".tasks-app").bounding_box()
+        boxes["tasks"] = box_of(page.locator(".tasks-app"))
         page.goto("/notes")
-        boxes["quicknote"] = page.locator(".notes-list").bounding_box()
+        boxes["quicknote"] = box_of(page.locator(".notes-list"))
         page.goto("/search?q=note")
-        boxes["search"] = page.locator(".search-results").bounding_box()
+        boxes["search"] = box_of(page.locator(".search-results"))
         edges = {k: (round(b["x"]), round(b["width"])) for k, b in boxes.items()}
         assert len(set(edges.values())) == 1, (viewport, edges)
 
@@ -776,17 +780,17 @@ def test_top_row_is_one_aligned_row(new_page, wiki, monkeypatch, width):
     page = new_page(viewport={"width": width, "height": 700})
     page.goto("/page/release")
     expect(page.locator("#uncommitted-badge")).to_be_visible()
-    centre = lambda sel: (lambda b: b["y"] + b["height"] / 2)(page.locator(sel).first.bounding_box())
+    centre = lambda sel: (lambda b: b["y"] + b["height"] / 2)(box_of(page.locator(sel).first))
     row = centre(".breadcrumb .module-switch")
     for sel in (".remote-badge", "#uncommitted-badge", ".top-actions button"):
         assert abs(centre(sel) - row) < 1.5, sel
-    last = page.locator(".top-actions button").last.bounding_box()     # the search pill's border
-    edge = page.locator("main > .breadcrumb").bounding_box()
+    last = box_of(page.locator(".top-actions button").last)     # the search pill's border
+    edge = box_of(page.locator("main > .breadcrumb"))
     assert abs(last["x"] + last["width"] - (edge["x"] + edge["width"])) < 1
-    badges = page.locator("#uncommitted-badge").bounding_box()
-    assert badges["x"] + badges["width"] < page.locator(".top-actions").bounding_box()["x"]
+    badges = box_of(page.locator("#uncommitted-badge"))
+    assert badges["x"] + badges["width"] < box_of(page.locator(".top-actions"))["x"]
     # 🌐 left of the module switcher, outside the content's edge.
-    globe, switch = page.locator(".remote-badge").bounding_box(), page.locator(".breadcrumb .module-switch").bounding_box()
+    globe, switch = box_of(page.locator(".remote-badge")), box_of(page.locator(".breadcrumb .module-switch"))
     assert globe["x"] + globe["width"] <= switch["x"] and globe["x"] >= 0
 
 
@@ -908,8 +912,8 @@ def test_uncommitted_list_layout(new_page, wiki, width):
     wiki.write("other-notes", "# Other notes with a longer title\n")
     page = new_page(viewport={"width": width, "height": 700})
     page.goto("/uncommitted")
-    btn = page.locator(".page-header-actions #commit-all-btn").bounding_box()
-    table = page.locator(".hist-table").bounding_box()
+    btn = box_of(page.locator(".page-header-actions #commit-all-btn"))
+    table = box_of(page.locator(".hist-table"))
     assert abs(btn["x"] + btn["width"] - (table["x"] + table["width"])) < 1
     assert horizontal_overflow(page) <= 0
     assert table["x"] + table["width"] <= width
@@ -926,7 +930,7 @@ def test_heading_links_copy_page_and_section_urls(page, wiki):
     expect(page.locator("article .heading-link")).to_have_count(2)
     # After the heading's text, not in the margin left of it.
     for h, link in ((page.locator(".page-header h1"), title_link), (page.locator("article h2#first-part"), section_link)):
-        assert link.bounding_box()["x"] > h.bounding_box()["x"] + 20
+        assert box_of(link)["x"] > box_of(h)["x"] + 20
     expect(section_link).to_have_css("opacity", "0")
     page.locator("article h2#first-part").hover()
     expect(section_link).not_to_have_css("opacity", "0")

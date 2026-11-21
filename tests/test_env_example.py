@@ -8,7 +8,7 @@ REPO = Path(__file__).resolve().parent.parent
 # Set by run.sh or the build, not by the user, or said to a test run or the
 # bench (ZONE_TEST_RACE, ZONE_BENCH_*): .env.example needn't list them.
 INTERNAL = {"ZONE_BUILD", "ZONE_HOST_DATA", "ZONE_COPY_REPO", "ZONE_MODEL_DIR", "ZONE_TEST_RACE", "ZONE_BENCH_SLACK",
-            "ZONE_BENCH_SIZE"}
+            "ZONE_BENCH_SIZE", "ZONE_E2E_REPEAT"}
 
 def _example_keys() -> set[str]:
     text = (REPO / ".env.example").read_text(encoding="utf-8")

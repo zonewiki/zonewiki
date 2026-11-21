@@ -8,7 +8,7 @@ from datetime import date, datetime, timedelta
 import pytest
 from playwright.sync_api import expect
 
-from conftest import list_page, make_list, more_menu, open_tab, pick_date, settle, still, wait_until
+from conftest import box_of, list_page, make_list, more_menu, open_tab, pick_date, settle, still, wait_until
 from tests import settings
 
 
@@ -215,8 +215,8 @@ def test_list_switcher_looks_as_the_module_switcher_does(page, wiki):
     assert style(".tasks-place[aria-current]", *pill) == style(".module-switch .module-link[aria-current]", *pill)
     assert style(".tasks-place:not([aria-current])", *pill) == style(".module-switch .module-link:not([aria-current])", *pill)
     # The pills are inside the capsule, on one line.
-    group = page.locator(".tasks-places-group").bounding_box()
-    for b in (p.bounding_box() for p in page.locator(".tasks-place").all()):
+    group = box_of(page.locator(".tasks-places-group"))
+    for b in (box_of(p) for p in page.locator(".tasks-place").all()):
         assert group["x"] < b["x"] and b["x"] + b["width"] < group["x"] + group["width"]
         assert group["y"] < b["y"] and b["y"] + b["height"] < group["y"] + group["height"]
 
@@ -238,9 +238,9 @@ def test_list_switcher_goes_between_the_lists_and_keeps_its_counts(page, wiki):
     expect(page.locator("h1")).to_have_text("List: shop")
     expect(page.locator(".page-foot #backlinks a")).to_have_text(["Shop"])
     # One row, above the heading.
-    boxes = [b.bounding_box() for b in places.all()]
+    boxes = [box_of(b) for b in places.all()]
     assert all(abs(b["y"] - boxes[0]["y"]) < 1 for b in boxes)
-    assert boxes[0]["y"] + boxes[0]["height"] <= page.locator("h1").bounding_box()["y"]
+    assert boxes[0]["y"] + boxes[0]["height"] <= box_of(page.locator("h1"))["y"]
     card(page, "Milk").locator("input[type=checkbox]").check()
     # After the checkbox's ~5 s grace period.
     expect(card(page, "Milk")).to_have_count(0, timeout=10000)
@@ -2439,7 +2439,7 @@ def test_double_click_on_title_or_notes_opens_modal(page, wiki):
 
 def _drop(source, target, side):
     """Drag source onto target's upper (side "before") or lower half ("after")."""
-    box = target.bounding_box()
+    box = box_of(target)
     source.drag_to(target, target_position={"x": box["width"] / 2,
                                             "y": box["height"] * (0.25 if side == "before" else 0.75)})
 
@@ -3348,10 +3348,10 @@ def test_note_checklist_starts_flush_with_the_text(page, wiki):
         "Before:\n\n- [ ] tent\n  - [ ] pegs\n  - poles\n- stove"})
     page.goto("/tasks?view=open&group=none")
     desc = open_details(page, "Pack").locator(".task-desc")
-    text_x = desc.locator("p").bounding_box()["x"]
+    text_x = box_of(desc.locator("p"))["x"]
     checks = desc.locator(".task-list-item-checkbox")
-    assert abs(checks.nth(0).bounding_box()["x"] - text_x) <= 1
-    assert checks.nth(1).bounding_box()["x"] > text_x + 10
+    assert abs(box_of(checks.nth(0))["x"] - text_x) <= 1
+    assert box_of(checks.nth(1))["x"] > text_x + 10
     # Where each item's first letter starts: tent, pegs, poles, stove.
     starts = desc.evaluate("""d => [...d.querySelectorAll('li')].map(li => {
         const t = [...li.childNodes].find(n => n.nodeType === 3 && n.textContent.trim());
@@ -3361,7 +3361,7 @@ def test_note_checklist_starts_flush_with_the_text(page, wiki):
     assert abs(starts[0] - starts[3]) <= 1        # a box item and a bullet item
     assert abs(starts[1] - starts[2]) <= 1        # nested, both kinds
     # The bullets are drawn in the boxes' column, as wide as a box.
-    box = checks.nth(0).bounding_box()
+    box = box_of(checks.nth(0))
     bullet = desc.evaluate("""d => { const li = d.querySelectorAll('li')[3], st = getComputedStyle(li, '::before');
         return { content: st.content, x: li.getBoundingClientRect().x + parseFloat(st.left), w: parseFloat(st.width) }; }""")
     assert bullet["content"] == '"•"'
@@ -3370,8 +3370,8 @@ def test_note_checklist_starts_flush_with_the_text(page, wiki):
     page.locator("#task-edit-preview-btn").click()
     preview = page.locator("#task-edit-preview")
     expect(preview.locator(".task-list-item-checkbox")).to_have_count(2)
-    assert abs(preview.locator(".task-list-item-checkbox").first.bounding_box()["x"]
-               - preview.locator("p").bounding_box()["x"]) <= 1
+    assert abs(box_of(preview.locator(".task-list-item-checkbox").first)["x"]
+               - box_of(preview.locator("p"))["x"]) <= 1
 
 
 def test_notes_editor_has_the_bar_and_a_preview(page, wiki):
@@ -3400,12 +3400,12 @@ def test_notes_editor_has_the_bar_and_a_preview(page, wiki):
     # card will show them; Edit (or F2) goes back.
     preview = modal.locator("#task-edit-preview")
     expect(preview).to_be_hidden()
-    field_height = notes.bounding_box()["height"]
+    field_height = box_of(notes)["height"]
     modal.locator("#task-edit-preview-btn").click()
     expect(preview.locator("strong")).to_have_text("loud")
     expect(notes).to_be_hidden()
     expect(bar).to_be_hidden()
-    assert preview.bounding_box()["height"] >= field_height - 1
+    assert box_of(preview)["height"] >= field_height - 1
     # Labelled, so it is never taken for the text field.
     assert preview.evaluate("el => getComputedStyle(el, '::before').content") == '"Preview"'
     modal.locator("#task-edit-notes-edit-btn").click()
@@ -4027,12 +4027,12 @@ def test_comment_of_several_lines(page, wiki):
     for one in (shown.first, shown.last):
         expect(one).to_have_css("border-left-width", "3px")
         expect(one).to_have_css("border-top-width", "0px")
-    first, last = shown.first.bounding_box(), shown.last.bounding_box()
+    first, last = box_of(shown.first), box_of(shown.last)
     assert last["y"] - (first["y"] + first["height"]) >= 5
     expect(shown.first).to_have_js_property("tagName", "P")
     expect(shown.last.locator(".task-comment-body li")).to_have_text(["two brushes", "primer"])
     when, text = shown.last.locator(".task-comment-when"), shown.last.locator(".task-comment-body")
-    assert text.bounding_box()["y"] >= when.bounding_box()["y"] + when.bounding_box()["height"] - 1
+    assert box_of(text)["y"] >= box_of(when)["y"] + box_of(when)["height"] - 1
 
 
 def test_comment_in_its_field_is_saved_with_the_task(page, wiki):
@@ -4124,8 +4124,8 @@ def test_repeat_stays_where_it_is_when_a_repeat_is_chosen(page, wiki):
     modal = open_edit(page, "Water plants")
     modal.locator("#task-edit-more-repeat").click()
     rec = modal.locator("#task-edit-rec-type")
-    box = lambda loc: loc.locator("xpath=ancestor::label").bounding_box()
-    due = modal.locator("[data-date-trigger=task-edit-due]").locator("xpath=ancestor::label").bounding_box()
+    box = lambda loc: box_of(loc.locator("xpath=ancestor::label"))
+    due = box_of(modal.locator("[data-date-trigger=task-edit-due]").locator("xpath=ancestor::label"))
     before = box(rec)
     assert before["x"] == due["x"] and before["y"] >= due["y"] + due["height"], (before, due)
     rec.select_option("weekly")
@@ -4143,8 +4143,8 @@ def test_description_is_close_to_the_title(page, wiki):
     page.goto("/tasks?view=open&group=none")
     page.locator("#task-add-btn").click()
     modal = page.locator("#task-edit-modal")
-    bottom = lambda sel: (lambda b: b["y"] + b["height"])(modal.locator(sel).bounding_box())
-    top = lambda sel: modal.locator(sel).bounding_box()["y"]
+    bottom = lambda sel: (lambda b: b["y"] + b["height"])(box_of(modal.locator(sel)))
+    top = lambda sel: box_of(modal.locator(sel))["y"]
     expect(modal.locator("#task-edit-target")).to_be_visible()
     tags_gap = top("label[for=task-edit-tags]") - bottom("#task-edit-desc")
     assert 0 < top("label[for=task-edit-desc]") - bottom("#task-edit-target") <= tags_gap + 6
@@ -4221,41 +4221,41 @@ def test_the_description_grows_and_has_its_bar_while_written_in(page, wiki):
     # Empty and not written in: its label, no bar, nothing to preview.
     expect(bar).to_be_hidden()
     expect(mode).to_be_hidden()
-    empty = notes.bounding_box()
+    empty = box_of(notes)
     assert empty["height"] < 70, empty
     # With the focus the bar takes the label's place, whole, and nothing moves.
     notes.click()
     expect(bar).to_be_visible()
     expect(mode).to_be_visible()
-    assert label.bounding_box()["width"] <= 1                          # there for screen readers
+    assert box_of(label)["width"] <= 1                          # there for screen readers
     assert bar.evaluate("b => b.scrollWidth <= b.clientWidth")
-    assert notes.bounding_box() == empty
+    assert box_of(notes) == empty
     # As tall as its text, without a scrollbar of its own.
     page.keyboard.type("one\ntwo\nthree\nfour\nfive\nsix")
-    grown = notes.bounding_box()["height"]
+    grown = box_of(notes)["height"]
     assert grown > empty["height"] + 50, grown
     assert notes.evaluate("ta => ta.scrollHeight <= ta.clientHeight")
     # Up to a point: then it scrolls, and the dialog's buttons stay in reach.
     notes.fill("\n".join(f"line {i}" for i in range(80)))
-    tall = notes.bounding_box()["height"]
+    tall = box_of(notes)["height"]
     assert grown < tall <= page.viewport_size["height"] * 0.45 + 1, tall
     assert notes.evaluate("ta => ta.scrollHeight > ta.clientHeight")
     # Text taken out again: as small as it was.
     notes.fill("")
-    assert notes.bounding_box()["height"] == empty["height"]
+    assert box_of(notes)["height"] == empty["height"]
     # Left with text in it: the label is back, and Preview stays.
     notes.fill("**done**")
     modal.locator("#task-edit-title").focus()
     expect(bar).to_be_hidden()
     expect(mode).to_be_visible()
-    assert label.bounding_box()["width"] > 20
+    assert box_of(label)["width"] > 20
     # A task with a long description opens with its field that tall.
     page.keyboard.press("Escape")
     page.request.post("/api/tasks", data={"title": "Long", "description": "a\n\nb\n\nc\n\nd"})
     page.reload()
     modal = open_edit(page, "Long")
     assert notes.evaluate("ta => ta.scrollHeight <= ta.clientHeight")
-    assert notes.bounding_box()["height"] > empty["height"] + 50
+    assert box_of(notes)["height"] > empty["height"] + 50
 
 
 def test_importance_shows_before_the_title_and_is_set_four_ways(page, wiki):
@@ -4269,7 +4269,7 @@ def test_importance_shows_before_the_title_and_is_set_four_ways(page, wiki):
     expect(mark("Sort photos")).to_have_text("↓")
     expect(mark("Water plants")).to_have_count(0)                     # normal says nothing
     # Before the title, on its line.
-    box, title = mark("Tax return").bounding_box(), card(page, "Tax return").locator(".task-title").bounding_box()
+    box, title = box_of(mark("Tax return")), box_of(card(page, "Tax return").locator(".task-title"))
     assert box["x"] < title["x"] and abs(box["y"] - title["y"]) < 6
     expect(mark("Tax return")).to_be_visible()
     # The dialog's field.
@@ -4463,16 +4463,16 @@ def test_one_line_per_task(page, wiki):
         if not passport.count():
             continue
         # One line: title, tags, the notes marker and the deadline side by side.
-        box = passport.bounding_box()
+        box = box_of(passport)
         assert box["height"] < 45, view
         expect(passport.locator(".task-desc")).to_be_hidden()
         for sel in (".task-title", ".task-tags-right .task-tag >> nth=0", ".task-due"):
-            b = passport.locator(sel).bounding_box()
+            b = box_of(passport.locator(sel))
             assert box["y"] <= b["y"] and b["y"] + b["height"] <= box["y"] + box["height"], sel
     page.locator("body").click(position={"x": 5, "y": 300})
     page.keyboard.press("v")
     expect(passport.locator(".task-desc")).to_be_hidden()
-    assert passport.bounding_box()["height"] < 45
+    assert box_of(passport)["height"] < 45
     expect(page.locator("#shortcuts-modal, .shortcuts-modal").get_by_text("full cards")).to_have_count(0)
 
 
@@ -4491,25 +4491,25 @@ def test_phone_cards_show_every_tag_never_clip_dates(new_page, wiki):
     expect(card(phone, "Pack for the trip")).to_be_visible()
     assert phone.evaluate("document.documentElement.scrollWidth") <= 390
     for item in phone.locator(".task-item").all():
-        box = item.bounding_box()
+        box = box_of(item)
         assert box["height"] >= 44                                   # finger-sized
         # Regression: with markers (↻ 💬) or a "📅 Tomorrow" the dates
         # were cut at the line's end; every line's meta fits.
         assert item.evaluate("el => { const m = el.querySelector('.task-meta'); return !m || m.scrollWidth <= m.clientWidth + 1; }"), item.inner_text()
         due = item.locator(".task-due:not(.task-date-empty)")
         if due.count():
-            d = due.bounding_box()
+            d = box_of(due)
             assert due.evaluate("el => el.scrollWidth <= el.clientWidth + 1") and d["x"] + d["width"] <= box["x"] + box["width"]
         # Every tag shows, whole: tags wrap onto more lines rather than
         # drop out when the line is short.
         for tag in item.locator(".task-tag").all():
             expect(tag).to_be_visible()
-            b = tag.bounding_box()
+            b = box_of(tag)
             assert tag.evaluate("el => el.scrollWidth <= el.clientWidth + 1"), tag.inner_text()
             assert box["x"] <= b["x"] and b["x"] + b["width"] <= box["x"] + box["width"]
             assert b["y"] + b["height"] <= box["y"] + box["height"]
     trip = card(phone, "Pack for the trip")
-    tags = [t.bounding_box() for t in trip.locator(".task-tag").all()]
+    tags = [box_of(t) for t in trip.locator(".task-tag").all()]
     assert len(tags) == 6 and tags[-1]["y"] > tags[0]["y"]          # on two lines
 
 
@@ -4524,14 +4524,14 @@ def test_phone_card_menu_sits_on_the_title_line(new_page, wiki):
     phone.goto("/tasks?view=open&group=none")
     expect(card(phone, "Pay rent")).to_be_visible()
     rent = card(phone, "Pay rent")
-    title, menu = rent.locator(".task-content").bounding_box(), rent.locator(".task-menu-btn").bounding_box()
-    meta = rent.locator(".task-meta").bounding_box()
+    title, menu = box_of(rent.locator(".task-content")), box_of(rent.locator(".task-menu-btn"))
+    meta = box_of(rent.locator(".task-meta"))
     assert abs((menu["y"] + menu["height"] / 2) - (title["y"] + title["height"] / 2)) < 2, (menu, title)
     assert menu["width"] >= 40 and menu["height"] >= 40
     assert meta["y"] >= title["y"] + title["height"] - 1
     assert meta["x"] + meta["width"] > menu["x"]                    # the line runs under ⋯
     # A line with nothing but a title stays one finger-sized line.
-    assert card(phone, "Plain").bounding_box()["height"] < 56
+    assert box_of(card(phone, "Plain"))["height"] < 56
 
 
 def test_every_card_shows_every_tag(page, wiki):
@@ -4549,27 +4549,27 @@ def test_every_card_shows_every_tag(page, wiki):
     expect(tags).to_have_count(7)
 
     def check():
-        box, due = item.bounding_box(), item.locator(".task-due").bounding_box()
-        title = item.locator(".task-content").bounding_box()
+        box, due = box_of(item), box_of(item.locator(".task-due"))
+        title = box_of(item.locator(".task-content"))
         for tag in tags.all():
-            b = tag.bounding_box()
+            b = box_of(tag)
             assert box["x"] <= b["x"] and b["x"] + b["width"] <= due["x"]     # whole, left of the dates
             assert b["x"] >= title["x"] + title["width"]                      # right of the title
             assert b["y"] + b["height"] <= box["y"] + box["height"]           # inside the card
-        first = tags.first.bounding_box()
-        assert tags.last.bounding_box()["y"] > first["y"]                    # wrapped
+        first = box_of(tags.first)
+        assert box_of(tags.last)["y"] > first["y"]                    # wrapped
         assert abs((due["y"] + due["height"] / 2) - (first["y"] + first["height"] / 2)) < 2
         assert title["width"] > 200                                           # the title keeps its share
         return box
 
     page.mouse.move(0, 0)
     line = check()
-    assert item.locator(".task-content").bounding_box()["height"] < 30    # the title is one line, cut off
-    assert card(page, "Plain").bounding_box()["height"] < 40              # a line, as ever
+    assert box_of(item.locator(".task-content"))["height"] < 30    # the title is one line, cut off
+    assert box_of(card(page, "Plain"))["height"] < 40              # a line, as ever
     # Hovering shows the empty 📅 in room kept for it: nothing rewraps.
     item.locator(".task-content").hover()
     expect(item.locator(".task-date-empty").first).to_be_visible()
-    assert item.bounding_box()["height"] == line["height"]
+    assert box_of(item)["height"] == line["height"]
 
 
 # ── Expand a task in place ───────────────────────────────────────────────────
@@ -4593,18 +4593,18 @@ def test_line_selecting_shows_the_title_details_on_request(page, wiki):
     # notes; → (or 📝) opens them, ← closes them; Enter opens the modal.
     _expand_setup(page)
     passport = card(page, LONG)
-    one_line = passport.bounding_box()["height"]
+    one_line = box_of(passport)["height"]
     passport.locator(".task-content").click()                      # select: the whole title
     expect(passport).to_have_class(EXPANDED)
     expect(passport).not_to_have_class(DETAILS)
     expect(passport.locator(".task-desc")).to_be_hidden()
-    titled = passport.bounding_box()["height"]
+    titled = box_of(passport)["height"]
     assert titled > one_line
     expect(page.locator(".task-edit-modal[open]")).to_have_count(0)
     page.keyboard.press("ArrowRight")                               # the details
     expect(passport).to_have_class(DETAILS)
     expect(passport.locator(".task-desc")).to_be_visible()
-    assert passport.bounding_box()["height"] > titled + 20
+    assert box_of(passport)["height"] > titled + 20
     # The notes' checkboxes work; the save re-renders, the details stay open.
     passport.locator(".task-desc .task-list-item-checkbox").check()
     expect(card(page, LONG).locator(".task-desc .task-date-done")).to_be_visible()
@@ -4678,9 +4678,9 @@ def test_line_expand_button_and_hl_keys(page, wiki):
     expect(btn).to_be_visible()
     expect(btn).to_have_attribute("aria-expanded", "false")
     expect(plain.locator(".task-expand-btn")).to_have_count(0)
-    p_menu, s_menu = plain.locator(".task-menu-btn").bounding_box(), short.locator(".task-menu-btn").bounding_box()
+    p_menu, s_menu = box_of(plain.locator(".task-menu-btn")), box_of(short.locator(".task-menu-btn"))
     assert abs(p_menu["x"] - s_menu["x"]) < 1
-    b = btn.bounding_box()
+    b = box_of(btn)
     assert b["x"] + b["width"] <= s_menu["x"] + 1                        # left of ⋯
     btn.click()
     expect(short.locator(".task-desc")).to_be_visible()
@@ -4721,7 +4721,7 @@ def test_line_double_click_below_expanded_opens_that_card(page, wiki):
     open_details(long_notes)
     for _ in range(2):                       # every time, not just the first
         still(page)
-        box = below.locator(".task-content").bounding_box()
+        box = box_of(below.locator(".task-content"))
         page.mouse.move(box["x"] + 10, box["y"] + box["height"] / 2)
         # Each press of the double-click leaves the card where it was.
         top = box["y"]
@@ -4732,10 +4732,11 @@ def test_line_double_click_below_expanded_opens_that_card(page, wiki):
         page.clock.pause_at(datetime.fromtimestamp(page.evaluate("() => Date.now()") / 1000 + 0.5))
         page.mouse.down()
         page.mouse.up()
-        assert below.locator(".task-content").bounding_box()["y"] == top
+        # moving=True: the clock stands, and still() waits for a frame.
+        assert box_of(below.locator(".task-content"), moving=True)["y"] == top
         assert "task-details" in long_notes.get_attribute("class")
         page.mouse.down(click_count=2)
-        assert below.locator(".task-content").bounding_box()["y"] == top
+        assert box_of(below.locator(".task-content"), moving=True)["y"] == top
         assert "task-details" in long_notes.get_attribute("class")
         page.mouse.up(click_count=2)
         page.clock.resume()
@@ -4745,13 +4746,13 @@ def test_line_double_click_below_expanded_opens_that_card(page, wiki):
         # The card closes with a 150ms height animation (finishCollapse): the
         # one below moves up as it runs, not with the class. Read at once,
         # under load, it hadn't moved yet.
-        wait_until(page, lambda: below.locator(".task-content").bounding_box()["y"] < top)
+        wait_until(page, lambda: box_of(below.locator(".task-content"))["y"] < top)
         open_details(long_notes)
         page.wait_for_timeout(500)
     # A single click: the card stays put for the double-click window.
-    top = below.bounding_box()["y"]
+    top = box_of(below)["y"]
     below.locator(".task-content").click()
-    assert below.bounding_box()["y"] == top
+    assert box_of(below)["y"] == top
     expect(long_notes).not_to_have_class(DETAILS)
     # The card below closes the same way when the one above is clicked.
     page.keyboard.press("ArrowRight")
@@ -4768,11 +4769,11 @@ def test_line_task_with_nothing_more_stays_a_line(page, wiki):
     _expand_setup(page)
     for title in ("Plain", "Short with notes"):
         item = card(page, title)
-        before = item.bounding_box()
+        before = box_of(item)
         item.locator(".task-content").click()
         expect(item).to_have_class(re.compile(r"\btask-selected\b"))
         expect(item).not_to_have_class(EXPANDED)
-        assert item.bounding_box()["height"] == before["height"]
+        assert box_of(item)["height"] == before["height"]
     plain = card(page, "Plain")
     plain.locator(".task-content").click()
     page.keyboard.press("ArrowRight")
@@ -4816,14 +4817,14 @@ def test_line_tap_expands_then_opens(new_page, wiki):
     expect(passport.locator(".task-desc")).to_be_hidden()
     expect(phone.locator(".task-edit-modal[open]")).to_have_count(0)
     expand = passport.locator(".task-expand-btn")
-    b = expand.bounding_box()
+    b = box_of(expand)
     assert b["width"] >= 40 and b["height"] >= 40
     expand.tap()
     expect(passport.locator(".task-desc")).to_be_visible()
     expand.tap()
     expect(passport.locator(".task-desc")).to_be_hidden()
     notes = passport.locator(".task-has-notes")
-    b = notes.bounding_box()
+    b = box_of(notes)
     assert b["width"] >= 24 and b["height"] >= 24                       # a finger's target
     notes.tap()
     expect(passport.locator(".task-desc")).to_be_visible()
@@ -4856,9 +4857,9 @@ def test_line_tags_follow_the_title(page, wiki):
     page.goto("/tasks?view=open&group=none")
     passport = card(page, "Renew passport")
     expect(passport.locator(".task-tag").first).to_have_text("#personal")
-    title, first, due = (passport.locator(sel).first.bounding_box() for sel in (".task-title", ".task-tag", ".task-due"))
+    title, first, due = (box_of(passport.locator(sel).first) for sel in (".task-title", ".task-tag", ".task-due"))
     assert first["x"] - (title["x"] + title["width"]) < 30
-    row = passport.bounding_box()
+    row = box_of(passport)
     assert due["x"] + due["width"] > row["x"] + row["width"] - 90
 
 
@@ -4883,11 +4884,11 @@ def test_card_actions_on_hover_and_right_click_menu(page, wiki):
     page.wait_for_timeout(200)
     expect(skip).to_be_visible()
     # Right-click: the same menu, at the pointer; its actions work.
-    box = card(page, "Other").locator(".task-title").bounding_box()
+    box = box_of(card(page, "Other").locator(".task-title"))
     page.mouse.click(box["x"] + 10, box["y"] + 5, button="right")
     menu = page.locator(".task-menu")
     expect(menu.locator(".task-menu-title")).to_have_text("Other")
-    m = menu.bounding_box()
+    m = box_of(menu)
     assert abs(m["x"] - (box["x"] + 10)) < 6 and m["y"] >= box["y"]
     expect(card(page, "Other")).to_have_class(re.compile(r"\btask-selected\b"))
     menu.get_by_role("menuitem", name="Won't do").click()
@@ -4909,21 +4910,21 @@ def test_dates_end_at_the_right_edge(page, wiki):
     page.mouse.move(0, 0)
     ends = []
     for title in ("Weekly review", "Call the plumber"):
-        menu, due = card(page, title).locator(".task-menu-btn").bounding_box(), card(page, title).locator(".task-due").bounding_box()
+        menu, due = box_of(card(page, title).locator(".task-menu-btn")), box_of(card(page, title).locator(".task-due"))
         ends.append(menu["x"] - (due["x"] + due["width"]))
     assert abs(ends[0] - ends[1]) < 1 and 0 <= ends[0] < 45     # the expand button's room is between
     weekly = card(page, "Weekly review")
     shown = (".task-tag", ".task-recurring", ".task-due", ".task-title", ".task-menu-btn")
-    before = {sel: weekly.locator(sel).bounding_box() for sel in shown}
+    before = {sel: box_of(weekly.locator(sel)) for sel in shown}
     weekly.locator(".task-title").hover()
     expect(weekly.locator(".task-skip-btn")).to_be_visible()
     for sel, box in before.items():
-        after = weekly.locator(sel).bounding_box()
+        after = box_of(weekly.locator(sel))
         assert abs(after["x"] - box["x"]) < 1 and abs(after["y"] - box["y"]) < 1, sel
-    boxes = [weekly.locator(sel).bounding_box() for sel in
+    boxes = [box_of(weekly.locator(sel)) for sel in
              (".task-skip-btn", ".task-start-info.task-date-empty", ".task-recurring", ".task-due", ".task-menu-btn")]
     assert all(l["x"] + l["width"] <= r["x"] + 1 for l, r in zip(boxes, boxes[1:]))    # left to right
-    dots, title = weekly.locator(".task-menu-btn svg").bounding_box(), weekly.locator(".task-title").bounding_box()
+    dots, title = box_of(weekly.locator(".task-menu-btn svg")), box_of(weekly.locator(".task-title"))
     assert abs((dots["y"] + dots["height"] / 2) - (title["y"] + title["height"] / 2)) < 1.5   # ⋯ on the line's centre
 
 
@@ -4953,23 +4954,23 @@ def test_expanded_task_keeps_its_line(page, wiki):
     page.goto("/tasks?view=open&group=none")
     item = page.locator(".task-item").first
     item.locator(".task-content").hover()   # as when clicking it: hover shows the empty 📅 too
-    before = {sel: item.locator(sel).first.bounding_box() for sel in (".task-tag", ".task-due")}
+    before = {sel: box_of(item.locator(sel).first) for sel in (".task-tag", ".task-due")}
     title = item.locator(".task-content")
     text_wider = "el => { const r = document.createRange(); r.selectNodeContents(el); return r.getBoundingClientRect().width > el.clientWidth + 1; }"
     assert title.evaluate(text_wider)                                    # cut off in the line
     item.locator(".task-content").click()                            # select: expands
     expect(item).to_have_class(re.compile(r"\btask-expanded\b"))
     for sel, box in before.items():
-        after = item.locator(sel).first.bounding_box()
+        after = box_of(item.locator(sel).first)
         assert abs(after["x"] - box["x"]) < 1 and abs(after["y"] - box["y"]) < 3, sel
     assert not title.evaluate(text_wider)                                # the whole title, wrapped
     expect(item.locator(".task-desc")).to_be_hidden()                    # not the notes
     page.keyboard.press("ArrowRight")                                    # they open below
     for sel, box in before.items():
-        after = item.locator(sel).first.bounding_box()
+        after = box_of(item.locator(sel).first)
         assert abs(after["x"] - box["x"]) < 1 and abs(after["y"] - box["y"]) < 3, sel
-    desc = item.locator(".task-desc").bounding_box()
-    assert desc["y"] > title.bounding_box()["y"] + title.bounding_box()["height"] - 1
+    desc = box_of(item.locator(".task-desc"))
+    assert desc["y"] > box_of(title)["y"] + box_of(title)["height"] - 1
 
 
 def test_open_task_sets_its_details_apart(page, wiki):
@@ -4982,7 +4983,7 @@ def test_open_task_sets_its_details_apart(page, wiki):
     page.request.post("/api/tasks", data={"title": "Above"})
     page.goto("/tasks?view=open&group=none")
     passport, after = card(page, "Renew passport"), card(page, "Below")
-    gap = lambda: after.bounding_box()["y"] - (passport.bounding_box()["y"] + passport.bounding_box()["height"])
+    gap = lambda: box_of(after)["y"] - (box_of(passport)["y"] + box_of(passport)["height"])
     closed_gap = gap()
     open_details(page, "Renew passport")
     desc, comments = passport.locator(".task-desc"), passport.locator(".task-card-comments")
@@ -4993,7 +4994,7 @@ def test_open_task_sets_its_details_apart(page, wiki):
     expect(comments.locator(".task-card-comment")).to_have_css("border-left-width", "3px")
     label = comments.locator(".task-card-comments-label")
     expect(label).to_have_text("Comments")
-    d, l, c = desc.bounding_box(), label.bounding_box(), comments.locator(".task-card-comment").bounding_box()
+    d, l, c = box_of(desc), box_of(label), box_of(comments.locator(".task-card-comment"))
     assert d["y"] + d["height"] < l["y"] < c["y"]
     assert gap() >= closed_gap + 8
 
@@ -5013,7 +5014,7 @@ def test_comments_are_the_edit_modals_last_section(page, wiki):
     expect(section).to_have_css("border-top-width", "1px")
     # The line to write one looks like a field and opens the real one.
     line = modal.get_by_role("button", name="Write a comment…")
-    box, desc = line.bounding_box(), modal.locator("[name=description]").bounding_box()
+    box, desc = box_of(line), box_of(modal.locator("[name=description]"))
     assert abs(box["width"] - desc["width"]) < 2
     line.click()
     expect(modal.locator("#task-edit-comment")).to_be_focused()
@@ -5054,12 +5055,12 @@ def test_line_on_a_phone_is_two_lines(new_page, wiki):
     _line_tasks(phone)
     phone.goto("/tasks?view=open&group=none")
     passport, plain = card(phone, "Renew passport"), card(phone, "Plain")
-    row, title, due = (passport.locator(sel).first.bounding_box() for sel in (".task-content", ".task-content", ".task-due"))
-    row = passport.bounding_box()
+    row, title, due = (box_of(passport.locator(sel).first) for sel in (".task-content", ".task-content", ".task-due"))
+    row = box_of(passport)
     assert title["width"] > row["width"] * 0.6
     assert due["y"] >= title["y"] + title["height"] - 1                  # dates on the second line
     assert 44 <= row["height"] < 64
-    assert 44 <= plain.bounding_box()["height"] < 52                     # nothing for a second line
+    assert 44 <= box_of(plain)["height"] < 52                     # nothing for a second line
 
 
 def test_empty_dates_show_on_hover_in_lines_too(page, wiki):

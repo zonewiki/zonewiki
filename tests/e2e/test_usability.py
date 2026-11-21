@@ -5,7 +5,7 @@ from datetime import date, timedelta
 
 from playwright.sync_api import expect
 
-from conftest import TOUCH_PHONE, quick_touch, still, wait_until
+from conftest import TOUCH_PHONE, box_of, quick_touch, still, wait_until
 
 
 def card(page, title):
@@ -145,8 +145,8 @@ def test_commit_link_shares_the_meta_line_on_phone(new_page, wiki):
     phone = new_page(**TOUCH_PHONE)
     phone.goto("/page/draft")
     still(phone)
-    meta = phone.locator(".page-meta").bounding_box()
-    link = phone.locator(".commit-link").bounding_box()
+    meta = box_of(phone.locator(".page-meta"))
+    link = box_of(phone.locator(".commit-link"))
     assert abs((link["y"] + link["height"] / 2) - (meta["y"] + meta["height"] / 2)) < 6
 
 
@@ -181,7 +181,7 @@ def test_desktop_editor_keeps_inline_buttons(page, wiki):
 def swipe(page, locator, dx, dy=0, steps=8, release=True):
     cdp = page.context.new_cdp_session(page)
     expect(locator).to_be_visible()   # drawn again after a write: no box until it is back
-    b = locator.bounding_box()
+    b = box_of(locator)
     x0, y0 = b["x"] + b["width"] / 2, b["y"] + b["height"] / 2
 
     def send(kind, points):

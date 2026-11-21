@@ -9,7 +9,7 @@ from datetime import date
 import pytest
 from playwright.sync_api import expect
 
-from conftest import make_list, more_menu, wait_until
+from conftest import box_of, make_list, more_menu, wait_until
 from tests import settings
 
 
@@ -187,6 +187,21 @@ def test_a_new_task_s_title_assigns(alice):
     assert "assignee" not in made and "list" not in made and made["private"] is True
 
 
+def test_the_name_list_stays_when_the_filter_is_left_and_entered_again(alice, wiki):
+    # Regression: leaving the field closes its list 150 ms later, and that
+    # also closed the list of a field entered again meanwhile: Tab then
+    # completed nothing (on a busy machine, in the test below).
+    new(alice, "Bob's", assignee="bob")
+    alice.goto("/tasks?view=open&group=none")
+    search = alice.locator("#task-filter-search")
+    search.focus()
+    search.blur()
+    search.type("@b")
+    expect(alice.locator(".tag-ac-item")).to_have_text(["@bob"])
+    alice.wait_for_timeout(300)                      # past the blur's 150 ms
+    expect(alice.locator(".tag-ac-item")).to_have_text(["@bob"])
+
+
 def test_the_filter_takes_names_me_and_none(alice, wiki):
     new(alice, "Mine", assignee="alice")
     new(alice, "Bob's", assignee="bob")
@@ -214,6 +229,8 @@ def test_the_filter_takes_names_me_and_none(alice, wiki):
     expect(search).to_have_value("@")
     expect(alice.locator(".tag-ac-item")).to_have_text(["@me", "@none", "@bob", "@alice"])
     search.type("b")
+    # Tab takes what the list offers: once it offers @bob alone, not before.
+    expect(alice.locator(".tag-ac-item")).to_have_text(["@bob"])
     alice.keyboard.press("Tab")
     expect(alice.locator(".tasks-toolbar .tag-chip-label")).to_have_text(["@bob"])
     expect(alice.locator(".task-item")).to_have_count(2)
@@ -844,7 +861,7 @@ def test_the_tasks_link_has_one_number_and_a_dot(alice):
     expect(link.locator(".module-focus")).to_be_hidden()
     dot = link.locator(".module-new")
     expect(dot).to_be_visible()
-    box = dot.bounding_box()
+    box = box_of(dot)
     assert box["width"] <= 10 and box["height"] <= 10          # a dot, no number
     expect(link).to_have_attribute("title", re.compile(r"1 update for you"))
 

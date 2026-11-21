@@ -8,7 +8,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import pytest
 from playwright.sync_api import expect
 
-from conftest import _new_page
+from conftest import _new_page, box_of
 
 
 def test_autosave_writes_file_without_commit(page, wiki):
@@ -306,14 +306,14 @@ def test_preview_grows_on_very_wide_screens(new_page, wiki):
     page.goto("/edit/wide")
     preview = page.locator("#editor-preview")
     expect(preview.locator("table")).to_be_visible()
-    assert page.locator(".preview-pane").bounding_box()["width"] == 1100
-    assert page.locator(".editor-pane").bounding_box()["width"] == 800
-    text = preview.locator("p").first.bounding_box()
-    table = preview.locator("table").bounding_box()
+    assert box_of(page.locator(".preview-pane"))["width"] == 1100
+    assert box_of(page.locator(".editor-pane"))["width"] == 800
+    text = box_of(preview.locator("p").first)
+    table = box_of(preview.locator("table"))
     assert abs(text["width"] - 46 * 16) < 1 and table["width"] > text["width"] + 100
     # Below 1800px: both panes as before.
     page.set_viewport_size({"width": 1700, "height": 900})
-    assert page.locator(".preview-pane").bounding_box()["width"] <= 800
+    assert box_of(page.locator(".preview-pane"))["width"] <= 800
 
 
 def test_date_snippets_use_local_time(new_page, wiki):

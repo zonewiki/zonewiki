@@ -4,7 +4,7 @@ import re
 
 from playwright.sync_api import expect
 
-from conftest import TOUCH_PHONE, wait_until
+from conftest import TOUCH_PHONE, box_of, wait_until
 
 
 def seed(wiki):
@@ -424,8 +424,8 @@ def test_preview_pane_on_wide_screens(new_page, wiki):
     preview = page.locator("#modal-preview")
     expect(preview.locator(".search-preview-title")).to_have_text("Garden")
     expect(preview.locator("mark.search-hl").first).to_be_visible()   # scrolled to the section
-    heading = preview.locator('[data-pid="compost"]').bounding_box()
-    pane = preview.bounding_box()
+    heading = box_of(preview.locator('[data-pid="compost"]'))
+    pane = box_of(preview)
     assert pane["y"] <= heading["y"] < pane["y"] + pane["height"] / 2
     assert page.locator("#compost").count() == 0                       # no ids of its own
     page.keyboard.press("ArrowDown")
@@ -440,7 +440,7 @@ def test_no_preview_pane_on_narrow_screens(new_page, wiki):
     page.locator("#modal-filter").fill("compost")
     expect(page.locator(".search-result-card").first).to_be_visible()
     expect(page.locator("#modal-preview")).to_be_hidden()
-    assert page.locator("#search-modal").bounding_box()["width"] <= 660
+    assert box_of(page.locator("#search-modal"))["width"] <= 660
 
 
 def test_preview_of_a_title_match(new_page, wiki):
@@ -480,8 +480,8 @@ def test_the_meaning_indicator_fits_the_dialog_on_a_phone(new_page, wiki):
     page = new_page(**TOUCH_PHONE)
     page.goto("/page/index")
     page.evaluate("document.getElementById('search-modal').showModal()")
-    dialog = page.locator("#search-modal").bounding_box()
-    mode = page.locator("#search-mode").bounding_box()
+    dialog = box_of(page.locator("#search-modal"))
+    mode = box_of(page.locator("#search-mode"))
     assert mode["width"] > 0
     assert dialog["x"] <= mode["x"] and mode["x"] + mode["width"] <= dialog["x"] + dialog["width"]
     page.screenshot(path="tests/e2e/_screenshots/search-mode-phone.png")

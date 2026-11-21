@@ -8,7 +8,7 @@ from datetime import date
 
 from playwright.sync_api import expect
 
-from conftest import DESKTOP, SCREENSHOT_DIR, make_list
+from conftest import DESKTOP, SCREENSHOT_DIR, box_of, make_list
 
 BIG = {"width": 1600, "height": 900}
 
@@ -38,9 +38,9 @@ def test_the_lists_are_the_left_column_on_a_big_screen(new_page, wiki):
     # One rhythm: the names start in one line, every line as high, the
     # same room before each group's heading, a heading smaller and lighter
     # than a list's name.
-    names = [b for b in (n.bounding_box() for n in rail_names(page).all())]
+    names = [b for b in (box_of(n) for n in rail_names(page).all())]
     assert len({round(b["x"]) for b in names}) == 1, names
-    lines = [i.bounding_box()["height"] for i in rail.locator(".lists-rail-item").all()]
+    lines = [box_of(i)["height"] for i in rail.locator(".lists-rail-item").all()]
     assert len({round(h) for h in lines}) == 1, lines
     heads = rail.locator(".lists-rail-head")
     gaps = [heads.nth(i).evaluate("h => h.getBoundingClientRect().top - h.previousElementSibling?.getBoundingClientRect().bottom"
@@ -51,7 +51,7 @@ def test_the_lists_are_the_left_column_on_a_big_screen(new_page, wiki):
     (hsize, hcolor), (nsize, ncolor) = style(heads.first), style(rail.locator(".lists-rail-item").first)
     assert hsize < nsize and hcolor != ncolor
     # Left of the sheet, which sits where a page's does.
-    r, sheet = rail.bounding_box(), page.locator(".sheet").bounding_box()
+    r, sheet = box_of(rail), box_of(page.locator(".sheet"))
     assert r["x"] + r["width"] < sheet["x"]
     for scheme in ("light", "dark"):
         page.emulate_media(color_scheme=scheme)
@@ -89,8 +89,8 @@ def test_your_lists_and_other_lists(new_page, wiki, monkeypatch):
     # Its lock after the name, which starts where the others' do.
     mine = rail.locator('[data-place="list:mine"]')
     expect(mine.locator(".lists-rail-mark")).to_have_count(1)
-    assert mine.locator(".lists-rail-mark").bounding_box()["x"] > mine.locator(".lists-rail-name").bounding_box()["x"]
-    assert round(mine.locator(".lists-rail-name").bounding_box()["x"]) == round(rail.locator('[data-place="list:team"] .lists-rail-name').bounding_box()["x"])
+    assert box_of(mine.locator(".lists-rail-mark"))["x"] > box_of(mine.locator(".lists-rail-name"))["x"]
+    assert round(box_of(mine.locator(".lists-rail-name"))["x"]) == round(box_of(rail.locator('[data-place="list:team"] .lists-rail-name'))["x"])
     expect(rail.locator('[data-place="inbox"] svg')).to_have_count(0)   # the Inbox, always hers, has no lock here
     page.screenshot(path=str(SCREENSHOT_DIR / "lists-rail-users.png"))
 

@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from playwright.sync_api import expect
 
-from conftest import PHONE, SCREENSHOT_DIR
+from conftest import PHONE, SCREENSHOT_DIR, box_of
 from tests import settings
 
 PUBLIC = Path(__file__).parents[2] / "public"
@@ -56,7 +56,7 @@ def test_the_whole_cheat_sheet_fits_a_desktop_screen(signed_in, size):
         assert g["bottom"] <= g["vh"] and g["right"] <= g["vw"], g
         assert g["scroll"] <= g["client"], f"the dialog scrolls at {w}×{h}: {g}"
         # The groups sit side by side, not in one long column.
-        lefts = {round(b["x"]) for b in (s.bounding_box() for s in dialog.locator(".sc-group").all())}
+        lefts = {round(b["x"]) for b in (box_of(s) for s in dialog.locator(".sc-group").all())}
         assert len(lefts) >= 4, lefts
 
 

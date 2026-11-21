@@ -192,6 +192,7 @@ edited by hand or with `./run.sh user …`/`./run.sh group …`/`./run.sh config
 | `./run.sh build` | Checkout only: build the container image only (`compose build`) |
 | `./run.sh test` | gofmt, go vet, go test -race, then the unit/API tests, in the tools image |
 | `./run.sh e2e` | The browser tests and the tasks-core.js (Node) tests, in the tools image |
+| `./run.sh flaky [N]` | Chosen browser tests N times each on a busy machine, to find one that fails now and then (A test that fails now and then in `docs/spec/testing.md`) |
 | `./run.sh bench` | The tasks at a team's size against their budgets, then against a race build |
 | `./run.sh retrieval` | Search on the sample wiki (`tests/retrieval`) against its floor |
 | `./run.sh binaries` | The release binaries into `dist/`, in the tools image (Release binaries, below) |

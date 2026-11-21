@@ -127,6 +127,7 @@ It lives in the host directory pointed to by `ZONE_DATA` (default: `~/zonewiki`)
 ./run.sh build|up|down|logs|update   # beside compose.yaml alone (no checkout), run.sh runs the prebuilt image instead
 ./run.sh test       # gofmt + go vet + go test -race, then the unit/API tests, in the tools image (extra args go to pytest)
 ./run.sh e2e        # browser tests + tasks-core.js (Node) tests in the tools image
+./run.sh flaky [N] [pytest args]  # chosen browser tests N times each (20) on a busy machine: finds a test that fails now and then
 ./run.sh bench      # the tasks at a team's size against their budgets, then under the race detector (CI's bench job)
 ./run.sh retrieval  # search on the sample wiki (tests/retrieval) against its floor, by keywords and by meaning (CI's retrieval job)
 ./run.sh binaries   # the release binaries (Linux, macOS; amd64, arm64) into dist/, with SHA256SUMS (CI's release job, on a v* tag)

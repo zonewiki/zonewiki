@@ -7,7 +7,7 @@ import re
 import pytest
 from playwright.sync_api import expect
 
-from conftest import TOUCH_PHONE
+from conftest import TOUCH_PHONE, box_of
 from tests import settings
 
 
@@ -34,7 +34,7 @@ def test_the_menu_opens_by_click_and_closes_on_escape(alice):
     expect(menu.locator(".menu-who")).to_have_text("Signed in as alice")
     # The first item has the focus; it sits under the button.
     expect(menu.get_by_role("menuitem").first).to_be_focused()
-    b, m = btn.bounding_box(), menu.bounding_box()
+    b, m = box_of(btn), box_of(menu)
     assert m["y"] >= b["y"] + b["height"] and abs(m["x"] - b["x"]) < 4
     alice.keyboard.press("Escape")
     expect(menu).to_be_hidden()
@@ -156,7 +156,7 @@ def test_pages_and_tools_are_a_pill_each(alice):
         expect(links.and_(alice.locator(f"[data-module={key}]")).locator(".module-lock")).to_be_visible()
     for key in ("wiki", "tasks"):
         expect(links.and_(alice.locator(f"[data-module={key}]")).locator(".module-lock")).to_have_count(0)
-    g0, g1 = groups.nth(0).bounding_box(), groups.nth(1).bounding_box()
+    g0, g1 = box_of(groups.nth(0)), box_of(groups.nth(1))
     assert g0["x"] + g0["width"] < g1["x"] and abs(g0["y"] - g1["y"]) < 1   # two pills in a row
     expect(alice.locator(".top-user")).not_to_have_attribute("aria-current", "page")
     alice.get_by_role("link", name="Private").click()
@@ -201,12 +201,12 @@ def test_the_phone_has_private_and_quicknote_tabs(new_page, wiki, monkeypatch):
     bar = phone.locator(".action-buttons")
     items = bar.locator(".action-module, button")
     expect(items).to_have_text(["Wiki", "Private", "Tasks", "Notes", "Note", "Task", "Search"])
-    assert all(i.bounding_box()["width"] >= 40 for i in items.all())
+    assert all(box_of(i)["width"] >= 40 for i in items.all())
     # Notes' icon carries a small lock, inside its tab and clear of the label.
     tab, lock = bar.locator("[data-module=notes]"), bar.locator(".action-lock")
     expect(lock).to_have_count(1)
     expect(lock).to_be_visible()
-    t, l, lab = tab.bounding_box(), lock.bounding_box(), tab.locator(".action-label").bounding_box()
+    t, l, lab = box_of(tab), box_of(lock), box_of(tab.locator(".action-label"))
     assert t["x"] <= l["x"] and l["x"] + l["width"] <= t["x"] + t["width"] and l["y"] + l["height"] <= lab["y"]
     # The user button is for desktops; the name and Sign out stay in the top row.
     expect(phone.locator(".top-user")).to_be_hidden()

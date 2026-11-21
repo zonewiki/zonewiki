@@ -6,7 +6,7 @@ import re
 import pytest
 from playwright.sync_api import expect
 
-from conftest import PHONE, TOUCH_PHONE
+from conftest import PHONE, TOUCH_PHONE, box_of
 
 BIG = {"width": 1600, "height": 900}
 
@@ -63,8 +63,8 @@ def test_fold_hides_the_section_up_to_the_next_heading(page, wiki):
     # Find in page can still reach it.
     assert page.locator("article pre").get_attribute("hidden") == "until-found"
     # A folded section takes no room: Two follows One's heading.
-    one_box = page.locator("article #one").bounding_box()
-    two_box = page.locator("article #two").bounding_box()
+    one_box = box_of(page.locator("article #one"))
+    two_box = box_of(page.locator("article #two"))
     assert two_box["y"] - (one_box["y"] + one_box["height"]) < 80
     _fold(page, "one")
     expect(page.get_by_text("First text.")).to_be_visible()
@@ -213,8 +213,8 @@ def test_chevron_sits_in_the_margin_and_the_link_icon_after_the_heading(page, wi
     expect(fold).to_have_css("opacity", "0")
     h.hover()
     expect(fold).not_to_have_css("opacity", "0")
-    text = page.locator("article").bounding_box()
-    f, l = fold.bounding_box(), link.bounding_box()
+    text = box_of(page.locator("article"))
+    f, l = box_of(fold), box_of(link)
     assert f["x"] + f["width"] <= text["x"] + 1                  # in the margin
     assert l["x"] > text["x"] + 20                               # the link icon after the text
     _fold(page, "one")
@@ -231,9 +231,9 @@ def test_chevron_on_phones_is_shown_after_the_heading(new_page, wiki, touch):
     fold = h.locator(".section-fold")
     expect(fold).not_to_have_css("opacity", "0")
     # After the text, so headings stay aligned with or without one.
-    assert fold.bounding_box()["x"] > page.locator("article #empty").bounding_box()["x"] + 20
+    assert box_of(fold)["x"] > box_of(page.locator("article #empty"))["x"] + 20
     if touch:
-        assert fold.bounding_box()["height"] >= 24
+        assert box_of(fold)["height"] >= 24
         fold.tap()
     else:
         fold.click()
@@ -250,7 +250,7 @@ def test_folded_label_in_the_wavy_line_unfolds(page, wiki):
     _fold(page, "two")
     expect(label).to_have_text("folded")
     # In the middle of the line under the header.
-    h, l = header.bounding_box(), label.bounding_box()
+    h, l = box_of(header), box_of(label)
     assert abs((l["x"] + l["width"] / 2) - (h["x"] + h["width"] / 2)) < 2
     assert l["y"] < h["y"] + h["height"] < l["y"] + l["height"]
     label.click()
@@ -260,7 +260,7 @@ def test_folded_label_in_the_wavy_line_unfolds(page, wiki):
     _fold(page, "detail")
     detail = page.locator("article #detail")
     label = detail.locator(".section-folded-label")
-    d, l = detail.bounding_box(), label.bounding_box()
+    d, l = box_of(detail), box_of(label)
     assert abs((l["x"] + l["width"] / 2) - (d["x"] + d["width"] / 2)) < 2
     label.click()
     expect(page.get_by_text("Detail text")).to_be_visible()

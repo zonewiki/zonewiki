@@ -289,6 +289,27 @@ def still(page):
     page.evaluate(_STILL_JS)
 
 
+def box_of(target, moving: bool = False):
+    """Where an element is and how big: its bounding box, measured once the
+    page stands still (still(page)). The one way a test measures: a list
+    drawn again by a late answer (Completed, loaded after its link's click)
+    replaces its cards, and a card found before and measured after has no
+    box (None), or the one of a layout about to change. Never None: an
+    element that isn't shown fails here, by its name, not as a TypeError at
+    the line after. moving=True measures at once, for a test that looks while
+    something moves or holds the page's clock or a request back (still would
+    wait for what the test stopped)."""
+    page = target.page
+    if not moving:
+        still(page)
+    for _ in range(WAIT_MS // 100):
+        found = target.bounding_box()  # the one raw call (tests/test_e2e_harness.py)
+        if found is not None:
+            return found
+        page.wait_for_timeout(100)
+    raise AssertionError(f"{target} has no box: it isn't shown")
+
+
 def more_menu(page):
     """Opens the ⋯ menu of the list shown: on the Tasks page the page's own
     (beside the heading), on a wiki page the ⋯ of the embed's toolbar."""
@@ -346,7 +367,8 @@ def open_tab(page, view: str):
     """Switch the tasks to a view by its name (open/plan/focus/closed).
     Completed has no tab; its link under the list opens it. Open and Plan
     are the Open tab as one list and as the Plan board (its control's
-    List and Plan)."""
+    List and Plan). Returns once the view has what it asked the server for
+    (settle): Completed loads after the click and draws the list again."""
     if view == "closed":
         page.locator("#task-closed-link").click()
     elif view in ("open", "plan"):
@@ -354,6 +376,7 @@ def open_tab(page, view: str):
         page.locator(f".tasks-cut [data-group='{'day' if view == 'plan' else 'none'}']").first.click()
     else:
         page.locator(f"#tasks-tabs [data-view='{view}']").click()
+    settle(page)
 
 
 def pick_date(picker, d: str, tap: bool = False):
@@ -371,6 +394,18 @@ def pick_date(picker, d: str, tap: bool = False):
         nav = picker.locator(f".dp-nav[data-nav='{-1 if d < shown else 1}']")
         nav.tap() if tap else nav.click()
     raise AssertionError(f"{d} not in the picker")
+
+
+# ── The same test again and again ────────────────────────────────────────────
+
+
+def pytest_generate_tests(metafunc):
+    """ZONE_E2E_REPEAT=N runs every chosen test N times (./run.sh flaky): a
+    test that fails once in fifty runs is found, and its fix shown to hold."""
+    n = int(os.environ.get("ZONE_E2E_REPEAT") or 1)
+    if n > 1:
+        metafunc.fixturenames.append("_again")
+        metafunc.parametrize("_again", range(n))
 
 
 # ── Browser ───────────────────────────────────────────────────────────────────
@@ -414,7 +449,10 @@ def _new_page(browser, base_url, *, viewport=DESKTOP, color_scheme="light", **co
     # The page's own requests still waiting for their answer (settle): this
     # page's, not another tab's of its context. A new document drops those
     # of the one before: one left behind may never say it ended (Done's save
-    # as the editor leaves).
+    # as the editor leaves). Dropped twice: when the new document is asked
+    # for, and when it is there (framenavigated), since the old page goes on
+    # until then and a request it sent in between (the uncommitted count,
+    # while the browser was sent on to another host) is never heard of again.
     inflight = set()
 
     def started(r):
@@ -423,6 +461,7 @@ def _new_page(browser, base_url, *, viewport=DESKTOP, color_scheme="light", **co
         elif r.resource_type == "document" and r.frame == page.main_frame:
             inflight.clear()
     page.on("request", started)
+    page.on("framenavigated", lambda frame: inflight.clear() if frame == page.main_frame else None)
     page.on("requestfinished", lambda r: inflight.discard(r))
     page.on("requestfailed", lambda r: inflight.discard(r))
     page.inflight = inflight

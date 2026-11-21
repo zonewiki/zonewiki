@@ -6,7 +6,7 @@ from datetime import date, timedelta
 import pytest
 from playwright.sync_api import expect
 
-from conftest import LONG_PRESS_MS, TOUCH_PHONE, make_list, open_tab, pick_date, quick_touch, still, wait_until
+from conftest import LONG_PRESS_MS, TOUCH_PHONE, box_of, make_list, open_tab, pick_date, quick_touch, still, wait_until
 
 
 def day(offset: int) -> str:
@@ -73,8 +73,8 @@ def test_checkbox_target_reaches_beside_the_box(phone):
     # a second tap. (Chromium's emulated tap snaps to the box anyway, so
     # what is under those points is checked, not a tap.)
     c = card(phone, "Water plants")
-    box = c.locator("input[type=checkbox]").bounding_box()
-    card_box, title = c.bounding_box(), c.locator(".task-content").bounding_box()
+    box = box_of(c.locator("input[type=checkbox]"))
+    card_box, title = box_of(c), box_of(c.locator(".task-content"))
     mid_x, mid_y = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
     # Left: past the card's border (3px on a task planned for now).
     points = [(card_box["x"] + 5, mid_y), (title["x"] - 2, mid_y),
@@ -83,7 +83,7 @@ def test_checkbox_target_reaches_beside_the_box(phone):
         assert phone.evaluate("([x, y]) => !!document.elementFromPoint(x, y).closest('.task-checkbox')",
                               [x, y]), (x, y)
     # The box stays centred on the line: the bigger target moves nothing.
-    line = c.locator(".task-content").bounding_box()
+    line = box_of(c.locator(".task-content"))
     assert abs(mid_y - (line["y"] + line["height"] / 2)) < 1.5
     phone.touchscreen.tap(card_box["x"] + 5, mid_y)
     expect(c).to_contain_class("task-completing")
@@ -94,7 +94,7 @@ def test_checkbox_target_reaches_beside_the_box(phone):
 def test_hover_icons_hidden_menu_button_is_a_real_target(phone):
     expect(card(phone, "Weekly review").locator(".task-wontdo-btn")).to_have_count(0)
     expect(card(phone, "Weekly review").locator(".task-skip-btn")).to_be_hidden()
-    box = card(phone, "Weekly review").locator(".task-menu-btn").bounding_box()
+    box = box_of(card(phone, "Weekly review").locator(".task-menu-btn"))
     assert box["width"] >= 40 and box["height"] >= 40
 
 
@@ -103,7 +103,7 @@ def test_menu_is_a_bottom_sheet_with_context_items(phone):
     items = menu.get_by_role("menuitem")
     expect(items).to_have_text(["Edit…", "Start today", "Start tomorrow", "Pick start date…",
                                 "Skip this occurrence", "Importance…", "Move to list…", "Won't do", "Copy link", "Select several"])
-    box = menu.bounding_box()
+    box = box_of(menu)
     assert box["x"] == 0 and abs(box["y"] + box["height"] - 844) < 1, box
     assert box["width"] == 390
     # Tapping outside (the backdrop) closes it without doing anything.
@@ -177,7 +177,7 @@ def test_select_mode_taps_toggle_cards(selecting):
     bar = pg.locator("#task-selbar")
     expect(bar.locator(".tasks-selbar-count")).to_have_text("1 selected")
     expect(pg.locator(".action-buttons")).to_be_hidden()        # the bar takes the tab bar's place
-    box = bar.bounding_box()
+    box = box_of(bar)
     assert box["x"] == 0 and box["width"] == 390 and abs(box["y"] + box["height"] - 844) < 1, box
     card(pg, "Nuts").locator(".task-title").tap()
     card(pg, "Bolts").locator(".task-checkbox").tap()            # the checkbox selects, not completes
@@ -209,17 +209,17 @@ def test_select_mode_bar_fits_every_action(selecting, wiki):
     buttons = bar.locator(".tasks-selbar-actions .btn")
     expect(buttons).to_have_text(["Tag…", "List…", "Today", "Unplan", "Done", "Won't do"])
     assert pg.evaluate("document.documentElement.scrollWidth") <= 390
-    box = bar.bounding_box()
+    box = box_of(bar)
     assert box["x"] == 0 and box["width"] == 390 and abs(box["y"] + box["height"] - 844) < 1, box
     for b in buttons.all():
-        bb = b.bounding_box()
+        bb = box_of(b)
         assert bb["x"] >= 0 and bb["x"] + bb["width"] <= 390 and bb["height"] >= 44, (b.inner_text(), bb)
         assert b.evaluate("el => el.scrollWidth <= el.clientWidth"), b.inner_text()
     # The last card stays reachable above the bar.
     last = pg.locator(".task-item").last
     last.scroll_into_view_if_needed()
-    lb = last.bounding_box()
-    assert lb["y"] + lb["height"] <= bar.bounding_box()["y"] + 1, (lb, bar.bounding_box())
+    lb = box_of(last)
+    assert lb["y"] + lb["height"] <= box_of(bar)["y"] + 1, (lb, box_of(bar))
 
 
 def test_select_mode_has_no_swipes_or_drags(selecting):
@@ -296,11 +296,11 @@ def test_desktop_menu_popover_and_keyboard(page, wiki):
     page.mouse.move(0, 0)
     expect(card(page, "Water plants").locator(".task-menu-btn")).to_be_visible()
     title = card(page, "Water plants").locator(".task-title")
-    tb = title.bounding_box()
+    tb = box_of(title)
     page.mouse.click(tb["x"] + 5, tb["y"] + 5, button="right")
     menu = page.locator(".task-menu")
     # A popover at the pointer, not a bottom sheet.
-    mb = menu.bounding_box()
+    mb = box_of(menu)
     assert abs(mb["x"] - (tb["x"] + 5)) < 6 and mb["width"] < 400
     expect(menu.get_by_role("menuitem").first).to_be_focused()
     page.keyboard.press("ArrowDown")
@@ -333,9 +333,9 @@ def open_editor(page, title="Weekly review"):
 
 
 def in_viewport(page, locator) -> bool:
-    box = locator.bounding_box()
+    box = box_of(locator)
     vp = page.viewport_size
-    return box is not None and box["y"] >= 0 and box["y"] + box["height"] <= vp["height"] + 0.5
+    return box["y"] >= 0 and box["y"] + box["height"] <= vp["height"] + 0.5
 
 
 def test_edit_modal_save_reachable_on_phone(new_page, wiki):
@@ -362,7 +362,7 @@ def test_edit_modal_save_reachable_on_phone(new_page, wiki):
 
 
 def test_edit_modal_is_full_screen_on_phone(phone):
-    box = open_editor(phone).bounding_box()
+    box = box_of(open_editor(phone))
     assert box["x"] == 0 and box["y"] == 0 and box["width"] == 390 and abs(box["height"] - 844) < 1
 
 
@@ -382,7 +382,7 @@ def test_date_picker_in_modal_stays_on_screen(phone):
     picker = phone.locator(".tasks-datepicker")
     expect(picker).to_be_visible()
     assert in_viewport(phone, picker)
-    tb, pb = trigger.bounding_box(), picker.bounding_box()
+    tb, pb = box_of(trigger), box_of(picker)
     # Right next to its trigger (below it, or above when there's no room).
     assert abs(pb["y"] - (tb["y"] + tb["height"] + 4)) < 2 or abs(pb["y"] + pb["height"] + 4 - tb["y"]) < 2
 
@@ -393,11 +393,11 @@ def test_edit_modal_scrolls_on_short_desktop_window(new_page, wiki):
     wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
     pg.goto("/page/tasks?view=open&group=none")
     c = card(pg, "Weekly review")
-    c.dblclick(position={"x": c.bounding_box()["width"] * 0.6, "y": 12})   # empty space in the card
+    c.dblclick(position={"x": box_of(c)["width"] * 0.6, "y": 12})   # empty space in the card
     modal = pg.locator("#task-edit-modal")
     expect(modal).to_be_visible()
     assert in_viewport(pg, modal.get_by_role("button", name="Save"))
-    box = modal.bounding_box()
+    box = box_of(modal)
     assert box["y"] >= 0 and box["y"] + box["height"] <= 560
     # Centred horizontally, not full-screen.
     assert abs(box["x"] + box["width"] / 2 - 640) < 2 and box["width"] < 1280
@@ -416,7 +416,7 @@ def test_card_date_picker_fits_on_phone(phone, field):
     picker = phone.locator(".tasks-datepicker")
     expect(picker).to_be_visible()
     still(phone)
-    pb, cb = picker.bounding_box(), chip.bounding_box()
+    pb, cb = box_of(picker), box_of(chip)
     assert pb["x"] >= 0 and pb["x"] + pb["width"] <= 390, pb
     assert pb["y"] >= 0 and pb["y"] + pb["height"] <= 844, pb
     assert pb["y"] >= cb["y"] + cb["height"] or pb["y"] + pb["height"] <= cb["y"]  # not covering the chip
@@ -453,7 +453,7 @@ def _open_chip_picker_at_bottom(page, field="start_date"):
 
 def test_card_date_picker_opens_upward_near_bottom(phone):
     chip, picker = _open_chip_picker_at_bottom(phone)
-    cb, pb = chip.bounding_box(), picker.bounding_box()
+    cb, pb = box_of(chip), box_of(picker)
     assert cb["y"] > 844 - 300, cb          # the chip really is near the bottom
     assert pb["y"] + pb["height"] <= cb["y"], (pb, cb)   # opened above it
     assert in_viewport(phone, picker)
@@ -474,7 +474,7 @@ def test_date_picker_pinned_on_screen_when_it_fits_nowhere(new_page, wiki):
     c.locator(".task-clickable-date[data-field='start_date']").tap()
     picker = pg.locator(".tasks-datepicker")
     expect(picker).to_be_visible()
-    assert in_viewport(pg, picker), picker.bounding_box()
+    assert in_viewport(pg, picker), box_of(picker)
 
 
 def test_edit_modal_is_compact_on_phone(phone):
@@ -484,11 +484,11 @@ def test_edit_modal_is_compact_on_phone(phone):
     assert modal.evaluate("d => d.scrollHeight <= d.clientHeight"), \
         modal.evaluate("d => [d.scrollHeight, d.clientHeight]")
     def top(sel):
-        return modal.locator(sel).bounding_box()["y"]
+        return box_of(modal.locator(sel))["y"]
     assert abs(top("[data-date-trigger='task-edit-due']") - top("[data-date-trigger='task-edit-start']")) <= 1.5
     assert abs(top(".task-prop:has(#task-edit-rec-type)") - top(".task-prop:has(#task-edit-rec-interval)")) <= 1.5
     # The action bar sits at the bottom edge, within thumb reach.
-    save = modal.get_by_role("button", name="Save").bounding_box()
+    save = box_of(modal.get_by_role("button", name="Save"))
     assert save["y"] + save["height"] > 844 - 60, save
 
 
@@ -500,7 +500,7 @@ def touch_drag(page, source, target, *, hold_ms=450, steps=8, release=True, at=0
     """Long-press the centre of `source`, move to `target` (`at`: how far down
     it, 0.25 its upper half, 0.75 its lower one), lift."""
     cdp = page.context.new_cdp_session(page)
-    s, t = source.bounding_box(), target.bounding_box()
+    s, t = box_of(source), box_of(target)
     x0, y0 = s["x"] + s["width"] / 2, s["y"] + s["height"] / 2
     x1, y1 = t["x"] + t["width"] / 2, t["y"] + t["height"] * at
 
@@ -646,7 +646,7 @@ def test_a_sideways_move_where_nothing_swipes_is_no_long_press(phone):
     no selection starts while it rests there."""
     complete_one(phone)
     open_tab(phone, "closed")
-    box = card(phone, "Old chore").bounding_box()
+    box = box_of(card(phone, "Old chore"))
     x, y = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
     cdp = phone.context.new_cdp_session(phone)
 

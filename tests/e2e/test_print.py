@@ -2,6 +2,8 @@
 light on paper whatever the screen is."""
 from playwright.sync_api import expect
 
+from conftest import box_of
+
 PAGE = """---
 tags: [garden]
 ---
@@ -47,7 +49,7 @@ def test_print_shows_the_page_alone(page, wiki):
     expect(page.locator("article table")).to_be_visible()
     expect(page.locator("article pre code")).to_be_visible()
     # The text takes the sheet's width.
-    article, main = page.locator("article").bounding_box(), page.locator("main").bounding_box()
+    article, main = box_of(page.locator("article")), box_of(page.locator("main"))
     assert article["width"] >= main["width"] - 2
     # A real PDF comes out of it.
     assert page.pdf()[:5] == b"%PDF-"

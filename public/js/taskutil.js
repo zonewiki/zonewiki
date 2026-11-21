@@ -179,7 +179,11 @@ export function attachTagAc(input, { word, suggest, accept, onEnter, prefix = '#
   }, true);
   input.addEventListener('input', show);
   input.addEventListener('click', show);
-  input.addEventListener('blur', () => setTimeout(hide, 150));
+  // A moment after the field is left (a click on an item comes first), and
+  // only if it is still left: a field left and entered again at once ('@'
+  // from the list right after a blur) had the list it then opened closed
+  // under the typing, and Tab completed nothing.
+  input.addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== input) hide(); }, 150));
   return { hide, isOpen: () => !!el };
 }
 

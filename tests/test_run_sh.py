@@ -282,6 +282,20 @@ def test_test_checks_the_server_then_runs_pytest_against_it(sandbox):
     assert run.rstrip().endswith("tests/test_routes.py -k Auth")
 
 
+def test_flaky_repeats_the_chosen_browser_tests_on_a_busy_machine(sandbox):
+    """./run.sh flaky [N] [pytest args]: the browser tests N times each (20
+    without a number), a worker per CPU and busy loops beside them."""
+    repo, env, log = sandbox
+    for args, repeat in ((["flaky", "50", "-k", "one_line"], "50"), (["flaky", "-k", "one_line"], "20")):
+        log.unlink(missing_ok=True)
+        r = subprocess.run(["./run.sh", *args], cwd=repo, env=env, capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr
+        assert f"{repeat} times each on a busy machine" in r.stderr
+        (run,) = [l for l in log.read_text().split("\nrun ") if "pytest tests/e2e" in l]
+        assert f"-e ZONE_E2E_REPEAT={repeat}" in run and '-n "$cpus"' in run and "while :; do :; done" in run
+        assert "tests/test_tasks_core.py" not in run and run.rstrip().endswith("-k one_line")
+
+
 def test_bench_measures_then_runs_under_the_race_detector(sandbox):
     repo, env, log = sandbox
     r = subprocess.run(["./run.sh", "bench"], cwd=repo, env={**env, "ZONE_BENCH_SLACK": "3"}, capture_output=True, text=True)
@@ -487,7 +501,7 @@ def test_in_a_checkout_up_builds_from_it(sandbox, tmp_path):
 
 def test_beside_compose_yaml_the_checkouts_commands_say_they_need_one(beside_compose):
     folder, env, log = beside_compose
-    for cmd in ("build", "test", "e2e", "bench", "retrieval", "binaries", "leaks", "screenshots", "eval"):
+    for cmd in ("build", "test", "e2e", "flaky", "bench", "retrieval", "binaries", "leaks", "screenshots", "eval"):
         r = subprocess.run(["./run.sh", cmd], cwd=folder, env=env, capture_output=True, text=True)
         assert r.returncode == 1 and "needs a checkout of Zone" in r.stderr, (cmd, r.stderr)
     assert not log.exists() or not [l for l in log.read_text().splitlines()

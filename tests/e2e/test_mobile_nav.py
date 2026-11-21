@@ -8,7 +8,7 @@ from datetime import date
 import pytest
 from playwright.sync_api import expect
 
-from conftest import TOUCH_PHONE, list_page, make_list, open_tab, still, wait_until
+from conftest import TOUCH_PHONE, box_of, list_page, make_list, open_tab, still, wait_until
 from test_touch import touch_drag
 from tests import settings
 
@@ -26,7 +26,7 @@ def test_search_button_on_phones(new_page, wiki):
     phone.goto("/page/index")
     btn = phone.locator(".action-search")
     expect(btn).to_be_visible()
-    box = btn.bounding_box()
+    box = box_of(btn)
     assert box["width"] >= 44 and box["height"] >= 44
     assert box["x"] + box["width"] > 390 - 40 and box["y"] + box["height"] > 844 - 40  # bottom right
 
@@ -51,8 +51,8 @@ def test_page_end_not_hidden_behind_search_button(new_page, wiki):
     phone = new_page(**TOUCH_PHONE)
     phone.goto("/page/long")
     phone.evaluate("scrollTo(0, document.body.scrollHeight)")
-    last = phone.get_by_text("The last line.").bounding_box()
-    assert last["y"] + last["height"] <= phone.locator(".action-search").bounding_box()["y"]
+    last = box_of(phone.get_by_text("The last line."))
+    assert last["y"] + last["height"] <= box_of(phone.locator(".action-search"))["y"]
 
 
 # ── Phone tab bar ────────────────────────────────────────────────────────────
@@ -63,15 +63,15 @@ def test_phone_tab_bar_spans_the_bottom_edge(new_page, wiki):
     phone = new_page(**TOUCH_PHONE)
     phone.goto("/page/index")
     bar = phone.locator(".action-buttons")
-    b = bar.bounding_box()
+    b = box_of(bar)
     assert b["x"] == 0 and b["width"] == 390 and abs(b["y"] + b["height"] - 844) < 1
     items = bar.locator(".action-module, button")
     expect(items).to_have_text(["Wiki", "Tasks", "Notes", "Note", "Task", "Search"])
-    boxes = [i.bounding_box() for i in items.all()]
+    boxes = [box_of(i) for i in items.all()]
     assert all(x["width"] >= 44 and x["height"] >= 44 for x in boxes)
     assert all(abs(x["y"] - boxes[0]["y"]) < 1 for x in boxes)   # one row
     # Dividers set apart navigation (the modules), the "new" actions and Search.
-    seps = [s.bounding_box() for s in bar.locator(".action-sep").all()]
+    seps = [box_of(s) for s in bar.locator(".action-sep").all()]
     assert len(seps) == 2
     assert all(s["width"] <= 1.5 and s["height"] >= 20 for s in seps), seps
     assert boxes[2]["x"] + boxes[2]["width"] <= seps[0]["x"] <= boxes[3]["x"]
@@ -184,15 +184,15 @@ def test_tasks_tab_counts_stand_beside_the_icon(new_page, wiki):
     expect(bar.locator(".module-focus")).to_be_hidden()
     tasks = bar.locator(".action-module[data-module=tasks]")
     expect(tasks).to_have_attribute("title", "Tasks: 12 for today · 12 overdue")
-    tab, icon = tasks.bounding_box(), tasks.locator("svg").bounding_box()
-    label = tasks.locator(".action-label").bounding_box()
-    nxt = bar.locator(".action-module[data-module=tasks] ~ .action-module svg").first.bounding_box()
-    due = bar.locator(".module-due").bounding_box()
+    tab, icon = box_of(tasks), box_of(tasks.locator("svg"))
+    label = box_of(tasks.locator(".action-label"))
+    nxt = box_of(bar.locator(".action-module[data-module=tasks] ~ .action-module svg").first)
+    due = box_of(bar.locator(".module-due"))
     assert due["x"] >= icon["x"] + icon["width"], (due, icon)            # beside the icon
     assert due["x"] + due["width"] < nxt["x"], (due, nxt)                # clear of the next tab's icon
     assert not _overlap(due, label), (due, label)
     # The icons stay evenly spaced: the counts take no room from a wider Tasks tab.
-    xs = [bar.locator(f".action-module[data-module={m}] svg").bounding_box() for m in ("wiki", "tasks", "notes")]
+    xs = [box_of(bar.locator(f".action-module[data-module={m}] svg")) for m in ("wiki", "tasks", "notes")]
     centres = [x["x"] + x["width"] / 2 for x in xs]
     assert abs((centres[1] - centres[0]) - (centres[2] - centres[1])) < 1, centres
 
@@ -204,7 +204,7 @@ def test_tasks_tab_shows_the_due_count(new_page, wiki):
     due = phone.locator(".action-buttons .module-due")
     expect(due).to_have_text("1")
     expect(due).to_be_visible()
-    d, tab = due.bounding_box(), phone.locator(".action-buttons [data-module=tasks]").bounding_box()
+    d, tab = box_of(due), box_of(phone.locator(".action-buttons [data-module=tasks]"))
     assert tab["x"] <= d["x"] and d["x"] + d["width"] <= tab["x"] + tab["width"]
 
 
@@ -220,7 +220,7 @@ def _touch_tap(phone, locator, below=0):
     `below` px under it. The events carry their own times, 50ms apart: a
     busy CI runner can take longer than the bar's 500ms between the two
     calls, and the bar leaves a press that long to the browser."""
-    b = locator.bounding_box()
+    b = box_of(locator)
     y = b["y"] + b["height"] + below if below else b["y"] + b["height"] - 4
     cdp = phone.context.new_cdp_session(phone)
     t = time.time()
@@ -267,7 +267,7 @@ def test_tab_bar_takes_taps_below_its_box(new_page, wiki):
     phone.evaluate("scrollTo(0, 400)")
     phone.evaluate("document.querySelector('.action-buttons').style.bottom = '40px'")
     tab = phone.locator(".action-module[data-module=notes]")
-    b = tab.bounding_box()
+    b = box_of(tab)
     under = phone.evaluate(f"document.elementFromPoint({b['x'] + b['width'] / 2}, {b['y'] + b['height'] + 20}).closest('.task-item') !== null")
     assert under   # a card is what the browser finds there
     with phone.expect_navigation():
@@ -287,10 +287,10 @@ def test_top_actions_on_desktop(page, wiki):
     # Search alone: sharing mode, used now and then, takes no room while off.
     expect(buttons).to_have_count(1)
     expect(buttons).to_have_attribute("aria-label", "Search")
-    crumb = page.locator("main > .breadcrumb").bounding_box()
+    crumb = box_of(page.locator("main > .breadcrumb"))
     vw = page.viewport_size["width"]
-    main = page.locator("main").bounding_box()
-    b = buttons.bounding_box()
+    main = box_of(page.locator("main"))
+    b = box_of(buttons)
     assert abs((b["y"] + b["height"] / 2) - (crumb["y"] + crumb["height"] / 2)) < 2   # in line
     # Search, the one used most, is a labelled pill with its shortcut.
     assert b["width"] > 100
@@ -304,7 +304,7 @@ def test_top_actions_on_desktop(page, wiki):
         page.keyboard.press("Shift+S")
     chip = page.locator(".top-actions .top-sharing")
     expect(chip).to_have_text("Sharing")
-    c, b = chip.bounding_box(), buttons.nth(1).bounding_box()
+    c, b = box_of(chip), box_of(buttons.nth(1))
     assert abs((c["y"] + c["height"] / 2) - (b["y"] + b["height"] / 2)) < 2
     assert c["x"] + c["width"] < b["x"]
     _clear_of_the_breadcrumb(page, c)
@@ -314,7 +314,7 @@ def _clear_of_the_breadcrumb(page, box):
     """The breadcrumb's own right end (the backlinks chip) keeps clear of the
     top actions, whose leftmost box is box."""
     crumb = page.locator("main > .breadcrumb")
-    b = crumb.bounding_box()
+    b = box_of(crumb)
     pad = float(crumb.evaluate("el => getComputedStyle(el).paddingRight").rstrip("px"))
     assert b["x"] + b["width"] - pad <= box["x"]
 
@@ -519,8 +519,8 @@ def test_desktop_breadcrumb_switches_modules(page, wiki):
     expect(switch.locator(".module-label")).to_have_text(["Wiki", "Tasks", "Notes"])
     expect(switch.nth(0)).to_have_attribute("aria-current", "page")
     # One line with the page title after it.
-    boxes = [m.bounding_box() for m in switch.all()]
-    title = page.locator(".breadcrumb > span", has_text="Garden").bounding_box()
+    boxes = [box_of(m) for m in switch.all()]
+    title = box_of(page.locator(".breadcrumb > span", has_text="Garden"))
     assert all(abs(b["y"] - boxes[0]["y"]) < 3 for b in boxes)
     assert boxes[-1]["x"] + boxes[-1]["width"] < title["x"]
     page.locator(".breadcrumb .module-link[data-module=tasks]").click()
@@ -542,9 +542,9 @@ def test_desktop_switcher_is_set_apart_from_the_trail(page, wiki):
     current = switch.locator(".module-link[aria-current]")
     assert current.evaluate("el => getComputedStyle(el).backgroundColor") != "rgba(0, 0, 0, 0)"
     divider = page.locator(".breadcrumb .module-switch + .breadcrumb-sep")
-    d = divider.bounding_box()
+    d = box_of(divider)
     assert d["width"] <= 1.5 and d["height"] >= 10, d
-    s, t = switch.bounding_box(), page.locator(".breadcrumb > span", has_text="Garden").bounding_box()
+    s, t = box_of(switch), box_of(page.locator(".breadcrumb > span", has_text="Garden"))
     assert s["x"] + s["width"] < d["x"] < t["x"]
 
 
@@ -656,7 +656,7 @@ def test_desktop_sign_out_clear_of_the_buttons(page, wiki, monkeypatch):
     page.goto("/page/index")
     signout = page.get_by_role("button", name="Sign out")
     expect(signout).to_be_visible()
-    assert not _overlap(signout.bounding_box(), page.locator(".top-actions").bounding_box())
+    assert not _overlap(box_of(signout), box_of(page.locator(".top-actions")))
 
 
 def test_desktop_toast_clear_of_the_buttons(page, wiki):
@@ -665,7 +665,7 @@ def test_desktop_toast_clear_of_the_buttons(page, wiki):
     page.locator(".task-list-item-checkbox").check()
     toast = page.locator(".task-undo-toast")
     expect(toast).to_be_visible()
-    assert not _overlap(toast.bounding_box(), page.locator(".top-actions").bounding_box())
+    assert not _overlap(box_of(toast), box_of(page.locator(".top-actions")))
 
 
 def test_no_action_buttons_in_desktop_editor(page, wiki):
@@ -682,7 +682,7 @@ def test_badges_do_not_cover_breadcrumb_on_phone(new_page, wiki):
     phone.goto("/page/draft")
     badge = phone.locator("#uncommitted-badge")
     expect(badge).to_be_visible()
-    assert not _overlap(badge.bounding_box(), phone.locator(".breadcrumb").bounding_box())
+    assert not _overlap(box_of(badge), box_of(phone.locator(".breadcrumb")))
 
 
 
@@ -704,13 +704,14 @@ def test_the_badge_coming_moves_nothing_on_phone(new_page, wiki, monkeypatch, us
     wait_until(phone, lambda: held, settled=False)
     badge = phone.locator("#uncommitted-badge")
     expect(badge).to_be_hidden()
-    before = {sel: phone.locator(sel).bounding_box()["y"] for sel in (".breadcrumb", "h1")}
+    # moving=True: the request is held back, and still() waits for its answer.
+    before = {sel: box_of(phone.locator(sel), moving=True)["y"] for sel in (".breadcrumb", "h1")}
     held[0].continue_()
     phone.unroute("**/api/uncommitted")
     expect(badge).to_be_visible()
     still(phone)
-    assert {sel: phone.locator(sel).bounding_box()["y"] for sel in (".breadcrumb", "h1")} == before
-    assert not _overlap(badge.bounding_box(), phone.locator(".breadcrumb").bounding_box())
+    assert {sel: box_of(phone.locator(sel))["y"] for sel in (".breadcrumb", "h1")} == before
+    assert not _overlap(box_of(badge), box_of(phone.locator(".breadcrumb")))
 
 
 # ── Compact Plan board ───────────────────────────────────────────────────────
@@ -723,14 +724,14 @@ def test_empty_sections_are_single_rows(page, wiki):
     empties = page.locator(".board-day-divider.board-day--empty")
     expect(empties).to_have_count(8)   # Tomorrow + five more days + Later + Unplanned
     for row in empties.all():
-        h = row.bounding_box()["height"]
+        h = box_of(row)["height"]
         assert 28 <= h <= 36, h
     # Today is the only section with a task, so it is the only non-empty one.
     expect(page.locator(".board-day-divider:not(.board-day--empty)")).to_have_count(1)
     # A week of empty days fits in well under 300px (Unplanned, above Today,
     # is left out: the days and Later run below Today).
     below = page.locator(".board-day-divider.board-day--empty:not([data-drop-bucket='unplanned'])")
-    first, last = below.first.bounding_box(), below.last.bounding_box()
+    first, last = box_of(below.first), box_of(below.last)
     assert last["y"] + last["height"] - first["y"] < 300
 
 
@@ -739,7 +740,7 @@ def test_empty_sections_are_finger_sized_on_touch(new_page, wiki):
     phone = new_page(**TOUCH_PHONE)
     phone.goto("/page/tasks?view=open&group=none")
     open_tab(phone, "plan")
-    assert all(r.bounding_box()["height"] >= 40
+    assert all(box_of(r)["height"] >= 40
                for r in phone.locator(".board-day--empty").all())
 
 
@@ -753,11 +754,11 @@ def test_board_layout_does_not_change_when_a_drag_starts(new_page, wiki):
     phone.goto("/page/tasks?view=open&group=none")
     open_tab(phone, "plan")
     rows = phone.locator(".board-day-divider")
-    before = [r.bounding_box() for r in rows.all()]
+    before = [box_of(r) for r in rows.all()]
     card = phone.locator(".task-item").filter(has=phone.get_by_text("Water plants", exact=True))
     send = touch_drag(phone, card, rows.nth(3), release=False)
     expect(phone.locator(".task-touch-ghost")).to_have_count(1)
-    assert [r.bounding_box() for r in rows.all()] == before
+    assert [box_of(r) for r in rows.all()] == before
     send("touchEnd", [])
 
 
@@ -773,10 +774,10 @@ def test_sign_out_does_not_cover_the_phone_buttons(new_page, wiki, monkeypatch):
     phone.goto("/page/index")
     signout = phone.get_by_role("button", name="Sign out")
     expect(signout).to_be_visible()
-    s, a = signout.bounding_box(), phone.locator(".action-buttons").bounding_box()
+    s, a = box_of(signout), box_of(phone.locator(".action-buttons"))
     assert s["y"] + s["height"] <= a["y"], (s, a)
     assert s["x"] + s["width"] <= 390 and s["y"] < 100
-    assert not _overlap(s, phone.locator(".breadcrumb").bounding_box())
+    assert not _overlap(s, box_of(phone.locator(".breadcrumb")))
 
 
 def test_breadcrumb_crumbs_wait_for_the_trail_so_they_dont_jump(page, wiki):
@@ -814,7 +815,7 @@ def test_the_name_opens_the_account_menu_on_a_phone(new_page, wiki, monkeypatch)
     menu = phone.locator(".module-menu:not(.groups-menu)")
     expect(menu).to_be_visible()
     expect(menu.locator('[role="menuitem"]:visible')).to_have_text(["Groups", "Connect an assistant", "Change password", "Help"])
-    box = menu.bounding_box()
+    box = box_of(menu)
     assert box["x"] >= 0 and box["x"] + box["width"] <= phone.viewport_size["width"]
     menu.get_by_role("menuitem", name="Groups").tap()
     phone.wait_for_url("**/groups")

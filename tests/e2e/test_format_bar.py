@@ -4,7 +4,7 @@ import re
 
 from playwright.sync_api import expect
 
-from conftest import TOUCH_PHONE, make_list
+from conftest import TOUCH_PHONE, box_of, make_list
 from tests import settings
 
 
@@ -380,7 +380,7 @@ def test_phone_bar_is_finger_sized_and_scrolls_sideways(new_page, wiki):
     phone.goto("/edit/fmt")
     bar = phone.locator("#format-bar")
     expect(bar).to_be_visible()
-    assert phone.locator("#format-bar .fmt-btn").first.bounding_box()["height"] >= 40
+    assert box_of(phone.locator("#format-bar .fmt-btn").first)["height"] >= 40
     # One line that scrolls inside itself, never widening the page.
     assert bar.evaluate("b => b.scrollWidth > b.clientWidth")
     assert phone.evaluate("document.documentElement.scrollWidth") <= 390
@@ -394,8 +394,8 @@ def test_bar_sits_close_above_the_textarea(page, wiki):
     # Regression: `.editor-pane form`'s padding overrode the smaller gap.
     wiki.write("fmt", "# Fmt\n")
     page.goto("/edit/fmt")
-    bar = page.locator("#format-bar .fmt-btn").first.bounding_box()
-    ta = page.locator("#editor-textarea").bounding_box()
+    bar = box_of(page.locator("#format-bar .fmt-btn").first)
+    ta = box_of(page.locator("#editor-textarea"))
     assert 0 <= ta["y"] - (bar["y"] + bar["height"]) <= 6
 
 

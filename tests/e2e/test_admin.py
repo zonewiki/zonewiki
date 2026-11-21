@@ -6,6 +6,7 @@ import re
 import pytest
 from playwright.sync_api import expect
 
+from conftest import box_of
 from tests import settings
 
 
@@ -65,11 +66,11 @@ def test_save_shows_once_a_field_is_edited(admin, wiki):
     expect(set_).to_have_text("Save")
     expect(change).to_be_hidden()
     expect(set_).to_be_hidden()
-    before = row.bounding_box()
+    before = box_of(row)
     row.locator("select").select_option("viewer")
     expect(change).to_be_visible()
     expect(set_).to_be_hidden()
-    assert row.bounding_box() == before                      # the button had its place: nothing moves
+    assert box_of(row) == before                      # the button had its place: nothing moves
     assert "role" not in (wiki.root / ".zone" / "config").read_text().split("[user bob]")[1]   # picking saved nothing
     row.locator("select").select_option("editor")
     expect(change).to_be_hidden()

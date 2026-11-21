@@ -297,6 +297,26 @@ case "${1:-up}" in
        python3 -m pytest tests/e2e tests/test_tasks_core.py -v -p no:cacheprovider \
          -n "$n" "$@"' -- "${@:2}"
     ;;
+  flaky)
+    needs_checkout flaky
+    # Finds a browser test that fails now and then, and shows that its fix
+    # holds: the chosen tests N times each (20; ZONE_E2E_REPEAT in
+    # tests/e2e/conftest.py) on a machine made busy, as a CI runner with a
+    # second run beside it is: a worker per CPU, twice e2e's, and four busy
+    # loops per CPU beside them. ./run.sh flaky [N] [pytest args], e.g.
+    # ./run.sh flaky 50 -k one_line_per_task. Without -k it is the whole
+    # suite N times: name the tests.
+    n=20
+    if [[ ${2:-} =~ ^[0-9]+$ ]]; then n=$2; shift; fi
+    image=$(build_image zonewiki-tools -f Containerfile.tools)
+    say "Running the chosen browser tests $n times each on a busy machine, in the tools image…"
+    in_image "$image" --ipc=host -e "ZONE_E2E_REPEAT=$n" -- sh -c \
+      'cpus=$(nproc); i=0
+       while [ "$i" -lt $(( cpus * 4 )) ]; do (while :; do :; done) & i=$(( i + 1 )); done
+       python3 -m pytest tests/e2e -q -p no:cacheprovider -n "$cpus" "$@"; code=$?
+       kill $(jobs -p) 2>/dev/null
+       exit $code' -- "${@:2}"
+    ;;
   retrieval)
     needs_checkout retrieval
     # Search's quality against its floor (tests/retrieval: a sample wiki, the
@@ -429,7 +449,7 @@ case "${1:-up}" in
     compose run --rm --no-deps "${tty[@]}" zonewiki /app/zonewiki "$@"
     ;;
   *)
-    echo "Usage: $0 [up|down|logs|update|user|group|config|build|test|e2e|bench|retrieval|binaries|leaks|screenshots|eval]"
+    echo "Usage: $0 [up|down|logs|update|user|group|config|build|test|e2e|flaky|bench|retrieval|binaries|leaks|screenshots|eval]"
     echo "In a checkout, Zone's image is built from it; beside compose.yaml alone, the prebuilt image runs."
     echo "  up     - start Zone (default); in a checkout, build its image first"
     echo "  down   - stop Zone"
@@ -443,6 +463,7 @@ case "${1:-up}" in
     echo "  build  - build the container image only"
     echo "  test   - gofmt, go vet, go test -race and the unit/API tests in the tools image (extra args go to pytest)"
     echo "  e2e    - run browser and tasks-core tests in the tools image (extra args go to pytest)"
+    echo "  flaky [N] - run chosen browser tests N times each (20) on a busy machine, to find one that fails now and then (extra args go to pytest)"
     echo "  bench  - measure the tasks at a team's size against their budgets, then under the race detector"
     echo "  retrieval - measure search on the sample wiki (tests/retrieval) against its floor, by keywords and by meaning"
     echo "  binaries - build the release binaries (Linux and macOS, amd64 and arm64) into dist/, with SHA256SUMS"
