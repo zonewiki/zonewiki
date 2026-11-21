@@ -226,11 +226,15 @@ def test_a_login_is_set_from_the_menu_on_localhost(page, wiki, monkeypatch):
     page.fill("input[name=again]", "correct horse")
     page.locator("form.login-form button[type=submit]").click()
     expect(page).to_have_url(re.compile(r"/page/index$"))
-    # Signed in as the first user: the user button, and her menu.
+    # Signed in as the first user: the user button, and her menu. The page
+    # the form led to is waited for: its script opens the menu, and a click
+    # before it ran opened nothing on a busy machine.
+    page.wait_for_load_state("load")
     btn = page.locator(".top-actions .top-user")
     expect(btn).to_have_attribute("title", "alice")
     btn.click()
     menu = page.locator(".module-menu:not(.groups-menu)")
+    expect(menu).to_be_visible()
     expect(menu.locator(".menu-who")).to_have_text("Signed in as alice")
     expect(menu.get_by_role("menuitem", name="Set a login")).to_have_count(0)
     expect(menu.get_by_role("menuitem", name="Admin")).to_be_visible()
