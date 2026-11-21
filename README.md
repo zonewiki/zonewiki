@@ -27,7 +27,7 @@ One Go binary, no database, nothing leaves your server.
 - **Private, shared or a group's.** Each user has private pages and tasks, groups get their own folders, and one permission model decides who sees what: in the browser, in search and for assistants alike.
 - **Pages, notes and tasks in one place.** They share links, search, history and permissions: turn a meeting's action items into tasks, show a project's tasks on its page, and find both with one search.
 - **Nothing gets lost.** Every version of every page, one-click restore, deleted pages brought back, and links that follow a rename.
-- **Simple to run.** One binary on a laptop, a NAS or a small server; no database, no plugins, no npm.
+- **Simple to run.** One binary on a laptop, a NAS or a server; no database, no plugins, no npm.
 
 ## Features
 
