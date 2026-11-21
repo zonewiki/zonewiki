@@ -2,7 +2,7 @@
 
 **A wiki with tasks that you, your team and your AI assistants share, in plain files you own.**
 
-Zone is a self-hosted wiki with built-in tasks and quick notes, for one person or a team.
+Zone is a self-hosted wiki with a full task manager and quick notes built in, for one person or a team.
 Your pages are plain Markdown files in a folder you choose, and every change is a git commit.
 Edit them in the browser or in any editor.
 Any AI assistant that speaks MCP can [work with them](#connect-an-ai-assistant), acting as you: it sees and changes only what you may, and you can review and undo every edit it makes.
@@ -16,13 +16,16 @@ One Go binary, no database, nothing leaves your server.
 
 ![A wiki page in Zone: the page in the middle, its table of contents on the left, backlinks and linked tasks on the right](docs/screenshots/page.png)
 
+![Tasks on the plan board: tasks grouped by the day they're planned for, Unplanned first, then Today, Tomorrow and the days ahead](docs/screenshots/tasks.png)
+
 ## Why Zone
 
 - **Your files, not a silo.** Pages are Markdown, tasks are JSON beside them, history is git. Grep them, back them up with `git push`, or stop using Zone and keep everything.
+- **A real task manager, not checkboxes in a page.** Plan your days on a board, keep the day you'll do a thing apart from its deadline, and give tasks lists, repeats, assignees and comments. It can be the task app you now run beside your notes.
 - **Good to use for humans and AI.** For you, a quick editor with live preview, search as you type, a Today view and a plan board for tasks, in any browser on a laptop or a phone, with nothing to install. For your assistant, everything you do in the browser, over MCP, through the same operations, never as an afterthought.
 - **A memory for your assistants, under your rules.** An assistant can do what you can, never more. Connect one that only reads, or keep it out of your private pages. Its edits are commits you can undo one at a time or all at once. Zone brings no model of its own: use the assistant you already have.
 - **Private, shared or a group's.** Each user has private pages and tasks, groups get their own folders, and one permission model decides who sees what: in the browser, in search and for assistants alike.
-- **Pages, notes and tasks in one place.** They share links, search and history: link a task from a page, and find both with one search.
+- **Pages, notes and tasks in one place.** They share links, search, history and permissions: turn a meeting's action items into tasks, show a project's tasks on its page, and find both with one search.
 - **Nothing gets lost.** Every version of every page, one-click restore, deleted pages brought back, and links that follow a rename.
 - **Simple to run.** One binary on a laptop, a NAS or a small server; no database, no plugins, no npm.
 
@@ -34,13 +37,13 @@ Math, Mermaid diagrams, callouts, sortable tables and foldable sections.
 Version history and a wiki-wide Changes view.
 Present a page as slides, or print it.
 
-**Notes.** Write a thought down first (`c n`), then move it into the wiki or append it to a page later.
-
-**Tasks.** A start date and a deadline, kept apart.
-A Today view, and a plan board where you drag tasks onto days.
-Lists, repeating tasks, quick-add (`Call Bob tomorrow #work due:fri`), Markdown descriptions, comments and files.
+**Tasks.** A task app in its own right: Today shows what you planned for today, and on the plan board you drag the rest onto the days ahead.
+A start date (when you'll do it) and a deadline (when it must be done), kept apart: only a missed deadline is overdue.
+Lists, repeating tasks, quick-add (`Call Bob tomorrow #work due:fri`), Markdown descriptions with subtasks, comments and files.
 Assignees, followers and `@mentions`, with news by mail if you want it.
-Embed a task list or a single task in any page.
+Turn lines of a page into tasks, and embed a task list or a single task in any page.
+
+**Notes.** Write a thought down first (`c n`), then move it into the wiki or append it to a page later.
 
 **Search.** Full-text search across pages and tasks (Ctrl+P): typo tolerance, `"phrases"`, `#tags` and dates.
 
@@ -53,8 +56,6 @@ Changes are committed in each user's name.
 A wiki can also be public, to read or to edit.
 
 **Everywhere.** Keyboard shortcuts for everything (`?` lists them), light and dark mode, and a phone layout you can install on the home screen.
-
-![Tasks' Open tab by days: tasks grouped by the day they're planned for](docs/screenshots/tasks.png)
 
 <p align="center"><img src="docs/screenshots/phone.png" width="640" alt="Zone on a phone: a wiki page, and the Today view of Tasks"></p>
 
