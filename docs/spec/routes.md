@@ -13,7 +13,8 @@ In a public wiki (`ZONE_PUBLIC`; Public wikis in `docs/spec/security.md`) a visi
 
 A `<slug>` in a folder starting with `_` or `.` (`_assets/`, `_tasks/`, `.zone/`, `.git/`, `a/_drafts/` …) names no page: `safePath()` refuses it (also after `..`), so no route reads or writes a `.md` file there, even by direct URL (400, or 404 for the page preview).
 These are the folders `iterPages()` skips.
-Nor does a slug name a page through a symlink (a linked file or folder: 400), or with a `\` or a folder or page name ending in `.` or a space, which some file systems read as another name (A page is the file its name says in `docs/spec/security.md`); `iterPages()` lists none of them.
+Nor does a slug name a page through a symlink (a linked file or folder: 400), or with a `\`, a `:`, a folder or page name ending in `.` or a space, or one of Windows' device names (`aux`, `nul` …), which some file systems read as another name (A page is the file its name says in `docs/spec/security.md`); `iterPages()` lists none of them.
+For a `:` or a device's name the 400 says why, and to pick another name.
 A file name starting with `_` (`_notes`, `a/_notes`) is still a page.
 
 ### Pages and the editor

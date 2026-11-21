@@ -574,10 +574,12 @@ func uploadName(name string) string {
 // uploadNamed: name is one an upload can have (uploadPath): one plain
 // part, no '/' nor '\\' nor NUL, no line break or other control
 // character (as a page's name: safePath), not a dot file ("..", ".git"
-// and friends), no end in '.' or ' ' (pagePart).
+// and friends), no end in '.' or ' ' and no device's name (plainPart). A ':'
+// stays: screenshots are named by the time, and Zone runs on no system
+// that minds.
 func uploadNamed(name string) bool {
 	return name != "" && !strings.ContainsAny(name, "/\\\x00") && !strings.ContainsFunc(name, mdtext.BadNameRune) &&
-		!strings.HasPrefix(name, ".") && pagePart(name)
+		!strings.HasPrefix(name, ".") && plainPart(name)
 }
 
 // baseName is a slash-separated path's last part ("" for ".").

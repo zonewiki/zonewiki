@@ -1261,6 +1261,11 @@ class TestWritePage:
             text, err = call(client, "write_page", slug=slug, content="# X")
             assert err and "folders starting with '_'" in text, slug
         assert not (wiki_dir / "_tasks" / "tasks.md").exists()
+        # A name Windows reads as a device is no page's, and the tool says why.
+        for slug in ("aux", "notes/NUL", "Com1"):
+            text, err = call(client, "write_page", slug=slug, content="# X")
+            assert err and "device's name" in text and "Pick another name" in text, slug
+        assert not (wiki_dir / "aux.md").exists()
         # to_slug drops the dots: the page lands inside the wiki
         text, err = call(client, "write_page", slug="../outside", content="# X")
         assert not err and "Created page outside." in text

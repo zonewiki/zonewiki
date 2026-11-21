@@ -60,7 +60,8 @@ A wiki can also be public, to read or to edit.
 
 ## Quick start
 
-**Download** the file for your computer (Linux or macOS, amd64 or arm64) from the [latest release](https://github.com/zonewiki/zonewiki/releases/latest) and run it; it needs git:
+**Download** the file for your computer (Linux or macOS, amd64 or arm64) from the [latest release](https://github.com/zonewiki/zonewiki/releases/latest) and run it; it needs git.
+On Windows, run the Linux file in WSL2: there is no Windows binary.
 
 ```bash
 mv zonewiki-macos-arm64 zonewiki      # the file you downloaded

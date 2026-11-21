@@ -18,6 +18,7 @@ On a Mac, `xcode-select --install` installs it (or `brew install git`); on Linux
    | A Mac with an Intel processor | `zonewiki-macos-amd64` |
    | Linux on a PC | `zonewiki-linux-amd64` |
    | Linux on ARM, such as a Raspberry Pi 4 or 5 (64-bit) | `zonewiki-linux-arm64` |
+   | Windows | None: in WSL2, the Linux file for your processor |
 
 2. In a terminal, name it `zonewiki`, make it a program, and start it:
 
@@ -51,7 +52,7 @@ The binary searches by keywords, not by meaning; how it is built is in [Release 
 ## With Docker
 
 You need Docker with Compose, or Podman with `podman-compose`.
-Zone is tested on Linux, and should work on macOS and in WSL2 on Windows.
+Zone is tested on Linux, and should work on macOS, and on Windows in WSL2.
 
 ```bash
 git clone https://github.com/zonewiki/zonewiki && cd zonewiki

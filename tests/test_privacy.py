@@ -616,9 +616,13 @@ def test_a_page_named_star_shows_no_one_elses_uncommitted_text(bob, wiki):
 def test_a_pattern_tells_nothing_of_a_deleted_private_page(bob, wiki):
     # private/alice/old was deleted: a name matching it is a page that
     # isn't there (the editor for a new one), not a deleted page to restore.
-    for name in ("p*/alice/ol*", ":(glob)private/alice/*"):
-        resp = bob.get(f"/page/{name}", headers=HOST)
-        assert resp.status_code == 302 and "/edit/" in resp.headers["Location"], name
+    resp = bob.get("/page/p*/alice/ol*", headers=HOST)
+    assert resp.status_code == 302 and "/edit/" in resp.headers["Location"]
+    # Git's own pattern syntax has a ':', which no page's name has: refused
+    # for the name alone, the same whatever was deleted.
+    resp = bob.get("/page/:(glob)private/alice/*", headers=HOST)
+    assert resp.status_code == 400 and "':'" in resp.get_data(as_text=True)
+    assert resp.get_data(as_text=True) == bob.get("/page/:(glob)private/nobody/*", headers=HOST).get_data(as_text=True)
 
 
 def test_commit_all_commits_only_what_you_see(bob, wiki):

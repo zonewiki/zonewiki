@@ -289,12 +289,18 @@ The wiki's own folder may be a symlink: Zone follows it once, at start.
 
 - a `\` (a folder's end on Windows),
 - a folder or page name ending in `.` or a space (which Windows drops),
+- a `:` in a folder's or page's name (which on Windows names a stream inside another file, and git can't check such a file out there),
+- one of Windows' device names as a folder's or page's name: `con`, `prn`, `aux`, `nul`, `com0`–`com9`, `lpt0`–`lpt9`, `conin$`, `conout$`, in any case, alone or before a dot (`nul.old`); a write to one would be lost,
 - a short 8.3 name, or a case by which the file system would find another folder (the path it resolves is not the path asked for).
+
+Zone refuses these on every system, not only on Windows (where it doesn't run but in WSL2): a wiki is plain files that are copied, synced and cloned, and a page that one system can't store is no page.
+For a `:` and a device's name, which a person may type (a page called "Aux"), the answer says why and to pick another name (`nameRefused`), in the browser and to an assistant.
 
 `private/` and `groups/` are judged in any case, as a case-insensitive volume folds them: `PRIVATE/alice/x` and `groupſ/dev/x` are alice's and dev's.
 
 **An upload likewise** (`uploadPath`, which every door to an upload asks: the routes that serve and write one, `read_file` and `upload_file`, a page's files taken along when it moves).
-Its name is one plain part: no `/`, no `\` (which leads out of the folder on Windows), no dot file, no end in `.` or a space.
+Its name is one plain part: no `/`, no `\` (which leads out of the folder on Windows), no dot file, no end in `.` or a space, no device's name (`nul.png`).
+A `:` an upload may have: screenshots are named by the time, and no system Zone runs on minds it.
 Its file is the one the name says, so an upload reached through a symlink (the file, or the `_assets/` folder) is none: no door serves it, reads it or writes through it.
 
 ## The permission model

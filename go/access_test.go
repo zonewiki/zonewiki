@@ -528,7 +528,8 @@ func TestANarrowedAskerSeesLess(t *testing.T) {
 // symlink on the way to it (a shared name linking to a private page, a
 // folder linking to a private folder, a link out of the wiki), no name a
 // file system reads as another (Windows' '\', its dropped trailing '.' and
-// ' '); iterPages lists none of those; and placeOf folds the case of
+// ' ', its ':' and its devices' names: TestWindowsReadsNoNameAsAnother);
+// iterPages lists none of those; and placeOf folds the case of
 // private/ and groups/ as a case-insensitive volume does.
 func TestSafePathOpensWhatPlaceOfJudged(t *testing.T) {
 	testWiki(t, map[string]string{"notes/a": "# A\n", "private/alice/diary": "# Diary\n", "odd./x": "# Odd\n", "dots.": "# Dots\n"})
@@ -580,6 +581,39 @@ func TestSafePathOpensWhatPlaceOfJudged(t *testing.T) {
 		"Groups/Dev/x": {ofGroup, "dev"}, "groupſ/dev/x": {ofGroup, "dev"}, "privateſ/alice/x": {}} {
 		if p := placeOf(rel); p != want {
 			t.Errorf("placeOf(%q) = %+v, want %+v", rel, p, want)
+		}
+	}
+}
+
+// A name Windows would read as another file, a stream or a device is no
+// page's or folder's on any system (a wiki's files are copied and cloned):
+// safePath opens none, iterPages lists none. An upload may have a ':'
+// (a screenshot named by the time), but no device's name.
+func TestWindowsReadsNoNameAsAnother(t *testing.T) {
+	testWiki(t, map[string]string{"notes/a": "# A\n", "nul": "# Nul\n", "aux/x": "# X\n", "notes/10:30": "# Time\n", "COM1.old": "# Port\n"})
+	withUsers(t, "alice")
+	for _, slug := range []string{"nul", "NUL", "con", "prn", "aux", "aux/x", "notes/aux", "com1", "COM9", "lpt0", "com¹", "conin$", "CONOUT$",
+		"nul.old", "notes/con.backup", "nul .x", "notes/10:30", "a:b", "notes:x/a", "notes/a:$DATA"} {
+		if p := safePath(slug); p != "" {
+			t.Errorf("safePath(%q) = %s", slug, p)
+		}
+	}
+	// Names that only look like one.
+	for _, slug := range []string{"console", "nulls", "com", "com10", "lpt", "auxiliary", "notes/con-artists", "icon", "x.nul", "com1x"} {
+		if safePath(slug) == "" {
+			t.Errorf("safePath(%q) refused", slug)
+		}
+	}
+	var slugs []string
+	for _, p := range iterPages() {
+		slugs = append(slugs, p.Slug)
+	}
+	if !slices.Equal(slugs, []string{"notes/a"}) {
+		t.Errorf("iterPages: %q", slugs)
+	}
+	for name, want := range map[string]bool{"shot 10:30.png": true, "console.log": true, "nul": false, "NUL.png": false, "aux.tar.gz": false, "com3.txt": false} {
+		if got := uploadNamed(name); got != want {
+			t.Errorf("uploadNamed(%q) = %v", name, got)
 		}
 	}
 }

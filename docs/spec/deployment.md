@@ -278,7 +278,8 @@ How to use one is in the manual (Download the binary in `docs/manual/self-hostin
   There it needs no login; opened to other devices (`ZONE_ALLOW_REMOTE=1`) it shows only its first-run page until one is set, as ever (First run in `docs/spec/security.md`).
 - It isn't signed or notarized: macOS keeps a downloaded one from starting until the quarantine mark is taken off (`xattr -d com.apple.quarantine zonewiki`).
   The arm64 Mac binary carries the ad-hoc signature Go's linker gives every darwin/arm64 binary, which Apple silicon requires to run code at all.
-- No Windows binary yet: a slug would take Windows' `\` from a page's path.
+- No Windows binary: Zone isn't built or tested for Windows, where a file's path and name follow other rules (which the permissions rest on) and no runner of Zone's CI could check them.
+  On Windows it runs in WSL2: the Linux binary there, or the container (Docker Desktop, Podman).
 
 ### How CI builds them
 

@@ -82,6 +82,12 @@ func pageRoutes(mux *http.ServeMux) {
 
 func badRequestPage(w http.ResponseWriter) { http.Error(w, "Bad Request", http.StatusBadRequest) }
 
+// badPageName: 400 for a slug safePath refuses, with the reason where it
+// is a name a person may have typed (nameRefused).
+func badPageName(w http.ResponseWriter, slug string) {
+	http.Error(w, cmp.Or(nameRefused(slug), "Bad Request"), http.StatusBadRequest)
+}
+
 func serverError(w http.ResponseWriter, r *http.Request, err error) {
 	logf("%s %s: %v", r.Method, r.URL.Path, err)
 	http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -149,7 +155,7 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 	slug := strings.TrimSuffix(r.PathValue("slug"), ".md")
 	path := safePath(slug)
 	if path == "" {
-		badRequestPage(w)
+		badPageName(w, slug)
 		return
 	}
 	if refusePage(w, r, rq, slug) {
@@ -321,7 +327,7 @@ func editPage(w http.ResponseWriter, r *http.Request) {
 	rq, slug := newReq(r), r.PathValue("slug")
 	path := safePath(slug)
 	if path == "" {
-		badRequestPage(w)
+		badPageName(w, slug)
 		return
 	}
 	if refusePage(w, r, rq, slug) || refuseWrite(w, r, slug) {
@@ -460,7 +466,7 @@ type editorSave struct {
 func readEditorSave(w http.ResponseWriter, r *http.Request) (*editorSave, bool) {
 	s := &editorSave{slug: r.PathValue("slug")}
 	if s.path = safePath(s.slug); s.path == "" {
-		badRequestPage(w)
+		badPageName(w, s.slug)
 		return nil, false
 	}
 	if refuseWrite(w, r, s.slug) {

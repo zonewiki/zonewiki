@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -183,8 +184,8 @@ func isProtected(slug string) bool {
 // a symlink (a link would take a shared page's name to another user's
 // page, or out of the wiki: a link is no page, as iterPages skips it), and
 // the file system reads the name as it is written: no '\', which Windows
-// takes for a folder's end, no name ending in '.' or ' ', which it drops
-// (pagePart), and no short 8.3 name or other case that it would find
+// takes for a folder's end, no name ending in '.' or ' ', which it drops,
+// no ':' and none of its devices' names (pagePart), and no short 8.3 name or other case that it would find
 // another folder by (the path resolved is the path asked for).
 //
 // Nor for a name with a control character or a backslash
@@ -215,9 +216,58 @@ func safePath(slug string) string {
 }
 
 // pagePart: name can be a folder's or a page's in a slug: the file system
-// reads it as written (safePath), on every system Zone runs on.
+// reads it as written (safePath), on every system a wiki's files may be
+// copied or cloned to. So no ':' either, which on Windows names a stream
+// inside another file (git can't check such a file out there).
 func pagePart(name string) bool {
-	return !strings.ContainsRune(name, '\\') && !strings.HasSuffix(name, ".") && !strings.HasSuffix(name, " ")
+	return plainPart(name) && !strings.ContainsRune(name, ':')
+}
+
+// nameRefused says why pagePart refuses a part of slug that a person may
+// well have typed (a ':' or a device's name), "" when it is none of those:
+// what a page's routes and an assistant's tools answer in place of a bare
+// "Bad Request". It speaks only of the name asked for.
+func nameRefused(slug string) string {
+	for _, part := range strings.Split(slug, "/") {
+		switch {
+		case deviceName(part):
+			return "A page or folder can't be named " + strconv.Quote(part) + ": Windows reads that as a device's name, so the wiki's files couldn't be copied there. Pick another name."
+		case strings.ContainsRune(part, ':'):
+			return "A page or folder can't have a ':' in its name (" + strconv.Quote(part) + "): Windows can't store such a file. Pick another name."
+		}
+	}
+	return ""
+}
+
+// plainPart: name is a file's or folder's own on every system: no '\\', no
+// end in '.' or ' ' (which Windows drops), and not one of Windows' devices
+// (deviceName). An upload's name is held to this (uploadNamed), a page's to
+// pagePart.
+func plainPart(name string) bool {
+	return !strings.ContainsRune(name, '\\') && !strings.HasSuffix(name, ".") && !strings.HasSuffix(name, " ") && !deviceName(name)
+}
+
+// deviceName: Windows reads name as a device, not a file: con, prn, aux,
+// nul, com0-9, lpt0-9 (and their superscript digits), conin$, conout$, in
+// any case, alone or before a dot ("nul.md", "aux.tar.gz"), spaces before
+// the dot dropped. A write to one is lost or waits for a port.
+func deviceName(name string) bool {
+	base, _, _ := strings.Cut(name, ".")
+	base = strings.TrimRight(base, " ")
+	if len(base) < 3 || len(base) > 7 {
+		return false
+	}
+	switch base = strings.ToLower(base); base {
+	case "con", "prn", "aux", "nul", "conin$", "conout$":
+		return true
+	}
+	if strings.HasPrefix(base, "com") || strings.HasPrefix(base, "lpt") {
+		switch base[3:] {
+		case "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "¹", "²", "³":
+			return true
+		}
+	}
+	return false
 }
 
 // wikiRoot: the wiki's folder, its symlinks followed (cfg.Data is so from
@@ -239,7 +289,9 @@ func wikiRoot() string {
 // relInside: p relative to root, ok false when p is outside root.
 func relInside(root, p string) (string, bool) {
 	rel, err := filepath.Rel(root, p)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, "../") || filepath.IsAbs(rel) {
+	// ".." and what starts with "../", with the system's separator (Rel
+	// gives "..\\x" on Windows, which a test for "../" let through).
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
 		return "", false
 	}
 	return rel, true

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"sort"
@@ -175,11 +176,10 @@ func slugInput(raw string) string {
 // open or edit it: the host's wiki folder (ZONE_HOST_DATA) plus the slug,
 // which is the file's path relative to the wiki.
 func hostFile(slug string) string {
-	root := cfg.HostData
-	if root == "" {
-		root = resolvePath(cfg.Data)
+	if cfg.HostData == "" {
+		return filepath.Join(resolvePath(cfg.Data), filepath.FromSlash(slug+".md"))
 	}
-	return root + "/" + slug + ".md"
+	return cfg.HostData + "/" + slug + ".md" // the host's path, as it was given
 }
 
 func pageInfo(slug, base string) string {
@@ -228,6 +228,9 @@ func pageName(raw string) (string, error) {
 		return "", toolErr(strconv.Quote(raw) + " is not a usable page name")
 	}
 	if safePath(slug) == "" {
+		if why := nameRefused(slug); why != "" {
+			return "", toolErr(why)
+		}
 		return "", toolErr(strconv.Quote(slug) + ": pages can't go in folders starting with '_' or '.'")
 	}
 	return slug, nil

@@ -295,6 +295,25 @@ class TestViewPage:
         resp = client.get("/page/../etc/passwd", headers=HOST)
         assert resp.status_code == 400
 
+    def test_a_name_windows_reads_as_another_is_no_page_and_says_why(self, client, wiki_dir):
+        # A device's name or a ':' (a wiki's files are copied and cloned to
+        # other systems): no page opens, is made or is listed, and the answer
+        # says why, where "Bad Request" would leave a person guessing.
+        write_page(wiki_dir, "notes/10:30", "# Time\n")
+        write_page(wiki_dir, "nul", "# Nul\n")
+        for path, word in (("/page/aux", "device"), ("/page/notes/NUL", "device"), ("/edit/com1", "device"),
+                           ("/page/notes/10:30", "':'"), ("/edit/a:b", "':'")):
+            resp = client.get(path, headers=HOST)
+            assert resp.status_code == 400 and word in resp.data.decode() and "Pick another name" in resp.data.decode(), path
+        resp = client.post("/edit/aux", data={"content": "# Aux\n"}, headers=HOST)
+        assert resp.status_code == 400 and "device" in resp.data.decode()
+        assert not (wiki_dir / "aux.md").exists()
+        listed = client.get("/api/pages", headers=HOST).data.decode()
+        assert "10:30" not in listed and '"nul"' not in listed
+        # A name that only looks like one is a page as ever.
+        assert client.get("/page/console", headers=HOST).status_code == 302
+        assert client.get("/page/../etc/passwd", headers=HOST).data.decode().strip() == "Bad Request"
+
     def test_frontmatter_rendered_as_meta_not_raw_yaml(self, client, wiki_dir):
         write_page(
             wiki_dir, "tagged",
