@@ -1,13 +1,15 @@
 {{- /* The desktop's actions, at the top right in line with the breadcrumb:
-    sharing mode (a mode, set apart by a divider) and search, the one used
-    most, as a labelled pill with its shortcut. New notes and tasks come
-    from the keyboard (c n, c t) and, on phones, the action bar. With users, the user button last: a
-    round initial that opens the user menu (modules.html module_menu). Phones
-    have the action bar. */ -}}
+    search, the one used most, as a labelled pill with its shortcut. While
+    sharing mode is on, an amber Sharing chip before it turns it off; off,
+    nothing here takes room for it (S, and the user menu, turn it on). New
+    notes and tasks come from the keyboard (c n, c t) and, on phones, the
+    action bar. With users, the user button last: a round initial that opens
+    the user menu (modules.html module_menu). Phones have the action bar. */ -}}
 {{define "top_actions" -}}
 <div class="top-actions">
-  <button type="button" class="top-sharing" aria-pressed="false" aria-label="Sharing mode" title="Sharing mode: hide what is around the page (S)"><svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8 12.1 12.5 8 12.5 1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/></svg></button>
-  <span class="top-sep" aria-hidden="true"></span>
+  {{- if .Sharing}}
+  <button type="button" class="top-sharing" aria-pressed="true" aria-label="Sharing mode is on: turn it off" title="Sharing mode is on: click to show everything again (S)"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8 12.1 12.5 8 12.5 1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/></svg><span aria-hidden="true">Sharing</span></button>
+  {{- end}}
   <button type="button" class="top-search" aria-label="Search" title="Search (Ctrl+P)">{{template "icon_search"}}<span class="top-search-label" aria-hidden="true">Search</span><kbd class="top-search-key" aria-hidden="true">Ctrl P</kbd></button>
   {{- with .SignIn}}<a class="btn top-signin" href="{{.}}">Sign in</a>{{end}}
   {{- range .ModuleLinks}}{{if .Menu}}

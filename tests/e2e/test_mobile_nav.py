@@ -276,35 +276,47 @@ def test_tab_bar_takes_taps_below_its_box(new_page, wiki):
 
 
 # ── Action buttons on desktop ────────────────────────────────────────────────
-# At the top right, in line with the breadcrumb: Sharing mode and Search.
+# At the top right, in line with the breadcrumb: Search (and, while sharing
+# mode is on, the Sharing chip before it).
 # New notes and tasks come from the keyboard; the bottom bar is the phone's.
 
 def test_top_actions_on_desktop(page, wiki):
     page.goto("/page/index")
     expect(page.locator(".action-buttons")).to_be_hidden()
     buttons = page.locator(".top-actions button")
-    expect(buttons).to_have_count(2)
-    names = [b.get_attribute("aria-label") for b in buttons.all()]
-    assert names == ["Sharing mode", "Search"]
-    boxes = [b.bounding_box() for b in buttons.all()]
+    # Search alone: sharing mode, used now and then, takes no room while off.
+    expect(buttons).to_have_count(1)
+    expect(buttons).to_have_attribute("aria-label", "Search")
     crumb = page.locator("main > .breadcrumb").bounding_box()
     vw = page.viewport_size["width"]
     main = page.locator("main").bounding_box()
-    for b in boxes:
-        assert abs((b["y"] + b["height"] / 2) - (crumb["y"] + crumb["height"] / 2)) < 2   # in line
-    assert 32 <= boxes[0]["width"] <= 40 and boxes[0]["width"] == boxes[0]["height"]   # an icon button, not tiny
+    b = buttons.bounding_box()
+    assert abs((b["y"] + b["height"] / 2) - (crumb["y"] + crumb["height"] / 2)) < 2   # in line
     # Search, the one used most, is a labelled pill with its shortcut.
-    assert boxes[1]["width"] > 100
-    expect(buttons.nth(1)).to_contain_text("Search")
-    expect(buttons.nth(1).locator("kbd")).to_have_text("Ctrl P")
-    # The eye set apart by a divider.
-    sep = page.locator(".top-actions .top-sep").bounding_box()
-    assert boxes[0]["x"] + boxes[0]["width"] < sep["x"] < boxes[1]["x"]
-    assert all(a["x"] < b["x"] for a, b in zip(boxes, boxes[1:]))
-    assert boxes[-1]["x"] + boxes[-1]["width"] > main["x"] + main["width"] - 40 and boxes[-1]["x"] < vw
-    # The breadcrumb's own right end (the backlinks chip) keeps clear of them.
-    assert crumb["x"] + crumb["width"] - float(page.locator("main > .breadcrumb").evaluate(
-        "el => getComputedStyle(el).paddingRight").rstrip("px")) <= boxes[0]["x"]
+    assert b["width"] > 100
+    expect(buttons).to_contain_text("Search")
+    expect(buttons.locator("kbd")).to_have_text("Ctrl P")
+    assert b["x"] + b["width"] > main["x"] + main["width"] - 40 and b["x"] < vw
+    _clear_of_the_breadcrumb(page, b)
+    # While sharing mode is on, the amber Sharing chip comes before it, and
+    # the breadcrumb keeps clear of both.
+    with page.expect_navigation():
+        page.keyboard.press("Shift+S")
+    chip = page.locator(".top-actions .top-sharing")
+    expect(chip).to_have_text("Sharing")
+    c, b = chip.bounding_box(), buttons.nth(1).bounding_box()
+    assert abs((c["y"] + c["height"] / 2) - (b["y"] + b["height"] / 2)) < 2
+    assert c["x"] + c["width"] < b["x"]
+    _clear_of_the_breadcrumb(page, c)
+
+
+def _clear_of_the_breadcrumb(page, box):
+    """The breadcrumb's own right end (the backlinks chip) keeps clear of the
+    top actions, whose leftmost box is box."""
+    crumb = page.locator("main > .breadcrumb")
+    b = crumb.bounding_box()
+    pad = float(crumb.evaluate("el => getComputedStyle(el).paddingRight").rstrip("px"))
+    assert b["x"] + b["width"] - pad <= box["x"]
 
 
 def test_top_actions_hidden_on_phones(new_page, wiki):

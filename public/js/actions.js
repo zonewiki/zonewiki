@@ -157,22 +157,16 @@ document.querySelector('.action-search')?.addEventListener('click', openSearchMo
 // status counts. And the server leaves out the pages not for sharing
 // (noshare in the settings file). It is a cookie, so the server knows: it renders
 // <html class="sharing"> from the first paint, and switching reloads the
-// page, rendered for the new mode.
-const sharingBtn = document.querySelector('.top-sharing');
+// page, rendered for the new mode. It is switched by S, by the user menu's
+// item, and, while on, by the Sharing chip at the top right (top_actions.html;
+// off, the top row keeps no room for it).
 export const sharingOn = () => document.documentElement.classList.contains('sharing');
-function syncSharingButton() {
-  const on = sharingOn();
-  sharingBtn?.setAttribute('aria-pressed', String(on));
-  if (sharingBtn) sharingBtn.title = on ? 'Sharing mode is on: click to show everything again (S)'
-                                        : 'Sharing mode: hide what is around the page (S)';
-}
 export function toggleSharing() {
   const on = !sharingOn();
   document.cookie = `zone-sharing=${on ? '1' : '0'}; path=/; SameSite=Lax; max-age=${on ? 31536000 : 0}`;
   location.reload();
 }
-sharingBtn?.addEventListener('click', toggleSharing);
-syncSharingButton();
+document.querySelectorAll('.top-sharing, .menu-sharing').forEach(b => b.addEventListener('click', toggleSharing));
 // The desktop's buttons at the top right (templates/partials/top_actions.html).
 document.querySelector('.top-search')?.addEventListener('click', openSearchModal);
 // The search pill names its shortcut; on a Mac that is ⌘P.

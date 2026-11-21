@@ -407,7 +407,10 @@ def test_trail_drops_its_oldest_pages_where_the_window_is_not_wide(new_page, wik
     expect(pg.locator(".breadcrumb > .trail-link.trail-off")).to_have_count(0)
     assert [r[0] for r in crumbs.evaluate_all(shown)] == names[1:]
     pg.set_viewport_size({"width": 700, "height": 600})
-    expect(pg.locator(".breadcrumb > .trail-link:visible")).to_have_count(0, timeout=3000)
+    # Fewer than at 1000px (how many depends on the top actions' width).
+    pg.wait_for_function(
+        "n => document.querySelectorAll('.breadcrumb > .trail-link:not(.trail-off)').length < n",
+        arg=len(row) - 1, timeout=3000)
     expect(pg.locator(".breadcrumb > span:not([class])")).to_have_text("Compost heap")
 
 

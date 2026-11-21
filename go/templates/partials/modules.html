@@ -50,6 +50,7 @@
 {{- ""}}<a href="/assistant" role="menuitem" class="menu-assistant">Connect an assistant</a>
 {{- if .sign_out}}<a href="/password" role="menuitem" class="menu-password">Change password</a>{{end -}}
 {{- if .admin}}<a href="/admin" role="menuitem" class="menu-admin">Admin</a>{{end -}}
+{{- ""}}<button type="button" role="menuitem" class="menu-sharing">{{if .sharing}}Turn sharing mode off{{else}}Sharing mode{{end}}</button>
 {{- ""}}<a href="/help" role="menuitem" class="menu-help">Help</a>
 {{- if .sign_out}}<form method="post" action="/logout" class="menu-signout"><button type="submit" role="menuitem">Sign out</button></form>{{end -}}
 </div>
@@ -75,5 +76,5 @@
 <span class="action-sep" aria-hidden="true"></span>
 <button type="button" class="action-search" aria-label="Search" title="Search (Ctrl+P)">{{template "icon_search"}}<span class="action-label">Search</span></button>
 </nav>
-{{- range .ModuleLinks}}{{if .Menu}}{{template "module_menu" (dict "link" . "user" $.User "sign_out" $.SignOut "admin" $.Admin)}}{{end}}{{end}}
+{{- range .ModuleLinks}}{{if .Menu}}{{template "module_menu" (dict "link" . "user" $.User "sign_out" $.SignOut "admin" $.Admin "sharing" $.Sharing)}}{{end}}{{end}}
 {{- end}}

@@ -152,19 +152,21 @@ body {
 @media (min-width: 641px) { .action-buttons { display: none; } }
 
 /* Top actions (top_actions.html): on desktop, at the top right of the
-   page in line with the breadcrumb: sharing mode, a divider, then Search as
-   a labelled pill.
+   page in line with the breadcrumb: Search as a labelled pill, before it
+   the Sharing chip while sharing mode is on.
    The breadcrumb and the status badges keep their room free
    (--top-actions-w, its width). Phones have the tab bar. */
-/* The icon (2.25rem), gaps, divider and the pill's margin (3.91rem) plus
-   the pill's fixed width, so the row's width doesn't depend on the font. */
-main { --top-actions-w: 12.25rem; }
+/* The pill's margin and fixed width, the chip's and the user button's when
+   they are there: fixed widths, so the row's width doesn't depend on the font. */
+main {
+  --top-actions-w: calc(8.75rem + var(--top-sharing-w, 0rem) + var(--top-user-w, 0rem));
+}
+main:has(> .top-actions .top-sharing) { --top-sharing-w: 6.25rem; }
 .top-actions {
   /* The search pill's border on the content's edge. */
   position: absolute; top: 1.5rem; right: var(--main-pad);
   display: flex; align-items: center; gap: .25rem;
 }
-.top-sep { width: 1px; height: 1.25rem; margin: 0 .3rem; background: var(--border); }
 .top-actions .top-search {
   width: 8.25rem; justify-content: flex-start; gap: .45rem; margin-left: .5rem; padding: 0 .45rem 0 .6rem;
   border-color: var(--border); background: var(--surface); font: inherit; font-size: .8rem;
@@ -184,7 +186,7 @@ main { --top-actions-w: 12.25rem; }
 .top-actions button:hover { color: var(--fg); background: var(--btn-bg); }
 .top-actions button:focus-visible { outline: 2px solid var(--link); outline-offset: 1px; }
 /* With users: the user button, a round initial, after the pill (2.25rem and a gap). */
-main:has(> .top-actions .top-user) { --top-actions-w: 14.75rem; }
+main:has(> .top-actions .top-user) { --top-user-w: 2.6rem; }
 .top-actions .top-user {
   margin-left: .35rem; border-radius: 50%; border-color: var(--border);
   background: var(--surface); font: inherit; font-size: .85rem; font-weight: 600; color: var(--fg);
@@ -200,8 +202,16 @@ html.sharing body::before {
   content: ""; position: fixed; inset: 0 0 auto; height: 3px; z-index: 1000;
   background: #f59e0b; pointer-events: none;
 }
-.top-actions .top-sharing[aria-pressed="true"] {
+/* The Sharing chip at the top right, there only while it is on: amber as the
+   bar, a click turns it off. Off, the user menu and S turn it on. */
+.top-actions .top-sharing {
+  width: 6rem; gap: .35rem; border-radius: 999px;
+  font: inherit; font-size: .8rem; font-weight: 600;
   color: #b45309; background: color-mix(in srgb, #f59e0b 18%, transparent);
+}
+.top-actions .top-sharing:hover { color: #92400e; background: color-mix(in srgb, #f59e0b 28%, transparent); }
+@media (prefers-color-scheme: dark) {
+  .top-actions .top-sharing, .top-actions .top-sharing:hover { color: #fbbf24; }
 }
 html.sharing :is(
   .trail-link, .trail-sep, .breadcrumb-clear,  /* the pages visited before */
@@ -2467,7 +2477,7 @@ body.editor-page main {
   .breadcrumb .module-group + .module-group,
   .breadcrumb .module-menu-btn { display: none; }
   /* The account menu, opened by the name beside Sign out: what that row doesn't have. */
-  .module-menu :is(.menu-who, .menu-signout, .menu-admin) { display: none; }
+  .module-menu :is(.menu-who, .menu-signout, .menu-admin, .menu-sharing) { display: none; }
   .module-menu-backdrop { background: rgba(0, 0, 0, .35); }
   /* Keep the end of the page and the toasts clear of the bar. */
   body:has(.action-buttons) main { padding-bottom: calc(5.5rem + env(safe-area-inset-bottom)); }

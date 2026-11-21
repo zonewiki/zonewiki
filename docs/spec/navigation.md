@@ -161,6 +161,7 @@ Who is signed in,
 **Groups** (your groups, and where you make one: `/groups`, Groups in `docs/spec/users.md`),
 **Connect an assistant** (your MCP token, `/assistant`, `docs/spec/mcp.md`),
 **Change password** (`/password`, Signing in in `docs/spec/users.md`),
+**Sharing mode** (`.menu-sharing`, **Turn sharing mode off** while it is on; desktop only, see Sharing mode),
 **Help** (the manual, `/help`: Help in `docs/spec/routes.md`) and Sign out are in the **user menu**,
 opened by the **user button** at the top right on desktop.
 Phones have Sign out in the page's top row, and the three pages' links in the shortcuts dialog.
@@ -185,15 +186,15 @@ The trail itself is added by `js/chrome.js` from `sessionStorage` after the page
 
 The **top actions** (desktop, `templates/partials/top_actions.html`, `.top-actions`, first in `<main>`) sit at the top right of the page,
 in line with the breadcrumb (absolutely positioned in `main`; the breadcrumb gets `min-height: 2.25rem` and right padding so its own end stays clear),
-in two groups:
+in this order:
 
-- **Sharing mode** (`.top-sharing`, the eye, `aria-pressed`; see Sharing mode),
-  set apart by a divider (`.top-sep`) since it switches a mode;
-- **Search** (`.top-search`, Ctrl+P), the one used most, as a labelled pill with its shortcut (`.top-search-key`, `⌘P` on a Mac), white on the paper like the module switcher's pills.
+- **Sharing** (`.top-sharing`, an amber chip with the eye, `aria-pressed="true"`), only while sharing mode is on: a click turns it off (see Sharing mode);
+- **Search** (`.top-search`, Ctrl+P), the one used most, as a labelled pill with its shortcut (`.top-search-key`, `⌘P` on a Mac), white on the paper like the module switcher's pills;
+- with users, the user button (The user menu).
 
-The icon is 2.25rem, muted, a background on hover; name and shortcut in tooltip and accessible name.
+Sharing mode takes no room here while it is off: it is switched now and then, so the top row's place goes to Search, and the switch on is **S** and the user menu.
 There are no "new" buttons on desktop: a new note is `c n` (`openNewNote`), a new task `c t` (`openDefaultTask`); the row stays calm, and phones have both in the action bar.
-The pill has a fixed width, so the row's width (`--top-actions-w`, which the breadcrumb's padding and the status badges' position use) doesn't depend on the font; its border ends on the content's right edge.
+The pill and the chip have fixed widths, so the row's width (`--top-actions-w`, which the breadcrumb's padding and the status badges' position use) doesn't depend on the font; its border ends on the content's right edge.
 Hidden at ≤640px.
 They replaced the round New and Search buttons in the bottom-right corner, so desktop toasts and Sign out have the bottom corners to themselves again.
 
@@ -289,9 +290,10 @@ Only a page with nothing that could show there (a visitor without Sign in) has n
 ## Sharing mode
 
 For sharing the screen: the page on screen stays as it is, everything that shows *other* pages around it is hidden, and pages not for sharing are left out entirely.
-Switched by the eye in the top actions or **S** (Shift+s; `toggleSharing` in `js/actions.js`).
-While on, a thin amber bar runs across the top and the eye is highlighted.
-Phones have no switch (no top actions).
+Switched on by **S** (Shift+s; `toggleSharing` in `js/actions.js`) or **Sharing mode** in the user menu (with users).
+While on, a thin amber bar runs across the top and an amber **Sharing** chip sits at the top right (Top actions), which turns it off, as **S** and the menu's **Turn sharing mode off** do.
+Off, nothing on the screen takes room for it: it is used now and then, for a call or a projector; the shortcuts dialog (`?`) lists **S**.
+Phones have no switch (no top actions, and the account menu leaves it out).
 The state is a cookie (`zone-sharing=1`, a year;), so the server knows it: `layout.html` renders `<html class="sharing">` from the first paint (nothing flashes on load), and switching reloads the page, rendered for the new mode.
 
 ### Around the page

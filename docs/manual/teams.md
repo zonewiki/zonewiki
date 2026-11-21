@@ -23,7 +23,7 @@ Open the wiki, type your **User name** and **Password**, and click **Sign in**.
 A wrong name or password says "Incorrect user name or password.", without saying which one was wrong.
 
 Once signed in, the round button with your initial at the top right opens your **user menu**:
-**Groups**, **Connect an assistant**, **Change password**, **Admin** (for admins only) and **Sign out**.
+**Groups**, **Connect an assistant**, **Change password**, **Sharing mode** (on a computer), **Admin** (for admins only) and **Sign out**.
 On a phone, your name in the top row opens the same menu.
 
 ### Changing your password

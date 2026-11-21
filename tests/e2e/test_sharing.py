@@ -31,7 +31,11 @@ def test_sharing_mode_hides_the_surroundings(new_page, wiki):
     for sel in hidden:
         expect(page.locator(sel).first).to_be_visible()
     expect(page.locator("html.sharing")).to_have_count(0)
+    # Off, the top row has no switch for it (S and the user menu turn it on).
+    expect(page.locator(".top-sharing")).to_have_count(0)
     sharing_on(page)
+    # On, an amber chip at the top right says so and turns it off.
+    expect(page.locator(".top-sharing")).to_have_text("Sharing")
     expect(page.locator(".top-sharing")).to_have_attribute("aria-pressed", "true")
     for sel in hidden:
         expect(page.locator(sel).first).to_be_hidden()
@@ -45,10 +49,28 @@ def test_sharing_mode_hides_the_surroundings(new_page, wiki):
     page.reload()
     expect(page.locator("html.sharing")).to_have_count(1)
     expect(page.locator(".trail-link").first).to_be_hidden()
-    # The eye switches it off again.
+    # The chip switches it off again, and goes.
     page.locator(".top-sharing").click()
     expect(page.locator("html.sharing")).to_have_count(0)
     expect(page.locator(".trail-link").first).to_be_visible()
+    expect(page.locator(".top-sharing")).to_have_count(0)
+
+
+def test_the_user_menu_switches_sharing_mode(new_page, wiki, monkeypatch):
+    # With users the account menu has it, worded for what a click does.
+    from tests import settings
+    monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "")})
+    page = new_page(viewport={"width": 1400, "height": 900})
+    page.request.post("/login", form={"username": "alice", "password": "pw"})
+    page.goto("/page/index")
+    page.locator(".top-user").click()
+    with page.expect_navigation():
+        page.get_by_role("menuitem", name="Sharing mode").click()
+    expect(page.locator("html.sharing")).to_have_count(1)
+    page.locator(".top-user").click()
+    with page.expect_navigation():
+        page.get_by_role("menuitem", name="Turn sharing mode off").click()
+    expect(page.locator("html.sharing")).to_have_count(0)
 
 
 def test_sharing_mode_search_lists_nothing_until_typed(new_page, wiki):
@@ -82,6 +104,10 @@ def test_no_sharing_switch_in_the_way_on_phones(new_page, wiki):
     from conftest import TOUCH_PHONE
     phone = new_page(**TOUCH_PHONE)
     phone.goto("/page/index")
+    expect(phone.locator(".top-sharing")).to_be_hidden()
+    phone.context.add_cookies([{"name": "zone-sharing", "value": "1", "url": phone.url}])
+    phone.reload()
+    expect(phone.locator("html.sharing")).to_have_count(1)
     expect(phone.locator(".top-sharing")).to_be_hidden()
 
 

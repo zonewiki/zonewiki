@@ -184,20 +184,28 @@ class TestViewPage:
         assert 'class="action-buttons"' not in client.get("/edit/my-page", headers=HOST).data.decode()
 
     def test_desktop_top_actions_on_views_not_in_editor(self, client, wiki_dir):
-        # Sharing mode and Search, at the start of <main> so the
-        # CSS can put them at the top right, in line with the breadcrumb.
+        # Search, at the start of <main> so the CSS can put it at the top
+        # right, in line with the breadcrumb; while sharing mode is on, the
+        # Sharing chip before it, which turns it off (off, it takes no room).
         write_page(wiki_dir, "my-page", "# My Page\n")
-        for url in ("/page/my-page", "/tasks", "/notes"):
+
+        def top_buttons(url):
             body = client.get(url, headers=HOST).get_data(as_text=True)
             top = body.split("<main", 1)[1].split('<div class="top-actions">', 1)
             # Before the page itself; only the status badges, which share
             # the row, come first.
             assert len(top) == 2 and '<div class="breadcrumb"' not in top[0] and '<header' not in top[0], url
             assert top[0].count('class="top-badges"') == 1, url
-            buttons = re.findall(r'<button type="button" class="top-([\w-]+)"(?: aria-pressed="false")? aria-label="([^"]+)" title="([^"]+)"',
-                                 top[1].split("</div>", 1)[0])
-            assert buttons == [("sharing", "Sharing mode", "Sharing mode: hide what is around the page (S)"),
-                               ("search", "Search", "Search (Ctrl+P)")], url
+            return re.findall(r'<button type="button" class="top-([\w-]+)"(?: aria-pressed="true")? aria-label="([^"]+)" title="([^"]+)"',
+                              top[1].split("</div>", 1)[0])
+
+        for url in ("/page/my-page", "/tasks", "/notes"):
+            assert top_buttons(url) == [("search", "Search", "Search (Ctrl+P)")], url
+        client.set_cookie("zone-sharing", "1")
+        for url in ("/page/my-page", "/tasks", "/notes"):
+            assert top_buttons(url) == [
+                ("sharing", "Sharing mode is on: turn it off", "Sharing mode is on: click to show everything again (S)"),
+                ("search", "Search", "Search (Ctrl+P)")], url
         assert 'class="top-actions"' not in client.get("/edit/my-page", headers=HOST).data.decode()
 
     def test_sharing_mode_is_rendered_from_the_cookie(self, client, wiki_dir):
