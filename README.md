@@ -21,7 +21,7 @@ One Go binary, no database, nothing leaves your server.
 ## Why Zone
 
 - **Your files stay yours.** Pages are Markdown, tasks are JSON beside them, history is git. Grep them, back them up with `git push`, or stop using Zone and keep everything.
-- **A real task manager, not checkboxes in a page.** Plan your days on a board, keep the day you'll do a thing apart from its deadline, and give tasks lists, repeats, assignees and comments. It can be the task app you now run beside your notes.
+- **A real task manager, not just checkboxes in a page.** Plan your days on a board, keep the day you'll do a thing apart from its deadline, and give tasks lists, repeats, assignees and comments. It can be the task app you now run beside your notes.
 - **Good to use for humans and AI.** For you, a quick editor with live preview, search as you type, a Today view and a plan board for tasks, in any browser on a laptop or a phone, with nothing to install. For your assistant, everything you do in the browser, over MCP, through the same operations, never as an afterthought.
 - **A memory for your assistants, under your rules.** An assistant can do what you can, never more. Connect one that only reads, or keep it out of your private pages. Its edits are commits you can undo one at a time or all at once. Zone brings no model of its own: use the assistant you already have.
 - **Private, shared or a group's.** Each user has private pages and tasks, groups get their own folders, and one permission model decides who sees what: in the browser, in search and for assistants alike.
