@@ -22,9 +22,16 @@ on:
   pull_request:
   workflow_dispatch:
 
+# One run at a time, whatever its branch or tag, none cancelled: the jobs run
+# their tests on the runner host's engine, and two runs at once (main and a
+# tag pushed together) took three times as long, which failed the browser
+# tests where they wait and the bench at its budgets. Forgejo runs the runs
+# of a group in the order they came (cancel-in-progress: false queues them
+# all; the group is the repository's, not a ref's). A cancelled run's tests
+# go on in their containers: the next run removes them (in_image in run.sh).
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci
+  cancel-in-progress: false
 
 jobs:
   checks:
@@ -180,9 +187,6 @@ jobs:
     runs-on: docker
     container:
       image: docker:29.9.3-cli@sha256:2357639ad1ea7d0194134bf3292622fd4e562483966ed674e5d7c945b5f3b28d
-    concurrency:
-      group: publish
-      cancel-in-progress: false
     defaults:
       run:
         shell: bash

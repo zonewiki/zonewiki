@@ -407,9 +407,23 @@ They come back, as they were, once Microsoft has said what happened and onnxrunt
 ## CI (Forgejo Actions)
 
 `.forgejo/workflows/ci.yml` runs on a push to `main` or a `v*` tag, on every pull request and when started by hand (`workflow_dispatch`);
-a newer run of the same branch or tag cancels the one before.
+runs go one at a time in the order they came, whatever their branch or tag, and none is cancelled (`concurrency: ci`, One run at a time, below).
 Its **checks** are a job per `run.sh` command, as on your machine, all in the tools image (`Containerfile.tools`),
 so CI keeps no package lists or test commands of its own.
+
+### One run at a time
+
+The jobs run their tests on the runner host's engine (Forgejo's runner, below), so two runs at once share its CPUs:
+main and a tag pushed together took three times as long, and failed the browser tests where they wait and the bench at its budgets.
+So the workflow has one concurrency group for the repository (`group: ci`, `cancel-in-progress: false`):
+Forgejo queues every run of the group and starts them in the order they came, a tag's run after main's, and cancels none.
+A push made while a run goes waits for it; the jobs of one run still go side by side.
+Forgejo knows a group for a workflow only (one on a job is read and ignored), and without `cancel-in-progress: false` it would cancel, not queue.
+
+A run cancelled by hand leaves its tests running: the runner removes the job's container, not the one `run.sh` started beside it on the host's engine.
+So `run.sh` marks the container of a CI run with its run (the label `zonewiki-ci-run`, `<owner>/<repo>#<run id>`),
+and each job first removes the containers another run of the repository left (`in_image`).
+That is safe because runs don't overlap; with the queue turned off on the server (`CONCURRENCY_GROUP_QUEUE_ENABLED = false`) a run would remove its neighbour's.
 
 ### Forgejo's jobs
 
@@ -447,7 +461,7 @@ Without the variable the image job is skipped, so forks just test.
 `run.sh` builds each image quietly (the build's output, which podman's `-q` doesn't hide for `RUN` steps, goes to a log shown only when the build fails;
 a first build, with no image of that tag yet, prints one line saying so)
 and runs it by ID, so parallel jobs on one engine can't swap a shared tag.
-With `ZONE_COPY_REPO=1` (set by CI) it copies the repo into the container (`create --rm`, `cp`, `start -a`; the engine removes the container even when a cancelled job kills `run.sh`) instead of bind-mounting it,
+With `ZONE_COPY_REPO=1` (set by CI) it copies the repo into the container (`create --rm`, `cp`, `start -a`; a cancelled run's container goes on and is removed by the next run: One run at a time, above) instead of bind-mounting it,
 since the checkout lives in the job container while the engine is the host's;
 nothing the command writes comes back.
 
@@ -500,7 +514,7 @@ What the job does, in order:
    It is a secret so that a rule that is one person's business stays out of the repository.
 5. Pushes.
 
-The jobs of one repository publish one at a time (`concurrency: publish`, none cancelled), so two runs don't race for main.
+The runs of the repository go one at a time (One run at a time, above), so two don't race for main.
 A pull request runs nothing of this: only a push to this repository starts the job, and secrets don't reach other repositories' pull requests.
 Tests: `tests/test_image.py` (the job's shape: after the checks, a push only, never forced, the host key's fingerprint).
 

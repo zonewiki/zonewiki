@@ -219,6 +219,16 @@ def test_a_tag_releases_the_binaries():
     assert "/dist/" in (REPO / ".gitignore").read_text(encoding="utf-8").splitlines()
 
 
+def test_forgejos_runs_go_one_at_a_time():
+    """One concurrency group for the repository, queued and not cancelled:
+    two runs at once on the runner's host (main and a tag pushed together)
+    failed the browser tests and the bench. On the workflow alone: Forgejo
+    ignores a group on a job, which would only look as if it held."""
+    ci = (REPO / ".forgejo" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    assert "\nconcurrency:\n  group: ci\n  cancel-in-progress: false\n" in ci
+    assert ci.count("concurrency:") == 1
+
+
 def test_forgejo_publishes_to_the_other_repository_only_as_it_is():
     """The github job pushes main's commit or a tag to the other repository
     after the checks, never forced (so the hashes there are Forgejo's), only

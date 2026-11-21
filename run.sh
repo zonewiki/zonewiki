@@ -121,8 +121,14 @@ export TZ="${TZ:-UTC}"
 # with ZONE_COPY_REPO=1 (CI) copied in: there the engine is the host's while
 # the checkout lives in the job container, so a mount would name a host path.
 # Copied, nothing the command writes comes back; --rm has the engine remove
-# the container even when this script is killed (a cancelled CI job), the
-# trap removes one that never started.
+# the container when it ends, the trap removes one that never started.
+# A cancelled CI job kills this script, not the container: the runner knows
+# only its job container, and the tests went on beside the next run, which
+# then took three times as long and failed where a test waits for the
+# browser. So in a CI run (GITHUB_RUN_ID) the container carries its run
+# (the label zonewiki-ci-run), and the next run of the repository first
+# removes what another run left: runs don't overlap (the workflow's
+# concurrency group), so another run's container is a cancelled one's.
 in_image() {
   local image=$1 opts=()
   shift
@@ -130,6 +136,17 @@ in_image() {
   shift
   if [[ -n "$ZONE_COPY_REPO" ]]; then
     local c
+    if [[ -n "${GITHUB_RUN_ID:-}" ]]; then
+      local repo="${GITHUB_REPOSITORY:-}#" left
+      left=$($ENGINE ps -a --filter label=zonewiki-ci-run --format '{{.ID}} {{.Label "zonewiki-ci-run"}}' |
+             awk -v repo="$repo" -v run="$repo$GITHUB_RUN_ID" 'index($2, repo) == 1 && $2 != run { print $1 }')
+      if [[ -n "$left" ]]; then
+        say "Removing the containers an earlier run left behind (a cancelled run's tests go on)…"
+        # shellcheck disable=SC2086
+        $ENGINE rm -f $left >/dev/null || true
+      fi
+      opts+=(--label "zonewiki-ci-run=$repo$GITHUB_RUN_ID")
+    fi
     c=$($ENGINE create --rm "${opts[@]}" -w /repo "$image" "$@")
     trap "$ENGINE rm -f $c >/dev/null" EXIT
     $ENGINE cp ./. "$c:/repo"

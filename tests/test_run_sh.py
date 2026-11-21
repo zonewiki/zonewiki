@@ -25,6 +25,7 @@ case "$1" in
     echo fake-image > "$2" ;;
   compose) echo "env ZONE_BIND=$ZONE_BIND ZONE_UID=$ZONE_UID ZONE_GID=$ZONE_GID ZONE_BUILD=$ZONE_BUILD" >> "$FAKE_LOG" ;;
   create) echo fake-container ;;
+  ps) [ -z "$FAKE_PS" ] || echo "$FAKE_PS" ;;
   image) exit 1 ;;
   run|start) exit "${FAKE_EXIT:-0}" ;;
 esac
@@ -191,6 +192,29 @@ def test_copy_mode_creates_a_self_removing_container(sandbox):
     (create,) = _engine_calls(log, "create")
     assert create.startswith("create --rm ")
     assert _engine_calls(log, "start") == ["start -a fake-container"]
+
+
+def test_a_ci_run_removes_what_a_cancelled_run_left(sandbox):
+    """A cancelled job's tests go on in their container (the runner kills
+    only the job's own): the next run of the repository removes them, and
+    leaves its own run's and another repository's alone."""
+    repo, env, log = sandbox
+    env.update(ZONE_COPY_REPO="1", GITHUB_RUN_ID="8", GITHUB_REPOSITORY="me/zone",
+               FAKE_PS="old1 me/zone#7\nmine me/zone#8\nold2 me/zone#6\nother you/zone#7\nlong me/zone#81")
+    r = subprocess.run(["./run.sh", "leaks"], cwd=repo, env=env, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    assert "an earlier run left behind" in r.stderr
+    assert _engine_calls(log, "rm") == ["rm -f old1 old2 long", "rm -f fake-container"]
+    (create,) = _engine_calls(log, "create")
+    assert "--label zonewiki-ci-run=me/zone#8 " in create
+    # Nothing left: nothing removed, nothing said. Outside CI: no label, no look.
+    for change, labelled in (({"FAKE_PS": "mine me/zone#8"}, True), ({"GITHUB_RUN_ID": ""}, False)):
+        log.unlink()
+        r = subprocess.run(["./run.sh", "leaks"], cwd=repo, env={**env, **change}, capture_output=True, text=True)
+        assert r.returncode == 0 and "left behind" not in r.stderr, r.stderr
+        assert _engine_calls(log, "rm") == ["rm -f fake-container"]
+        assert ("--label zonewiki-ci-run" in _engine_calls(log, "create")[0]) == labelled
+        assert bool(_engine_calls(log, "ps")) == labelled
 
 
 def test_build_output_is_hidden_and_a_first_build_says_so(sandbox):
