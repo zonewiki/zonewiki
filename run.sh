@@ -242,6 +242,18 @@ case "${1:-up}" in
     # tests against it, in the tools image (Containerfile.tools), one worker per
     # CPU (-n 0: one process). Extra args go to pytest; without a tests/…
     # path the whole suite runs but the browser and tasks-core tests (e2e).
+    # In CI on a v* tag (GITHUB_REF, GitHub's and Forgejo's): the tag is the
+    # version the binary says (go/config.go), or nothing is released, since
+    # the image, the binaries and the push to GitHub all wait for the checks.
+    case "${GITHUB_REF:-}" in
+      refs/tags/v*)
+        if ! grep -qxF "const version = \"${GITHUB_REF#refs/tags/v}\"" go/config.go; then
+          echo "The tag ${GITHUB_REF#refs/tags/} isn't the version in go/config.go ($(grep '^const version = ' go/config.go)):" \
+               "raise the version in a commit, then tag that commit." >&2
+          exit 1
+        fi
+        ;;
+    esac
     image=$(build_image zonewiki-tools -f Containerfile.tools)
     say "Running the tests in the tools image: gofmt, go vet, go test -race, then pytest…"
     # ZONE_TEST_RACE=1: the server the API tests start is built with the race

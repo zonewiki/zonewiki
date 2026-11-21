@@ -299,6 +299,9 @@ Each `v*` tag's GitHub release carries Zone as one file per platform, for a desk
 
 How to use one is in the manual (With the binary in `docs/manual/self-hosting.md`): download, `chmod +x`, run, open `http://localhost:5080`.
 
+A tag is the version the binary says: `v0.5.0` for `const version = "0.5.0"` in `go/config.go`.
+CI's test job fails a `v*` tag that isn't (`./run.sh test`, from `GITHUB_REF`), and with it nothing of the tag is released: the image, the binaries and Forgejo's push to GitHub wait for the checks.
+
 ### What a release binary is
 
 - Zone's server with its own files built in (What the binary holds, above): the browser code, Help's docs, the licenses (`zonewiki licenses`).

@@ -200,6 +200,15 @@ def test_a_tag_releases_the_binaries():
                  "        run: ./run.sh binaries\n", 'gh release upload "$TAG" dist/* --clobber\n'):
         assert line in job, line
     run_sh = (REPO / "run.sh").read_text(encoding="utf-8")
+    # The tag is the version the binary says: the checks, which the image,
+    # the binaries and Forgejo's push to GitHub wait for, fail a v* tag that
+    # isn't (run.sh test), and the version is where that looks for it.
+    tests = run_sh[run_sh.index("\n  test)\n"):run_sh.index("\n  bench)\n")]
+    assert 'grep -qxF "const version = \\"${GITHUB_REF#refs/tags/v}\\"" go/config.go' in tests
+    assert tests.index("refs/tags/v*)") < tests.index("build_image")
+    assert re.search(r'^const version = "\d+\.\d+\.\d+"$', (REPO / "go" / "config.go").read_text(encoding="utf-8"), re.M)
+    for workflow in (ci, (REPO / ".forgejo" / "workflows" / "ci.yml").read_text(encoding="utf-8")):
+        assert "check: [test, e2e, leaks]" in workflow
     binaries = run_sh[run_sh.index("\n  binaries)\n"):]
     binaries = binaries[:binaries.index("\n    ;;\n")]
     assert "build_image zonewiki-tools -f Containerfile.tools" in binaries
