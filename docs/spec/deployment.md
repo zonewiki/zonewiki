@@ -136,6 +136,7 @@ The template for `.env` (`cp .env.example .env`): every setting with a comment, 
 ### .env
 
 The deployment's settings, read by `run.sh`, compose and Zone at start; gitignored.
+Zone itself reads no `.env` file, only its environment: `run.sh` and compose pass the file's settings on, and a binary run by hand (downloaded or built) takes them as environment variables (`ZONE_DATA=~/notes ./zonewiki`; Where settings live in `docs/manual/self-hosting.md` shows a start script for several).
 
 | Setting | What it sets |
 |---------|--------------|

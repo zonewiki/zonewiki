@@ -316,7 +316,7 @@ Use `./run.sh user …` in the repository, or `zonewiki user …` without the co
 ## A public wiki
 
 A wiki with users can also be shown to people who aren't signed in, called **visitors**.
-Whoever runs the server sets this in `.env`, not an admin in the browser:
+Whoever runs the server sets this where Zone is started (in `.env`, or as an environment variable for the binary: [Where settings live](self-hosting.md#where-settings-live)), not an admin in the browser:
 
 | `ZONE_PUBLIC` | Visitors can |
 |---------------|--------------|

@@ -67,6 +67,7 @@ On Windows, run the Linux file in WSL2: there is no Windows binary.
 mv zonewiki-macos-arm64 zonewiki      # the file you downloaded
 chmod +x zonewiki
 ./zonewiki                            # your wiki: ~/zonewiki
+ZONE_DATA=~/notes ./zonewiki          # or: a folder of Markdown notes you already have
 ```
 
 Open <http://localhost:5000>.
@@ -78,14 +79,14 @@ It is tested on Linux, and should work on macOS and in WSL2.
 ```bash
 git clone https://github.com/zonewiki/zonewiki && cd zonewiki
 mkdir -p ~/zonewiki                   # your wiki folder
-cp .env.example .env                  # ZONE_DATA is your wiki folder
+cp .env.example .env                  # its ZONE_DATA=~/zonewiki is your wiki folder: change it for another
 ./run.sh up                           # build and start
 ```
 
 Open <http://localhost:5000>.
 
 Either way, Zone answers only on your computer, with no login.
-To use a folder of Markdown notes you already have, point `ZONE_DATA` at it (`ZONE_DATA=~/notes ./zonewiki`, or in `.env`).
+Settings such as `ZONE_DATA` are lines in `.env` for the container; the binary reads no `.env` and takes them as environment variables, as above.
 To reach Zone from your phone or let your team in, [set a login](docs/manual/self-hosting.md#setting-a-login) and [open it to other devices](docs/manual/self-hosting.md#reaching-it-from-other-devices).
 
 **On a NAS or server** (Synology, a Raspberry Pi, …) you don't need the repository: `compose.nas.yaml` runs the prebuilt image `ghcr.io/zonewiki/zonewiki` (amd64 and arm64).
