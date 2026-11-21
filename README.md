@@ -144,7 +144,7 @@ The full rules for each feature, written for whoever builds Zone, are in the spe
 
 ## How Zone is made
 
-Zone is developed by Gernot Klingler, a software engineer for more than 25 years, mostly on scalable, low-level monitoring systems where security and reliability come first.
+Zone is developed by Gernot Klingler, who has worked in software engineering for more than 25 years, mostly on scalable, low-level monitoring systems where security and reliability come first.
 He sets the goals and the principles.
 The code, the spec and the tests are all written by AI coding agents, and the result is checked by its test suites, benchmarks and secret scanning, not by a human reading every line.
 The guardrails are in the repository: [`AGENTS.md`](AGENTS.md) holds the principles and conventions, `docs/spec/` describes every feature and changes with it, and every change comes with tests (unit, API and browser).
