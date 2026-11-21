@@ -2656,12 +2656,30 @@ class TestVersion:
         assert r.returncode == 0, r.stderr
         made = home / "zonewiki"
         assert f"ZONE_DATA isn't set: made a new wiki at {made}" in r.stderr
+        assert f"made {made} a git repository" in r.stderr and "found a git repository" not in r.stderr
         assert (made / "index.md").exists() and (made / "_assets").is_dir()
         assert re.search(rf"^Open http://localhost:\d+ in a browser\. The wiki is {re.escape(str(made))}$", r.stdout, re.M)
         (made / "notes.md").write_text("# Notes\n", encoding="utf-8")
         r = self._start(wiki, home)     # the next start: the same wiki, as it is
         assert r.returncode == 0, r.stderr
         assert "made a new wiki" not in r.stderr and (made / "notes.md").exists()
+        assert f"found a git repository in {made}" in r.stderr and f"made {made} a git repository" not in r.stderr
+
+    def test_says_when_there_is_no_git(self, tmp_path):
+        # Without git on PATH the wiki runs with no history: the log says so.
+        wiki = tmp_path / "wiki"
+        wiki.mkdir()
+        env = {k: v for k, v in os.environ.items() if not k.startswith("ZONE_")}
+        env.update(ZONE_DATA=str(wiki), PATH=str(tmp_path / "empty"))
+        proc = subprocess.Popen([str(binary()), "--addr", "127.0.0.1:0"], env=env, text=True,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        assert " listening on " in proc.stdout.readline()
+        proc.terminate()
+        with proc.stdout, proc.stderr:
+            err = proc.stderr.read()
+        proc.wait(timeout=60)
+        assert "git isn't installed (not on PATH): the wiki keeps no history" in err
+        assert not (wiki / ".git").exists()
 
     def test_refuses_a_missing_wiki_folder(self, tmp_path):
         # Zone never makes a wiki that ZONE_DATA names, so a mistyped one

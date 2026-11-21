@@ -58,8 +58,11 @@ func wikiRel(path string) (string, bool) {
 
 // gitSetup makes the wiki a repository (its files as the first commit), or
 // gives an existing one a committer, and points origin at the git-remote setting.
+// It says in the log which it did: made the repository, found one, or
+// found no git to keep a history with.
 func gitSetup() {
 	if !cfg.GitEnabled {
+		logf("git isn't installed (not on PATH): the wiki keeps no history, so no versions or undo")
 		return
 	}
 	if _, err := os.Stat(filepath.Join(cfg.Data, ".git")); err != nil {
@@ -76,13 +79,21 @@ func gitSetup() {
 				logf("could not create %s: %v", gitignore, err)
 			}
 		}
+		made := true
 		for _, args := range [][]string{{"add", "."}, {"commit", "--allow-empty", "-m", "Initial import"}} {
 			if r := runGit(args...); r.Code != 0 {
 				logf("git %s failed: %s", args[0], strings.TrimSpace(r.Stderr))
+				made = false
 			}
 		}
-	} else if strings.TrimSpace(runGit("config", "user.name").Stdout) == "" {
-		setCommitter()
+		if made {
+			logf("made %s a git repository: the wiki's history starts here, with its files as they are", cfg.Data)
+		}
+	} else {
+		logf("found a git repository in %s: the wiki's history goes on from it", cfg.Data)
+		if strings.TrimSpace(runGit("config", "user.name").Stdout) == "" {
+			setCommitter()
+		}
 	}
 	setGitRemote()
 }

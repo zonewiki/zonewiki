@@ -681,7 +681,8 @@ Inside the container it is always mounted at `/wiki-data`.
   a group's page's in `groups/<group>/_assets/`, a private page's in `private/<user>/_assets/`, a task's (with users) in `_tasks/files/<task id>/_assets/`
 - `$ZONE_DATA/_tasks/` — the tasks (`tasks.json`, `closed.json`, `closed-YYYY-MM.json`, each list's in `lists/<name>/`, and `lists.json`, the lists' registry, with the settings of All tasks; see Storage in `docs/spec/tasks.md`);
   each user's private tasks in `private/<user>/_tasks/`
-- `$ZONE_DATA/.git/` — the wiki's history: Zone makes the folder a git repository at its first start (`gitSetup`) and commits every change made through it (Packing the repository, below)
+- `$ZONE_DATA/.git/` — the wiki's history: Zone makes the folder a git repository at its first start (`gitSetup`) and commits every change made through it (Packing the repository, below).
+  Its log says which it did at each start: "made … a git repository" (its files as they are, in one commit), "found a git repository in …" (the history goes on), or, without git on `PATH`, that the wiki keeps no history
 - `$ZONE_DATA/.zone-format` — the format the wiki's files are in, a number, in git (The data format, below)
 - `$ZONE_DATA/.zone/` — Zone's own state, out of git (What is in .zone/, below)
 
