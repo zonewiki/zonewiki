@@ -98,6 +98,7 @@ To run compose without it, see [Without run.sh](../spec/deployment.md#without-ru
 ## On a NAS or server
 
 A NAS, a Raspberry Pi or a small server with Docker and Compose can run the prebuilt image, `ghcr.io/zonewiki/zonewiki` (for amd64 and arm64), without the repository or a build.
+It is built by Zone's CI from the same `Containerfile` that `./run.sh up` builds from, so it is the same Zone, started by `compose.nas.yaml` instead of `run.sh` (and searching by keywords only for now).
 
 1. Create the wiki folder, empty or with Markdown files in it.
 2. Put `compose.nas.yaml` from the repository in a folder, and next to it a `.env` with:

@@ -99,7 +99,8 @@ Unlike `compose.yaml`:
   a wrong UID would only show later as files Zone can't write);
 - the port is `${ZONE_PORT:-5080}:5000` on every interface (not 5000 on the host: Synology's DSM uses it);
 - no `selinux: Z` (NAS systems have no SELinux, and older compose versions reject the option);
-- the log is capped (`max-size` 10m, 3 files).
+- the log is capped (`max-size` 10m, 3 files);
+- what is built in comes with the image, not from git or `.env`: the build string is CI's (`ZONE_BUILD`, Version), and `ZONE_SEMANTIC_SEARCH` is the image's (off for now: Semantic search paused, below).
 
 The rest is as in `compose.yaml` (`init`, `restart`, healthcheck, `create_host_path: false`).
 
