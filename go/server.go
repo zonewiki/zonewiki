@@ -192,7 +192,9 @@ func main() {
 			"Move it to a user's folder (%s/<name>/) or out of %s/.", p, privateDir, privateDir, privateDir)
 	}
 	sessionKey = secretKey(cfg.Data)
-	gitSetup()
+	if err := gitSetup(); err != nil {
+		fatal(err)
+	}
 	if err := missingUsers(); err != nil {
 		fatal(err)
 	}

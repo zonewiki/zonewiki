@@ -59,16 +59,21 @@ func wikiRel(path string) (string, bool) {
 // gitSetup makes the wiki a repository (its files as the first commit), or
 // gives an existing one a committer, and points origin at the git-remote setting.
 // It says in the log which it did: made the repository, found one, or
-// found no git to keep a history with.
-func gitSetup() {
+// found no git to keep a history with. The error: the folder is inside
+// another repository that doesn't ignore it (outerRepo), so Zone doesn't
+// start.
+func gitSetup() error {
 	if !cfg.GitEnabled {
 		logf("git isn't installed (not on PATH): the wiki keeps no history, so no versions or undo")
-		return
+		return nil
 	}
 	if _, err := os.Stat(filepath.Join(cfg.Data, ".git")); err != nil {
+		if err := outerRepo(); err != nil {
+			return err
+		}
 		if r := runGit("init"); r.Code != 0 {
 			logf("git init failed, so there is no history: %s", strings.TrimSpace(r.Stderr))
-			return
+			return nil
 		}
 		setCommitter()
 		// Before the first add: .zone/ holds the session key.
@@ -96,6 +101,43 @@ func gitSetup() {
 		}
 	}
 	setGitRemote()
+	return nil
+}
+
+// outerRepo: an error when the wiki's folder, not a repository yet, lies
+// inside another one's working tree, which doesn't ignore it. A repository
+// of the wiki's own there would hide its pages from the outer one (git
+// takes a folder with a .git for another project: its add records a
+// pointer, not the files), and it is most often a mistake: a ZONE_DATA
+// that names a folder of a checkout. Where the outer repository ignores
+// the folder (a home folder kept in git for its dotfiles, ignoring the
+// rest), the wiki's own repository is what was meant. A folder that is a
+// repository already is the wiki's, wherever it lies (gitSetup).
+func outerRepo() error {
+	r := runGit("rev-parse", "--show-toplevel")
+	top := strings.TrimSpace(r.Stdout)
+	if r.Code != 0 || top == "" {
+		return nil // in no repository, or in one git won't read (another owner's): as before
+	}
+	if real, err := filepath.EvalSymlinks(top); err == nil {
+		top = real
+	}
+	rel, err := filepath.Rel(top, cfg.Data)
+	if err != nil || rel == "." {
+		return nil
+	}
+	// check-ignore takes no literal pathspecs (Zone's default for git), so
+	// the folder's name is one with its glob characters escaped.
+	spec := strings.NewReplacer(`\`, `\\`, "*", `\*`, "?", `\?`, "[", `\[`).Replace(filepath.ToSlash(rel)) + "/"
+	ignored := gitrepo.Repo{Dir: top}.Run(context.Background(),
+		gitrepo.Call{Timeout: gitTimeout, Env: []string{"GIT_LITERAL_PATHSPECS=0"}}, "check-ignore", "-q", "--", spec)
+	if ignored.Code == 0 {
+		return nil
+	}
+	return fmt.Errorf("%s is inside the git repository %s, which doesn't ignore it. "+
+		"Zone keeps the wiki's history in a repository of its own, which would hide the wiki's files from that one. "+
+		"Use a folder outside it, or add the folder to that repository's .gitignore (%s/), then start Zone again.",
+		cfg.Data, top, filepath.ToSlash(rel))
 }
 
 // setGitRemote points origin at git-remote (the settings file): at start, and when the setting changes.

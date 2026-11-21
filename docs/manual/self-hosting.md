@@ -87,6 +87,7 @@ The first build takes a few minutes; later starts are quick.
 The wiki folder must exist before Zone starts: Zone won't create one where a typo points.
 To use a folder of Markdown notes you already have, set `ZONE_DATA` in `.env` to it.
 Zone makes it a git repository if it isn't one, and adds a home page.
+A folder inside another git repository (a folder of a project you keep in git) needs that repository to ignore it first, in its `.gitignore`: otherwise Zone doesn't start, and says so.
 What ends up in the folder is described in [Your data](your-data.md).
 
 `./run.sh` works out what compose can't: your user ID (so the wiki's files stay yours), your timezone, and whether to listen beyond localhost.

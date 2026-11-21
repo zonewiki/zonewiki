@@ -799,3 +799,87 @@ func TestTheCommitGraphIsWritten(t *testing.T) {
 		t.Errorf("the log didn't use the graph's filters: %s", r.Stderr)
 	}
 }
+
+// A wiki folder inside another repository's working tree gets a
+// repository of its own only where the outer one ignores the folder (a
+// home folder kept in git for its dotfiles); otherwise Zone refuses to
+// start, and says how to go on. A folder that is a repository already is
+// the wiki's wherever it lies, and a folder in no repository is made one.
+func TestAWikiInsideAnotherRepository(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("no git")
+	}
+	git := func(dir string, args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+	}
+	start := func(wiki string) error {
+		t.Helper()
+		testWiki(t, nil)
+		real, err := filepath.EvalSymlinks(wiki)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cfg.Data, cfg.GitEnabled = real, true
+		return gitSetup()
+	}
+	outer, _ := filepath.EvalSymlinks(t.TempDir())
+	git(outer, "init", "-q")
+	notes := filepath.Join(outer, "docs", "notes")
+	if err := os.MkdirAll(notes, 0o777); err != nil {
+		t.Fatal(err)
+	}
+
+	// Not ignored: refused, nothing made, and the message says how to go on.
+	err := start(notes)
+	if err == nil || !strings.Contains(err.Error(), "is inside the git repository "+outer) ||
+		!strings.Contains(err.Error(), ".gitignore (docs/notes/)") {
+		t.Fatalf("not refused as it should be: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(notes, ".git")); err == nil {
+		t.Error("a nested repository was made all the same")
+	}
+
+	// Ignored by the outer repository (the folder, or a folder above it): its own repository.
+	for _, ignore := range []string{"docs/notes/\n", "docs/\n", "*\n"} {
+		if err := os.WriteFile(filepath.Join(outer, ".gitignore"), []byte(ignore), 0o666); err != nil {
+			t.Fatal(err)
+		}
+		if err := start(notes); err != nil {
+			t.Fatalf("ignored as %q, refused: %v", ignore, err)
+		}
+		if _, err := os.Stat(filepath.Join(notes, ".git")); err != nil {
+			t.Fatalf("ignored as %q, no repository made", ignore)
+		}
+		_ = os.RemoveAll(filepath.Join(notes, ".git"))
+	}
+
+	// A folder whose name has glob characters is judged by that name alone.
+	odd := filepath.Join(outer, "a*", "x")
+	if err := os.MkdirAll(odd, 0o777); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.MkdirAll(filepath.Join(outer, "ab", "x"), 0o777)
+	if err := os.WriteFile(filepath.Join(outer, ".gitignore"), []byte("ab/\n"), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	if err := start(odd); err == nil {
+		t.Error("a*/x passed for ab/x, which is ignored")
+	}
+
+	// A repository already (made by hand, or by Zone before): the wiki's, wherever it lies.
+	_ = os.Remove(filepath.Join(outer, ".gitignore"))
+	git(notes, "init", "-q")
+	if err := start(notes); err != nil {
+		t.Fatalf("an existing repository refused: %v", err)
+	}
+
+	// The outer repository's own top is no folder inside it: Zone goes on with it.
+	if err := start(outer); err != nil {
+		t.Fatalf("the repository's top refused: %v", err)
+	}
+}
