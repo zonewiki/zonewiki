@@ -2743,10 +2743,27 @@ class TestVersion:
         assert r.returncode == 0, r.stderr
         assert (tmp_path / "index.md").exists()
 
-    def test_a_folder_that_is_a_repository_needs_no_init(self, tmp_path):
-        # Notes kept in git already: the wiki's history goes on from it.
+    def test_a_repository_with_files_is_no_wiki_yet(self, tmp_path):
+        # A .git doesn't make a folder a wiki: a project's checkout or a
+        # home folder kept in git has one, and Zone would commit into it.
+        # Refused untouched, as any folder with files; --init once, for
+        # notes kept in git, whose history then goes on.
+        wiki = Path(os.path.realpath(tmp_path))
+        subprocess.run(["git", "init", "-q", str(wiki)], check=True)
+        (wiki / "a.md").write_text("# Note\n", encoding="utf-8")
+        r = self._start(wiki, home=tmp_path)
+        assert r.returncode != 0
+        assert f"{wiki} holds files (a.md) but isn't a wiki yet" in r.stderr
+        assert "commits its changes to the git repository there" in r.stderr
+        assert sorted(p.name for p in wiki.iterdir()) == [".git", "a.md"]
+        r = self._start(wiki, tmp_path, "--init")
+        assert r.returncode == 0, r.stderr
+        assert f"found a git repository in {wiki}" in r.stderr and (wiki / ".zone-format").exists()
+        r = self._start(wiki, home=tmp_path)
+        assert r.returncode == 0, r.stderr
+
+    def test_an_empty_repository_needs_no_init(self, tmp_path):
         subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
-        (tmp_path / "a.md").write_text("# Note\n", encoding="utf-8")
         r = self._start(tmp_path, home=tmp_path)
         assert r.returncode == 0, r.stderr
 

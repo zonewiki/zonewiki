@@ -48,7 +48,7 @@ On a Mac, `xcode-select --install` installs it (or `brew install git`); on Linux
 
 Your wiki is the folder `zonewiki` in your home folder, made at the first start; the terminal says where.
 To keep it elsewhere, start Zone with that folder.
-To use a folder of Markdown notes you already have, add `--init` the first time:
+To use a folder of Markdown notes you already have (kept in git or not), add `--init` the first time:
 
 ```bash
 ZONE_DATA=~/Documents/notes ./zonewiki --init

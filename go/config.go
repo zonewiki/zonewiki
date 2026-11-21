@@ -216,11 +216,13 @@ func defaultData(getenv func(string) string) (string, error) {
 }
 
 // newWikiError: why Zone doesn't make the wiki's folder a wiki without
-// being asked (--init, ZONE_INIT): it isn't one yet (no .git, no
-// .zone-format) and holds files, which a start would make the wiki's
-// pages and, with git, commit, all of them. That is what a folder of
-// notes wants once, and what a mistyped ZONE_DATA (the home folder, a
-// Documents folder) must never get. An empty folder needs nothing, nor
+// being asked (--init, ZONE_INIT): it isn't one yet (no .zone-format) and
+// holds files, which a start would make the wiki's pages and, with git,
+// commit, all of them. That is what a folder of notes wants once, and
+// what a mistyped ZONE_DATA (the home folder, a Documents folder, a
+// project's checkout) must never get. A .git doesn't make a folder a
+// wiki: a checkout and a home folder kept in git have one, and Zone would
+// commit its pages into that repository. An empty folder needs nothing, nor
 // one with only what Zone's own commands write before a first start
 // (.zone/, the settings file) or an older start made (_assets/). Asked at
 // start before Zone writes anything in the folder.
@@ -228,10 +230,8 @@ func newWikiError() error {
 	if cfg.Init {
 		return nil
 	}
-	for _, marker := range []string{".git", formatFileName} {
-		if _, err := os.Lstat(filepath.Join(cfg.Data, marker)); err == nil {
-			return nil
-		}
+	if _, err := os.Lstat(formatPath()); err == nil {
+		return nil
 	}
 	entries, err := os.ReadDir(cfg.Data)
 	if err != nil {
@@ -239,8 +239,8 @@ func newWikiError() error {
 	}
 	var names []string
 	for _, e := range entries {
-		if e.Name() == stateDirName || e.Name() == "_assets" {
-			continue
+		if e.Name() == stateDirName || e.Name() == "_assets" || e.Name() == ".git" {
+			continue // an empty repository holds no files either
 		}
 		name := e.Name()
 		if e.IsDir() {
@@ -255,10 +255,14 @@ func newWikiError() error {
 	if len(names) > 3 {
 		shown += fmt.Sprintf(" and %d more", len(names)-3)
 	}
+	history := "the first commit of its history"
+	if isDir(filepath.Join(cfg.Data, ".git")) {
+		history = "Zone commits its changes to the git repository there"
+	}
 	return fmt.Errorf("%s holds files (%s) but isn't a wiki yet. Zone would make it one: its files become the wiki's "+
-		"pages and the first commit of its history. If that is what you want, start Zone once with --init "+
+		"pages and %s. If that is what you want, start Zone once with --init "+
 		"(or ZONE_INIT=1, in .env for the container); else set ZONE_DATA to an empty folder or to your wiki.",
-		cfg.Data, shown)
+		cfg.Data, shown, history)
 }
 
 // published: ZONE_BIND, the address compose publishes Zone's port on
