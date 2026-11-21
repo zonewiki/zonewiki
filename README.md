@@ -73,23 +73,23 @@ ZONE_DATA=~/notes ./zonewiki          # or: a folder of Markdown notes you alrea
 Open <http://localhost:5000>.
 On a Mac, see [With the binary](docs/manual/self-hosting.md#with-the-binary) first: the binary isn't signed.
 
-**With Docker** or Podman and Compose, from the repository.
+**With Docker** or Podman and Compose, from the prebuilt image (amd64 and arm64): no repository, no build.
 It is tested on Linux, and should work on macOS and in WSL2.
 
 ```bash
-git clone https://github.com/zonewiki/zonewiki && cd zonewiki
-mkdir -p ~/zonewiki                   # your wiki folder
-cp .env.example .env                  # its ZONE_DATA=~/zonewiki is your wiki folder: change it for another
-./run.sh up                           # build and start
+mkdir -p ~/zonewiki ~/zonewiki-docker && cd ~/zonewiki-docker
+curl -fsSLO https://raw.githubusercontent.com/zonewiki/zonewiki/main/compose.image.yaml
+printf 'ZONE_DATA=%s\nZONE_UID=%s\nZONE_GID=%s\nTZ=Europe/Vienna\n' ~/zonewiki "$(id -u)" "$(id -g)" > .env
+docker compose -f compose.image.yaml up -d
 ```
 
 Open <http://localhost:5000>.
 
 Either way, Zone answers only on your computer, with no login.
 Settings such as `ZONE_DATA` are lines in `.env` for the container; the binary reads no `.env` and takes them as environment variables, as above.
-To reach Zone from your phone or let your team in, [set a login](docs/manual/self-hosting.md#setting-a-login) and [open it to other devices](docs/manual/self-hosting.md#reaching-it-from-other-devices).
+To reach Zone from your phone or let your team in, [set a login](docs/manual/self-hosting.md#setting-a-login) and [open it to other devices](docs/manual/self-hosting.md#reaching-it-from-other-devices); on a NAS or server (Synology, a Raspberry Pi, …), see [On a NAS or server](docs/manual/self-hosting.md#on-a-nas-or-server).
 
-**On a NAS or server** (Synology, a Raspberry Pi, …) you don't need the repository: `compose.nas.yaml` runs the prebuilt image `ghcr.io/zonewiki/zonewiki` (amd64 and arm64).
+**From the repository**, `./run.sh up` builds the image from a checkout: to change Zone, or for search by meaning.
 **From source**, build the Go binary yourself.
 All of these are described in [Running Zone yourself](docs/manual/self-hosting.md), with [where settings live](docs/manual/self-hosting.md#where-settings-live).
 

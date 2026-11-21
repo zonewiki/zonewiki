@@ -1,6 +1,6 @@
 # Tests and a secret scan on every push and pull request; on main (and v*
 # tags) the image is then built for amd64 and arm64 and pushed to GitHub's
-# container registry as ghcr.io/<owner>/zonewiki, which compose.nas.yaml
+# container registry as ghcr.io/<owner>/zonewiki, which compose.image.yaml
 # pulls. On a v* tag the release binaries are attached to its GitHub release.
 #
 # The same checks as .forgejo/workflows/ci.yml, on GitHub's runners (not

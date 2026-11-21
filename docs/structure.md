@@ -20,8 +20,8 @@ What each file and folder of the repository is for.
 ├── docs/screenshots/       # The README's and the manual's screenshots + make_screenshots.py (./run.sh screenshots)
 ├── Containerfile           # The image: a Go build stage (Zone's own files built in), onnxruntime + the model (opt-in), an Ubuntu 26.04 LTS runtime with the binary and the licenses
 ├── compose.yaml            # Builds and runs the image (run.sh drives it)
-├── compose.podman.yaml     # Rootless podman only: userns keep-id (run.sh adds it)
-├── compose.nas.yaml        # NAS/server: runs the prebuilt ghcr.io image, no build (see docs/spec/deployment.md)
+├── compose.podman.yaml     # Rootless podman only: userns keep-id (run.sh adds it; with compose.image.yaml, a second -f)
+├── compose.image.yaml      # Runs the prebuilt ghcr.io image, no checkout or build (see docs/spec/deployment.md)
 ├── Containerfile.tools     # Tools image: Go (and gcc, for its race detector), Playwright + Chromium, the tests' Python packages, Node for tasks-core tests, gitleaks, git, pngquant
 ├── run.sh                  # Helper script: build/up/down/logs, user/config (via compose), test/e2e/bench/retrieval/binaries/leaks (CI runs these too); bash 3.2-compatible (macOS)
 ├── .githooks/pre-commit    # Refuses a commit with a secret in it (gitleaks); on with git config core.hooksPath .githooks

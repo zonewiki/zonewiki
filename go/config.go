@@ -38,7 +38,7 @@ type Config struct {
 	AllowRemote bool   // listen on the LAN: no Host check unless Hosts is set
 	Published   bool   // open to the network: the container's port (ZONE_BIND, from compose), or --addr beyond loopback
 	// PortMapped: compose publishes Zone's port (ZONE_BIND is set), maybe
-	// as another one (compose.nas.yaml: 5080), so the address Zone listens
+	// as another one (compose.image.yaml: ZONE_PORT), so the address Zone listens
 	// on isn't the one to open it at (openURL).
 	PortMapped bool
 	// IdleExit: Zone exits after this long without a request, when it
@@ -215,7 +215,7 @@ func defaultData(getenv func(string) string) (string, error) {
 }
 
 // published: ZONE_BIND, the address compose publishes Zone's port on
-// (compose.yaml hands it in; compose.nas.yaml says 0.0.0.0), isn't this
+// (compose.yaml and compose.image.yaml hand it in), isn't this
 // machine alone: other devices reach Zone. Not set (Zone run by hand):
 // not known, so no.
 func published(bind string) bool {

@@ -18,7 +18,7 @@ def _example_keys() -> set[str]:
 def _used_keys() -> set[str]:
     text = "".join(p.read_text(encoding="utf-8")
                    for p in [*(REPO / "go").glob("*.go"), REPO / "run.sh", REPO / "compose.yaml",
-                             REPO / "compose.nas.yaml"] if not p.name.endswith("_test.go"))
+                             REPO / "compose.image.yaml"] if not p.name.endswith("_test.go"))
     return set(re.findall(r"\bZONE_[A-Z0-9_]+", text)) - INTERNAL
 
 

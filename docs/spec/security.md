@@ -94,7 +94,7 @@ Behind the proxy the session cookie is `Secure` (The session cookie, below), and
 
 - **No login on localhost.**
   There, anyone who can reach the port can read, change and delete everything.
-  Opened to the network (`ZONE_ALLOW_REMOTE=1`, names in `hosts`, or `compose.nas.yaml`), Zone shows nothing until a login is set (First run, below), unless `no-login = yes` says it is open on purpose.
+  Opened to the network (`ZONE_ALLOW_REMOTE=1`, names in `hosts`, or a published port, `ZONE_BIND=0.0.0.0`), Zone shows nothing until a login is set (First run, below), unless `no-login = yes` says it is open on purpose.
   Every user reads everything except other users' private pages and tasks and the pages of groups they aren't in, and all but viewers can change it.
   So give access to no one you wouldn't hand the shared files to.
 - **Private means private inside Zone.**
@@ -224,7 +224,7 @@ The Host check is no login: a client on the LAN sends `Host: localhost`.
 - `ZONE_ALLOW_REMOTE` is set,
 - `hosts` names a host,
 - the container's port is published beyond localhost, which compose tells Zone in `ZONE_BIND` (`Config.Published`).
-  `compose.yaml` hands on its own `${ZONE_BIND:-127.0.0.1}`; `compose.nas.yaml`, whose port is on every interface, says `0.0.0.0`,
+  `compose.yaml` and `compose.image.yaml` hand on the `${ZONE_BIND:-127.0.0.1}` their port is published on,
 - without `ZONE_BIND`, Zone listens beyond loopback: `--addr` names every interface (`0.0.0.0:5000`, `[::]:5000`), another address of the machine, or a name (`beyondLoopback`, also `Config.Published`).
   The image's own command is `--addr 0.0.0.0:5000`, so a container started without compose (`docker run -p 5000:5000`) asks for a login too.
 
