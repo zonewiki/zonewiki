@@ -145,7 +145,7 @@ func newMDRenderer(inline bool) *mdRenderer {
 }
 
 // urlRE: goldmark's linkify pattern, but the host needs no dot, so a bare
-// http://localhost:5000 or http://nas:5000 in a self-hosted wiki is a link.
+// http://localhost:5080 or http://nas:5080 in a self-hosted wiki is a link.
 var urlRE = regexp.MustCompile(`^(?:http|https|ftp)://[-a-zA-Z0-9@:%._\+~#=]{1,256}(?:\.[a-z]+)?(?::\d+)?(?:[/#?][-a-zA-Z0-9@:%_+.~#$!?&/=\(\);,'">\^{}\[\]` + "`" + `]*)?`)
 
 // alertTransformer: a blockquote whose first line is [!NOTE], [!TIP],

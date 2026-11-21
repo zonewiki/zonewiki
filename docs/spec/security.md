@@ -57,7 +57,7 @@ What someone running Zone should know (the README sends them here).
 
 Out of the box Zone listens on localhost only:
 with `run.sh` and compose, the container's port is published on the host's loopback (`ZONE_BIND=127.0.0.1`);
-the binary run by hand listens on `127.0.0.1:5000`, as a port alone in `--addr` (`:5000`, the default) means localhost unless `ZONE_ALLOW_REMOTE` is set (`listenAddr` in `go/server.go`).
+the binary run by hand listens on `127.0.0.1:5080`, as a port alone in `--addr` (`:5080`, the default) means localhost unless `ZONE_ALLOW_REMOTE` is set (`listenAddr` in `go/server.go`).
 It refuses a foreign `Host` header (DNS rebinding) and cross-site writes.
 Anything reachable beyond localhost belongs behind HTTPS, with a login (`./run.sh config passwd`, or users).
 
@@ -70,7 +70,7 @@ Name the public host in `hosts`.
 
 ```
 wiki.example.org {
-    reverse_proxy localhost:5000
+    reverse_proxy localhost:5080
 }
 ```
 
@@ -81,7 +81,7 @@ wiki.example.org {
 ```
 
 Leave `ZONE_ALLOW_REMOTE` off then.
-The proxy reaches Zone on localhost, and port 5000 stays closed to the network, so nobody can go around HTTPS.
+The proxy reaches Zone on localhost, and port 5080 stays closed to the network, so nobody can go around HTTPS.
 A proxy on another machine needs `ZONE_ALLOW_REMOTE=1` too; `hosts` keeps the `Host` check on.
 Zone can also listen on a Unix socket instead of a port (A Unix socket in `docs/spec/deployment.md`).
 
@@ -225,8 +225,8 @@ The Host check is no login: a client on the LAN sends `Host: localhost`.
 - `hosts` names a host,
 - the container's port is published beyond localhost, which compose tells Zone in `ZONE_BIND` (`Config.Published`).
   `compose.build.yaml` and `compose.yaml` hand on the `${ZONE_BIND:-127.0.0.1}` their port is published on,
-- without `ZONE_BIND`, Zone listens beyond loopback: `--addr` names every interface (`0.0.0.0:5000`, `[::]:5000`), another address of the machine, or a name (`beyondLoopback`, also `Config.Published`).
-  The image's own command is `--addr 0.0.0.0:5000`, so a container started without compose (`docker run -p 5000:5000`) asks for a login too.
+- without `ZONE_BIND`, Zone listens beyond loopback: `--addr` names every interface (`0.0.0.0:5080`, `[::]:5080`), another address of the machine, or a name (`beyondLoopback`, also `Config.Published`).
+  The image's own command is `--addr 0.0.0.0:5080`, so a container started without compose (`docker run -p 5080:5080`) asks for a login too.
 
 On localhost alone Zone needs no login: a port alone in `--addr` listens on `127.0.0.1`, and a socket (`unix:PATH`, `fd:N`) is its owner's to open.
 
@@ -529,7 +529,7 @@ Cross-site writes are refused (`crossSite`, checked after the Host check).
 A POST, PUT, PATCH or DELETE whose `Origin` header names another site, or is `null` (a sandboxed iframe), gets 403.
 Requests without `Origin` (curl, scripts) are allowed.
 
-Without it any web page could post a form to `localhost:5000` and delete or overwrite pages, or write tasks (the tasks API parses text/plain bodies, which need no CORS preflight).
+Without it any web page could post a form to `localhost:5080` and delete or overwrite pages, or write tasks (the tasks API parses text/plain bodies, which need no CORS preflight).
 Raw HTML in markdown would turn such an overwrite into a stored script.
 
 Behind a reverse proxy the proxy must pass the original `Host` through, or same-origin writes would be refused.

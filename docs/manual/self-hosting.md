@@ -44,7 +44,7 @@ On a Mac, `xcode-select --install` installs it (or `brew install git`); on Linux
    ./zonewiki
    ```
 
-3. Open <http://localhost:5000>.
+3. Open <http://localhost:5080>.
 
 Your wiki is the folder `zonewiki` in your home folder, made at the first start; the terminal says where.
 To keep it elsewhere, start Zone with that folder.
@@ -65,8 +65,8 @@ Take the download mark off it once, then start it again:
 xattr -d com.apple.quarantine zonewiki
 ```
 
-If port 5000 is taken, Zone says so and stops; on a Mac, AirPlay Receiver often has it.
-Start Zone on another port, `./zonewiki --addr :5001`, and open <http://localhost:5001>.
+If port 5080 is taken, Zone says so and stops.
+Start Zone on another port, `./zonewiki --addr :5081`, and open <http://localhost:5081>.
 
 `./zonewiki --help` lists its commands and settings.
 The binary searches by keywords, not by meaning; how it is built is in [Release binaries](../spec/deployment.md#release-binaries).
@@ -92,7 +92,7 @@ echo 'ZONE_DATA=~/zonewiki' > .env
 ./run.sh up
 ```
 
-Open <http://localhost:5000>; Zone answers only on this computer.
+Open <http://localhost:5080>; Zone answers only on this computer.
 The first start downloads the image.
 Each `./run.sh` command says what it is doing in lines starting with `==>`; `./run.sh --help` lists them.
 
@@ -112,10 +112,10 @@ For your phone or other computers to reach it, open it to the network in `.env`,
 
 ```bash
 ZONE_ALLOW_REMOTE=1
-ZONE_PORT=5080          # optional: another port; on a Synology, DSM has 5000
+ZONE_PORT=5081          # optional: another port than 5080
 ```
 
-Open it at `http://<the machine's address>:5080` (the port in `ZONE_PORT`, else 5000).
+Open it at `http://<the machine's address>:5080` (the port in `ZONE_PORT`, else 5080).
 To open it by a name, tell Zone the name: `./run.sh config set hosts nas.local`.
 On the network Zone asks for a password in the browser before it shows anything; or set a login first, `./run.sh user add anna`.
 
@@ -135,7 +135,7 @@ cp .env.example .env                  # ZONE_DATA is your wiki folder
 ./run.sh up                           # build and start
 ```
 
-Open <http://localhost:5000>.
+Open <http://localhost:5080>.
 The first build takes a few minutes; later starts are quick.
 Zone is compiled inside the container's image, so no `zonewiki` file appears in the folder; `./run.sh binaries` builds the binaries for Linux and macOS into `dist/`, to run Zone without a container.
 Everything else is as [with Docker](#with-docker): the same commands, the same `.env`.
@@ -214,7 +214,7 @@ A running Zone then keeps the settings it had and says so in its log; a Zone sta
 | `ZONE_ALLOW_REMOTE` | Environment | `1`: other devices on the network reach Zone |
 | `ZONE_PUBLIC` | Environment | `view` or `edit`: people read, or edit, without signing in |
 | `ZONE_SIGNUP`, `ZONE_SMTP_*` | Environment | Sign-up and the mail server ([Mail](#mail)) |
-| `ZONE_PORT` | Environment | The host's port, in a container (default 5000) |
+| `ZONE_PORT` | Environment | The host's port, in a container (default 5080) |
 | `hosts` | `.zone/config` | Names Zone is opened by: `wiki.example.org, nas.local` |
 | `base-url` | `.zone/config` | Zone's address as people know it: `https://wiki.example.org` |
 | `git-remote` | `.zone/config` | A remote to push the history to ([Your data](your-data.md#backups)) |
@@ -269,7 +269,7 @@ To reach it from your phone or another computer on the same network:
    ZONE_ALLOW_REMOTE=1 ./zonewiki
    ```
 
-2. Open `http://<the machine's address>:5000`, such as `http://192.168.1.20:5000`.
+2. Open `http://<the machine's address>:5080`, such as `http://192.168.1.20:5080`.
 
 Any IP address then works.
 To open Zone by a name instead (`nas.local`, `wiki.example.org`), add the name to `hosts`:
@@ -306,7 +306,7 @@ Put a reverse proxy in front of Zone that handles HTTPS.
 
 ```
 wiki.example.org {
-    reverse_proxy localhost:5000
+    reverse_proxy localhost:5080
 }
 ```
 
@@ -318,7 +318,7 @@ Then tell Zone its name and address, and set the login:
 ./run.sh config passwd
 ```
 
-Leave `ZONE_ALLOW_REMOTE` off: the proxy reaches Zone on localhost, and nobody can go around HTTPS to port 5000.
+Leave `ZONE_ALLOW_REMOTE` off: the proxy reaches Zone on localhost, and nobody can go around HTTPS to port 5080.
 A proxy on another machine needs `ZONE_ALLOW_REMOTE=1`, and its address in `trusted-proxies` so that wrong passwords are counted per visitor, not all as the proxy's.
 Any other proxy must pass on the original host name and say the request came over HTTPS (`X-Forwarded-Proto`).
 See [Self-hosting behind HTTPS](../spec/security.md#self-hosting-behind-https).

@@ -138,7 +138,7 @@ It lives in the host directory pointed to by `ZONE_DATA` (default: `~/zonewiki`)
 ./run.sh config check|set|unset|passwd|token  # the wiki's settings file: check it, set a key, password and MCP token without users
 ```
 
-Zone is at **http://localhost:5000**.
+Zone is at **http://localhost:5080**.
 The deployment's settings are in `.env` (gitignored; `ZONE_DATA`, `ZONE_ALLOW_REMOTE`, `TZ` …, read once into `cfg`); the wiki's own (users, password, MCP token, hosts, locale …) are in the wiki's settings file `.zone/config`, kept out of git and reloaded when it changes (`settings()`).
 The wiki lives outside the repo, in `ZONE_DATA` (default `~/zonewiki`), which must exist (unset, the binary makes `~/zonewiki`): pages at its root and in folders, uploads in `_assets/`, tasks and their lists in `_tasks/`, the settings file, the search index files, the semantic cache and session key in `.zone/`.
 Details: `docs/spec/deployment.md`.
@@ -147,7 +147,7 @@ Without the container (Go 1.27 and a C compiler; `CGO_ENABLED=0` builds one with
 
 ```bash
 (cd go && go build -o zonewiki .)
-go/zonewiki                                      # http://localhost:5000, the wiki in ~/zonewiki (ZONE_DATA=… for another), the checkout's public/ and docs/
+go/zonewiki                                      # http://localhost:5080, the wiki in ~/zonewiki (ZONE_DATA=… for another), the checkout's public/ and docs/
 ZONE_DATA=~/zonewiki go/zonewiki eval FILE       # measure retrieval
 ```
 
@@ -274,4 +274,4 @@ Where a guard is named, it fails for a forgotten step; where none is, only the r
 - **The data format** (`.zone-format`, `wikiFormat` in `go/wikiformat.go`): a change to what Zone keeps in git that an older Zone would misread raises it, with a start-up step that writes the new number in its own commit (The data format in `docs/spec/deployment.md`).
 - `index.md` always exists and can't be deleted or renamed; a rename re-points every link to the page, on pages and in tasks, in one commit.
 - `ZONE_ALLOW_REMOTE` is the one knob for network access, with `run.sh` and for the binary; unset, the port is bound to loopback (compose's mapping; the binary's `--addr :PORT` on `127.0.0.1`, `listenAddr`).
-  The container itself listens on every interface (the `Containerfile`'s `--addr 0.0.0.0:5000`); don't make the binary's default do so.
+  The container itself listens on every interface (the `Containerfile`'s `--addr 0.0.0.0:5080`); don't make the binary's default do so.

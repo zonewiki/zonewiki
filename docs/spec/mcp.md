@@ -25,7 +25,7 @@ So the wiki keeps up with what the user looks up, without the model writing on i
 ## Connecting an assistant
 
 **Two ways in.**
-With a login, a client is given only the address, `http://localhost:5000/mcp`: it opens the wiki in its user's browser, they sign in and allow it, and it gets tokens of its own (Connecting with OAuth, below).
+With a login, a client is given only the address, `http://localhost:5080/mcp`: it opens the wiki in its user's browser, they sign in and allow it, and it gets tokens of its own (Connecting with OAuth, below).
 Or a client registers the address with the HTTP transport and the header `Authorization: Bearer <token>`, a token that doesn't change, from the page **Connect an assistant** (below) or from `./run.sh config token` (with users, `./run.sh user token NAME`): for a client that can't open a browser, a script, or a wiki without a login.
 Either way the assistant acts as the user whose token it is.
 
@@ -689,7 +689,7 @@ The tools' descriptions say only that a move to fewer readers is an admin's, or 
 
 ## Links and file paths
 
-**Links** in tool results start with `base-url` from the settings file (e.g. `http://localhost:5000`, Zone's address as your browser knows it) when set, else with the address the request came in on (`siteURL`, as the page and OAuth's addresses: https when Zone's own connection is, or a proxy's `X-Forwarded-Proto: https` says so).
+**Links** in tool results start with `base-url` from the settings file (e.g. `http://localhost:5080`, Zone's address as your browser knows it) when set, else with the address the request came in on (`siteURL`, as the page and OAuth's addresses: https when Zone's own connection is, or a proxy's `X-Forwarded-Proto: https` says so).
 A client in a container reaches Zone as `host.containers.internal`, and links with that host don't open in the browser on the host.
 
 **File paths** (`file:`, `hostFile`: search_wiki's sections, read_page) are the host's wiki folder plus `<slug>.md` (a slug is the file's path relative to the wiki, unchanged): `ZONE_HOST_DATA`, which `run.sh` sets to `ZONE_DATA`'s host path, since inside the container the wiki is only `/wiki-data`;

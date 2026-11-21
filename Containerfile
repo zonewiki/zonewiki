@@ -137,6 +137,6 @@ ENV ZONE_BUILD=$ZONE_BUILD
 # an account here): git gets a HOME it can use.
 ENV HOME=/tmp
 
-EXPOSE 5000
+EXPOSE 5080
 
-CMD ["/app/zonewiki", "--addr", "0.0.0.0:5000"]
+CMD ["/app/zonewiki", "--addr", "0.0.0.0:5080"]

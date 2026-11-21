@@ -1,5 +1,5 @@
 // Zone's web server: one process, its request checks and routes.
-// Run: zonewiki [--addr :5000] [--public dir], the wiki in ZONE_DATA
+// Run: zonewiki [--addr :5080] [--public dir], the wiki in ZONE_DATA
 // (default ~/zonewiki). Also: zonewiki eval
 // measures retrieval (eval.go), zonewiki health asks a running Zone whether
 // it answers (the container's healthcheck), zonewiki user and zonewiki config edit
@@ -38,7 +38,7 @@ func logf(format string, args ...any) {
 }
 
 const usage = `Usage: zonewiki [--addr ADDRESS] [--init] [--public FOLDER] [--docs FOLDER]
-  serve the wiki in ZONE_DATA (http://localhost:5000, this machine alone unless ZONE_ALLOW_REMOTE;
+  serve the wiki in ZONE_DATA (http://localhost:5080, this machine alone unless ZONE_ALLOW_REMOTE;
   --addr unix:PATH: on a Unix socket, for a reverse proxy on this machine)
 
 Commands:
@@ -105,7 +105,7 @@ func isHelp(arg string) bool {
 }
 
 func main() {
-	addr := flag.String("addr", ":5000", "the `address` to listen on (:PORT: on localhost, on every interface with ZONE_ALLOW_REMOTE; 0.0.0.0:PORT: every interface; 127.0.0.1:0: a free port; unix:PATH: a Unix socket; fd:3: the socket systemd hands over)")
+	addr := flag.String("addr", ":5080", "the `address` to listen on (:PORT: on localhost, on every interface with ZONE_ALLOW_REMOTE; 0.0.0.0:PORT: every interface; 127.0.0.1:0: a free port; unix:PATH: a Unix socket; fd:3: the socket systemd hands over)")
 	public := flag.String("public", "", "the `folder` of the browser code (default: public/ next to the binary or in its checkout, else the copy built into it)")
 	flag.StringVar(&docsDir, "docs", "", "the `folder` of README.md and docs/ (the manual, the spec), for /help and zone_help (default: beside the browser code's folder, else the copy built into the binary)")
 	initWiki := flag.Bool("init", false, "make the wiki's folder a wiki though it holds files already (ZONE_INIT=1 does the same): its files become the wiki's pages and its first commit")
@@ -227,7 +227,7 @@ func main() {
 	}
 
 	// Localhost by default (listenAddr); in the container every interface
-	// (the Containerfile's --addr 0.0.0.0:5000), so its network bridge can
+	// (the Containerfile's --addr 0.0.0.0:5080), so its network bridge can
 	// forward connections, and exposure is the port mapping's (the compose files'
 	// ZONE_BIND, 127.0.0.1 = localhost only). The Host check is the
 	// DNS-rebinding defence, not a door. Or a Unix socket, for a reverse proxy.
@@ -288,11 +288,11 @@ func openURL(ln net.Listener, baseURL string) string {
 }
 
 // portTaken: a listen error, with what to do when another program has the
-// port: on a Mac, AirPlay Receiver listens on 5000, Zone's default.
+// port: on a Mac, AirPlay Receiver listens on 5000, which is why Zone's default is not.
 func portTaken(err error) error {
 	if errors.Is(err, syscall.EADDRINUSE) {
 		return fmt.Errorf("%w. Another program has that port (on a Mac, AirPlay Receiver has 5000): "+
-			"start Zone on another one, as zonewiki --addr :5001", err)
+			"start Zone on another one, as zonewiki --addr :5081", err)
 	}
 	return err
 }
@@ -311,7 +311,7 @@ var onSocket bool
 // in decides. A socket file a Zone that was killed left is replaced; one
 // something still listens on, or a file that is no socket, is refused.
 // listenAddr: the address Zone listens on for --addr. A port alone
-// (":5000", the default) is this machine's alone (127.0.0.1), unless
+// (":5080", the default) is this machine's alone (127.0.0.1), unless
 // ZONE_ALLOW_REMOTE opens Zone to the network: a Zone started by hand has
 // no login, and the Host check wouldn't keep the network out (a client on
 // the LAN sends Host: localhost). An address with a host, a socket or a
@@ -484,14 +484,14 @@ func fatal(err error) {
 }
 
 const healthUsage = `Usage: zonewiki health [ADDR]
-  whether the Zone listening on ADDR (its --addr, default :5000; unix:PATH for a
+  whether the Zone listening on ADDR (its --addr, default :5080; unix:PATH for a
   socket) answers on localhost and took its settings file: exit code 0, or 1`
 
 // healthURL: /api/health on localhost at the port of zonewiki health's
-// argument, the --addr Zone listens on (":8080"; default :5000). For a
+// argument, the --addr Zone listens on (":8080"; default :5080). For a
 // socket (unix:PATH) there is no port: healthClient connects to it.
 func healthURL(args []string) string {
-	port := "5000"
+	port := "5080"
 	if len(args) > 0 && strings.HasPrefix(args[0], socketPrefix) {
 		return "http://localhost/api/health"
 	}

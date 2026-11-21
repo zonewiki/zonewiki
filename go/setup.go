@@ -17,7 +17,7 @@ import (
 
 // needsSetup: other devices reach Zone (ZONE_ALLOW_REMOTE, names in hosts,
 // a port compose published beyond localhost, or Zone started by hand on an
-// address beyond loopback, as --addr 0.0.0.0:5000: Config.Published), it has
+// address beyond loopback, as --addr 0.0.0.0:5080: Config.Published), it has
 // no login, and that isn't on purpose (no-login = yes). On localhost alone
 // Zone needs no login, as ever.
 func needsSetup() bool {

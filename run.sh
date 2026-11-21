@@ -202,7 +202,7 @@ start() {
   fi
   local port
   port=$(env_val ZONE_PORT)
-  echo "Zone running at http://localhost:${port:-5000}"
+  echo "Zone running at http://localhost:${port:-5080}"
   echo "Zone data: $ZONE_DATA"
 }
 

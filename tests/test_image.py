@@ -133,7 +133,7 @@ def test_the_binary_is_zonewiki():
     assert "COPY --from=build /zonewiki ./zonewiki" in final
     # Every interface in the container, for its network bridge: the binary's
     # default port alone would be the container's localhost, out of reach.
-    assert 'CMD ["/app/zonewiki", "--addr", "0.0.0.0:5000"]' in final
+    assert 'CMD ["/app/zonewiki", "--addr", "0.0.0.0:5080"]' in final
     for compose in ("compose.build.yaml", "compose.yaml"):
         assert '"/app/zonewiki", "health"' in (REPO / compose).read_text(encoding="utf-8")
 
@@ -145,7 +145,7 @@ def test_the_prebuilt_image_stays_on_localhost_until_opened():
     # for a login once it is on the network). It pulls, never builds.
     compose = (REPO / "compose.yaml").read_text(encoding="utf-8")
     body = "\n".join(l for l in compose.splitlines() if not l.lstrip().startswith("#"))
-    assert '- "${ZONE_BIND:-127.0.0.1}:${ZONE_PORT:-5000}:5000"' in body
+    assert '- "${ZONE_BIND:-127.0.0.1}:${ZONE_PORT:-5080}:5080"' in body
     assert "ZONE_BIND: ${ZONE_BIND:-127.0.0.1}" in body
     assert "image: ghcr.io/zonewiki/zonewiki:latest" in body and "build:" not in body
     assert "0.0.0.0" not in body

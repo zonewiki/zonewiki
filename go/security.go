@@ -77,7 +77,7 @@ var refusedHosts = struct {
 }{seen: map[string]bool{}}
 
 // Cross-site request forgery: without it, any page open in the browser could
-// post a form to http://localhost:5000/delete/<page> (or /edit, or the tasks
+// post a form to http://localhost:5080/delete/<page> (or /edit, or the tasks
 // API, which takes text/plain bodies without a CORS preflight), and the Host
 // check passes because the Host really is localhost. Browsers send Origin on
 // every cross-site POST, so a write whose Origin names another site, or is

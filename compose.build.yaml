@@ -49,7 +49,7 @@ services:
     ports:
       # Localhost only unless ZONE_ALLOW_REMOTE (run.sh sets ZONE_BIND=0.0.0.0);
       # ZONE_PORT for another port on the host.
-      - "${ZONE_BIND:-127.0.0.1}:${ZONE_PORT:-5000}:5000"
+      - "${ZONE_BIND:-127.0.0.1}:${ZONE_PORT:-5080}:5080"
     volumes:
       - type: bind
         source: ${ZONE_DATA:-~/zonewiki}

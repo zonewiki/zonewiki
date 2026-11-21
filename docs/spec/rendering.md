@@ -119,7 +119,7 @@ a page's own `<style>` selects such an element as `#user-content-…`.
 
 ### Autolinks and external links
 
-- **Bare URLs become links** (goldmark's linkify, with `urlRE`, which needs no dot in the host, so `http://localhost:5000/…` and `http://nas:5000` are links): `https://…`, `www.…` and email addresses, with trailing punctuation left outside the link.
+- **Bare URLs become links** (goldmark's linkify, with `urlRE`, which needs no dot in the host, so `http://localhost:5080/…` and `http://nas:5080` are links): `https://…`, `www.…` and email addresses, with trailing punctuation left outside the link.
   Code spans, fenced code and existing links are untouched.
   It covers text the editor's paste prompt never saw: files edited on disk, an unnamed paste, a URL inside pasted text.
 - **External links open in a new tab**: a link to another site (http/https, not the host the request came in on) gets `target="_blank" rel="noopener noreferrer"` (`zoneTransformer.external`, on the parsed document, so autolinks too);

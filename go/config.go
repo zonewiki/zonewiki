@@ -76,7 +76,7 @@ func truthy(s string) bool {
 	return false
 }
 
-// hostName is a Host header's name without its port, lowercase ("[::1]:5000"
+// hostName is a Host header's name without its port, lowercase ("[::1]:5080"
 // → "[::1]", "Wiki.Example.org:443" → "wiki.example.org").
 func hostName(host string) string {
 	host = strings.ToLower(strings.TrimSpace(host))

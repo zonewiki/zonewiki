@@ -2775,7 +2775,7 @@ class TestUsage:
         for word in ("Usage: zonewiki", "user COMMAND", "config COMMAND", "eval ", "health ", "licenses ",
                      "ZONE_DATA", "ZONE_ALLOW_REMOTE", "ZONE_SEMANTIC_SEARCH",
                      "--addr ADDRESS", "--public FOLDER", "--docs FOLDER", "--semantic-test JSON",
-                     "(default :5000)"):
+                     "(default :5080)"):
             assert word in out, word
         assert not re.search(r"^ +-[a-z]", out, re.M)   # flags shown with two dashes
 

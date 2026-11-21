@@ -15,10 +15,10 @@ import (
 // zonewiki health asks localhost at the port Zone listens on.
 func TestHealthURL(t *testing.T) {
 	for args, want := range map[string]string{
-		"":                 "http://localhost:5000/api/health",
+		"":                 "http://localhost:5080/api/health",
 		":8080":            "http://localhost:8080/api/health",
 		"127.0.0.1:9000":   "http://localhost:9000/api/health",
-		"nonsense":         "http://localhost:5000/api/health",
+		"nonsense":         "http://localhost:5080/api/health",
 		"unix:/run/z.sock": "http://localhost/api/health",
 	} {
 		var a []string
@@ -350,7 +350,7 @@ func TestPortTaken(t *testing.T) {
 	}
 	defer ln.Close()
 	_, err = listen(ln.Addr().String())
-	if err == nil || !strings.Contains(portTaken(err).Error(), "zonewiki --addr :5001") {
+	if err == nil || !strings.Contains(portTaken(err).Error(), "zonewiki --addr :5081") {
 		t.Errorf("%v", portTaken(err))
 	}
 	if other := os.ErrNotExist; portTaken(other) != other {

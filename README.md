@@ -62,7 +62,7 @@ A wiki can also be public, to read or to edit.
 ## Quick start
 
 Three ways to run Zone: the binary (the quickest), a container, or built from source.
-Whichever you pick, Zone answers only on your computer, with no login, at <http://localhost:5000>.
+Whichever you pick, Zone answers only on your computer, with no login, at <http://localhost:5080>.
 
 ### Binary
 
@@ -120,7 +120,7 @@ You sign in, click **Allow**, and it is connected as you.
 Claude.ai and ChatGPT connect from their makers' servers, so they need a wiki on the internet over https; Claude Code reaches any wiki your computer does.
 
 **With a token** (any wiki, any client): open **Connect an assistant** in the browser, or run `./run.sh config token` (`./run.sh user token NAME` with users).
-Then add an MCP server at `http://localhost:5000/mcp` with the header `Authorization: Bearer <token>`.
+Then add an MCP server at `http://localhost:5080/mcp` with the header `Authorization: Bearer <token>`.
 
 Write your conventions on a page called `wiki-guide` (where things go, what's private, how pages are tagged), and every assistant follows them.
 Assistants can also answer questions about Zone itself.

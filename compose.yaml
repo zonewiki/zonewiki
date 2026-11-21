@@ -21,11 +21,11 @@
 #
 # and then: docker compose up -d (update: docker compose pull, then up -d).
 #
-# Zone is then at http://localhost:5000, on this machine only. For other
+# Zone is then at http://localhost:5080, on this machine only. For other
 # devices (a NAS, a server), open the port to the network in .env:
 #
 #   ZONE_BIND=0.0.0.0                    # or, with run.sh, ZONE_ALLOW_REMOTE=1
-#   ZONE_PORT=5080                       # on a Synology: DSM has 5000
+#   ZONE_PORT=5081                       # another port than 5080
 #
 # and tell Zone the names it is opened by, in its settings file
 # (.zone/config): ./run.sh config set hosts nas.local, or without run.sh
@@ -57,8 +57,8 @@ services:
       TZ: ${TZ:-UTC}
     ports:
       # Localhost only unless ZONE_BIND=0.0.0.0; ZONE_PORT for another port
-      # on the host (a Synology's DSM has 5000).
-      - "${ZONE_BIND:-127.0.0.1}:${ZONE_PORT:-5000}:5000"
+      # on the host (default 5080: not 5000, which a Synology's DSM and a Mac's AirPlay Receiver have).
+      - "${ZONE_BIND:-127.0.0.1}:${ZONE_PORT:-5080}:5080"
     volumes:
       - type: bind
         source: ${ZONE_DATA:?set ZONE_DATA in .env (the wiki folder, absolute path)}

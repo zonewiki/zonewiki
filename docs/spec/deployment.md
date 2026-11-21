@@ -50,7 +50,7 @@ The image has:
   (the vendored libraries' are in the binary, with its copy of `public/vendor/`: `zonewiki licenses` prints them all;
   Mermaid's bundled packages in `public/vendor/mermaid/THIRD_PARTY_LICENSES`, written by `docs/licenses/mermaid_notices.py`);
 - `HOME=/tmp` (Zone may run as a UID without an account);
-- the command `/app/zonewiki --addr 0.0.0.0:5000`: every interface, so the container's network bridge reaches Zone (the binary's default port alone would be the container's localhost); what the host exposes is the port mapping's (Network access, below).
+- the command `/app/zonewiki --addr 0.0.0.0:5080`: every interface, so the container's network bridge reaches Zone (the binary's default port alone would be the container's localhost); what the host exposes is the port mapping's (Network access, below).
 
 Build args: `ZONE_SEMANTIC_SEARCH` and `ZONE_BUILD` (last layer).
 The image is about 0.23 GB, 0.9 GB with the model.
@@ -64,7 +64,7 @@ It builds the image (`build:` with those args) and runs the `zonewiki` container
 |---------|---------------|
 | `env_file: .env` | Passes every setting |
 | `environment` | Adds `ZONE_DATA=/wiki-data` (overriding `.env`'s), `ZONE_HOST_DATA` and `TZ` |
-| port | `${ZONE_BIND:-127.0.0.1}:${ZONE_PORT:-5000}:5000` |
+| port | `${ZONE_BIND:-127.0.0.1}:${ZONE_PORT:-5080}:5080` |
 | the wiki | A bind mount with `create_host_path: false` and `selinux: Z` |
 | `init: true` | A minimal init as PID 1 reaps orphaned processes |
 | `restart: unless-stopped` | |
@@ -75,7 +75,7 @@ It builds the image (`build:` with those args) and runs the `zonewiki` container
 - `ZONE_HOST_DATA` is the host path, for the MCP tools' `file:` lines.
 - `create_host_path: false`: a mistyped path errors instead of starting an empty wiki.
 - `init: true`: with Zone as PID 1 orphaned processes piled up as zombies (see Packing the repository, below).
-- The healthcheck, `/app/zonewiki health`, fetches `/api/health` from localhost (port 5000;
+- The healthcheck, `/app/zonewiki health`, fetches `/api/health` from localhost (port 5080;
   `zonewiki health :8080` for a Zone started with `--addr :8080`, `zonewiki health unix:PATH` for one on a socket).
   It fails while the settings file has an error Zone didn't take (see Reloading in `docs/spec/users.md`).
   The image has no curl or Python.
@@ -163,7 +163,7 @@ Zone itself reads no `.env` file, only its environment: `run.sh` and compose pas
 | `ZONE_PUBLIC` | `view` or `edit`: the wiki is shown, or open to edits, without signing in |
 | `ZONE_SIGNUP`, `ZONE_SMTP_*`, `ZONE_MAIL_FROM` | Sign-up and its mail server (Mail, below) |
 | `ZONE_BIND`, `ZONE_UID`/`ZONE_GID` | For compose without `run.sh`; with it, they win over what it works out (run.sh, above) |
-| `ZONE_PORT` | The host's port, for compose (default 5000) |
+| `ZONE_PORT` | The host's port, for compose (default 5080) |
 
 `ZONE_PUBLIC` is described in Public wikis in `docs/spec/security.md`.
 With rootless podman, keep-id (`compose.podman.yaml`) runs Zone as the host user, so files written to the mounted wiki directory are the host user's.
@@ -221,7 +221,7 @@ and where what it makes lands (`binaries`: the `dist/` folder by its full path; 
 - `group`: `group includes NAME [+G] [-G]`, `group owners NAME [+U] [-U]`, `group list`.
 - `config`: `config check|set|unset|passwd|token`: check it, set a key, the password and MCP token without users.
 
-Zone is available at **http://localhost:5000** after `./run.sh up` (the port `ZONE_PORT` says, if set).
+Zone is available at **http://localhost:5080** after `./run.sh up` (the port `ZONE_PORT` says, if set).
 To update: `./run.sh update`.
 To point Zone at an existing folder of Markdown notes, set `ZONE_DATA` to it: Zone makes it a git repository (if it isn't one) and adds a home page.
 
@@ -249,9 +249,9 @@ go/zonewiki                          # the wiki in ~/zonewiki; ZONE_DATA=/path/t
 
 In Windows PowerShell: `cd go; go build -o zonewiki.exe .; cd ..`, then `$env:ZONE_DATA="$HOME\zonewiki"; go\zonewiki.exe`.
 For semantic search, onnxruntime's library must be where the loader finds it (`docs/spec/search.md`).
-It listens on localhost only: a port alone in `--addr` (`:5000`, the default; `:5001`) is `127.0.0.1`'s unless `ZONE_ALLOW_REMOTE` is set, which opens it on every interface (`listenAddr` in `go/server.go`).
-An address with a host is taken as written (`--addr 0.0.0.0:5000`), and asks for a login first, as `ZONE_ALLOW_REMOTE` does (First run in `docs/spec/security.md`).
-A port another program has stops Zone with what to do (`portTaken` in `go/server.go`): on a Mac, AirPlay Receiver listens on 5000, so `--addr :5001`.
+It listens on localhost only: a port alone in `--addr` (`:5080`, the default; `:5081`) is `127.0.0.1`'s unless `ZONE_ALLOW_REMOTE` is set, which opens it on every interface (`listenAddr` in `go/server.go`).
+An address with a host is taken as written (`--addr 0.0.0.0:5080`), and asks for a login first, as `ZONE_ALLOW_REMOTE` does (First run in `docs/spec/security.md`).
+A port another program has stops Zone with what to do (`portTaken` in `go/server.go`): the default is not 5000, which a Mac's AirPlay Receiver and a Synology's DSM use, but another program may have 5080 too: `--addr :5081`.
 `zonewiki --help` lists the flags, the commands (`user`, `group`, `config`, `eval`, `health`, `manual`, `licenses`; each takes `--help` too) and the environment.
 
 ### What the binary holds
@@ -294,7 +294,7 @@ Each `v*` tag's GitHub release carries Zone as one file per platform, for a desk
 | `SHA256SUMS` | The files' SHA-256 sums (`sha256sum -c SHA256SUMS --ignore-missing`; on a Mac `shasum -a 256 -c`) |
 | `LICENSE`, `THIRD_PARTY_LICENSES` | Zone's license and the notices of what the binaries hold |
 
-How to use one is in the manual (With the binary in `docs/manual/self-hosting.md`): download, `chmod +x`, run, open `http://localhost:5000`.
+How to use one is in the manual (With the binary in `docs/manual/self-hosting.md`): download, `chmod +x`, run, open `http://localhost:5080`.
 
 ### What a release binary is
 
@@ -302,7 +302,7 @@ How to use one is in the manual (With the binary in `docs/manual/self-hosting.md
 - Built without cgo (`CGO_ENABLED=0`), so statically linked on Linux and without semantic search: it searches by keywords (`go/embed_nocgo.go`), as the images CI publishes do for now (Semantic search paused, below).
 - 22 to 24 MB each (`-trimpath -ldflags="-s -w"`); the build string is the tagged commit and its date, from `go build`'s own record of the checkout (`sourceBuild`, Version below).
 - It needs git at run time, for the wiki's history: Zone looks for it on `PATH` at start (`exec.LookPath`) and without it runs with no history, versions or undo.
-- Started with nothing set, the wiki is `~/zonewiki`, made at the first start (Data directory, below), and it listens on port 5000 of localhost only (`127.0.0.1:5000`), printing where to open it.
+- Started with nothing set, the wiki is `~/zonewiki`, made at the first start (Data directory, below), and it listens on port 5080 of localhost only (`127.0.0.1:5080`), printing where to open it.
   There it needs no login; opened to other devices (`ZONE_ALLOW_REMOTE=1`) it shows only its first-run page until one is set, as ever (First run in `docs/spec/security.md`).
 - It isn't signed or notarized: macOS keeps a downloaded one from starting until the quarantine mark is taken off (`xattr -d com.apple.quarantine zonewiki`).
   The arm64 Mac binary carries the ad-hoc signature Go's linker gives every darwin/arm64 binary, which Apple silicon requires to run code at all.
@@ -342,7 +342,7 @@ The wiki is untouched by an update; it lives in the folder `ZONE_DATA` names.
   Zone runs as that user and writes the wiki as it.
 - Without `run.sh` (which takes the host's): `TZ`, e.g. `Europe/Vienna`, so "today" is your day (else UTC).
 - For other devices (a NAS, a server): `ZONE_ALLOW_REMOTE=1` with `run.sh`, or `ZONE_BIND=0.0.0.0`, which publishes the port on every interface instead of localhost.
-- Optional: `ZONE_PORT` (the host's port, default 5000; 5080 on a Synology, whose DSM has 5000).
+- Optional: `ZONE_PORT` (the host's port, default 5080).
   `ZONE_SEMANTIC_SEARCH=on` does nothing with the prebuilt image for now: it has no semantic search since 2026-11-18 (Semantic search paused, below), so Zone searches by keywords.
 
 The wiki's own settings go in its settings file (`.zone/config`, `docs/spec/users.md`), through the container, in the folder of `compose.yaml` and `.env` (no repo needed):
@@ -364,7 +364,7 @@ without them only localhost gets in, and a browser opening Zone by another name 
 Until a login is set Zone shows only its first-run page (`no-login = yes` in the settings file turns that off, for a wiki open on purpose);
 `config token` (or `user token NAME`) makes a token for AI clients.
 
-Zone is then at `http://localhost:5000`, or on the network at `http://<nas>:<ZONE_PORT>`.
+Zone is then at `http://localhost:5080`, or on the network at `http://<nas>:<ZONE_PORT>`.
 Over the internet, put HTTPS in front (a reverse proxy, below); the session cookie is `Secure` when the proxy sends `X-Forwarded-Proto: https`.
 
 ### Synology
@@ -529,12 +529,12 @@ A new package on ghcr.io is private: make it public once in its settings on GitH
 
 `ZONE_ALLOW_REMOTE` is the single knob for network access, with `run.sh` and for the binary run by hand.
 
-- Unset, `run.sh` exports `ZONE_BIND=127.0.0.1`, so the container's port 5000 is only exposed on the host's loopback interface, and the host-header check rejects any `Host` header but localhost and the settings file's `hosts`.
+- Unset, `run.sh` exports `ZONE_BIND=127.0.0.1`, so the container's port 5080 is only exposed on the host's loopback interface, and the host-header check rejects any `Host` header but localhost and the settings file's `hosts`.
 - With `ZONE_ALLOW_REMOTE=1`, `run.sh` exports `ZONE_BIND=0.0.0.0` (LAN-accessible port binding),
   and without `hosts` the host-header check lets in any IP address too (and names in `.internal`), so the LAN reaches Zone by address;
   a name it is opened by goes in `hosts`.
 
-Both compose files map `${ZONE_BIND:-127.0.0.1}:${ZONE_PORT:-5000}:5000`; without `run.sh`, `ZONE_BIND=0.0.0.0` must be set in `.env`, alongside `ZONE_ALLOW_REMOTE=1` or `hosts`.
+Both compose files map `${ZONE_BIND:-127.0.0.1}:${ZONE_PORT:-5080}:5080`; without `run.sh`, `ZONE_BIND=0.0.0.0` must be set in `.env`, alongside `ZONE_ALLOW_REMOTE=1` or `hosts`.
 
 The binary run by hand listens on `127.0.0.1` unless `ZONE_ALLOW_REMOTE=1` (`ZONE_ALLOW_REMOTE=1 ./zonewiki`), which opens a port alone in `--addr` on every interface.
 The `Host` check alone wouldn't keep the network out: a client on the LAN sends `Host: localhost`.
@@ -634,8 +634,8 @@ The mail about an assigned task is sent in the background: a task write never wa
 ## Mobile / phone access
 
 Set `ZONE_ALLOW_REMOTE=1` in `.env` (and restart with `./run.sh up`) to bind on all interfaces:
-`run.sh` then maps `0.0.0.0:5000` and the server's host-header check lets in any IP address (a name goes in `hosts`).
-Phones on the same network reach Zone at `http://<host-LAN-IP>:5000`.
+`run.sh` then maps `0.0.0.0:5080` and the server's host-header check lets in any IP address (a name goes in `hosts`).
+Phones on the same network reach Zone at `http://<host-LAN-IP>:5080`.
 
 A wiki other devices can reach and that has no login yet answers only `/setup`, where the first login is chosen,
 unless `no-login = yes` says it is open on purpose (First run in `docs/spec/security.md`, `go/setup.go`);
@@ -694,7 +694,7 @@ and makes that one folder at the first start, saying so in its log ("ZONE_DATA i
 the commands (`zonewiki user …`, `config …`) do the same, so a password can be set before the first start.
 It makes nothing else: without a home folder, or with a file at `~/zonewiki`, it exits and says to set `ZONE_DATA`.
 At start it prints where to open it and where the wiki is, under the line it listens on:
-`Open http://localhost:5000 in a browser. The wiki is /home/anna/zonewiki`
+`Open http://localhost:5080 in a browser. The wiki is /home/anna/zonewiki`
 (`base-url` when it is set; no such line on a socket or behind compose, whose port mapping Zone doesn't know: `ZONE_BIND` set).
 
 In an existing wiki folder Zone creates what it needs (`_assets/`, `_tasks/`, `index.md`):
