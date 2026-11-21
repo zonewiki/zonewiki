@@ -172,8 +172,9 @@ def main():
     from tests.goserver import GoServer
 
     build_wiki()                     # before Zone starts: its first commit takes them in
-    srv = GoServer({k: v for k, v in os.environ.items() if k.startswith("ZONE_")}, WIKI.parent / "zonewiki.log",
-                   config="")       # the wiki has its own (above)
+    # ZONE_INIT: the sample wiki holds its pages before Zone first starts.
+    env = {**{k: v for k, v in os.environ.items() if k.startswith("ZONE_")}, "ZONE_INIT": "1"}
+    srv = GoServer(env, WIKI.parent / "zonewiki.log", config="")       # the wiki has its own (above)
     base = f"http://127.0.0.1:{srv.port}"
 
     ids = [post(base, "/api/tasks", t)["id"] for t in TASKS]
