@@ -240,10 +240,22 @@ Without a name the wiki gets its password (as `zonewiki config passwd`); with on
 - Whoever reaches a wiki first sets its login, as whoever reached it could read it before.
   An owner who meets a login they didn't set removes it on the host (`.zone/config`).
 
+#### A login on purpose
+
+The same form sets a login where none is asked for: a wiki on localhost alone, which needs none.
+**Set a login** in the menu at the top right opens it (The user menu in `docs/spec/navigation.md`), said as what it is ("This wiki has no login …") with **Not now** leading back, and the wiki goes on answering meanwhile.
+It is the first run's rule: whoever can open the wiki reads and changes everything already, so they may give it a login, and an owner who meets one they didn't set removes it on the host.
+Everything of the form holds as above (only where there is no login, the Origin check, the log line); a `no-login = yes` left in the settings file is removed with it.
+With a name, the wiki's MCP token gives way, and the form says so when the wiki has one.
+
+**Not in a wiki open to the network on purpose** (`no-login = yes` and reachable from other devices): anyone on the network would set a login and lock everyone else out, which is more than they could do before.
+There `/setup` answers as in a wiki with a login (302, nothing set), and the menu's entry leads to the manual's section on setting a login on the host.
+`maySetLogin` in `go/setup.go` is the one place that says where the form answers.
+
 **No login on purpose**: `no-login = yes` in the settings file (`zonewiki config set no-login yes`; `zonewiki user remove NAME --open` writes it).
 At start the log says when Zone waits for a login.
 
-Tests: `tests/test_setup.py`, `test_a_wiki_without_a_login_asks_for_one_first` in `tests/e2e/test_security.py`.
+Tests: `tests/test_setup.py` (a login on purpose: `TestALoginOnPurpose`), `test_a_wiki_without_a_login_asks_for_one_first` and `test_a_login_is_set_from_the_menu_on_localhost` in `tests/e2e/test_security.py`.
 The tests' own server has `no-login = yes` (`settings.NO_LOGIN`).
 
 ## The settings file and Zone's folders

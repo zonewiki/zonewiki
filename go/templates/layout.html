@@ -111,7 +111,7 @@
         top right (top_actions), where the view has it (.signout-in-menu). */}}
     {{- if .Shell.SignOut}}
     <form method="post" action="/logout" class="signout-form{{if or .Shell.User .Shell.ShowActions}} signout-in-menu{{end}}">{{if .Shell.User}}<button type="button" class="signout-user module-menu-btn" aria-haspopup="menu" aria-expanded="false" aria-label="{{.Shell.User}}: account menu" title="Signed in as {{.Shell.User}}"><span>{{.Shell.User}}</span> <span aria-hidden="true">▾</span></button>{{else if .Shell.ShowActions}}<button type="button" class="signout-user signout-menu module-menu-btn" aria-haspopup="menu" aria-expanded="false" aria-label="Menu" title="Menu">{{template "icon_menu"}}</button>{{end}}{{if .Shell.Admin}}<a class="btn signout-admin" href="/admin">Admin</a>{{end}}<button class="btn" type="submit">Sign out</button></form>
-    {{- else if and .Shell.ShowActions .Shell.NoLogin}}
+    {{- else if and .Shell.ShowActions .Shell.SetLogin}}
     <div class="signout-form signout-in-menu"><button type="button" class="signout-user signout-menu module-menu-btn" aria-haspopup="menu" aria-expanded="false" aria-label="Menu" title="Menu">{{template "icon_menu"}}</button></div>
     {{- end}}
   </div>

@@ -1,19 +1,30 @@
-{{- /* /setup: the first-run page (setup.go): a wiki other devices can
-    reach, with no login yet, asks for one before it shows anything. */ -}}
+{{- /* /setup (setup.go): the first-run page, where a wiki other devices can
+    reach, with no login yet, asks for one before it shows anything (.Asked);
+    and the same form opened on purpose, from the menu's Set a login, in a
+    wiki on localhost alone. */ -}}
 {{define "body"}}
 <div class="login-wrap">
   <form class="login-form" method="post" action="/setup">
+    {{- if .Asked}}
     <h2>Set a password for {{.Shell.AppName}}</h2>
     <p class="welcome-note">This wiki can be reached from other devices and has no login yet. Choose a password: from then on, only who knows it gets in.</p>
+    {{- else}}
+    <h2>Set a login for {{.Shell.AppName}}</h2>
+    <p class="welcome-note">This wiki has no login: whoever can open it reads and changes everything. Choose a password: from then on, only who knows it gets in.</p>
+    {{- end}}
     <input type="text" name="username" placeholder="User name (optional)" value="{{.Username}}" autocapitalize="none" autocorrect="off" spellcheck="false" autocomplete="username">
-    <p class="welcome-note">Without a name, the wiki has one password. With one, you are its first user and its admin, and can invite others.</p>
+    <p class="welcome-note">Without a name, the wiki has one password. With one, you are its first user and its admin, and can invite others.{{if .HasToken}} With a name, the wiki's assistant token ends: connect your assistant again as yourself.{{end}}</p>
     <input type="password" name="password" placeholder="Password (at least 8 characters)" autocomplete="new-password" autofocus required>
     <input type="password" name="again" placeholder="Again" autocomplete="new-password" required>
     {{- with .Error}}
     <p class="login-error">{{.}}</p>
     {{- end}}
     <button type="submit" class="btn btn-primary">Set the password</button>
+    {{- if .Asked}}
     <p class="welcome-note">To run it without a login on purpose, on the machine Zone runs on: <code>zonewiki config set no-login yes</code> (with run.sh: <code>./run.sh config set no-login yes</code>).</p>
+    {{- else}}
+    <p class="welcome-note"><a href="/">Not now</a>. A login is removed again only on the machine Zone runs on, so keep the password.</p>
+    {{- end}}
   </form>
 </div>
 {{end}}

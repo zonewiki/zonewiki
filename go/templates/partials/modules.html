@@ -40,8 +40,9 @@
 
 {{- /* The menu at the top right, in every wiki: Connect an assistant (the MCP
     token, assistant.go), Change password (password.go) or, in a wiki
-    without a login, Set a login (the manual says how: it is set on the
-    host), Sharing mode, Help (the manual, help.go) and Sign out. With users
+    without a login, Set a login (the form of the first run, setup.go; in
+    a wiki open to the network on purpose the manual's section: there it is
+    set on the host), Sharing mode, Help (the manual, help.go) and Sign out. With users
     it is the user menu: who is signed in and Groups first, Admin for an
     admin. Phones have Admin and Sign out in the page's top row. Opened by
     the top right's button (js/chrome.js). Outside the tab bar's nav: its
@@ -52,7 +53,7 @@
 {{- if .user}}<a href="/groups" role="menuitem" class="menu-groups">Groups</a>{{end -}}
 {{- ""}}<a href="/assistant" role="menuitem" class="menu-assistant">Connect an assistant</a>
 {{- if .sign_out}}<a href="/password" role="menuitem" class="menu-password">Change password</a>{{end -}}
-{{- if .no_login}}<a href="/help/self-hosting#setting-a-login" role="menuitem" class="menu-login">Set a login</a>{{end -}}
+{{- with .set_login}}<a href="{{.}}" role="menuitem" class="menu-login">Set a login</a>{{end -}}
 {{- if .admin}}<a href="/admin" role="menuitem" class="menu-admin">Admin</a>{{end -}}
 {{- ""}}<button type="button" role="menuitem" class="menu-sharing">{{if .sharing}}Turn sharing mode off{{else}}Sharing mode{{end}}</button>
 {{- ""}}<a href="/help" role="menuitem" class="menu-help">Help</a>
@@ -80,5 +81,5 @@
 <span class="action-sep" aria-hidden="true"></span>
 <button type="button" class="action-search" aria-label="Search" title="Search (Ctrl+P)">{{template "icon_search"}}<span class="action-label">Search</span></button>
 </nav>
-{{- range .ModuleLinks}}{{if .Menu}}{{template "module_menu" (dict "link" . "user" $.User "sign_out" $.SignOut "no_login" $.NoLogin "admin" $.Admin "sharing" $.Sharing)}}{{end}}{{end}}
+{{- range .ModuleLinks}}{{if .Menu}}{{template "module_menu" (dict "link" . "user" $.User "sign_out" $.SignOut "set_login" $.SetLogin "admin" $.Admin "sharing" $.Sharing)}}{{end}}{{end}}
 {{- end}}

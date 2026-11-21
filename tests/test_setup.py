@@ -121,6 +121,84 @@ class TestSettingTheLogin:
         assert client.post("/login", data={"password": "another one"}, headers=HOST).status_code == 200
 
 
+class TestALoginOnPurpose:
+    """A wiki on localhost alone needs no login, and whoever opens it may
+    give it one: Set a login in the menu opens the first run's form."""
+
+    @pytest.fixture()
+    def local(self, fresh, monkeypatch):
+        monkeypatch.setattr(settings, "ZONE_ALLOW_REMOTE", False)
+        return fresh
+
+    @staticmethod
+    def menu(client):
+        body = client.get("/page/plans", headers=HOST).get_data(as_text=True)
+        return body.split('class="module-menu page-menu"', 1)[1].split("</div>", 1)[0]
+
+    def test_the_menu_leads_to_the_form(self, client, local):
+        assert '<a href="/setup" role="menuitem" class="menu-login">Set a login</a>' in self.menu(client)
+        resp = client.get("/setup", headers=HOST)
+        body = resp.get_data(as_text=True)
+        assert resp.status_code == 200 and 'action="/setup"' in body
+        # Said as what it is: not the first run's words, and a way back.
+        assert "Set a login for" in body and "whoever can open it reads and changes everything" in body
+        assert '<a href="/">Not now</a>' in body
+        assert "reached from other devices" not in body and "no-login yes" not in body and "secret words" not in body
+        # The wiki goes on without one meanwhile.
+        assert client.get("/page/plans", headers=HOST).status_code == 200
+
+    def test_a_password_for_the_wiki(self, client, local):
+        resp = client.post("/setup", data=FORM, headers=HOST)
+        assert resp.status_code == 303 and resp.headers["Location"] == "/"
+        assert re.search(r"^password = pbkdf2-sha256:600000:", config(local), re.M) and "[user" not in config(local)
+        assert (local / ".zone" / "config").stat().st_mode & 0o777 == 0o600
+        # Signed in with it; the menu has Change password now, and the form is gone.
+        menu = self.menu(client)
+        assert 'href="/password"' in menu and "Set a login" not in menu
+        assert client.get("/setup", headers=HOST).status_code == 302
+        client.post("/logout", headers=HOST)
+        assert "/login" in client.get("/page/plans", headers=HOST).headers["Location"]
+        assert client.post("/login", data={"password": "correct horse"}, headers=HOST).status_code == 302
+
+    def test_with_a_name_the_first_user_and_the_wikis_token_ends(self, client, local, monkeypatch):
+        monkeypatch.setattr(settings, "MCP_TOKEN", "wiki-token-wiki-token-wiki-token")
+        assert "the wiki's assistant token ends" in client.get("/setup", headers=HOST).get_data(as_text=True)
+        assert client.post("/setup", data={**FORM, "username": "alice"}, headers=HOST).status_code == 303
+        assert "[user alice]" in config(local) and "role = admin" in config(local)
+        assert not re.search(r"^mcp-token", config(local), re.M)
+        assert client.get("/admin/users", headers=HOST).status_code == 200
+
+    def test_no_login_on_purpose_on_localhost_gives_way(self, client, local, monkeypatch):
+        # no-login = yes says nothing on localhost alone; a login set there ends it.
+        monkeypatch.setattr(settings, "CONFIG_FILE", "no-login = yes\n")
+        assert client.get("/setup", headers=HOST).status_code == 200
+        assert client.post("/setup", data=FORM, headers=HOST).status_code == 303
+        assert "no-login" not in config(local) and re.search(r"^password = ", config(local), re.M)
+
+    def test_a_wiki_open_to_the_network_on_purpose_has_no_form(self, client, fresh, monkeypatch):
+        # Anyone on the network would lock everyone else out: there the login
+        # is set on the host, and the menu says how.
+        monkeypatch.setattr(settings, "CONFIG_FILE", "no-login = yes\n")
+        assert 'href="/help/self-hosting#setting-a-login"' in self.menu(client) and 'href="/setup"' not in self.menu(client)
+        assert client.get("/setup", headers=HOST).headers["Location"] == "/"
+        assert client.post("/setup", data=FORM, headers=HOST).status_code == 302 and "password" not in config(fresh)
+        # Names in hosts count as the network too.
+        monkeypatch.setattr(settings, "ZONE_ALLOW_REMOTE", False)
+        monkeypatch.setattr(settings, "HOSTS", frozenset({"wiki.example.org"}))
+        assert client.post("/setup", data=FORM, headers={"Host": "wiki.example.org"}).status_code == 302
+        assert "password" not in config(fresh)
+
+    def test_another_site_cant_send_the_form(self, client, local):
+        resp = client.post("/setup", data=FORM, headers={**HOST, "Origin": "https://elsewhere.example"})
+        assert resp.status_code == 403 and config(local) == ""
+
+    def test_only_where_there_is_no_login(self, client, local, monkeypatch):
+        monkeypatch.setattr(settings, "PASSWORD", "wiki-pw")
+        assert client.get("/setup", headers=HOST).status_code == 302
+        assert client.post("/setup", data=FORM, headers=HOST).status_code == 302
+        assert client.post("/login", data={"password": "correct horse"}, headers=HOST).status_code == 200   # the old one holds
+
+
 class TestWhenThereIsNoPage:
 
     def test_no_login_on_purpose(self, client, fresh, monkeypatch):
@@ -132,7 +210,7 @@ class TestWhenThereIsNoPage:
     def test_on_localhost_alone_zone_needs_no_login(self, client, fresh, monkeypatch):
         monkeypatch.setattr(settings, "ZONE_ALLOW_REMOTE", False)
         assert client.get("/page/plans", headers=HOST).status_code == 200
-        assert client.post("/setup", data=FORM, headers=HOST).status_code == 302 and config(fresh) == ""
+        assert config(fresh) == ""
 
     @pytest.mark.parametrize("bind,page", [("0.0.0.0", True), ("192.168.1.5", True), ("::", True),
                                            ("127.0.0.1", False), ("localhost", False), ("::1", False), ("", False)])

@@ -204,6 +204,38 @@ def test_a_wiki_without_a_login_asks_for_one_first(page, wiki, monkeypatch):
     expect(page.locator("#logout-form, .logout-btn, form[action='/logout']").first).to_be_attached()
 
 
+def test_a_login_is_set_from_the_menu_on_localhost(page, wiki, monkeypatch):
+    # On localhost alone a wiki needs no login; Set a login in the menu opens
+    # the first run's form, and with a name the wiki has its first user.
+    from tests import settings
+    monkeypatch.setattr(settings, "NO_LOGIN", False)
+    monkeypatch.setattr(settings, "ZONE_ALLOW_REMOTE", False)
+    wiki.write("plans", "# Plans\n\nsecret words\n")
+    page.goto("/page/plans")
+    expect(page.locator("article.page-content")).to_contain_text("secret words")   # no login needed
+    page.locator(".top-actions .top-menu").click()
+    page.locator(".module-menu").get_by_role("menuitem", name="Set a login").click()
+    expect(page).to_have_url(re.compile(r"/setup$"))
+    expect(page.locator("form.login-form h2")).to_have_text("Set a login for Zone")
+    # Not now leads back, and nothing was set.
+    page.get_by_role("link", name="Not now").click()
+    expect(page).to_have_url(re.compile(r"/page/index$"))
+    page.goto("/setup")
+    page.fill("input[name=username]", "alice")
+    page.fill("input[name=password]", "correct horse")
+    page.fill("input[name=again]", "correct horse")
+    page.locator("form.login-form button[type=submit]").click()
+    expect(page).to_have_url(re.compile(r"/page/index$"))
+    # Signed in as the first user: the user button, and her menu.
+    btn = page.locator(".top-actions .top-user")
+    expect(btn).to_have_attribute("title", "alice")
+    btn.click()
+    menu = page.locator(".module-menu:not(.groups-menu)")
+    expect(menu.locator(".menu-who")).to_have_text("Signed in as alice")
+    expect(menu.get_by_role("menuitem", name="Set a login")).to_have_count(0)
+    expect(menu.get_by_role("menuitem", name="Admin")).to_be_visible()
+
+
 def test_a_pages_ids_stand_in_for_none_of_zones(page, wiki):
     # Zone's scripts find their elements by id, the browser globals by name:
     # a page's <data id="task-edit-id" value=…> came first and would aim the

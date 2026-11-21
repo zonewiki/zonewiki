@@ -144,7 +144,7 @@ To anyone else such a link says nothing, not even that there is such a group (`g
 |--------|-----------------------|-------------------------------------------------|
 | GET, POST | `/login`           | The login page and its form (`username` with users, `password`); `?next=` the local path to go to after (A redirect goes only to Zone's own paths in `docs/spec/security.md`); wrong passwords are throttled (429); without a login a redirect to `/` |
 | POST   | `/logout`             | Sign out: the session ends wherever a copy of its cookie is (`.zone/signed-out`); redirects to `/login` |
-| GET, POST | `/setup`           | First run: a wiki other devices reach with no login sets one here, then is signed in (First run in `docs/spec/security.md`); once there is a login, a redirect to `/` |
+| GET, POST | `/setup`           | First run: a wiki other devices reach with no login sets one here, then is signed in (First run in `docs/spec/security.md`); so does a wiki on localhost alone, on purpose (A login on purpose, there); once there is a login, and in a wiki open to the network on purpose, a redirect to `/` |
 | GET, POST | `/signup`          | Sign-up (`email`): mails a link that makes the account (Sign-up in `docs/spec/users.md`); 404 while sign-up is off, a redirect to `/` for whoever is signed in |
 | GET/POST | `/welcome/<token>`  | An invite or reset link's page: choose a password, once (no login needed) |
 | GET, POST | `/password`        | Change password: whoever is signed in sets a new one (without users, the wiki's), with the one they have (Signing in in `docs/spec/users.md`); 404 without a login |

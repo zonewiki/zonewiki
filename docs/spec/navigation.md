@@ -169,12 +169,13 @@ Phones have Sign out in the page's top row, where the name opens the menu's page
 **A wiki without users has the menu too**, so that what is about the wiki has one place in every wiki:
 three lines (`.top-menu`, "Menu") stand where the user button would, and open
 **Connect an assistant** (the wiki's token),
-**Change password** (the wiki's, when it has one) or **Set a login** (when it asks for none: the manual's page on it, `/help/self-hosting#setting-a-login`, since a login is set on the host),
+**Change password** (the wiki's, when it has one) or **Set a login** (when it asks for none: the first run's form, `/setup`;
+in a wiki open to the network on purpose the manual's section on it, `/help/self-hosting#setting-a-login`, since its login is set on the host: A login on purpose in `docs/spec/security.md`),
 **Sharing mode**, **Help**, and **Sign out** when there is a password.
 No name and no Groups: there is nobody and there are none.
 On phones the three lines are at the right of the page's top row (`.signout-menu`), beside Sign out when there is one.
 A public wiki's visitor has no menu, only **Sign in**.
-The menu is one template (`module_menu` in `templates/partials/modules.html`) and one entry of `moduleLinks` for everyone but a visitor; `NoLogin` in the page shell says the wiki asks for no login.
+The menu is one template (`module_menu` in `templates/partials/modules.html`) and one entry of `moduleLinks` for everyone but a visitor; `SetLogin` in the page shell is where **Set a login** leads (`setLoginHref`), empty in a wiki with a login.
 
 ### Current module
 
@@ -482,7 +483,7 @@ It lists nothing the code doesn't answer, and leaves out what a wiki doesn't hav
 Its groups (Anywhere, Go to, Create, Page, Editor, Snippets, Presentation, Tasks: select, Tasks: act, Tasks: view, Tasks: plan, A task's dialog, Search) are short: key caps on the left, a few words on the right.
 They flow into as many columns of 15rem as the screen is wide (CSS `columns`, a group never split), up to 1480px, so on a desktop (1280×720 and up) the whole dialog fits on screen without scrolling.
 Where it doesn't fit (a phone, at most 640px wide: one column), the dialog stays inside the screen and scrolls within itself, its title and **×** staying at the top; Esc and a click on the backdrop close it too.
-At the bottom are Zone's version and build, and the links to Help (the manual), Connect an AI assistant, Change password and Groups:
+At the bottom are Zone's version and build, and the links to Help (the manual), Connect an AI assistant, Change password or Set a login, and Groups:
 these are the menu's pages (The user menu, above).
 
 ---

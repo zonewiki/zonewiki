@@ -5,6 +5,10 @@
 // first, instead of an open wiki they never notice. The login goes into the
 // settings file as zonewiki config passwd (one password) or zonewiki user
 // add (a first user, the admin) would write it.
+//
+// The same form sets a login on purpose (Set a login in the menu): a wiki
+// on localhost alone needs none, and whoever opens it may give it one
+// (maySetLogin).
 package main
 
 import (
@@ -22,7 +26,35 @@ import (
 // Zone needs no login, as ever.
 func needsSetup() bool {
 	s := settings()
-	return !s.authOn() && !s.NoLogin && (cfg.AllowRemote || cfg.Published || len(s.Hosts) > 0)
+	return !s.authOn() && !s.NoLogin && reachable(s)
+}
+
+// reachable: other devices reach Zone (needsSetup's three ways).
+func reachable(s *Settings) bool {
+	return cfg.AllowRemote || cfg.Published || len(s.Hosts) > 0
+}
+
+// maySetLogin: the form answers: the wiki has no login, and either waits
+// for one (needsSetup) or is on localhost alone, where whoever opens it
+// reads and changes everything anyway and now may give it a login. Not a
+// wiki open to the network on purpose (no-login = yes): there anyone on
+// the network would lock everyone else out; its login is set on the host.
+func maySetLogin() bool {
+	s := settings()
+	return !s.authOn() && (!reachable(s) || !s.NoLogin)
+}
+
+// setLoginHref: where the menu's Set a login leads in a wiki without a
+// login: the form, or where it doesn't answer the manual's section on
+// setting one on the host; "" with a login.
+func setLoginHref() string {
+	switch {
+	case settings().authOn():
+		return ""
+	case maySetLogin():
+		return "/setup"
+	}
+	return "/help/self-hosting#setting-a-login"
 }
 
 // setupFirstMsg: what anything but a page view is told while Zone waits
@@ -51,19 +83,22 @@ type setupView struct {
 	view
 	Username, Error string
 	ConfigName      string
+	Asked           bool // Zone waits for a login (needsSetup); false: set on purpose, from the menu
+	HasToken        bool // the wiki has an MCP token, which a first user ends
 }
 
 // setupRoute: GET /setup shows the form, POST /setup sets the login: a
 // password for the wiki, or with a name the first user, an admin. Only
 // while Zone has none (the settings file is checked again as it is
 // written: of two people sending the form at once, one sets the login,
-// the other is told to sign in).
+// the other is told to sign in), and only where it may be set in the
+// browser (maySetLogin).
 func setupRoute(w http.ResponseWriter, r *http.Request) {
-	if !needsSetup() {
+	if !maySetLogin() {
 		http.Redirect(w, r, "/", http.StatusFound)
 		return
 	}
-	v := &setupView{ConfigName: configName()}
+	v := &setupView{ConfigName: configName(), Asked: needsSetup(), HasToken: settings().MCPToken != ""}
 	if r.Method == http.MethodPost {
 		name := strings.ToLower(strings.TrimSpace(r.PostFormValue("username")))
 		password := r.PostFormValue("password")
@@ -83,6 +118,7 @@ func setupRoute(w http.ResponseWriter, r *http.Request) {
 				if _, ok := f.Top["password"]; ok || len(f.Users) > 0 {
 					return errHasLogin
 				}
+				f.Unset("", "no-login") // it has one now
 				if name == "" {
 					f.Set("", "password", hash)
 					return nil
@@ -110,7 +146,11 @@ func setupRoute(w http.ResponseWriter, r *http.Request) {
 	if v.Error != "" {
 		status = http.StatusBadRequest
 	}
-	page(w, newReq(r), status, "setup.html", "Set a password", shell{noActions: true}, v)
+	title := "Set a password"
+	if !v.Asked {
+		title = "Set a login"
+	}
+	page(w, newReq(r), status, "setup.html", title, shell{noActions: true}, v)
 }
 
 // errHasLogin: the settings file has a login already (setupRoute).

@@ -233,11 +233,13 @@ Every `.zone/config` key is in [The wiki's keys](../spec/users.md#the-wikis-keys
 On localhost, out of the box, Zone has no login: whoever can reach the port can do everything.
 That's fine on your own laptop, and nowhere else.
 
-As soon as other devices can reach Zone, it shows nothing until a login is set.
-Open it in a browser, and it asks for a password (at least 8 characters, twice), then **Set the password**:
+To give it one, choose **Set a login** in the menu at the top right (the three lines).
+As soon as other devices can reach Zone, it asks by itself, and shows nothing until a login is set.
+Either way it asks for a password (at least 8 characters, twice), then **Set the password**:
 
 - leave **User name (optional)** empty, and the wiki gets one password;
 - fill it in, and you become the wiki's first user and its admin, and can invite others.
+  An assistant connected with the wiki's token is then connected again, as you.
 
 Whoever reaches a new wiki first sets its login, so do this right after starting it.
 If you meet a login you didn't set, remove it on the host, in `.zone/config`.
@@ -251,6 +253,7 @@ From the terminal it's the same:
 
 Adding users, roles, groups and invites is in [Teams](teams.md).
 To keep a wiki on the network open on purpose, without a login: `./run.sh config set no-login yes`.
+Such a wiki gets a login only from the terminal: in the browser, anyone on the network could set one and lock the others out.
 
 ## Reaching it from other devices
 
