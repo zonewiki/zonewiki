@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Zone">
+<title>Zone</title>
+<rect x="0" y="0" width="512" height="512" rx="112" fill="#3a7563"/>
+<path d="M160 160H352L160 352H352" fill="none" stroke="#fff" stroke-width="60.8" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

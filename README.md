@@ -1,3 +1,5 @@
+<img src="docs/logo/mark.svg" alt="" width="88" align="right">
+
 # Zone
 
 **A wiki with tasks that you, your team and your AI assistants share, in plain files you own.**
