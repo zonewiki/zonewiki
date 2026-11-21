@@ -222,12 +222,13 @@ func (rq *Req) placeHref(place string) string {
 // moduleLinks: the module links (where each goes, whether it is the current
 // view's, the Tasks's counts, the group it is shown in, whether only you see
 // it). With users Private follows Wiki, Tasks and Notes are a group of their
-// own, and the list ends with the user menu ("menu": who is signed in, Sign
-// out; the desktop's user button).
+// own. The list ends with the menu ("menu": the desktop's button at the top
+// right; with users who is signed in and Sign out too), in every wiki, for
+// everyone but a public wiki's visitor.
 // moduleLink: a module's link in the breadcrumb's switcher and the phone's
 // tab bar. Counts: the Tasks link's (nil for the others); Own: only the user sees what is
-// behind it (Private, Notes with users); Menu: not a link but the Account
-// entry that stands for the user menu (with users).
+// behind it (Private, Notes with users); Menu: not a link but the entry
+// that stands for the menu (the user menu with users).
 type moduleLink struct {
 	Key, Label, Href string
 	Current          bool
@@ -283,7 +284,7 @@ func moduleLinks(rq *Req) []moduleLink {
 		}
 		out = append(out, link)
 	}
-	if users {
+	if rq.who().Name != visitor {
 		out = append(out, moduleLink{Key: "menu", Label: "Account", Menu: true})
 	}
 	return out
@@ -399,6 +400,7 @@ type pageShell struct {
 	Dirty, AllowRemote bool
 	Locale, DateFormat string
 	SignOut            bool   // signed in, so Sign out is offered
+	NoLogin            bool   // the wiki asks for no login: the menu says where one is set
 	User               string // who is signed in, with users
 	Admin              bool   // they are an admin: the user menu offers Admin
 	Viewer             bool   // they are a viewer: nothing to make (no New note, New task)
@@ -431,7 +433,7 @@ func page(w http.ResponseWriter, rq *Req, status int, name, title string, o shel
 		AppName: appName, Version: version, Build: cfg.Build, SourceURL: sourceURL, AllowRemote: cfg.AllowRemote,
 		Locale: s.Locale, DateFormat: s.DateFormat,
 		// Only signed in: the login page has no one to sign out.
-		SignOut: s.authOn() && isSignedIn(rq.r), User: rq.user.Name, Users: s.Users != nil, Admin: s.isAdmin(rq.user.Name),
+		SignOut: s.authOn() && isSignedIn(rq.r), NoLogin: !s.authOn(), User: rq.user.Name, Users: s.Users != nil, Admin: s.isAdmin(rq.user.Name),
 		Viewer: s.isViewer(rq.user.Name),
 	}
 	if rq.user.Name == visitor {

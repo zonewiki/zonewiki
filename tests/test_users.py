@@ -144,7 +144,13 @@ class TestLogin:
         monkeypatch.setattr(settings, "PASSWORD", "pw")
         client.post("/login", data={"password": "pw"}, headers=HOST)
         body = client.get("/page/index", headers=HOST).data.decode()
-        assert "signout-form" in body and "signout-user" not in body
+        assert "signout-form" in body and "Signed in as" not in body and "account menu" not in body
+        # The menu is there all the same: three lines open it, at the top
+        # right and, on a phone, beside Sign out.
+        assert 'class="top-user top-menu module-menu-btn"' in body and 'class="signout-user signout-menu module-menu-btn"' in body
+        menu = body.split('class="module-menu page-menu"', 1)[1].split("</div>", 1)[0]
+        assert re.findall(r'href="([^"]*)"', menu) == ["/assistant", "/password", "/help"]
+        assert 'action="/logout"' in menu and ">Sign out</button>" in menu and "menu-sharing" in menu
 
 
 class TestDisabled:
@@ -495,7 +501,21 @@ class TestModuleMenu:
     def test_without_users_quicknote_stays_a_pill_in_the_third_place(self, client, wiki_dir):
         body = client.get("/page/index", headers=HOST).data.decode()
         crumb, bar, top = self.parts(body)
-        assert "module-menu" not in body and "top-user" not in top
+        # No user menu, but the menu: after Search, three lines open what a
+        # wiki without users has of it (no name, no Groups, nothing to sign
+        # out of; where a login is set, since there is none).
+        assert top.index("top-search") < top.index('class="top-user top-menu module-menu-btn"')
+        assert 'aria-label="Menu"' in top and "account menu" not in body
+        assert body.count('class="module-menu page-menu"') == 1 and "module-menu" not in bar
+        menu = body.split('class="module-menu page-menu"', 1)[1].split("</div>", 1)[0]
+        assert 'aria-label="Menu"' in menu
+        assert re.findall(r'href="([^"]*)"', menu) == ["/assistant", "/help/self-hosting#setting-a-login", "/help"]
+        assert "menu-sharing" in menu and "Signed in as" not in menu and "/logout" not in body
+        # Phones: the same three lines in the page's top row.
+        assert '<div class="signout-form signout-in-menu"><button type="button" class="signout-user signout-menu module-menu-btn"' in body
+        # Where it leads is there.
+        assert client.get("/assistant", headers=HOST).status_code == 200
+        assert 'id="setting-a-login"' in client.get("/help/self-hosting", headers=HOST).data.decode()
         assert crumb.count('class="module-group"') == 1 and 'data-module="private"' not in crumb and "module-lock" not in crumb
         assert "action-lock" not in body.split('<nav class="action-buttons"', 1)[1].split("</nav>", 1)[0]
         assert crumb.index('data-module="tasks"') < crumb.index('data-module="notes"')

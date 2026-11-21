@@ -326,9 +326,9 @@ if (tasksLinks.length) {
 
 // ── The user menu, and the groups' ───────────────────────────────────────────
 // A menu rendered hidden, opened as a popover under the button that was
-// pressed. ↑/↓ move, Esc closes and returns focus. With users the user
-// button at the top right opens one (.module-menu: who is signed in, Sign
-// out); for who is in several groups the switcher's Groups pill opens
+// pressed. ↑/↓ move, Esc closes and returns focus. The button at the top
+// right opens one in every wiki (.module-menu: Connect an assistant, Help;
+// with users who is signed in, Sign out); for who is in several groups the switcher's Groups pill opens
 // another (.groups-menu: each group's home), where a click on the link
 // itself would go to the list of them (/groups, which is what a phone's tab
 // and a browser without JavaScript get).

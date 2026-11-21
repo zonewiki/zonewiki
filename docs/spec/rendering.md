@@ -631,7 +631,7 @@ They share code by `import`, not through `window`:
 | `js/util.js` | Small shared helpers: `he`, `localDate`, `pasteUrlAsLink`, `continueList`, `showToast`, `putTask`, `hashTarget`, … |
 | `js/mdtext.js` | The text functions the browser shares with the server (Shared text functions, below) |
 | `js/completion.js` | `linkAutocomplete`: `[[`, `[[task:` and `[text](` completion (editor and the task app's task fields) |
-| `js/chrome.js` | Around the page: navigation trail, backlinks chip, side columns, the Tasks links' counts (`refreshDueBadge`), the user menu (with users) |
+| `js/chrome.js` | Around the page: navigation trail, backlinks chip, side columns, the Tasks links' counts (`refreshDueBadge`), the menu at the top right (the user menu with users) |
 | `js/git.js` | Uncommitted badge, Commit buttons, forms that confirm first (`data-confirm`) |
 | `js/search.js` | Search modal and its preview, Notes filter, highlights on a page opened from search |
 | `js/actions.js` | New note / page / task (`openDefaultTask`, loading a hidden tasks when the page has none), action bar, sharing mode |

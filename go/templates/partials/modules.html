@@ -18,7 +18,7 @@
 {{- $open := -1 -}}
 {{- range .links -}}
 {{- if .Menu -}}
-{{- /* with users: the user button at the top right (top_actions) */ -}}
+{{- /* the menu's button is at the top right (top_actions) */ -}}
 {{- else -}}
 {{- if ne .Group $open}}{{if ge $open 0}}</span>{{end}}<span class="module-group">{{$open = .Group}}{{end -}}
 <a href="{{.Href}}" class="module-link" data-module="{{.Key}}"{{with .Counts}} title="{{.Title}}"{{end}}{{if .Own}} title="{{.Label}}: only you see it"{{end}}{{with .Tip}} title="{{.}}"{{end}}{{if .Current}} aria-current="page"{{end}}
@@ -38,17 +38,21 @@
 </nav>
 {{- end}}
 
-{{- /* The user menu (with users, desktop): who is signed in, Connect an
-    assistant (their MCP token, assistant.go), Change password (password.go),
-    Admin for an admin (the admin page), Help (the manual, help.go), and Sign out (phones have Admin and Sign out in
-    the page's top row), opened by the top right's user button (js/chrome.js). Outside the tab bar's nav: its touch handling
-    picks a tab by position. */}}
+{{- /* The menu at the top right, in every wiki: Connect an assistant (the MCP
+    token, assistant.go), Change password (password.go) or, in a wiki
+    without a login, Set a login (the manual says how: it is set on the
+    host), Sharing mode, Help (the manual, help.go) and Sign out. With users
+    it is the user menu: who is signed in and Groups first, Admin for an
+    admin. Phones have Admin and Sign out in the page's top row. Opened by
+    the top right's button (js/chrome.js). Outside the tab bar's nav: its
+    touch handling picks a tab by position. */}}
 {{define "module_menu" -}}
-<div class="module-menu-backdrop" hidden></div><div class="module-menu page-menu" role="menu" aria-label="Account" hidden>
+<div class="module-menu-backdrop" hidden></div><div class="module-menu page-menu" role="menu" aria-label="{{if .user}}Account{{else}}Menu{{end}}" hidden>
 {{- with .user}}<div class="menu-who">Signed in as <strong>{{.}}</strong></div>{{end -}}
-<a href="/groups" role="menuitem" class="menu-groups">Groups</a>
+{{- if .user}}<a href="/groups" role="menuitem" class="menu-groups">Groups</a>{{end -}}
 {{- ""}}<a href="/assistant" role="menuitem" class="menu-assistant">Connect an assistant</a>
 {{- if .sign_out}}<a href="/password" role="menuitem" class="menu-password">Change password</a>{{end -}}
+{{- if .no_login}}<a href="/help/self-hosting#setting-a-login" role="menuitem" class="menu-login">Set a login</a>{{end -}}
 {{- if .admin}}<a href="/admin" role="menuitem" class="menu-admin">Admin</a>{{end -}}
 {{- ""}}<button type="button" role="menuitem" class="menu-sharing">{{if .sharing}}Turn sharing mode off{{else}}Sharing mode{{end}}</button>
 {{- ""}}<a href="/help" role="menuitem" class="menu-help">Help</a>
@@ -64,7 +68,7 @@
 {{- $group := 0 -}}
 {{- range .ModuleLinks -}}
 {{- if .Menu -}}
-{{- /* the user button is the desktop's (top_actions) */ -}}
+{{- /* the menu's button is the desktop's (top_actions) */ -}}
 {{- else -}}
 {{- if ne .Group $group}}<span class="action-sep" aria-hidden="true"></span>{{$group = .Group}}{{end -}}
 <a href="{{.Href}}" class="action-module module-link" data-module="{{.Key}}"{{with .Counts}} title="{{.Title}}"{{end}}{{with .Tip}} title="{{.}}"{{end}}{{if .Current}} aria-current="page"{{end}}>{{template "icon_module" .Key}}{{if and (eq .Key "notes") .Own}}<span class="action-lock" aria-hidden="true">{{template "icon_lock"}}</span>{{end}}<span class="action-label">{{.Label}}</span>{{with .Counts}}{{template "module_counts" .}}{{end}}</a>
@@ -76,5 +80,5 @@
 <span class="action-sep" aria-hidden="true"></span>
 <button type="button" class="action-search" aria-label="Search" title="Search (Ctrl+P)">{{template "icon_search"}}<span class="action-label">Search</span></button>
 </nav>
-{{- range .ModuleLinks}}{{if .Menu}}{{template "module_menu" (dict "link" . "user" $.User "sign_out" $.SignOut "admin" $.Admin "sharing" $.Sharing)}}{{end}}{{end}}
+{{- range .ModuleLinks}}{{if .Menu}}{{template "module_menu" (dict "link" . "user" $.User "sign_out" $.SignOut "no_login" $.NoLogin "admin" $.Admin "sharing" $.Sharing)}}{{end}}{{end}}
 {{- end}}

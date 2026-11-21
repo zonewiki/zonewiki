@@ -187,10 +187,40 @@ def test_sign_out_is_in_the_menu_on_desktop(alice):
     alice.wait_for_url("**/login**")
 
 
-def test_without_users_there_is_no_menu(page, wiki):
+def test_without_users_the_menu_is_at_the_top_right(page, wiki):
+    """A wiki without users has no user menu, but the menu: three lines after
+    Search open Connect an assistant, Set a login, Sharing mode and Help."""
     page.goto("/page/index")
-    expect(page.locator(".module-menu-btn")).to_have_count(0)
     expect(page.locator(".breadcrumb .module-link[data-module=notes]")).to_be_visible()
+    btn = page.locator(".top-actions .top-menu")
+    expect(btn).to_be_visible()
+    expect(page.locator(".signout-form")).to_be_hidden()   # the phone's opener
+    search, b = box_of(page.locator(".top-search")), box_of(btn)
+    assert b["x"] >= search["x"] + search["width"] and abs(b["width"] - b["height"]) < 1
+    menu = page.locator(".module-menu")
+    expect(menu).to_be_hidden()
+    btn.click()
+    expect(menu).to_be_visible()
+    expect(btn).to_have_attribute("aria-expanded", "true")
+    expect(menu.locator('[role="menuitem"]')).to_have_text(["Connect an assistant", "Set a login", "Sharing mode", "Help"])
+    page.keyboard.press("Escape")
+    expect(menu).to_be_hidden()
+    btn.click()
+    menu.get_by_role("menuitem", name="Connect an assistant").click()
+    page.wait_for_url("**/assistant")
+    page.goto("/page/index")
+    page.locator(".top-actions .top-menu").click()
+    page.locator(".module-menu").get_by_role("menuitem", name="Set a login").click()
+    page.wait_for_url("**/help/self-hosting#setting-a-login")
+    expect(page.locator("#setting-a-login")).to_be_visible()
+
+
+def test_without_users_sharing_mode_is_in_the_menu(page, wiki):
+    page.goto("/page/index")
+    page.locator(".top-actions .top-menu").click()
+    page.locator(".module-menu").get_by_role("menuitem", name="Sharing mode").click()
+    expect(page.locator("html.sharing")).to_have_count(1)
+    expect(page.locator(".top-sharing")).to_be_visible()
 
 
 def test_the_phone_has_private_and_quicknote_tabs(new_page, wiki, monkeypatch):

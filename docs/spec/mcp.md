@@ -33,7 +33,7 @@ Either way the assistant acts as the user whose token it is.
 
 The page `/assistant` (`go/assistant.go`, `assistant.html`): the token made in the browser, without a shell on the host.
 With users it is in the user menu ("Connect an assistant") and makes the token of whoever is signed in, never another user's (no field names one);
-without users it makes the wiki's token, and anyone who can open the wiki can open it (the shortcuts dialog links to it in every wiki: "Connect an AI assistant").
+without users it is in the menu at the top right all the same (three lines; The user menu in `docs/spec/navigation.md`) and makes the wiki's token, and anyone who can open the wiki can open it (the shortcuts dialog links to it in every wiki too: "Connect an AI assistant").
 A viewer may make one too: their assistant reads, and its writing tools are refused.
 
 #### What the page shows

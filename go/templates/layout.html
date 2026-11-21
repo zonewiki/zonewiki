@@ -106,8 +106,13 @@
     {{- end}}
     {{- /* A public wiki's visitor: where to sign in (phones; the desktop's is in the top actions). */}}
     {{- with .Shell.SignIn}}<a class="btn signin-link" href="{{.}}">Sign in</a>{{end}}
+    {{- /* Phones: the menu's opener (the name with users, three lines
+        without) and Sign out; the desktop has both behind the button at the
+        top right (top_actions), where the view has it (.signout-in-menu). */}}
     {{- if .Shell.SignOut}}
-    <form method="post" action="/logout" class="signout-form{{if .Shell.User}} signout-user-menu{{end}}">{{with .Shell.User}}<button type="button" class="signout-user module-menu-btn" aria-haspopup="menu" aria-expanded="false" aria-label="{{.}}: account menu" title="Signed in as {{.}}"><span>{{.}}</span> <span aria-hidden="true">▾</span></button>{{end}}{{if .Shell.Admin}}<a class="btn signout-admin" href="/admin">Admin</a>{{end}}<button class="btn" type="submit">Sign out</button></form>
+    <form method="post" action="/logout" class="signout-form{{if or .Shell.User .Shell.ShowActions}} signout-in-menu{{end}}">{{if .Shell.User}}<button type="button" class="signout-user module-menu-btn" aria-haspopup="menu" aria-expanded="false" aria-label="{{.Shell.User}}: account menu" title="Signed in as {{.Shell.User}}"><span>{{.Shell.User}}</span> <span aria-hidden="true">▾</span></button>{{else if .Shell.ShowActions}}<button type="button" class="signout-user signout-menu module-menu-btn" aria-haspopup="menu" aria-expanded="false" aria-label="Menu" title="Menu">{{template "icon_menu"}}</button>{{end}}{{if .Shell.Admin}}<a class="btn signout-admin" href="/admin">Admin</a>{{end}}<button class="btn" type="submit">Sign out</button></form>
+    {{- else if and .Shell.ShowActions .Shell.NoLogin}}
+    <div class="signout-form signout-in-menu"><button type="button" class="signout-user signout-menu module-menu-btn" aria-haspopup="menu" aria-expanded="false" aria-label="Menu" title="Menu">{{template "icon_menu"}}</button></div>
     {{- end}}
   </div>
   {{- if .Shell.ShowActions}}{{template "top_actions" .Shell}}{{end}}

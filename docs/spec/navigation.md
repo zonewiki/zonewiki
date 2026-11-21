@@ -164,7 +164,17 @@ Who is signed in,
 **Sharing mode** (`.menu-sharing`, **Turn sharing mode off** while it is on; desktop only, see Sharing mode),
 **Help** (the manual, `/help`: Help in `docs/spec/routes.md`) and Sign out are in the **user menu**,
 opened by the **user button** at the top right on desktop.
-Phones have Sign out in the page's top row, and the three pages' links in the shortcuts dialog.
+Phones have Sign out in the page's top row, where the name opens the menu's pages, and the pages' links in the shortcuts dialog.
+
+**A wiki without users has the menu too**, so that what is about the wiki has one place in every wiki:
+three lines (`.top-menu`, "Menu") stand where the user button would, and open
+**Connect an assistant** (the wiki's token),
+**Change password** (the wiki's, when it has one) or **Set a login** (when it asks for none: the manual's page on it, `/help/self-hosting#setting-a-login`, since a login is set on the host),
+**Sharing mode**, **Help**, and **Sign out** when there is a password.
+No name and no Groups: there is nobody and there are none.
+On phones the three lines are at the right of the page's top row (`.signout-menu`), beside Sign out when there is one.
+A public wiki's visitor has no menu, only **Sign in**.
+The menu is one template (`module_menu` in `templates/partials/modules.html`) and one entry of `moduleLinks` for everyone but a visitor; `NoLogin` in the page shell says the wiki asks for no login.
 
 ### Current module
 
@@ -190,7 +200,7 @@ in this order:
 
 - **Sharing** (`.top-sharing`, an amber chip with the eye, `aria-pressed="true"`), only while sharing mode is on: a click turns it off (see Sharing mode);
 - **Search** (`.top-search`, Ctrl+P), the one used most, as a labelled pill with its shortcut (`.top-search-key`, `⌘P` on a Mac), white on the paper like the module switcher's pills;
-- with users, the user button (The user menu).
+- the menu's button: with users the user button, a round initial; without, three lines (The user menu).
 
 Sharing mode takes no room here while it is off: it is switched now and then, so the top row's place goes to Search, and the switch on is **S** and the user menu.
 There are no "new" buttons on desktop: a new note is `c n` (`openNewNote`), a new task `c t` (`openDefaultTask`); the row stays calm, and phones have both in the action bar.
@@ -290,7 +300,7 @@ Only a page with nothing that could show there (a visitor without Sign in) has n
 ## Sharing mode
 
 For sharing the screen: the page on screen stays as it is, everything that shows *other* pages around it is hidden, and pages not for sharing are left out entirely.
-Switched on by **S** (Shift+s; `toggleSharing` in `js/actions.js`) or **Sharing mode** in the user menu (with users).
+Switched on by **S** (Shift+s; `toggleSharing` in `js/actions.js`) or **Sharing mode** in the menu at the top right (The user menu).
 While on, a thin amber bar runs across the top and an amber **Sharing** chip sits at the top right (Top actions), which turns it off, as **S** and the menu's **Turn sharing mode off** do.
 Off, nothing on the screen takes room for it: it is used now and then, for a call or a projector; the shortcuts dialog (`?`) lists **S**.
 Phones have no switch (no top actions, and the account menu leaves it out).
@@ -473,7 +483,7 @@ Its groups (Anywhere, Go to, Create, Page, Editor, Snippets, Presentation, Tasks
 They flow into as many columns of 15rem as the screen is wide (CSS `columns`, a group never split), up to 1480px, so on a desktop (1280×720 and up) the whole dialog fits on screen without scrolling.
 Where it doesn't fit (a phone, at most 640px wide: one column), the dialog stays inside the screen and scrolls within itself, its title and **×** staying at the top; Esc and a click on the backdrop close it too.
 At the bottom are Zone's version and build, and the links to Help (the manual), Connect an AI assistant, Change password and Groups:
-on phones these are the user menu's three pages (The user menu, above).
+these are the menu's pages (The user menu, above).
 
 ---
 

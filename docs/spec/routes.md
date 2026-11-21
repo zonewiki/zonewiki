@@ -186,7 +186,7 @@ Zone's manual, `docs/manual/`, is written for users: how to do things, in what t
 `/help` shows it in the browser (`go/help.go`, `help.html`), as a page is shown: the document's `#` heading as its title, its headings on the left on big screens, and at its end the pages before and after it.
 The reading order is the contents' (`docs/manual/README.md`): the pages in the order its links name them, then any it doesn't name.
 Links between the docs are written for the files (`tasks.md#views`, `../spec/users.md`, `../screenshots/page.png`, as they read on GitHub) and pointed at `/help/…` when shown.
-It is linked from the user menu, the search modal's page list (Help, beside Tasks and Notes) and the shortcuts dialog (`?`).
+It is linked from the menu at the top right (the user menu; without users, the three lines), the search modal's page list (Help, beside Tasks and Notes) and the shortcuts dialog (`?`).
 Everyone who reaches the wiki reaches it, a public wiki's visitors too: it holds nothing of the wiki's.
 The docs are the checkout's, or the binary's own copy of them (What the binary holds in `docs/spec/deployment.md`), so a binary run on its own has Help too;
 with `--docs` naming a folder without them, `/help` says they aren't installed.

@@ -283,10 +283,10 @@ def test_tab_bar_takes_taps_below_its_box(new_page, wiki):
 def test_top_actions_on_desktop(page, wiki):
     page.goto("/page/index")
     expect(page.locator(".action-buttons")).to_be_hidden()
-    buttons = page.locator(".top-actions button")
-    # Search alone: sharing mode, used now and then, takes no room while off.
-    expect(buttons).to_have_count(1)
-    expect(buttons).to_have_attribute("aria-label", "Search")
+    # Search and the menu's button: sharing mode, used now and then, takes no room while off.
+    expect(page.locator(".top-actions button")).to_have_count(2)
+    assert page.locator(".top-actions button").evaluate_all("els => els.map(e => e.ariaLabel)") == ["Search", "Menu"]
+    buttons = page.locator(".top-actions .top-search")
     crumb = box_of(page.locator("main > .breadcrumb"))
     vw = page.viewport_size["width"]
     main = box_of(page.locator("main"))
@@ -296,7 +296,10 @@ def test_top_actions_on_desktop(page, wiki):
     assert b["width"] > 100
     expect(buttons).to_contain_text("Search")
     expect(buttons.locator("kbd")).to_have_text("Ctrl P")
-    assert b["x"] + b["width"] > main["x"] + main["width"] - 40 and b["x"] < vw
+    # The menu's button after it, in line, the last thing in the row.
+    m = box_of(page.locator(".top-actions .top-menu"))
+    assert b["x"] + b["width"] <= m["x"] and abs((m["y"] + m["height"] / 2) - (b["y"] + b["height"] / 2)) < 2
+    assert m["x"] + m["width"] > main["x"] + main["width"] - 40 and m["x"] + m["width"] <= vw
     _clear_of_the_breadcrumb(page, b)
     # While sharing mode is on, the amber Sharing chip comes before it, and
     # the breadcrumb keeps clear of both.
@@ -304,7 +307,7 @@ def test_top_actions_on_desktop(page, wiki):
         page.keyboard.press("Shift+S")
     chip = page.locator(".top-actions .top-sharing")
     expect(chip).to_have_text("Sharing")
-    c, b = box_of(chip), box_of(buttons.nth(1))
+    c, b = box_of(chip), box_of(buttons)
     assert abs((c["y"] + c["height"] / 2) - (b["y"] + b["height"] / 2)) < 2
     assert c["x"] + c["width"] < b["x"]
     _clear_of_the_breadcrumb(page, c)
@@ -650,13 +653,19 @@ def test_editor_breadcrumb_keeps_only_the_logo(page, wiki):
         expect(label).to_be_hidden()
 
 
-def test_desktop_sign_out_clear_of_the_buttons(page, wiki, monkeypatch):
+def test_desktop_sign_out_is_in_the_menu_without_users(page, wiki, monkeypatch):
     monkeypatch.setattr(settings, "PASSWORD", "pw")
     page.request.post("/login", form={"password": "pw"})
     page.goto("/page/index")
-    signout = page.get_by_role("button", name="Sign out")
-    expect(signout).to_be_visible()
-    assert not _overlap(box_of(signout), box_of(page.locator(".top-actions")))
+    # With the wiki's password and no users, Sign out is in the menu at the
+    # top right, as with users: nothing of it floats in a corner.
+    expect(page.get_by_role("button", name="Sign out")).to_be_hidden()
+    page.locator(".top-actions .top-menu").click()
+    menu = page.locator(".module-menu")
+    expect(menu.locator('[role="menuitem"]')).to_have_text(
+        ["Connect an assistant", "Change password", "Sharing mode", "Help", "Sign out"])
+    menu.get_by_role("menuitem", name="Sign out").click()
+    page.wait_for_url("**/login**")
 
 
 def test_desktop_toast_clear_of_the_buttons(page, wiki):
@@ -798,6 +807,25 @@ def test_breadcrumb_crumbs_wait_for_the_trail_so_they_dont_jump(page, wiki):
     expect(page.locator(".breadcrumb")).not_to_have_class(re.compile(r"\btrail-ready\b"))
     assert title.evaluate("el => getComputedStyle(el).visibility") == "hidden"
     expect(title).to_be_visible(timeout=3000)   # the fallback shows it after a second
+
+
+def test_three_lines_open_the_menu_on_a_phone_without_users(new_page, wiki):
+    """Without users a phone has the menu too: three lines at the right of
+    the page's top row open Connect an assistant, Set a login and Help."""
+    phone = new_page(**TOUCH_PHONE)
+    phone.goto("/page/index")
+    opener = phone.locator(".signout-menu")
+    expect(opener).to_be_visible()
+    box = box_of(opener)
+    assert box["x"] + box["width"] > phone.viewport_size["width"] - 40   # at the right edge
+    opener.tap()
+    menu = phone.locator(".module-menu")
+    expect(menu).to_be_visible()
+    expect(menu.locator('[role="menuitem"]:visible')).to_have_text(["Connect an assistant", "Set a login", "Help"])
+    box = box_of(menu)
+    assert box["x"] >= 0 and box["x"] + box["width"] <= phone.viewport_size["width"]
+    menu.get_by_role("menuitem", name="Connect an assistant").tap()
+    phone.wait_for_url("**/assistant")
 
 
 def test_the_name_opens_the_account_menu_on_a_phone(new_page, wiki, monkeypatch):

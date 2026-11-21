@@ -872,7 +872,8 @@ Wrong tries are throttled per client and the user name it tries, with a total fo
 ### Who is signed in
 
 The user's name is shown beside Sign out (`.signout-user`, "Signed in as alice") on phones, in the page's top row, and opens the account menu there (Groups, Connect an assistant, Change password, Help: what the row itself doesn't have; so a group is made, a token made and a password changed from a phone too).
-On desktop both are in the user menu (Private pages, below): the form is hidden there (`.signout-user-menu`).
+On desktop both are in the user menu (Private pages, below): the form is hidden there (`.signout-in-menu`).
+Without users there is no name: three lines open the menu instead (The user menu in `docs/spec/navigation.md`).
 
 ### Sessions and passwords
 
@@ -890,7 +891,7 @@ so changing a password is how to sign out a stolen session.
 
 `GET`/`POST /password` (`go/password.go`, `password.html`): whoever is signed in sets a new password in the browser, without a shell on the host.
 With users it is in the user menu ("Change password") and changes the password of whoever is signed in, never another user's (no field names one; an admin gives someone else a reset link);
-without users, with the wiki's one password, it changes that, for everyone (as `zonewiki config passwd`).
+without users, with the wiki's one password, it is in the menu at the top right too and changes that, for everyone (as `zonewiki config passwd`).
 The shortcuts dialog (`?`) links to it too, wherever there is a login, which is how a phone reaches it.
 A wiki without a login has no such page (404).
 A viewer may change theirs (`viewerWrites`).
@@ -1001,6 +1002,7 @@ Private views (a page in your folder, the home included) make it current, notes 
 
 **The user menu** holds who is signed in and **Sign out** (desktop; phones have them in the page's top row, where the name opens the menu's other entries).
 It opens from the **user button** (`.top-user`, a round initial with the name as its tooltip) at the top right, after Search.
+A wiki without users has the same menu without the name, behind three lines (The user menu in `docs/spec/navigation.md`).
 
 ### The lock
 
