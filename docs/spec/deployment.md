@@ -267,7 +267,7 @@ Each `v*` tag's GitHub release carries Zone as one file per platform, for a desk
 | `SHA256SUMS` | The files' SHA-256 sums (`sha256sum -c SHA256SUMS --ignore-missing`; on a Mac `shasum -a 256 -c`) |
 | `LICENSE`, `THIRD_PARTY_LICENSES` | Zone's license and the notices of what the binaries hold |
 
-How to use one is in the manual (Download the binary in `docs/manual/self-hosting.md`): download, `chmod +x`, run, open `http://localhost:5000`.
+How to use one is in the manual (With the binary in `docs/manual/self-hosting.md`): download, `chmod +x`, run, open `http://localhost:5000`.
 
 ### What a release binary is
 

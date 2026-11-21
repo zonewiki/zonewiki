@@ -71,7 +71,7 @@ ZONE_DATA=~/notes ./zonewiki          # or: a folder of Markdown notes you alrea
 ```
 
 Open <http://localhost:5000>.
-On a Mac, see [Download the binary](docs/manual/self-hosting.md#download-the-binary) first: the binary isn't signed.
+On a Mac, see [With the binary](docs/manual/self-hosting.md#with-the-binary) first: the binary isn't signed.
 
 **With Docker** or Podman and Compose, from the repository.
 It is tested on Linux, and should work on macOS and in WSL2.
@@ -90,7 +90,7 @@ Settings such as `ZONE_DATA` are lines in `.env` for the container; the binary r
 To reach Zone from your phone or let your team in, [set a login](docs/manual/self-hosting.md#setting-a-login) and [open it to other devices](docs/manual/self-hosting.md#reaching-it-from-other-devices).
 
 **On a NAS or server** (Synology, a Raspberry Pi, …) you don't need the repository: `compose.nas.yaml` runs the prebuilt image `ghcr.io/zonewiki/zonewiki` (amd64 and arm64).
-**Without a container**, build the Go binary yourself.
+**From source**, build the Go binary yourself.
 All of these are described in [Running Zone yourself](docs/manual/self-hosting.md), with [where settings live](docs/manual/self-hosting.md#where-settings-live).
 
 ## Connect an AI assistant

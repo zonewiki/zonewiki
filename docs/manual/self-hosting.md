@@ -4,7 +4,18 @@ This page is for whoever installs and runs a Zone: on a laptop, a home server or
 It covers installing Zone, where its settings live, setting a login, reaching it from other devices, and what to do before you open it to the internet.
 The full details are in [the deployment spec](../spec/deployment.md) and [the security spec](../spec/security.md).
 
-## Download the binary
+There are four ways to run it; pick the first that fits:
+
+| Way | For | You need |
+|-----|-----|----------|
+| [With the binary](#with-the-binary) | Your own computer, the quickest start | git; Linux or a Mac (Windows: WSL2) |
+| [With Docker](#with-docker) | A computer or server where Zone runs in a container, built from the repository | Docker or Podman, with Compose |
+| [On a NAS or server](#on-a-nas-or-server) | A NAS, a Raspberry Pi or a small server, with the prebuilt image | Docker with Compose |
+| [From source](#from-source) | Building the binary yourself, to change Zone or for another system | Go, a C compiler and git |
+
+Whichever you choose, the wiki is a folder of Markdown files, so you can change the way later and keep the wiki.
+
+## With the binary
 
 The quickest way to run Zone on your own computer, on Linux or a Mac: one file, nothing to build.
 Zone needs git, for the wiki's history.
@@ -103,7 +114,7 @@ docker compose -f compose.nas.yaml run --rm zonewiki /app/zonewiki user add anna
 
 For a Synology with Container Manager, step by step, see [Synology](../spec/deployment.md#synology).
 
-## Without a container
+## From source
 
 With Go 1.27 or newer, a C compiler and git:
 
