@@ -5,14 +5,15 @@
 Zone is a self-hosted wiki with a full task manager and quick notes built in, for one person or a team.
 Your pages are plain Markdown files in a folder you choose, and every change is a git commit.
 Edit them in the browser or in any editor.
-Any AI assistant that speaks MCP can [work with them](#connect-an-ai-assistant), acting as you: it sees and changes only what you may, and you can review and undo every edit it makes.
+Any AI assistant that speaks MCP can [work with them](#connect-an-ai-assistant), acting as you.
+It sees and changes only what you are allowed to, and you can review and undo every edit it makes.
 One Go binary, no database, nothing leaves your server.
 
 > [!NOTE]
 > **Zone is a beta (0.x).**
-> Your pages are plain Markdown files in git and stay readable without Zone, whatever happens.
+> Your pages are plain Markdown files in git and stay readable without Zone.
 > Until 1.0, how tasks are stored, the settings file's keys, the MCP tools and URLs may still change; the release notes say what to do when they do.
-> 1.0 will promise that a newer Zone takes an older wiki over by itself.
+> From 1.0, a newer Zone will upgrade an older wiki by itself.
 
 ![A wiki page in Zone: the page in the middle, its table of contents on the left, backlinks and linked tasks on the right](docs/screenshots/page.png)
 
@@ -20,13 +21,13 @@ One Go binary, no database, nothing leaves your server.
 
 ## Why Zone
 
-- **Your files stay yours.** Pages are Markdown, tasks are JSON beside them, history is git. Grep them, back them up with `git push`, or stop using Zone and keep everything.
-- **A real task manager, not just checkboxes in a page.** Plan your days on a board, keep the day you'll do a thing apart from its deadline, and give tasks lists, repeats, assignees and comments. It can be the task app you now run beside your notes.
-- **Good to use for humans and AI assistants.** For you, a quick editor with live preview, search as you type, a Today view and a plan board for tasks, in any browser on a laptop or a phone, with nothing to install. For your assistant, everything you do in the browser, over MCP, through the same operations, never as an afterthought.
-- **A memory for your assistants, under your rules.** An assistant can do what you can, never more. Connect one that only reads, or keep it out of your private pages. Its edits are commits you can undo one at a time or all at once. Zone brings no model of its own: use the assistant you already have.
+- **Your files stay yours.** Pages are Markdown, tasks are JSON beside them, history is git. Any tool can read them: grep them, back them up with `git push`. If you ever stop using Zone, you lose nothing.
+- **A real task manager, not just checkboxes in a page.** Plan your days on a board, keep the day you'll do a thing apart from its deadline, and give tasks lists, repeats, assignees and comments. It can replace the separate task app you run beside your notes.
+- **Good for you and for your AI assistant.** For you: a quick editor with live preview, search as you type, a Today view and a plan board, in any browser on a laptop or a phone, with nothing to install. For your AI assistant: everything you can do in the browser, over MCP, built in from the start.
+- **Assistants on your terms.** An assistant can do what you can, never more. Connect one that only reads, or keep it out of your private pages. Its edits are commits you can undo one at a time or all at once. Zone brings no model of its own: use the assistant you already have.
 - **Private, shared or a group's.** Each user has private pages and tasks, groups get their own folders, and one permission model decides who sees what: in the browser, in search and for assistants alike.
 - **Pages, notes and tasks in one place.** They share links, search, history and permissions: turn a meeting's action items into tasks, show a project's tasks on its page, and find both with one search.
-- **Nothing gets lost.** Every version of every page, one-click restore, deleted pages brought back, and links that follow a rename.
+- **Nothing is lost by accident.** Every version of every page, one-click restore, deleted pages brought back, and links that follow a rename.
 - **Simple to run.** One binary on a laptop, a NAS or a server; no database, no plugins, no npm.
 
 ## Features
@@ -62,7 +63,7 @@ A wiki can also be public, to read or to edit.
 ## Quick start
 
 Three ways to run Zone: the binary (the quickest), a container, or built from source.
-Whichever you pick, Zone answers only on your computer, with no login, at <http://localhost:5080>.
+Whichever you pick, Zone is reachable only from your computer, and asks for no login, at <http://localhost:5080>.
 
 ### Binary
 
@@ -155,5 +156,5 @@ Found a bug or have an idea? Open an issue; there are templates for both.
 
 Copyright (C) 2026 Gernot Klingler.
 Zone is free software under the [GNU Affero General Public License](LICENSE), version 3 or later (`AGPL-3.0-or-later`).
-Using it, also in a company, asks nothing of you. If you change it and others use your version over a network, offer them its source (point `sourceURL` in `go/config.go` at your copy).
+You can use it freely, in a company too. If you change it and others use your version over a network, offer them its source (point `sourceURL` in `go/config.go` at your copy).
 Third-party components keep their own licenses: see [THIRD_PARTY_LICENSES](THIRD_PARTY_LICENSES) and the license files in `public/vendor/` (`zonewiki licenses` prints them all).
