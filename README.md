@@ -61,6 +61,11 @@ A wiki can also be public, to read or to edit.
 
 ## Quick start
 
+Three ways to run Zone: the binary (the quickest), a container, or built from source.
+Whichever you pick, Zone answers only on your computer, with no login, at <http://localhost:5000>.
+
+### Binary
+
 **Download** the file for your computer (Linux or macOS, amd64 or arm64) from the [latest release](https://github.com/zonewiki/zonewiki/releases/latest) and run it; it needs git.
 On Windows, run the Linux file in WSL2: there is no Windows binary.
 
@@ -71,8 +76,9 @@ chmod +x zonewiki
 ZONE_DATA=~/notes ./zonewiki          # or: a folder of Markdown notes you already have
 ```
 
-Open <http://localhost:5000>.
 On a Mac, see [With the binary](docs/manual/self-hosting.md#with-the-binary) first: the binary isn't signed.
+
+### Container
 
 **With Docker** or Podman and Compose, from the prebuilt image (amd64 and arm64): no repository, no build.
 It is tested on Linux, and should work on macOS and in WSL2.
@@ -84,15 +90,25 @@ printf 'ZONE_DATA=%s\nZONE_UID=%s\nZONE_GID=%s\nTZ=Europe/Vienna\n' ~/zonewiki "
 docker compose -f compose.image.yaml up -d
 ```
 
-Open <http://localhost:5000>.
+To build the image from a checkout instead (to change Zone, or for search by meaning), use `./run.sh up`: see [From the repository](docs/manual/self-hosting.md#from-the-repository).
 
-Either way, Zone answers only on your computer, with no login.
+### From source
+
+With Go 1.27 or newer, a C compiler and git:
+
+```bash
+git clone https://github.com/zonewiki/zonewiki && cd zonewiki
+(cd go && go build -o zonewiki .)
+go/zonewiki                           # your wiki: ~/zonewiki
+```
+
+`CGO_ENABLED=0` builds without semantic search and needs no C compiler.
+
+### Next steps
+
 Settings such as `ZONE_DATA` are lines in `.env` for the container; the binary reads no `.env` and takes them as environment variables, as above.
 To reach Zone from your phone or let your team in, [set a login](docs/manual/self-hosting.md#setting-a-login) and [open it to other devices](docs/manual/self-hosting.md#reaching-it-from-other-devices); on a NAS or server (Synology, a Raspberry Pi, …), see [On a NAS or server](docs/manual/self-hosting.md#on-a-nas-or-server).
-
-**From the repository**, `./run.sh up` builds the image from a checkout: to change Zone, or for search by meaning.
-**From source**, build the Go binary yourself.
-All of these are described in [Running Zone yourself](docs/manual/self-hosting.md), with [where settings live](docs/manual/self-hosting.md#where-settings-live).
+All the ways are described in [Running Zone yourself](docs/manual/self-hosting.md), with [where settings live](docs/manual/self-hosting.md#where-settings-live).
 
 ## Connect an AI assistant
 
