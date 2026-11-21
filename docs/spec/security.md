@@ -227,8 +227,9 @@ The Host check is no login: a client on the LAN sends `Host: localhost`.
   `compose.build.yaml` and `compose.yaml` hand on the `${ZONE_BIND:-127.0.0.1}` their port is published on,
 - without `ZONE_BIND`, Zone listens beyond loopback: `--addr` names every interface (`0.0.0.0:5080`, `[::]:5080`), another address of the machine, or a name (`beyondLoopback`, also `Config.Published`).
   The image's own command is `--addr 0.0.0.0:5080`, so a container started without compose (`docker run -p 5080:5080`) asks for a login too.
+- Zone was handed a TCP socket that listens beyond loopback (`--addr fd:3` with systemd's `ListenStream=5080`): `fd:3` doesn't say where it listens, so the socket is asked (`handedBeyondLoopback`, also `Config.Published`).
 
-On localhost alone Zone needs no login: a port alone in `--addr` listens on `127.0.0.1`, and a socket (`unix:PATH`, `fd:N`) is its owner's to open.
+On localhost alone Zone needs no login: a port alone in `--addr` listens on `127.0.0.1`, and a Unix socket (`unix:PATH`, or one handed over as `fd:N`) is its owner's to open.
 
 **The form** (`GET`/`POST /setup`, `setup.html`) takes a password twice (at least 8 characters, `passwordMin`) and, optionally, a user name.
 Without a name the wiki gets its password (as `zonewiki config passwd`); with one, its first user, an admin (as `zonewiki user add`; a wiki MCP token gives way).

@@ -235,6 +235,15 @@ func main() {
 	if err != nil {
 		fatal(portTaken(err))
 	}
+	if handedBeyondLoopback(ln) {
+		// A TCP socket Zone was handed (--addr fd:3) that other devices
+		// reach: a login first, as with --addr beyond loopback (needsSetup).
+		cfg.Published = true
+		if needsSetup() {
+			logf("the socket Zone was handed (%s) is open to other devices and the wiki has no login: Zone asks for "+
+				"a password in the browser before it shows anything (/setup)", ln.Addr())
+		}
+	}
 	srv := &http.Server{
 		Handler: countRequests(newHandler()),
 		// A slow or idle client doesn't hold a connection for long: the
@@ -340,6 +349,17 @@ func beyondLoopback(addr string) bool {
 	}
 	ip, err := netip.ParseAddr(host)
 	return err != nil || !ip.IsLoopback()
+}
+
+// handedBeyondLoopback: ln is a TCP socket Zone was handed (--addr fd:N)
+// and other devices reach it: beyondLoopback can't tell from "fd:3", only
+// the socket says where it listens. A Unix socket is its owner's to open.
+func handedBeyondLoopback(ln net.Listener) bool {
+	if !handedSocket {
+		return false
+	}
+	tcp, ok := ln.Addr().(*net.TCPAddr)
+	return ok && !tcp.IP.IsLoopback()
 }
 
 func listen(addr string) (net.Listener, error) {

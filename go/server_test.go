@@ -147,6 +147,42 @@ func TestClientKeyOnSocket(t *testing.T) {
 	}
 }
 
+// A TCP socket Zone was handed that listens beyond this machine counts as
+// open to the network (a wiki without a login then asks for one first):
+// "fd:3" doesn't say where it listens, the socket does. One on loopback,
+// and a socket Zone opened itself (--addr says where), don't.
+func TestAHandedTCPSocketBeyondLoopback(t *testing.T) {
+	configWiki(t, "")
+	t.Cleanup(func() { onSocket, handedSocket = false, false })
+	for _, c := range []struct {
+		addr string
+		want bool
+	}{{"0.0.0.0:0", true}, {"127.0.0.1:0", false}} {
+		holder, err := net.Listen("tcp4", c.addr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		f, err := holder.(*net.TCPListener).File()
+		if err != nil {
+			t.Fatal(err)
+		}
+		handedSocket = false
+		if handedBeyondLoopback(holder) {
+			t.Errorf("%s, opened by Zone: counted as handed", c.addr)
+		}
+		ln, err := listen("fd:" + strconv.Itoa(int(f.Fd())))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := handedBeyondLoopback(ln); got != c.want || onSocket {
+			t.Errorf("%s handed: beyond loopback %v, onSocket %v", c.addr, got, onSocket)
+		}
+		ln.Close()
+		f.Close()
+		holder.Close()
+	}
+}
+
 // --addr fd:N: Zone serves on a listening socket it was started with, as
 // systemd hands one to a service of a socket unit. A Unix socket's file
 // stays when Zone closes its listener: it is the holder's.
@@ -167,8 +203,8 @@ func TestListenOnAHandedSocket(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !handedSocket || !onSocket {
-		t.Errorf("handedSocket %v, onSocket %v", handedSocket, onSocket)
+	if !handedSocket || !onSocket || handedBeyondLoopback(ln) {
+		t.Errorf("handedSocket %v, onSocket %v, beyond loopback %v", handedSocket, onSocket, handedBeyondLoopback(ln))
 	}
 	if got := listenName(ln); got != socketPrefix+path {
 		t.Errorf("listenName: %q", got)
