@@ -63,7 +63,8 @@ A wiki can also be public, to read or to edit.
 ## Quick start
 
 Three ways to run Zone: the binary (the quickest), a container, or built from source.
-Whichever you pick, Zone is reachable only from your computer, and asks for no login, at <http://localhost:5080>.
+Whichever you pick, Zone is then at <http://localhost:5080>.
+To start with, it is reachable only from your computer and asks for no login; [Next steps](#next-steps) says how to open it to your phone or your team.
 
 ### Binary
 
