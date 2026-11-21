@@ -275,7 +275,7 @@ func TestTheWikiByDefault(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want, _ := filepath.EvalSymlinks(home); c.Data != filepath.Join(want, "zonewiki") || !isDir(c.Uploads) {
+	if want, _ := filepath.EvalSymlinks(home); c.Data != filepath.Join(want, "zonewiki") || !isDir(c.Data) {
 		t.Fatalf("the wiki is %s", c.Data)
 	}
 	os.WriteFile(filepath.Join(c.Data, "index.md"), []byte("# Mine\n"), 0o666)

@@ -68,7 +68,7 @@ func gitSetup() error {
 		return nil
 	}
 	if _, err := os.Stat(filepath.Join(cfg.Data, ".git")); err != nil {
-		if err := outerRepo(); err != nil {
+		if err := wikiFolderError(); err != nil {
 			return err
 		}
 		if r := runGit("init"); r.Code != 0 {
@@ -102,6 +102,20 @@ func gitSetup() error {
 	}
 	setGitRemote()
 	return nil
+}
+
+// wikiFolderError: why Zone doesn't use the wiki's folder (outerRepo),
+// nil if it does. The start asks it first, before anything is written
+// there, so a folder refused is left as it was; gitSetup asks it again
+// before it makes the repository.
+func wikiFolderError() error {
+	if !cfg.GitEnabled {
+		return nil
+	}
+	if _, err := os.Stat(filepath.Join(cfg.Data, ".git")); err == nil {
+		return nil // the wiki's repository already, wherever it lies
+	}
+	return outerRepo()
 }
 
 // outerRepo: an error when the wiki's folder, not a repository yet, lies

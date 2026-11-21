@@ -467,8 +467,8 @@ func TestLoadConfig(t *testing.T) {
 	if !s.NoshareTags["people"] || !s.NoshareTags["private"] || len(s.NoshareFolder) != 1 || s.NoshareFolder[0] != "personal/" {
 		t.Fatalf("noshare %v %v", s.NoshareTags, s.NoshareFolder)
 	}
-	if !isDir(filepath.Join(wiki, "_assets")) {
-		t.Fatal("no _assets/")
+	if isDir(filepath.Join(wiki, "_assets")) {
+		t.Fatal("loading the settings made _assets/: the start makes it, once the folder is checked")
 	}
 	file("")
 	if _, s, _ := loadConfig(env()); !s.NoshareTags["noshare"] {

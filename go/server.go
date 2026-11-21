@@ -147,6 +147,12 @@ func main() {
 		fatal(err)
 	}
 	cfg = c
+	// Before Zone writes anything in the wiki's folder (.zone/, _assets/):
+	// a folder it won't use is left as it was.
+	if err := wikiFolderError(); err != nil {
+		fatal(err)
+	}
+	_ = os.Mkdir(cfg.Uploads, 0o777)
 	*addr = listenAddr(*addr, cfg.AllowRemote)
 	if !cfg.PortMapped && beyondLoopback(*addr) {
 		cfg.Published = true // started by hand on the network: a login first (needsSetup)

@@ -153,8 +153,7 @@ func loadWiki(getenv func(string) string) (*Config, error) {
 	if real, err := filepath.EvalSymlinks(c.Data); err == nil {
 		c.Data = real // pages' paths are resolved too (safePath)
 	}
-	c.Uploads = filepath.Join(c.Data, "_assets")
-	_ = os.Mkdir(c.Uploads, 0o777)
+	c.Uploads = filepath.Join(c.Data, "_assets") // made at start, once the folder is checked (wikiFolderError)
 	_, err := exec.LookPath("git")
 	c.GitEnabled = err == nil
 	if c.Mail, err = loadMail(getenv); err != nil {

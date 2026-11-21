@@ -2689,6 +2689,19 @@ class TestVersion:
         assert f"no wiki at {tmp_path / 'nowhere'}" in r.stderr
         assert not (tmp_path / "nowhere").exists() and not (tmp_path / "zonewiki").exists()
 
+    def test_refuses_a_folder_inside_another_repository_untouched(self, tmp_path):
+        # A ZONE_DATA naming a folder of a checkout: Zone doesn't start, and
+        # leaves the folder as it was (no .zone/, _assets/ or .git).
+        outer = Path(os.path.realpath(tmp_path))
+        subprocess.run(["git", "init", "-q", str(outer)], check=True)
+        docs = outer / "docs"
+        docs.mkdir()
+        (docs / "readme.md").write_text("# Docs\n", encoding="utf-8")
+        r = self._start(docs, home=tmp_path)
+        assert r.returncode != 0
+        assert f"{docs} is inside the git repository {outer}, which doesn't ignore it" in r.stderr
+        assert sorted(p.name for p in docs.iterdir()) == ["readme.md"]
+
     def test_starts_with_an_empty_wiki_folder(self, tmp_path):
         r = self._start(tmp_path)
         assert r.returncode == 0, r.stderr
