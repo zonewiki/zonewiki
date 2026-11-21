@@ -7,11 +7,11 @@ Your pages are plain Markdown files in a folder you choose, and every change is 
 Edit them in the browser or in any editor.
 Any AI assistant that speaks MCP can [work with them](#connect-an-ai-assistant), acting as you.
 It sees and changes only what you are allowed to, and you can review and undo every edit it makes.
-One Go binary, no database, nothing leaves your server.
+One Go binary, no database, no outside services: Zone sends nothing anywhere on its own.
 
 > [!NOTE]
 > **Zone is a beta (0.x).**
-> Your pages are plain Markdown files in git and stay readable without Zone.
+> Your pages stay readable without Zone.
 > Until 1.0, how tasks are stored, the settings file's keys, the MCP tools and URLs may still change; the release notes say what to do when they do.
 > From 1.0, a newer Zone will upgrade an older wiki by itself.
 
@@ -22,7 +22,7 @@ One Go binary, no database, nothing leaves your server.
 ## Why Zone
 
 - **Your files stay yours.** Pages are Markdown, tasks are JSON beside them, history is git. Any tool can read them: grep them, back them up with `git push`. If you ever stop using Zone, you lose nothing.
-- **A real task manager, not just checkboxes in a page.** Plan your days on a board, keep the day you'll do a thing apart from its deadline, and give tasks lists, repeats, assignees and comments. It can replace the separate task app you run beside your notes.
+- **A real task manager, not just checkboxes in a page.** Plan your days on a board, keep the day you'll work on a task apart from its deadline, and give tasks lists, repeats, assignees and comments. It can replace the separate task app you run beside your notes.
 - **Good for you and for your AI assistant.** For you: a quick editor with live preview, search as you type, a Today view and a plan board, in any browser on a laptop or a phone, with nothing to install. For your AI assistant: everything you can do in the browser, over MCP, built in from the start.
 - **Assistants on your terms.** An assistant can do what you can, never more. Connect one that only reads, or keep it out of your private pages. Its edits are commits you can undo one at a time or all at once. Zone brings no model of its own: use the assistant you already have.
 - **Private, shared or a group's.** Each user has private pages and tasks, groups get their own folders, and one permission model decides who sees what: in the browser, in search and for assistants alike.
@@ -50,13 +50,13 @@ Turn lines of a page into tasks, and embed a task list or a single task in any p
 
 **Assistants.** Over MCP, an assistant searches, reads and writes pages, notes and tasks, as you.
 History shows which changes it made ("Anna through Claude"), and you undo them one at a time or all at once.
-Connect one that only reads, or keep it out of your private pages; a `wiki-guide` page tells every assistant your conventions.
+A `wiki-guide` page tells every assistant your conventions, and you can limit what it reaches.
 
-**Teams.** Optionally several users with their own logins, private pages and tasks, group folders and roles (admin, editor, viewer); invite people with a link, or let them sign up.
+**Teams.** Several users can have their own logins, private pages and tasks, group folders and roles (admin, editor, viewer); invite people with a link, or let them sign up.
 Changes are committed in each user's name.
 A wiki can also be public, to read or to edit.
 
-**Everywhere.** Keyboard shortcuts for everything (`?` lists them), light and dark mode, and a phone layout you can install on the home screen.
+**Everywhere.** Keyboard shortcuts (`?` lists them), light and dark mode, and a phone layout you can install on the home screen.
 
 <p align="center"><img src="docs/screenshots/phone.png" width="640" alt="Zone on a phone: a wiki page, and the Today view of Tasks"></p>
 
@@ -81,7 +81,7 @@ On a Mac, see [With the binary](docs/manual/self-hosting.md#with-the-binary) fir
 
 ### Container
 
-**With Docker** or Podman and Compose, from the prebuilt image (amd64 and arm64): no repository, no build.
+**With Docker or Podman** and Compose, from the prebuilt image (amd64 and arm64): no repository, no build.
 It is tested on Linux, and should work on macOS and in WSL2.
 
 ```bash
@@ -123,7 +123,7 @@ Claude.ai and ChatGPT connect from their makers' servers, so they need a wiki on
 **With a token** (any wiki, any client): open **Connect an assistant** in the browser, or run `./run.sh config token` (`./run.sh user token NAME` with users).
 Then add an MCP server at `http://localhost:5080/mcp` with the header `Authorization: Bearer <token>`.
 
-Write your conventions on a page called `wiki-guide` (where things go, what's private, how pages are tagged), and every assistant follows them.
+Write your conventions on a page called `wiki-guide` (where things go, what's private, how pages are tagged), and every assistant reads them before it writes.
 Assistants can also answer questions about Zone itself.
 Details: [AI assistants](docs/manual/assistants.md) in the manual.
 
