@@ -182,6 +182,13 @@ edited by hand or with `./run.sh user …`/`./run.sh group …`/`./run.sh config
 | `./run.sh group …` | Groups made of groups and a group's owners (`zonewiki group`) |
 | `./run.sh config …` | The wiki's settings file (`zonewiki config`) |
 
+Each command says what it does, in lines starting with `==>` on stderr:
+the image it builds and from which file (a first build, that it takes minutes; the build's own output only when it fails),
+where it runs (the tools image, the app's, compose),
+its steps (`test`: gofmt and go vet, go test, pytest; `binaries`: each file as it is built),
+and where what it makes lands (`binaries`: the `dist/` folder by its full path; `screenshots`: `docs/screenshots/`).
+`build` and `up` say that the binary is compiled inside the image, not into the checkout, and `build` points to `binaries` for files.
+
 - `test`: extra args go to pytest; a tests/… path replaces the default whole suite but the browser tests.
 - `e2e`: extra args go to pytest.
 - `bench`: `tests/bench_tasks.py`, then once more against a server built with the race detector;

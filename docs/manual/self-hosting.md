@@ -83,6 +83,8 @@ cp .env.example .env                  # ZONE_DATA is your wiki folder
 
 Open <http://localhost:5000>.
 The first build takes a few minutes; later starts are quick.
+Each `./run.sh` command says what it is doing in lines starting with `==>`.
+Zone is compiled inside the container's image, so no `zonewiki` file appears in the folder; `./run.sh binaries` builds the binaries for Linux and macOS into `dist/`, to run Zone without a container.
 
 The wiki folder must exist before Zone starts: Zone won't create one where a typo points.
 To use a folder of Markdown notes you already have, set `ZONE_DATA` in `.env` to it.

@@ -196,11 +196,49 @@ def test_build_output_is_hidden_and_a_first_build_says_so(sandbox):
                        capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
     assert "debconf" not in r.stdout + r.stderr
-    assert "Building the zonewiki-tools image (first time" in r.stderr
+    assert "Building the zonewiki-tools image from Containerfile.tools (first time" in r.stderr
+    assert "Scanning the git history for secrets" in r.stderr
     (build,) = _engine_calls(log, "build")
     assert "-t zonewiki-tools -f Containerfile.tools" in build
     (run,) = _engine_calls(log, "run")
     assert " fake-image gitleaks " in run
+
+
+def test_binaries_say_what_they_build_and_where_it_lands(sandbox):
+    repo, env, log = sandbox
+    r = subprocess.run(["./run.sh", "binaries"], cwd=repo, env=env, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    assert "Building the release binaries in the tools image" in r.stderr
+    assert f"The binaries are in {repo.resolve()}/dist/." in r.stderr
+    run = log.read_text()   # the script spans lines; each target is named as it builds
+    assert 'echo "==> dist/$name"' in run
+    # Copied into the container (CI), nothing comes back, and it says so.
+    env["ZONE_COPY_REPO"] = "1"
+    r = subprocess.run(["./run.sh", "binaries"], cwd=repo, env=env, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    assert "nothing came back to dist/" in r.stderr and "The binaries are in" not in r.stderr
+
+
+def test_each_command_says_what_it_does(sandbox, tmp_path):
+    repo, env, log = sandbox
+    wiki = tmp_path / "wiki"
+    wiki.mkdir()
+    (repo / ".env").write_text(f"ZONE_DATA={wiki}\n")
+    for args, said in ((["up"], "the binary is compiled inside it, not into this folder"),
+                       (["build"], "./run.sh binaries builds binaries into dist/"),
+                       (["down"], "Stopping Zone"),
+                       (["test"], "gofmt, go vet, go test -race, then pytest"),
+                       (["e2e"], "browser and tasks-core tests"),
+                       (["bench"], "tests/bench_tasks.py"),
+                       (["retrieval"], "Measuring search on tests/retrieval/"),
+                       (["screenshots"], "docs/screenshots/"),
+                       (["config", "check"], "Building Zone's image")):
+        r = subprocess.run(["./run.sh", *args], cwd=repo, env=env, capture_output=True, text=True,
+                           stdin=subprocess.DEVNULL)
+        assert r.returncode == 0, r.stderr
+        assert said in r.stderr, (args, r.stderr)
+        # Never on stdout: build_image's is the image ID the commands run.
+        assert "==>" not in r.stdout
 
 
 def test_every_build_names_its_containerfile(sandbox):

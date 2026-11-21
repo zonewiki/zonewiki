@@ -11,6 +11,12 @@ env_val() {
   grep "^$1=" .env 2>/dev/null | cut -d= -f2-
 }
 
+# Say what the script is doing, on stderr (stdout is what a command prints,
+# and build_image's is the image ID).
+say() {
+  echo "==> $*" >&2
+}
+
 # Podman if it's there, else Docker; each with its compose.
 if command -v podman >/dev/null 2>&1; then
   ENGINE=podman
@@ -109,13 +115,19 @@ in_image() {
 # Build an image and print its ID: build_image TAG [OPTION…]. Commands run
 # it by ID, so two builds at once (CI runs on one engine) can't swap a shared
 # tag under them. The build's output (podman's -q still shows what RUN steps
-# print, e.g. apt's) is shown only when it fails; a first build, which takes
-# minutes, says so.
+# print, e.g. apt's) is shown only when it fails; each build says which
+# image it builds from which file, a first build that it takes minutes.
 build_image() {
-  local tag=$1 log iid
+  local tag=$1 log iid file=Containerfile a prev=
   shift
+  for a in "$@"; do
+    [[ $prev != -f ]] || file=$a
+    prev=$a
+  done
   if ! $ENGINE image inspect "$tag" >/dev/null 2>&1; then
-    echo "Building the $tag image (first time; takes a few minutes)…" >&2
+    say "Building the $tag image from $file (first time; takes a few minutes)…"
+  else
+    say "Building the $tag image from $file (cached where nothing changed)…"
   fi
   log=$(mktemp) iid=$(mktemp)
   if ! $ENGINE build -q --iidfile "$iid" -t "$tag" "$@" . >"$log" 2>&1; then
@@ -129,7 +141,9 @@ build_image() {
 
 case "${1:-up}" in
   build)
+    say "Building Zone's image with $ENGINE compose (the binary is compiled inside it, not into this folder)…"
     compose build
+    say "Built. ./run.sh up starts it; ./run.sh binaries builds binaries into dist/."
     ;;
   up)
     # The wiki must exist: Zone doesn't make one where a typo in .env points.
@@ -141,11 +155,13 @@ case "${1:-up}" in
       echo "No .env: create one (cp .env.example .env, see README)." >&2
       exit 1
     fi
+    say "Building Zone's image with $ENGINE compose (the binary is compiled inside it, not into this folder) and starting it…"
     compose up -d --build
     echo "Zone running at http://localhost:5000"
     echo "Zone data: $ZONE_DATA"
     ;;
   down)
+    say "Stopping Zone…"
     compose down
     ;;
   logs)
@@ -158,13 +174,16 @@ case "${1:-up}" in
     # CPU (-n 0: one process). Extra args go to pytest; without a tests/…
     # path the whole suite runs but the browser and tasks-core tests (e2e).
     image=$(build_image zonewiki-tools -f Containerfile.tools)
+    say "Running the tests in the tools image: gofmt, go vet, go test -race, then pytest…"
     # ZONE_TEST_RACE=1: the server the API tests start is built with the race
     # detector too (tests/goserver.py); several times slower.
     in_image "$image" ${ZONE_TEST_RACE:+-e ZONE_TEST_RACE=1} -- sh -c \
-      '(cd go && f=$(gofmt -l . ../zonefiles.go) && if [ -n "$f" ]; then echo "Not gofmt-formatted (gofmt -w them):" $f >&2; exit 1; fi &&
-         go vet ./... && CGO_ENABLED=1 go test -race ./...) || exit 1
+      'echo "==> gofmt, go vet" >&2
+       (cd go && f=$(gofmt -l . ../zonefiles.go) && if [ -n "$f" ]; then echo "Not gofmt-formatted (gofmt -w them):" $f >&2; exit 1; fi &&
+         go vet ./... && echo "==> go test -race" >&2 && CGO_ENABLED=1 go test -race ./...) || exit 1
        for a in "$@"; do case "$a" in tests*) paths=1;; esac; done
        [ -n "$paths" ] || set -- tests --ignore=tests/e2e --ignore=tests/test_tasks_core.py "$@"
+       echo "==> pytest $*" >&2
        python3 -m pytest -q -p no:cacheprovider -n auto "$@"' -- "${@:2}"
     ;;
   bench)
@@ -175,6 +194,7 @@ case "${1:-up}" in
     # several times slower). ZONE_BENCH_SLACK=3 allows three times the time
     # budgets (CI's runners are slower and noisier than a desk's machine).
     image=$(build_image zonewiki-tools -f Containerfile.tools)
+    say "Measuring the tasks at a team's size in the tools image (tests/bench_tasks.py)…"
     in_image "$image" ${ZONE_BENCH_SLACK:+-e ZONE_BENCH_SLACK="$ZONE_BENCH_SLACK"} ${ZONE_BENCH_SIZE:+-e ZONE_BENCH_SIZE="$ZONE_BENCH_SIZE"} -- sh -c \
       'python3 -m pytest -q -p no:cacheprovider -n 0 -s tests/bench_tasks.py "$@" || exit 1
        echo; echo "The same against a server built with the race detector (no budgets):"
@@ -188,6 +208,7 @@ case "${1:-up}" in
     # CPU starves the browsers until timing-sensitive tests fail. -n 0 (or
     # any -n) in the extra args overrides it.
     image=$(build_image zonewiki-tools -f Containerfile.tools)
+    say "Running the browser and tasks-core tests in the tools image (screenshots in tests/e2e/_screenshots/)…"
     in_image "$image" --ipc=host -- sh -c \
       'n=$(( $(nproc) / 2 )); [ "$n" -ge 1 ] || n=1
        python3 -m pytest tests/e2e tests/test_tasks_core.py -v -p no:cacheprovider \
@@ -203,6 +224,7 @@ case "${1:-up}" in
     # ranking's floor is held by ./run.sh test too (TestRetrievalHoldsItsFloor).
     image=$(build_image zonewiki-retrieval -f Containerfile --build-arg "ZONE_BUILD=$ZONE_BUILD" \
       --build-arg ZONE_SEMANTIC_SEARCH=on)
+    say "Measuring search on tests/retrieval/ against floors.json, in the app's image…"
     in_image "$image" -e ZONE_DATA=/repo/tests/retrieval/wiki -e ZONE_SEMANTIC_SEARCH=on -- \
       /app/zonewiki eval --floor /repo/tests/retrieval/floors.json /repo/tests/retrieval/questions.json "${@:2}"
     ;;
@@ -215,6 +237,7 @@ case "${1:-up}" in
     # to a v* tag's GitHub release. The build string is git's, as for any go
     # build (safe.directory: the repo is the host user's, not the container's).
     image=$(build_image zonewiki-tools -f Containerfile.tools)
+    say "Building the release binaries in the tools image, into dist/…"
     in_image "$image" -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0='*' -- sh -c \
       'set -e
        rm -rf dist
@@ -222,12 +245,18 @@ case "${1:-up}" in
        for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
          os=${target%/*} arch=${target#*/}
          name=zonewiki-$(echo "$os" | sed s/darwin/macos/)-$arch
+         echo "==> dist/$name" >&2
          (cd go && CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath -ldflags="-s -w" -o "../dist/$name" .)
        done
        cp LICENSE THIRD_PARTY_LICENSES dist/
        cd dist
        sha256sum zonewiki-* LICENSE THIRD_PARTY_LICENSES > SHA256SUMS
        ls -l'
+    if [[ -n "$ZONE_COPY_REPO" ]]; then
+      say "Built in a copy of the repo (ZONE_COPY_REPO): nothing came back to dist/."
+    else
+      say "The binaries are in $PWD/dist/."
+    fi
     ;;
   leaks)
     # Secrets in the git history (gitleaks, in the tools image); extra args
@@ -258,6 +287,7 @@ case "${1:-up}" in
       esac
     fi
     image=$(build_image zonewiki-tools -f Containerfile.tools)
+    say "Scanning the git history for secrets (gitleaks, in the tools image)…"
     in_image "$image" "${gitdir[@]}" "${idx[@]}" -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory \
       -e GIT_CONFIG_VALUE_0='*' -- \
       gitleaks git --redact --no-banner --exit-code 3 "${@:2}" .
@@ -266,7 +296,9 @@ case "${1:-up}" in
     # The README's screenshots (docs/screenshots/*.png), from a sample wiki,
     # in the tools image (Playwright).
     image=$(build_image zonewiki-tools -f Containerfile.tools)
+    say "Taking the README's screenshots in the tools image…"
     in_image "$image" --ipc=host -- python3 docs/screenshots/make_screenshots.py
+    say "The screenshots are in $PWD/docs/screenshots/."
     ;;
   eval)
     # Retrieval quality on your wiki (zonewiki eval, go/eval.go): the questions
@@ -281,6 +313,7 @@ case "${1:-up}" in
     semantic=$(env_val ZONE_SEMANTIC_SEARCH)
     image=$(build_image zonewiki -f Containerfile --build-arg "ZONE_BUILD=$ZONE_BUILD" \
       --build-arg "ZONE_SEMANTIC_SEARCH=$semantic")
+    say "Measuring search on $ZONE_DATA against $file, in the app's image…"
     in_image "$image" -v "$ZONE_DATA:/wiki-data:ro,z" -e ZONE_DATA=/wiki-data \
       -e "ZONE_SEMANTIC_SEARCH=$semantic" -- \
       /app/zonewiki eval "/wiki-data/$file" "${@:3}"
@@ -299,6 +332,7 @@ case "${1:-up}" in
       exit 1
     fi
     # The image as up builds it, its output only when the build fails.
+    say "Building Zone's image with $ENGINE compose…"
     log=$(mktemp)
     if ! compose build -q zonewiki >"$log" 2>&1; then
       cat "$log" >&2
