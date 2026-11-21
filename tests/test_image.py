@@ -228,3 +228,11 @@ def test_forgejo_publishes_to_the_other_repository_only_as_it_is():
     for name in ("PUBLISH_KEY", "PUBLISH_CHECK"):
         assert f"{name}: ${{{{ secrets.{name} }}}}" in job
     assert "PUBLISH_REPO: ${{ vars.PUBLISH_REPO }}" in job
+
+
+def test_the_target_architecture_has_no_default():
+    # A default in the ARG wins over the one buildx sets, so the arm64 image
+    # was built with amd64's Go ("Exec format error"). The Containerfile
+    # falls back on the container's own architecture instead.
+    assert not re.search(r"^ARG TARGETARCH=", CONTAINERFILE, re.M)
+    assert CONTAINERFILE.count("${TARGETARCH:-$(dpkg --print-architecture)}") == 2

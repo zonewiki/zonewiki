@@ -23,11 +23,15 @@ RUN apt-get update && \
 # Go, a pinned release checked against its published checksum (go.dev/dl),
 # the same as Containerfile.tools'. To update it, change the version and
 # both sums in both files.
-ARG TARGETARCH=amd64
+# TARGETARCH is set by buildx and podman for the platform being built; it has
+# no default here, since a default wins over it (the arm64 build got amd64's
+# Go). Where the builder doesn't set it, the container's own architecture is it.
+ARG TARGETARCH
 ARG GO_VERSION=1.27.3
 ARG GO_SHA256_AMD64=65efbc80fdc1fa2cd2631cad5b481777a68e8725f34e89f50fc6ac714e379b40
 ARG GO_SHA256_ARM64=a06e99309dbcbdca1a8ccd2282c3ee146e55930886e26b4f1193269587165f49
-RUN case "$TARGETARCH" in \
+RUN TARGETARCH=${TARGETARCH:-$(dpkg --print-architecture)} \
+ && case "$TARGETARCH" in \
       amd64) sum=$GO_SHA256_AMD64 ;; \
       arm64) sum=$GO_SHA256_ARM64 ;; \
       *) echo "no Go build for $TARGETARCH" >&2; exit 1 ;; \
@@ -62,7 +66,7 @@ RUN go build -trimpath -ldflags="-s -w" -o /zonewiki .
 # its files), the model's files at a fixed revision (go/embed.go has the
 # same names and sums; tests/test_image.py checks they agree).
 FROM ${UBUNTU} AS semantic
-ARG TARGETARCH=amd64
+ARG TARGETARCH
 ARG ZONE_SEMANTIC_SEARCH=
 ARG ORT_VERSION=1.31.0
 ARG ORT_SHA256_X64=cc5c72baf5ae5c8238a6841f0897227be2d02826b9cf98eaf02fdefaeeb03a57
@@ -77,6 +81,7 @@ RUN mkdir -p /opt/onnxruntime /opt/onnxruntime-licenses /opt/zonewiki-model \
       1|on|true|yes) ;; \
       *) echo "ZONE_SEMANTIC_SEARCH: expected on or off, got '$ZONE_SEMANTIC_SEARCH'" >&2; exit 1 ;; \
     esac \
+ && TARGETARCH=${TARGETARCH:-$(dpkg --print-architecture)} \
  && case "$TARGETARCH" in \
       amd64) arch=x64 sum=$ORT_SHA256_X64 ;; \
       arm64) arch=aarch64 sum=$ORT_SHA256_AARCH64 ;; \
