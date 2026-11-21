@@ -135,7 +135,7 @@ ZONE_DATA=/path/to/wiki ZONE_ALLOW_REMOTE=1 go/zonewiki    # and open to the net
 The commands are `zonewiki user …`, `zonewiki group …` and `zonewiki config …`, on the same wiki (with the same `ZONE_DATA`).
 `zonewiki --help` lists them all.
 Run by hand, Zone listens only on the machine it runs on; `ZONE_ALLOW_REMOTE=1` opens it to the network, and it then asks for a login first.
-See [Without a container](../spec/deployment.md#without-a-container), and for a Unix socket or systemd, [A Unix socket](../spec/deployment.md#a-unix-socket).
+See [From source](../spec/deployment.md#from-source), and for a Unix socket or systemd, [A Unix socket](../spec/deployment.md#a-unix-socket).
 
 ## Where settings live
 

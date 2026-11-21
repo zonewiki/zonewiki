@@ -3,7 +3,7 @@
 Part of Zone's spec (see `AGENTS.md` for the index).
 
 How Zone is built and run: the files that deploy it (`Containerfile`, the compose files, `run.sh`, `.env`), the commands,
-running it without `run.sh` or without a container, the release binaries, on a NAS or server, CI on Forgejo and GitHub,
+running it without `run.sh` or from source, the release binaries, on a NAS or server, CI on Forgejo and GitHub,
 network access (a Unix socket, systemd), mail, phone access, the version string, the home-screen app,
 the data directory (its data format) and its backups, how Zone packs the wiki's git repository, how big a wiki can be, and moving from Zone 1.
 
@@ -126,7 +126,7 @@ It works out and exports what compose interpolates:
 Platforms: Linux is the only tested one; it is meant to work also on macOS and, on Windows, in WSL2 (Docker Desktop and Podman run on it there).
 It sticks to bash 3.2 (macOS's stock bash: no `${x,,}`, no `declare -A`, no `mapfile`) and to options BSD tools share with GNU ones.
 `.gitattributes` keeps `*.sh` and `.githooks/*` at LF line endings, so a Windows checkout with `core.autocrlf` doesn't break them.
-Without the container, Zone itself should run on any OS Go builds for, with git (Without a container, below), though only Linux is tested.
+Without the container, Zone itself should run on any OS Go builds for, with git (From source, below), though only Linux is tested.
 
 ### .env.example
 
@@ -211,7 +211,7 @@ To run `docker compose up -d --build` directly, set in `.env`:
 
 With rootless Podman, add the file that keeps your user ID inside the container: `podman compose -f compose.yaml -f compose.podman.yaml up -d --build`.
 
-## Without a container
+## From source
 
 With Go 1.27 or newer, a C compiler (for semantic search; `CGO_ENABLED=0` builds without it) and git:
 
