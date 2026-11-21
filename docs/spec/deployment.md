@@ -270,6 +270,9 @@ A folder on disk wins over the copy built in, so a checkout serves its files as 
 
 A `public/` found from the binary counts only when it holds Zone's entry module, `zonewiki.js`:
 on a Mac's case-insensitive disk, `../public` of a binary in `~/Downloads` is `~/Public`, which Zone would otherwise serve.
+And only when the folder and that file are whoever runs Zone's, or root's, and no one else may write to them (`ownFolder`):
+the browser runs what is in it as Zone's own code, so a binary started in a shared place (`/tmp`) doesn't take a `public/` another user put beside it.
+A folder passed over is named in the log, and the binary's copy is served; `--public` takes any folder.
 
 Both are served alike (`go/static.go`): a file's type by its extension, `Last-Modified` (for the binary's copies, which have no time of their own, the time of the binary's file, so a browser asks again after an update),
 `/public/vendor/` scripts and styles gzipped,

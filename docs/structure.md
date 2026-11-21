@@ -40,7 +40,7 @@ What each file and folder of the repository is for.
 │   ├── server.go           # main: flags, start-up, the routes' mux, the request checks around them; zonewiki eval, zonewiki health, zonewiki manual, zonewiki licenses, zonewiki user, zonewiki group, zonewiki config
 │   ├── login.go            # The login gate's routes: /login, /logout
 │   ├── static.go           # public/ served as it is (gzipped, kept by the browser), from the folder or the binary's copy; a file sent with its type
-│   ├── files.go            # Zone's own files: public/ and the docs from a folder on disk (--public, --docs, found from the binary) or the binary's copies (zonefiles); zonewiki licenses
+│   ├── files.go            # Zone's own files: public/ and the docs from a folder on disk (--public, --docs, found from the binary when it is the user's own: ownfolder_*.go) or the binary's copies (zonefiles); zonewiki licenses
 │   ├── uploads.go          # Uploads: _assets/ served (a private page's and a group's from their folders, a task's from _tasks/files/<id>/), POST /api/upload
 │   ├── config.go           # What is fixed for the process, from the environment (read once into cfg)
 │   ├── configfile.go       # The settings file .zone/config: its keys, Settings (settings(), reloaded when the file changes), the line edits

@@ -49,12 +49,23 @@ func findPublic() string {
 	return publicNear(filepath.Dir(exe))
 }
 
-// publicNear: Zone's public/ in dir or beside it (findPublic), or "".
+// publicNear: Zone's public/ in dir or beside it (findPublic), or "". Only
+// a folder that is whoever runs Zone's, or root's, and that others can't
+// write to (ownFolder): the browser runs what is in it as Zone's own code,
+// so a binary started in a shared place (/tmp) doesn't take a public/
+// someone else put beside it. --public names any folder.
 func publicNear(dir string) string {
 	for _, p := range []string{filepath.Join(dir, "public"), filepath.Join(dir, "..", "public")} {
-		if exists(filepath.Join(p, "zonewiki.js")) {
-			return p
+		entry := filepath.Join(p, "zonewiki.js")
+		if !exists(entry) {
+			continue
 		}
+		if !ownFolder(p) || !ownFolder(entry) {
+			logf("not using the browser code in %s (it is another user's, or others can write to it): "+
+				"the binary's own copy is served. --public %s uses it all the same.", p, p)
+			continue
+		}
+		return p
 	}
 	return ""
 }

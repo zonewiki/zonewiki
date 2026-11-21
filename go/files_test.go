@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"zonefiles"
@@ -277,6 +278,21 @@ func TestFindsOnlyZonesPublic(t *testing.T) {
 	os.WriteFile(filepath.Join(bin, "public", "zonewiki.js"), nil, 0o666)
 	if got := publicNear(bin); got != filepath.Join(bin, "public") {
 		t.Errorf("public/ beside the binary: %q", got)
+	}
+	// A folder anyone may write to (as one put in /tmp by somebody else
+	// would be to them) isn't Zone's code: the next one, or the binary's.
+	if runtime.GOOS == "windows" {
+		return
+	}
+	os.Chmod(filepath.Join(bin, "public"), 0o777)
+	if got := publicNear(bin); got != filepath.Join(bin, "..", "public") {
+		t.Errorf("a public/ others write to: %q", got)
+	}
+	os.Chmod(filepath.Join(bin, "public"), 0o755)
+	os.Chmod(filepath.Join(bin, "public", "zonewiki.js"), 0o666)
+	os.Chmod(filepath.Join(home, "public"), 0o777)
+	if got := publicNear(bin); got != "" {
+		t.Errorf("a zonewiki.js others write to: %q", got)
 	}
 }
 
