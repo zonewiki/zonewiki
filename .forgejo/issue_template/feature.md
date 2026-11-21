@@ -10,4 +10,4 @@ labels:
 **Your idea**: how it could work (optional).
 
 <!-- Zone stays small: no database, no build step, Markdown files as the
-source of truth, one process, one person (see AGENTS.md). -->
+source of truth, one process (see AGENTS.md). -->

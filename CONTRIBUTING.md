@@ -11,11 +11,13 @@ Open an issue with the **Bug report** template. It asks for:
 - **Zone's version**: press `?` in Zone (the shortcuts dialog shows it at the
   bottom, e.g. `Zone 0.5.0 · c28ec9e 2026-09-26 19:22`), or open
   `/api/version`.
-- **How you run it**: `run.sh` with Podman or Docker, or without a
-  container; the OS; the browser, and whether it's a phone.
+- **How you run it**: the release binary, the prebuilt image, or a checkout
+  (`run.sh` with Podman or Docker, or built from source); the OS; the
+  browser, and whether it's a phone.
 - **Steps to reproduce**, what you expected and what happened. A few lines of
   Markdown or a `[[tasks: …]]` line that shows the problem help most.
-- **The server log** around the error if there was one (`./run.sh logs`).
+- **The server log** around the error if there was one (`./run.sh logs`, or
+  what the binary printed).
 
 Leave out passwords, MCP tokens and anything private from your
 notes. To report a security problem, don't open a public issue: report it
@@ -26,7 +28,7 @@ privately, as [SECURITY.md](SECURITY.md) says.
 Open an issue with the **Feature request** template and describe the problem
 you want solved before the solution you have in mind. Check it against
 Zone's principles in [AGENTS.md](AGENTS.md#goals--principles): no database,
-no build step, Markdown files as the source of truth, one process, one person.
+no build step, Markdown files as the source of truth, one process.
 
 ## Changing the code
 

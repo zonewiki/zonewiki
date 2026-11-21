@@ -7,7 +7,7 @@ labels:
 
 **Zone's version** (press `?` in Zone; it's at the bottom of the dialog):
 
-**How you run it** (run.sh with Podman / Docker, or without a container; OS; browser, phone or not):
+**How you run it** (the release binary, the prebuilt image, or a checkout with run.sh / built from source; OS; browser, phone or not):
 
 **Steps to reproduce**
 
@@ -16,7 +16,7 @@ labels:
 
 **What you expected**
 
-**What happened** (with the server log around an error, `./run.sh logs`)
+**What happened** (with the server log around an error: `./run.sh logs`, or what the binary printed)
 
 <!-- Leave out passwords, tokens and private notes. Security problems: don't
 report them here, report them privately (SECURITY.md). -->

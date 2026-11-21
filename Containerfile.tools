@@ -26,11 +26,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends nodejs git curl
 
 # gitleaks, a pinned release checked against its published checksums. To
 # update it, change the version and both sums (gitleaks_<v>_checksums.txt).
-ARG TARGETARCH=amd64
+# TARGETARCH has no default, as in Containerfile: a default wins over the one
+# the builder sets, and an arm64 machine got amd64's gitleaks and Go. Where
+# the builder doesn't set it, the container's own architecture is it.
+ARG TARGETARCH
 ARG GITLEAKS_VERSION=8.30.1
 ARG GITLEAKS_SHA256_X64=551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
 ARG GITLEAKS_SHA256_ARM64=e4a487ee7ccd7d3a7f7ec08657610aa3606637dab924210b3aee62570fb4b080
-RUN case "$TARGETARCH" in \
+RUN TARGETARCH=${TARGETARCH:-$(dpkg --print-architecture)} \
+ && case "$TARGETARCH" in \
       amd64) arch=x64 sum=$GITLEAKS_SHA256_X64 ;; \
       arm64) arch=arm64 sum=$GITLEAKS_SHA256_ARM64 ;; \
       *) echo "no gitleaks build for $TARGETARCH" >&2; exit 1 ;; \
@@ -47,7 +51,8 @@ RUN case "$TARGETARCH" in \
 ARG GO_VERSION=1.27.3
 ARG GO_SHA256_AMD64=65efbc80fdc1fa2cd2631cad5b481777a68e8725f34e89f50fc6ac714e379b40
 ARG GO_SHA256_ARM64=a06e99309dbcbdca1a8ccd2282c3ee146e55930886e26b4f1193269587165f49
-RUN case "$TARGETARCH" in \
+RUN TARGETARCH=${TARGETARCH:-$(dpkg --print-architecture)} \
+ && case "$TARGETARCH" in \
       amd64) sum=$GO_SHA256_AMD64 ;; \
       arm64) sum=$GO_SHA256_ARM64 ;; \
       *) echo "no Go build for $TARGETARCH" >&2; exit 1 ;; \

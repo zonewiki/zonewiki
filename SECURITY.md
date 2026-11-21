@@ -43,5 +43,6 @@ read the wiki's folder on the server can do.
 
 ## Supported versions
 
-Fixes go into `main` and the image built from it
-(`ghcr.io/zonewiki/zonewiki`). Run the latest one.
+Fixes go into `main` and the next release: its binaries and its image
+(`ghcr.io/zonewiki/zonewiki`). Older releases get no fixes of their own, so
+run the latest one.

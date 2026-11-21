@@ -255,3 +255,7 @@ def test_the_target_architecture_has_no_default():
     # falls back on the container's own architecture instead.
     assert not re.search(r"^ARG TARGETARCH=", CONTAINERFILE, re.M)
     assert CONTAINERFILE.count("${TARGETARCH:-$(dpkg --print-architecture)}") == 2
+    # The tools image likewise (gitleaks and Go): on an arm64 machine
+    # ./run.sh test got amd64's.
+    assert not re.search(r"^ARG TARGETARCH=", TOOLS, re.M)
+    assert TOOLS.count("${TARGETARCH:-$(dpkg --print-architecture)}") == 2
