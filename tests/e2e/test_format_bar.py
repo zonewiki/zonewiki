@@ -9,9 +9,17 @@ from tests import settings
 
 
 def _edit(page, wiki, text, sel_start, sel_end=None):
-    """Open an editor on `text` (after the H1) with that part selected."""
-    wiki.write("fmt", "# Fmt\n\n" + text)
-    page.goto("/edit/fmt")
+    """Open an editor on `text` (after the H1) with that part selected.
+
+    A test's later editors get pages of their own (fmt-2, fmt-3 …): the
+    editor before may still be saving what the test did in it (auto-save
+    two seconds after an edit, a save on leaving), and that save landing
+    after this write would bring its text back.
+    """
+    page.fmt_editors = getattr(page, "fmt_editors", 0) + 1
+    slug = "fmt" if page.fmt_editors == 1 else f"fmt-{page.fmt_editors}"
+    wiki.write(slug, "# Fmt\n\n" + text)
+    page.goto(f"/edit/{slug}")
     textarea = page.locator("#editor-textarea")
     off = len("# Fmt\n\n")
     end = sel_start if sel_end is None else sel_end
