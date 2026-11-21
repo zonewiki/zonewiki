@@ -1,6 +1,6 @@
 # Zone's manual
 
-How to use Zone: a wiki with notes and tasks, for you, your team and your AI assistants.
+How to use Zone: a wiki with a task manager and quick notes, for you, your team and your AI assistants.
 Zone is first-class for people and for assistants: it's made to be a pleasure to use in your browser, and your assistant can do everything you can, never more.
 It's also in Zone itself, under **Help**, and your assistant can look things up in it.
 
@@ -13,7 +13,7 @@ New to Zone? Start with [Getting started](getting-started.md).
 - [Writing](writing.md): the editor and Zone's Markdown
 - [History and undo](history.md): every version, Changes, restoring and undoing
 - [Notes](notes.md): write it down now, file it later
-- [Tasks](tasks.md): Today, Open and the Plan board, lists, dates, assigning, tasks on a page
+- [Tasks](tasks.md): a task manager of its own: Today and the Plan board, lists, dates, repeating tasks, assigning, tasks on a page
 - [Search](search.md): finding pages and tasks
 - [Getting around](navigation.md): the modules, keyboard shortcuts, phones, sharing and presenting
 

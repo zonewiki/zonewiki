@@ -1,6 +1,6 @@
 # Getting started
 
-Your first ten minutes in Zone: what's where, your first page, a note and a task, and how to find them again.
+Your first ten minutes in Zone: what's where, your first page, a note and a task, planning your day, and how to find things again.
 Everything else in this manual builds on these few steps.
 
 ![A wiki page in Zone: the page in the middle, its table of contents on the left, backlinks and linked tasks on the right](../screenshots/page.png)
@@ -13,7 +13,7 @@ You switch between them with the pills at the top left of every page (on a phone
 | Module | What it is |
 |--------|------------|
 | **Wiki** | Your pages: Markdown, linked to each other. The Z logo next to it takes you to the home page. |
-| **Tasks** | Your tasks, with dates, lists and a Today view. |
+| **Tasks** | A task manager of its own: what's on today, a board to plan the days ahead, lists, repeating tasks. |
 | **Notes** | Quick notes, written down now and filed into the wiki later. |
 
 In a wiki with several users there are two more:
@@ -83,7 +83,16 @@ Click **Save**: the task goes to your **Inbox**, and you stay on the page you we
 
 Without a date of your own, the task starts today, so it shows up in **Today** in Tasks.
 The number on the **Tasks** pill counts what's due.
-[Tasks](tasks.md) has the rest: lists, planning, repeating tasks.
+
+## Plan your day
+
+Click **Tasks** (or press `g`, then `t`).
+**Today** shows what you planned for today, and what is due or overdue.
+On **Open**, switch from **List** to **Plan**: a board with a section for each day.
+Drag a task from **Unplanned** onto a day, and it's on Today when that day comes.
+Tick a task's box when it's done.
+
+Tasks can be all the task app you need: [Tasks](tasks.md) has the rest, such as lists, repeating tasks, assigning tasks in a team, and showing tasks on a wiki page.
 
 ## Find things
 
@@ -112,7 +121,7 @@ The most useful ones to start with:
 
 - [Pages](pages.md): links, folders, renaming, moving and deleting
 - [Writing](writing.md): the editor and Zone's Markdown
-- [Tasks](tasks.md): Today, Open and the Plan board, lists, dates and assigning
+- [Tasks](tasks.md): Today and the Plan board, lists, dates, repeating tasks and assigning
 - [Notes](notes.md): filing notes into the wiki
 - [Search](search.md): finding pages and tasks
 - [Getting around](navigation.md): the modules, shortcuts, phones, sharing and presenting

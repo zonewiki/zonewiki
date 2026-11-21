@@ -1,6 +1,7 @@
 # Tasks
 
 Zone has a task app beside the wiki: what you have to do, when you plan to do it, and by when it must be done.
+It is a task manager in its own right, with a board to plan your days, lists, repeating tasks and, in a team, assignees and comments, so you need no other one beside your wiki.
 This page covers making and planning tasks, lists and who sees them, assigning tasks to others, and showing tasks on a wiki page.
 Tasks share the wiki's links and search, so a task can point to a page and a page can show its tasks.
 
