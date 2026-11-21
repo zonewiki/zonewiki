@@ -5,7 +5,7 @@
 Zone is a self-hosted **wiki** with a **real task manager** and **quick notes** built in, for **one person** or **a team**.
 Your pages are plain **Markdown files** in a folder you choose, and every change is a **git** commit.
 Edit them in the browser or in any editor.
-Any **AI assistant** that speaks MCP can [work with them](#connect-an-ai-assistant), acting as you.
+Any **AI assistant** that speaks MCP can [work with them](#connect-an-ai-assistant) on your behalf.
 It sees and changes only what you are allowed to, and you can review and undo every edit it makes.
 One binary, no database, no outside services: Zone sends nothing anywhere on its own.
 
@@ -48,7 +48,7 @@ Turn lines of a page into tasks, and embed a task list or a single task in any p
 
 **Search.** Full-text search across pages and tasks (Ctrl+P): typo tolerance, `"phrases"`, `#tags` and dates.
 
-**Assistants.** Over MCP, an assistant searches, reads and writes pages, notes and tasks, as you.
+**Assistants.** Over MCP, an assistant searches, reads and writes pages, notes and tasks on your behalf.
 History shows which changes it made ("Anna through Claude"), and you undo them one at a time or all at once.
 A `wiki-guide` page tells every assistant your conventions, and you can limit what it reaches.
 

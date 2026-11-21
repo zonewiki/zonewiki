@@ -1,7 +1,7 @@
 # AI assistants
 
 An AI assistant such as Claude can search, read and write your wiki and your tasks.
-It works as you: it sees and changes what you may, never more, and every change it makes is in the history, where you can undo it.
+It works on your behalf: it sees and changes what you may, never more, and every change it makes is in the history, where you can undo it.
 This page gets you connected first, then explains what a connection may do and how to keep an eye on it.
 
 ## Connect in five minutes
@@ -75,7 +75,7 @@ Signing out or changing your password doesn't end a token, so keep it like a pas
 
 ## What an assistant may do
 
-An assistant acts as the user who connected it.
+An assistant acts on behalf of the user who connected it.
 It sees the pages and tasks you see and changes what you may change: no more.
 With users, another user's private pages don't exist for it, and a group's pages only if you are in the group (see [Teams](teams.md)).
 If you are a viewer, your assistant only reads.
