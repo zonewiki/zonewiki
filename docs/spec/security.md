@@ -224,7 +224,7 @@ The Host check is no login: a client on the LAN sends `Host: localhost`.
 - `ZONE_ALLOW_REMOTE` is set,
 - `hosts` names a host,
 - the container's port is published beyond localhost, which compose tells Zone in `ZONE_BIND` (`Config.Published`).
-  `compose.yaml` and `compose.image.yaml` hand on the `${ZONE_BIND:-127.0.0.1}` their port is published on,
+  `compose.build.yaml` and `compose.yaml` hand on the `${ZONE_BIND:-127.0.0.1}` their port is published on,
 - without `ZONE_BIND`, Zone listens beyond loopback: `--addr` names every interface (`0.0.0.0:5000`, `[::]:5000`), another address of the machine, or a name (`beyondLoopback`, also `Config.Published`).
   The image's own command is `--addr 0.0.0.0:5000`, so a container started without compose (`docker run -p 5000:5000`) asks for a login too.
 

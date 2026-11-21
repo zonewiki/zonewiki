@@ -256,8 +256,8 @@ With `run.sh` they are `./run.sh user …`, `./run.sh group …` and `./run.sh c
 #### Running the commands
 
 Without the container it is `zonewiki user …`, `zonewiki group …`, `zonewiki config …` on the wiki in `ZONE_DATA` (unset: `~/zonewiki`, Data directory in `docs/spec/deployment.md`) (`go/commands.go`: `userMain`, `groupMain`, `configMain`; `zonewiki user --help` and the others print their usage);
-with the prebuilt image, through the container: `docker compose -f compose.image.yaml run --rm zonewiki /app/zonewiki user add alice`.
-`run.sh` runs the binary in a one-off container of the app's image (`compose build -q zonewiki`, its output only on failure, then `compose run --rm --no-deps zonewiki /app/zonewiki …`), with `.env` and the wiki mounted as `up` has them, so the file is written as Zone's user;
+in a container, `./run.sh user …` (and without `run.sh`, `docker compose run --rm zonewiki /app/zonewiki user add alice` beside `compose.yaml`).
+`run.sh` runs the binary in a one-off container of the app's image (in a checkout `compose build -q zonewiki` first, its output only on failure; then `compose run --rm --no-deps zonewiki /app/zonewiki …`), with `.env` and the wiki mounted as `up` has them, so the file is written as Zone's user;
 the password prompt's echo is off (`echoOff`, the container has a terminal; `-T` when stdin isn't one).
 
 #### A password from a command

@@ -15,13 +15,9 @@ There are four ways to run it; pick the first that fits:
 
 Whichever you choose, the wiki is a folder of Markdown files, so you can change the way later and keep the wiki.
 
-This page writes the commands as `./run.sh …` and puts settings in `.env`, as Zone from the repository has them.
-The other ways differ:
-
-- **With the binary**: a command is `./zonewiki …` (`./zonewiki config passwd`, `./zonewiki user add anna`).
-  The binary reads no `.env`: a setting is an environment variable you give it at the start; [Where settings live](#where-settings-live) shows how to keep several.
-- **With Docker**: a command is `docker compose -f compose.image.yaml run --rm zonewiki /app/zonewiki …`, in the folder of `compose.image.yaml`.
-  A change to `.env` takes effect at the next `docker compose -f compose.image.yaml up -d`.
+This page writes the commands as `./run.sh …` and puts settings in `.env`, as Zone in a container has them, with Docker and from the repository alike.
+With the binary, a command is `./zonewiki …` (`./zonewiki config passwd`, `./zonewiki user add anna`),
+and a setting is an environment variable you give it at the start, since the binary reads no `.env`; [Where settings live](#where-settings-live) shows how to keep several.
 
 ## With the binary
 
@@ -78,29 +74,28 @@ Zone's image is prebuilt for amd64 and arm64, `ghcr.io/zonewiki/zonewiki`, so a 
 It is built by Zone's CI from the same `Containerfile` the repository builds from, so it is the same Zone (searching by keywords only for now).
 
 1. Create the wiki folder, empty or with Markdown files in it.
-2. In another folder, put [`compose.image.yaml`](https://github.com/zonewiki/zonewiki/blob/main/compose.image.yaml) and next to it a `.env` that names the wiki folder, its owner and your timezone.
-3. Start Zone.
+2. In another folder, put three files from the repository: `run.sh`, `compose.yaml` and `compose.podman.yaml` (only Podman needs the last).
+3. Next to them, a `.env` that names the wiki folder.
+4. Start Zone with `./run.sh up`.
 
 In a terminal:
 
 ```bash
 mkdir -p ~/zonewiki ~/zonewiki-docker && cd ~/zonewiki-docker
-curl -fsSLO https://raw.githubusercontent.com/zonewiki/zonewiki/main/compose.image.yaml
-cat > .env <<EOF
-ZONE_DATA=$HOME/zonewiki
-ZONE_UID=$(id -u)
-ZONE_GID=$(id -g)
-TZ=Europe/Vienna
-EOF
-docker compose -f compose.image.yaml up -d
+base=https://raw.githubusercontent.com/zonewiki/zonewiki/main
+curl -fsSL -O $base/run.sh -O $base/compose.yaml -O $base/compose.podman.yaml
+chmod +x run.sh
+echo 'ZONE_DATA=~/zonewiki' > .env
+./run.sh up
 ```
 
 Open <http://localhost:5000>; Zone answers only on this computer.
 The first start downloads the image.
+Each `./run.sh` command says what it is doing in lines starting with `==>`; `./run.sh --help` lists them.
 
-- `ZONE_DATA` is the wiki folder, as a full path; it must exist.
-- `ZONE_UID` and `ZONE_GID` are the IDs of the folder's owner (`id -u` and `id -g` as that user): Zone writes the wiki as them.
-- `TZ` makes "today" your day.
+`./run.sh` works out what compose can't: your user ID (so the wiki's files stay yours), your timezone, and whether to listen beyond localhost.
+Beside `compose.yaml` it runs the prebuilt image; in a checkout of the repository it builds Zone instead ([From the repository](#from-the-repository)).
+To run compose without it, see [Without run.sh](../spec/deployment.md#without-runsh).
 
 The wiki folder must exist before Zone starts: Zone won't create one where a typo points.
 To use a folder of Markdown notes you already have, set `ZONE_DATA` in `.env` to it.
@@ -108,24 +103,20 @@ Zone makes it a git repository if it isn't one, and adds a home page.
 A folder inside another git repository (a folder of a project you keep in git) needs that repository to ignore it first, in its `.gitignore`: otherwise Zone doesn't start, and says so.
 What ends up in the folder is described in [Your data](your-data.md).
 
-With rootless Podman, name a second file, so the wiki's files stay yours: `podman compose -f compose.image.yaml -f compose.podman.yaml up -d` (put [`compose.podman.yaml`](https://github.com/zonewiki/zonewiki/blob/main/compose.podman.yaml) beside the first).
-
 ### On a NAS or server
 
-For your phone or other computers to reach it, open the port to the network in `.env`, and start Zone again (`docker compose -f compose.image.yaml up -d`):
+For your phone or other computers to reach it, open it to the network in `.env`, and start Zone again with `./run.sh up`:
 
 ```bash
-ZONE_BIND=0.0.0.0
+ZONE_ALLOW_REMOTE=1
 ZONE_PORT=5080          # optional: another port; on a Synology, DSM has 5000
 ```
 
-Then tell Zone the names and addresses you open it by, and open it at `http://<nas>:5080` (the port in `ZONE_PORT`, else 5000):
+Open it at `http://<the machine's address>:5080` (the port in `ZONE_PORT`, else 5000).
+To open it by a name, tell Zone the name: `./run.sh config set hosts nas.local`.
+On the network Zone asks for a password in the browser before it shows anything; or set a login first, `./run.sh user add anna`.
 
-```bash
-docker compose -f compose.image.yaml run --rm zonewiki /app/zonewiki config set hosts nas.local, 192.168.1.20
-```
-
-On the network Zone asks for a password in the browser before it shows anything; or set a login first, `… /app/zonewiki user add anna`.
+If the wiki folder belongs to another user than the one who runs `./run.sh`, name its owner in `.env`: `ZONE_UID` and `ZONE_GID` (`id -u` and `id -g` as that user).
 For a Synology with Container Manager, step by step, see [Synology](../spec/deployment.md#synology).
 
 ## From the repository
@@ -143,13 +134,8 @@ cp .env.example .env                  # ZONE_DATA is your wiki folder
 
 Open <http://localhost:5000>.
 The first build takes a few minutes; later starts are quick.
-Each `./run.sh` command says what it is doing in lines starting with `==>`.
 Zone is compiled inside the container's image, so no `zonewiki` file appears in the folder; `./run.sh binaries` builds the binaries for Linux and macOS into `dist/`, to run Zone without a container.
-
-The wiki folder is as [with Docker](#with-docker): it must exist, and may hold the Markdown notes you already have.
-
-`./run.sh` works out what compose can't: your user ID (so the wiki's files stay yours), your timezone, and whether to listen beyond localhost.
-To run compose without it, see [Without run.sh](../spec/deployment.md#without-runsh).
+Everything else is as [with Docker](#with-docker): the same commands, the same `.env`.
 
 ## From source
 
@@ -179,7 +165,7 @@ Settings live in two places:
 
 - **The environment**: how Zone runs.
   The wiki folder, the timezone, network access, mail, a public wiki.
-  In a container these are lines in the file `.env`, beside `run.sh` or the compose file; a change takes effect at the next `./run.sh up` (with Docker, `docker compose -f compose.image.yaml up -d`).
+  In a container these are lines in the file `.env`, beside `run.sh`; a change takes effect at the next `./run.sh up`.
   The binary reads no `.env`: they are environment variables you start it with, and a change takes a restart.
 - **`.zone/config`**, in the wiki folder: the wiki itself.
   Its users and their roles, the login, the names it's reached by, limits and everything else.
@@ -224,8 +210,7 @@ A running Zone then keeps the settings it had and says so in its log; a Zone sta
 | `ZONE_ALLOW_REMOTE` | Environment | `1`: other devices on the network reach Zone |
 | `ZONE_PUBLIC` | Environment | `view` or `edit`: people read, or edit, without signing in |
 | `ZONE_SIGNUP`, `ZONE_SMTP_*` | Environment | Sign-up and the mail server ([Mail](#mail)) |
-| `ZONE_BIND` | Environment | `0.0.0.0`: other devices reach Zone, with Docker ([On a NAS or server](#on-a-nas-or-server)) |
-| `ZONE_PORT` | Environment | The host's port, with Docker (default 5000) |
+| `ZONE_PORT` | Environment | The host's port, in a container (default 5000) |
 | `hosts` | `.zone/config` | Names Zone is opened by: `wiki.example.org, nas.local` |
 | `base-url` | `.zone/config` | Zone's address as people know it: `https://wiki.example.org` |
 | `git-remote` | `.zone/config` | A remote to push the history to ([Your data](your-data.md#backups)) |
@@ -271,11 +256,9 @@ To reach it from your phone or another computer on the same network:
 1. Set `ZONE_ALLOW_REMOTE=1` and start Zone again:
 
    ```bash
-   # From the repository: add the line to .env, then
+   # In a container: add the line to .env, then
    ./run.sh up
    ```
-
-   With Docker, `ZONE_BIND=0.0.0.0` goes in `.env` too ([On a NAS or server](#on-a-nas-or-server)).
 
    ```bash
    # With the binary
@@ -382,8 +365,7 @@ Your wiki is never touched by an update: it lives in its own folder.
 
 | Installed with | To update |
 |----------------|-----------|
-| The repository and `./run.sh` | `git pull && ./run.sh up` |
-| Docker (`compose.image.yaml`) | `docker compose -f compose.image.yaml pull`, then `docker compose -f compose.image.yaml up -d` |
+| Docker, or the repository and `./run.sh` | `./run.sh update`: the newest image, or the newest code built |
 | The downloaded binary | Download the new one, put it in place of the old file (`mv` and `chmod +x` as before), and start it again |
 | A binary you built | `git pull`, build again and restart |
 
@@ -393,10 +375,10 @@ The version is shown in the shortcuts list (press `?`).
 
 | Command | What it does |
 |---------|--------------|
-| `./run.sh up` | Build and start Zone (also just `./run.sh`) |
+| `./run.sh up` | Start Zone (also just `./run.sh`); from the repository, build it first |
 | `./run.sh down` | Stop Zone |
 | `./run.sh logs` | Follow Zone's log |
-| `./run.sh build` | Build the image only |
+| `./run.sh update` | Update Zone and start it again |
 | `./run.sh config check` | Each setting in effect, or what's wrong |
 | `./run.sh config set KEY VALUE` | Set a key in `.zone/config`; `config unset KEY` for its default |
 | `./run.sh config passwd` | The wiki's password, without users |

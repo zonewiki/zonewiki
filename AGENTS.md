@@ -36,7 +36,7 @@ Read the file for the area you are working on before changing it:
 | `docs/spec/tasks.md` | Tasks: embed syntax, dates, fields, repeating tasks, views, settings, export and import, interaction (filter, editing, quick actions, selection, cards), history, comments, news on your tasks (following, mentions, mail), importance, keep tasks, lists (who sees and manages them, the Inbox, My tasks, pins), a task's files, renaming a tag, touch, keyboard shortcuts; how it works (the code, storage, what a start does) |
 | `docs/spec/security.md` | Principles, before you open it up (HTTPS, what to know), login and sessions (the session cookie, signing out, first run), the settings file and Zone's folders, the permission model (who asks is an asker), public wikis (visitors), the MCP token and OAuth, the Host and Origin checks, the page policy (CSP, raw HTML defused, framing), untrusted input, throttling, limits, supply chain |
 | `docs/spec/users.md` | Several users: the settings file `.zone/config` (its keys, format, storage limit, password hashes, kept out of git, `zonewiki user`/`zonewiki group`/`zonewiki config`, reloading), roles (admins, disabled users, viewers, visitors, guides), groups (made of groups, of your own, owners, renamed, ended), managing users, invite links, sign-up, signing in, per-user MCP tokens, private pages, group pages, who may move a page to other readers, private tasks, assigning tasks, commit authors |
-| `docs/spec/deployment.md` | Containerfile, compose, `run.sh`, `.env`, a NAS or server (prebuilt image, Synology), CI (Forgejo, GitHub), mail (SMTP), network and phone access, the version string, the home-screen app, the data directory (all of `.zone/`), backups, packing the repository, how big a wiki can be |
+| `docs/spec/deployment.md` | Containerfile, compose, `run.sh`, `.env`, the prebuilt image (compose.yaml; a NAS or server, Synology), CI (Forgejo, GitHub), mail (SMTP), network and phone access, the version string, the home-screen app, the data directory (all of `.zone/`), backups, packing the repository, how big a wiki can be |
 | `docs/spec/testing.md` | The test harness (fixtures, the server under test, the browser tests' gotchas), the guards that fail for a forgotten step, where each area's tests live, the shared case files, the suites and the bench, secret scanning (the pre-commit hook, CI's leaks job) |
 
 The spec and this file are written a sentence a line (a long sentence a clause a line; a list item's following lines indented under its text), so a change shows as the sentence that changed, not as its paragraph.
@@ -123,8 +123,8 @@ It lives in the host directory pointed to by `ZONE_DATA` (default: `~/zonewiki`)
 ## Running
 
 ```bash
-./run.sh            # build the image and start Zone (default: "up"), via compose
-./run.sh build|up|down|logs
+./run.sh            # build the image from the checkout and start Zone (default: "up"), via compose.build.yaml
+./run.sh build|up|down|logs|update   # beside compose.yaml alone (no checkout), run.sh runs the prebuilt image instead
 ./run.sh test       # gofmt + go vet + go test -race, then the unit/API tests, in the tools image (extra args go to pytest)
 ./run.sh e2e        # browser tests + tasks-core.js (Node) tests in the tools image
 ./run.sh bench      # the tasks at a team's size against their budgets, then under the race detector (CI's bench job)

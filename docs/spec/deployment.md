@@ -12,10 +12,10 @@ the data directory (its data format) and its backups, how Zone packs the wiki's 
 | File | What it is |
 |------|------------|
 | `Containerfile` | The image, in three stages |
-| `compose.yaml` | Builds the image and runs the `zonewiki` container |
+| `compose.yaml` | Runs the prebuilt image, without the repo (a computer, a server, a NAS) |
+| `compose.build.yaml` | In a checkout: builds the image from it and runs the `zonewiki` container |
 | `compose.podman.yaml` | Rootless podman only: `userns_mode: keep-id` (`run.sh` adds it) |
-| `compose.image.yaml` | Without the repo: runs the prebuilt image (a computer, a server, a NAS) |
-| `run.sh` | The entry point: drives compose, runs the tests in the tools image |
+| `run.sh` | The entry point: drives compose (the prebuilt image beside `compose.yaml`, a build in a checkout), runs the tests in the tools image |
 | `.env.example` | The template for `.env` |
 | `.env` | The deployment's settings (gitignored) |
 | `.zone/config` | The wiki's own settings and its users, in the wiki |
@@ -55,16 +55,16 @@ The image has:
 Build args: `ZONE_SEMANTIC_SEARCH` and `ZONE_BUILD` (last layer).
 The image is about 0.23 GB, 0.9 GB with the model.
 
-### compose.yaml
+### compose.build.yaml
 
 It builds the image (`build:` with those args) and runs the `zonewiki` container (project and service `zonewiki`).
-It works on its own (`docker compose up -d --build`), with `unknown` as the build and UTC unless `.env` sets `TZ`.
+`run.sh` takes it in a checkout; it works on its own too (`docker compose -f compose.build.yaml up -d --build`), with `unknown` as the build and UTC unless `.env` sets `TZ`.
 
 | Setting | Value and why |
 |---------|---------------|
 | `env_file: .env` | Passes every setting |
 | `environment` | Adds `ZONE_DATA=/wiki-data` (overriding `.env`'s), `ZONE_HOST_DATA` and `TZ` |
-| port | `${ZONE_BIND:-127.0.0.1}:5000:5000` |
+| port | `${ZONE_BIND:-127.0.0.1}:${ZONE_PORT:-5000}:5000` |
 | the wiki | A bind mount with `create_host_path: false` and `selinux: Z` |
 | `init: true` | A minimal init as PID 1 reaps orphaned processes |
 | `restart: unless-stopped` | |
@@ -86,45 +86,56 @@ It works on its own (`docker compose up -d --build`), with `unknown` as the buil
 With docker compose the settings reach the container through the API;
 podman-compose turns `env_file` into `podman create -e KEY=value` arguments, so there the secrets are on a command line for that moment.
 
-### compose.image.yaml
+### compose.yaml
 
 Zone without the repo: it runs the prebuilt image `ghcr.io/zonewiki/zonewiki:latest` (amd64 and arm64, built by GitHub's CI, see CI (GitHub Actions)) instead of building it,
 so the machine needs only Docker (or Podman) with Compose: a computer, a server or a NAS.
-It is the way the manual offers first for running Zone in a container; `compose.yaml` and `run.sh` are for a checkout, to run its code (a change, a branch, semantic search).
+It is the way the manual offers first for running Zone in a container, with `run.sh` beside it or on its own (`docker compose up -d`; a Synology's Container Manager finds it by its name);
+`compose.build.yaml` is for a checkout, to run its code (a change, a branch, semantic search).
 See With the prebuilt image.
 
-Unlike `compose.yaml`:
+Unlike `compose.build.yaml`:
 
 - no `build:`;
 - `ZONE_DATA`, `ZONE_UID` and `ZONE_GID` are required (`${…:?message}`: compose stops with the message instead of guessing;
-  a wrong UID would only show later as files Zone can't write; no `run.sh` fills them in);
-- the port is `${ZONE_BIND:-127.0.0.1}:${ZONE_PORT:-5000}:5000`: localhost only, as `compose.yaml`'s, until `ZONE_BIND=0.0.0.0` in `.env` (a NAS, a server);
-  `ZONE_PORT` another port on the host (a Synology's DSM has 5000);
+  a wrong UID would only show later as files Zone can't write; `run.sh` fills them in);
 - no `selinux: Z` (NAS systems have no SELinux, and older compose versions reject the option):
   on a host with SELinux enforcing (Fedora), label the wiki folder once, `chcon -Rt container_file_t <folder>`, or run Zone from the repo;
 - the log is capped (`max-size` 10m, 3 files);
 - what is built in comes with the image, not from git or `.env`: the build string is CI's (`ZONE_BUILD`, Version), and `ZONE_SEMANTIC_SEARCH` is the image's (off for now: Semantic search paused, below).
 
-The rest is as in `compose.yaml` (`init`, `restart`, healthcheck, `create_host_path: false`).
+The rest is as in `compose.build.yaml` (`init`, `restart`, healthcheck, `create_host_path: false`, the port: localhost only until `ZONE_BIND=0.0.0.0`, `ZONE_PORT` another port on the host).
 
 ### run.sh
 
-The entry point, driving `<engine> compose` (podman if installed, else docker; a compose provider must be installed) for build/up/down/logs (its commands: Commands, below).
+The entry point, driving `<engine> compose` (podman if installed, else docker; a compose provider must be installed) for up/down/logs/update and the settings file's commands (its commands: Commands, below).
+Where it is decides which Zone it runs:
+
+| Beside it | Compose file | `up` |
+|-----------|--------------|------|
+| A `Containerfile` (a checkout) | `compose.build.yaml` | Builds the image from the checkout, then starts it (`compose up -d --build`) |
+| `compose.yaml` alone (downloaded with it) | `compose.yaml` | Starts the prebuilt image, pulled if it isn't there yet (`compose up -d`) |
+
+Neither, it says it needs `compose.yaml` beside it.
+Without a checkout, the commands for working on Zone (`build`, `test`, `e2e`, `bench`, `retrieval`, `binaries`, `leaks`, `screenshots`, `eval`) say they need one, and do nothing.
+
 It works out and exports what compose interpolates:
 
 | Variable | From |
 |----------|------|
 | `ZONE_DATA` | `.env`, with `~` expanded (default `~/zonewiki`) |
-| `ZONE_BIND` | `ZONE_ALLOW_REMOTE`: `0.0.0.0`, else `127.0.0.1` |
-| `ZONE_BUILD` | git (see Version) |
+| `ZONE_BIND` | `ZONE_ALLOW_REMOTE`: `0.0.0.0`; else `.env`'s `ZONE_BIND`; else `127.0.0.1` |
+| `ZONE_BUILD` | git, in a checkout (see Version) |
 | `TZ` | `.env`'s, else the host's from `/etc/timezone` or the `/etc/localtime` link, else UTC |
-| `ZONE_UID`/`ZONE_GID` | `id -u`/`id -g`; 0 with rootless docker |
+| `ZONE_UID`/`ZONE_GID` | `.env`'s, else `id -u`/`id -g`; 0 with rootless docker (unless `.env` names them) |
+
+- A variable it exports wins over `.env`'s in compose's interpolation, so it reads `ZONE_BIND` and `ZONE_UID`/`ZONE_GID` from `.env` itself: what compose without `run.sh` takes from there holds with it too (a NAS whose wiki folder belongs to another user than who runs `run.sh`).
 
 - `TZ` makes "today" on the server (due count, tasks dates, note names, "Last changed") the user's day.
-- With rootless podman it adds `compose.podman.yaml` (`userns_mode: keep-id`: the host user keeps its UID inside, so Zone runs as you and the wiki's files stay yours).
+- With rootless podman it adds `compose.podman.yaml` (`userns_mode: keep-id`: the host user keeps its UID inside, so Zone runs as you and the wiki's files stay yours); beside `compose.yaml` that file has to be there too, or it says so.
 - With rootless docker, which has no keep-id, `ZONE_UID`/`ZONE_GID` are 0 (the container's root is the host user there; another UID would be a subordinate one).
 
-`up` refuses a missing wiki folder or `.env`, then runs `compose up -d --build`.
+`up` refuses a missing wiki folder or `.env`, then starts Zone as the table says; `update` first pulls the newest code (`git pull`, in a checkout) or image (`compose pull`), then does the same.
 `test`/`e2e` use the engine directly (no `.env` needed), in the tools image.
 
 Platforms: Linux is the only tested one; it is meant to work also on macOS and, on Windows, in WSL2 (Docker Desktop and Podman run on it there).
@@ -135,7 +146,7 @@ Without the container, Zone itself should run on any OS Go builds for, with git 
 ### .env.example
 
 The template for `.env` (`cp .env.example .env`): every setting with a comment, optional ones commented out, no real values.
-`tests/test_env_example.py` keeps it in step with the code: every `ZONE_*` name the source, `run.sh`, `compose.yaml` or `compose.image.yaml` reads is in it, and nothing else is (a typo in `.env` is silently ignored).
+`tests/test_env_example.py` keeps it in step with the code: every `ZONE_*` name the source, `run.sh`, `compose.build.yaml` or `compose.yaml` reads is in it, and nothing else is (a typo in `.env` is silently ignored).
 
 ### .env
 
@@ -150,8 +161,8 @@ Zone itself reads no `.env` file, only its environment: `run.sh` and compose pas
 | `ZONE_SEMANTIC_SEARCH` | Semantic search at build time |
 | `ZONE_PUBLIC` | `view` or `edit`: the wiki is shown, or open to edits, without signing in |
 | `ZONE_SIGNUP`, `ZONE_SMTP_*`, `ZONE_MAIL_FROM` | Sign-up and its mail server (Mail, below) |
-| `ZONE_BIND`, `ZONE_UID`/`ZONE_GID` | For compose without `run.sh` (`compose.image.yaml`, or `compose.yaml` by hand) |
-| `ZONE_PORT` | The host's port for `compose.image.yaml` |
+| `ZONE_BIND`, `ZONE_UID`/`ZONE_GID` | For compose without `run.sh`; with it, they win over what it works out (run.sh, above) |
+| `ZONE_PORT` | The host's port, for compose (default 5000) |
 
 `ZONE_PUBLIC` is described in Public wikis in `docs/spec/security.md`.
 With rootless podman, keep-id (`compose.podman.yaml`) runs Zone as the host user, so files written to the mounted wiki directory are the host user's.
@@ -169,11 +180,15 @@ edited by hand or with `./run.sh user …`/`./run.sh group …`/`./run.sh config
 
 | Command | What it does |
 |---------|--------------|
-| `./run.sh` | Build the image and start Zone (default: "up") |
-| `./run.sh build` | Build the container image only (`compose build`) |
-| `./run.sh up` | Build and start in detached mode (`compose up -d --build`) |
+| `./run.sh` | Start Zone (default: "up") |
+| `./run.sh up` | Start in detached mode: in a checkout built first (`compose up -d --build`), beside `compose.yaml` the prebuilt image (`compose up -d`) |
 | `./run.sh down` | Stop and remove the container (`compose down`) |
 | `./run.sh logs` | Follow the container's logs |
+| `./run.sh update` | Pull the newest code (`git pull`) or prebuilt image (`compose pull`), then `up` |
+| `./run.sh user …` | The users in the wiki's settings file (`zonewiki user`) |
+| `./run.sh group …` | Groups made of groups and a group's owners (`zonewiki group`) |
+| `./run.sh config …` | The wiki's settings file (`zonewiki config`) |
+| `./run.sh build` | Checkout only: build the container image only (`compose build`) |
 | `./run.sh test` | gofmt, go vet, go test -race, then the unit/API tests, in the tools image |
 | `./run.sh e2e` | The browser tests and the tasks-core.js (Node) tests, in the tools image |
 | `./run.sh bench` | The tasks at a team's size against their budgets, then against a race build |
@@ -182,9 +197,8 @@ edited by hand or with `./run.sh user …`/`./run.sh group …`/`./run.sh config
 | `./run.sh leaks` | Scan the git history for secrets with gitleaks, in the tools image |
 | `./run.sh screenshots` | Redo the README's screenshots from a sample wiki, in the tools image |
 | `./run.sh eval [FILE]` | Measure retrieval on your wiki, in the app image |
-| `./run.sh user …` | The users in the wiki's settings file (`zonewiki user`) |
-| `./run.sh group …` | Groups made of groups and a group's owners (`zonewiki group`) |
-| `./run.sh config …` | The wiki's settings file (`zonewiki config`) |
+
+From `test` on, the commands need a checkout (run.sh, above).
 
 Each command says what it does, in lines starting with `==>` on stderr:
 the image it builds and from which file (a first build, that it takes minutes; the build's own output only when it fails),
@@ -202,26 +216,26 @@ and where what it makes lands (`binaries`: the `dist/` folder by its full path; 
 - `leaks`: extra args go to `gitleaks git`; a leak exits with 3.
 - `screenshots`: `docs/screenshots/*.png`, compressed with pngquant (the README shows phone.png at 640px).
 - `eval`: see Measuring retrieval in `docs/spec/search.md`; with semantic search as `ZONE_SEMANTIC_SEARCH` says.
-- `user`: `user add|passwd|token|role|email|group|disable|enable|invite|reset|remove NAME`, `user list`, in a one-off container (compose run; see `docs/spec/users.md`).
+- `user`: `user add|passwd|token|role|email|group|disable|enable|invite|reset|remove NAME`, `user list`, in a one-off container (compose run; see `docs/spec/users.md`); in a checkout the image is built first, quietly.
 - `group`: `group includes NAME [+G] [-G]`, `group owners NAME [+U] [-U]`, `group list`.
 - `config`: `config check|set|unset|passwd|token`: check it, set a key, the password and MCP token without users.
 
-Zone is available at **http://localhost:5000** after `./run.sh up`.
-To update: `git pull && ./run.sh up`.
+Zone is available at **http://localhost:5000** after `./run.sh up` (the port `ZONE_PORT` says, if set).
+To update: `./run.sh update`.
 To point Zone at an existing folder of Markdown notes, set `ZONE_DATA` to it: Zone makes it a git repository (if it isn't one) and adds a home page.
 
 ## Without run.sh
 
-`run.sh` fills in what `compose.yaml` can't work out itself: the commit the image is built from, the timezone, the user ID and the address from `ZONE_ALLOW_REMOTE`.
-Without a checkout at all, `compose.image.yaml` runs the prebuilt image (With the prebuilt image, below), with the same `.env` settings.
-To run `docker compose up -d --build` directly, set in `.env`:
+`run.sh` fills in what the compose files can't work out themselves: the commit the image is built from, the timezone, the user ID and the address from `ZONE_ALLOW_REMOTE`.
+Without it, `docker compose up -d` runs the prebuilt image (`compose.yaml`; With the prebuilt image, below), and in a checkout `docker compose -f compose.build.yaml up -d --build` builds it (a bare `docker compose up` there runs the prebuilt image too, not the checkout's code).
+For either, set in `.env`:
 
 - `ZONE_DATA` as an absolute path (no `~`);
 - `ZONE_BIND=0.0.0.0` together with `ZONE_ALLOW_REMOTE=1`, for network access;
-- `ZONE_UID` and `ZONE_GID` (`id -u`, `id -g`) if they aren't 1000;
+- `ZONE_UID` and `ZONE_GID` (`id -u`, `id -g`): `compose.yaml` requires them, `compose.build.yaml` takes 1000 without;
 - `TZ`, or the container runs on UTC.
 
-With rootless Podman, add the file that keeps your user ID inside the container: `podman compose -f compose.yaml -f compose.podman.yaml up -d --build`.
+With rootless Podman, add the file that keeps your user ID inside the container: `podman compose -f compose.yaml -f compose.podman.yaml up -d` (or after `compose.build.yaml`).
 
 ## From source
 
@@ -311,32 +325,35 @@ Forgejo's workflow builds no binaries.
 ## With the prebuilt image
 
 Any machine with Docker and Compose (your own computer, a server, a NAS, a Raspberry Pi) can run Zone from the prebuilt image, without the repo, git or a build:
-`compose.image.yaml` and a `.env` in one folder, then `docker compose -f compose.image.yaml up -d`.
-With rootless Podman, add the file that keeps your user ID inside the container: `podman compose -f compose.image.yaml -f compose.podman.yaml up -d`.
+`run.sh`, `compose.yaml` (and for rootless Podman `compose.podman.yaml`) and a `.env` with `ZONE_DATA` in one folder, then `./run.sh up`.
+`run.sh` fills in the rest, as in a checkout (run.sh, above), and gives the same commands (`./run.sh user add alice`, `./run.sh config set hosts …`, `./run.sh update`).
+Without `run.sh`, `docker compose up -d` in that folder, with the `.env` below.
 The image is `ghcr.io/zonewiki/zonewiki`, for amd64 and arm64 (Docker picks the right one):
 `latest` follows `main`, a version tag (`1.2.0`, `1.2`) stays put, a short commit hash names one build.
-To update: `docker compose -f compose.image.yaml pull`, then `up -d` again.
+To update: `./run.sh update` (without it, `docker compose pull`, then `up -d` again).
 The wiki is untouched by an update; it lives in the folder `ZONE_DATA` names.
 
 `.env` needs (`.env.example` has them all):
 
-- `ZONE_DATA`: the wiki folder, as an absolute path; it must exist (create it first, empty or with Markdown files in it).
-- `ZONE_UID`, `ZONE_GID`: the owner of that folder (`id -u` and `id -g` as that user, or `ls -nd <folder>`).
+- `ZONE_DATA`: the wiki folder; it must exist (create it first, empty or with Markdown files in it).
+  Without `run.sh`, as an absolute path.
+- Without `run.sh`, or for another owner than who runs it: `ZONE_UID`, `ZONE_GID`, the owner of that folder (`id -u` and `id -g` as that user, or `ls -nd <folder>`).
   Zone runs as that user and writes the wiki as it.
-- `TZ`, e.g. `Europe/Vienna`, so "today" is your day (else UTC).
-- For other devices (a NAS, a server): `ZONE_BIND=0.0.0.0`, which publishes the port on every interface instead of localhost.
+- Without `run.sh` (which takes the host's): `TZ`, e.g. `Europe/Vienna`, so "today" is your day (else UTC).
+- For other devices (a NAS, a server): `ZONE_ALLOW_REMOTE=1` with `run.sh`, or `ZONE_BIND=0.0.0.0`, which publishes the port on every interface instead of localhost.
 - Optional: `ZONE_PORT` (the host's port, default 5000; 5080 on a Synology, whose DSM has 5000).
   `ZONE_SEMANTIC_SEARCH=on` does nothing with the prebuilt image for now: it has no semantic search since 2026-11-18 (Semantic search paused, below), so Zone searches by keywords.
 
-The wiki's own settings go in its settings file (`.zone/config`, `docs/spec/users.md`), through the container, in the folder of `compose.image.yaml` and `.env` (no repo needed):
+The wiki's own settings go in its settings file (`.zone/config`, `docs/spec/users.md`), through the container, in the folder of `compose.yaml` and `.env` (no repo needed):
 
 ```bash
-docker compose -f compose.image.yaml run --rm zonewiki /app/zonewiki config set hosts nas.local, 192.168.1.20, wiki.example.org
-docker compose -f compose.image.yaml run --rm zonewiki /app/zonewiki user add alice     # or: config passwd, one password
+./run.sh config set hosts nas.local, 192.168.1.20, wiki.example.org
+./run.sh user add alice     # or: config passwd, one password
+# without run.sh: docker compose run --rm zonewiki /app/zonewiki config set hosts …
 ```
 
 On the network, the login needs no command: opened in a browser, a wiki without one asks for a password first
-(First run in `docs/spec/security.md`; `compose.image.yaml` hands Zone `ZONE_BIND`, so it knows its port is on the LAN),
+(First run in `docs/spec/security.md`; `compose.yaml` hands Zone `ZONE_BIND`, so it knows its port is on the LAN),
 and shows nothing before.
 The commands above set it just as well.
 
@@ -357,8 +374,8 @@ With Container Manager (DSM 7.2 or newer; Docker on older DSM works the same ove
 2. **UID and GID**: the user who owns them.
    DSM doesn't show IDs; with SSH on (Control Panel → Terminal & SNMP), log in as that user and run `id`.
    The first admin user is usually `uid=1026`, and group `users` is `gid=100`.
-3. **Files**: put `compose.image.yaml` into the project folder as `compose.yaml` (Container Manager looks for that name), and next to it a `.env` with at least `ZONE_DATA=/volume1/docker/zonewiki/wiki`, `ZONE_UID`, `ZONE_GID`, `TZ`, `ZONE_BIND=0.0.0.0` and `ZONE_PORT=5080`;
-   then, over SSH in the project folder, `hosts` (the NAS's name and LAN address) with the command above;
+3. **Files**: put `compose.yaml` into the project folder (Container Manager looks for that name), and next to it a `.env` with at least `ZONE_DATA=/volume1/docker/zonewiki/wiki`, `ZONE_UID`, `ZONE_GID`, `TZ`, `ZONE_BIND=0.0.0.0` and `ZONE_PORT=5080`;
+   then, over SSH in the project folder, `hosts` (the NAS's name and LAN address) with the command above (`docker compose run …`, or `./run.sh config set hosts …` with `run.sh` put there too);
    or, without SSH, `ZONE_ALLOW_REMOTE=1` in `.env`.
    The login is set in the browser, on the page Zone shows first.
 4. **Project**: Container Manager → Project → Create, name `zonewiki`, path the project folder; it finds `compose.yaml` there.
@@ -493,7 +510,7 @@ Tests: `tests/test_image.py` (the job's shape: after the checks, a push only, ne
 | **manifest** | Joins the two digests under the tags | After **image** |
 | **release** | `./run.sh binaries`, the files attached to the tag's GitHub release (Release binaries) | A `v*` tag, once the checks pass |
 
-GitHub publishes the image `compose.image.yaml` runs.
+GitHub publishes the image `compose.yaml` runs.
 **image** builds the `Containerfile` (`ZONE_SEMANTIC_SEARCH=off`, the `ZONE_BUILD` string) once per architecture,
 each natively on its own runner (`ubuntu-26.04` for amd64, `ubuntu-26.04-arm` for arm64;
 no emulation, so the arm64 build compiles with cgo, and, with semantic search, fetches onnxruntime's arm64 build and the model as fast as the other),
@@ -516,7 +533,7 @@ A new package on ghcr.io is private: make it public once in its settings on GitH
   and without `hosts` the host-header check lets in any IP address too (and names in `.internal`), so the LAN reaches Zone by address;
   a name it is opened by goes in `hosts`.
 
-`compose.yaml` maps `${ZONE_BIND:-127.0.0.1}:5000:5000`, `compose.image.yaml` `${ZONE_BIND:-127.0.0.1}:${ZONE_PORT:-5000}:5000`; without `run.sh`, `ZONE_BIND=0.0.0.0` must be set in `.env`, alongside `ZONE_ALLOW_REMOTE=1` or `hosts`.
+Both compose files map `${ZONE_BIND:-127.0.0.1}:${ZONE_PORT:-5000}:5000`; without `run.sh`, `ZONE_BIND=0.0.0.0` must be set in `.env`, alongside `ZONE_ALLOW_REMOTE=1` or `hosts`.
 
 The binary run by hand listens on `127.0.0.1` unless `ZONE_ALLOW_REMOTE=1` (`ZONE_ALLOW_REMOTE=1 ./zonewiki`), which opens a port alone in `--addr` on every interface.
 The `Host` check alone wouldn't keep the network out: a client on the LAN sends `Host: localhost`.

@@ -134,16 +134,16 @@ def test_the_binary_is_zonewiki():
     # Every interface in the container, for its network bridge: the binary's
     # default port alone would be the container's localhost, out of reach.
     assert 'CMD ["/app/zonewiki", "--addr", "0.0.0.0:5000"]' in final
-    for compose in ("compose.yaml", "compose.image.yaml"):
+    for compose in ("compose.build.yaml", "compose.yaml"):
         assert '"/app/zonewiki", "health"' in (REPO / compose).read_text(encoding="utf-8")
 
 
 def test_the_prebuilt_image_stays_on_localhost_until_opened():
-    # compose.image.yaml is the manual's first way into a container, on a
-    # laptop too: its port is loopback's, as compose.yaml's, until .env says
+    # compose.yaml is the manual's first way into a container, on a
+    # laptop too: its port is loopback's, as compose.build.yaml's, until .env says
     # ZONE_BIND=0.0.0.0, and Zone is told the same address (First run asks
     # for a login once it is on the network). It pulls, never builds.
-    compose = (REPO / "compose.image.yaml").read_text(encoding="utf-8")
+    compose = (REPO / "compose.yaml").read_text(encoding="utf-8")
     body = "\n".join(l for l in compose.splitlines() if not l.lstrip().startswith("#"))
     assert '- "${ZONE_BIND:-127.0.0.1}:${ZONE_PORT:-5000}:5000"' in body
     assert "ZONE_BIND: ${ZONE_BIND:-127.0.0.1}" in body

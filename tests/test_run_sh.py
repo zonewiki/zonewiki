@@ -23,6 +23,7 @@ case "$1" in
     [ -z "$FAKE_BUILD_FAILS" ] || exit 1
     while [ "$1" != --iidfile ]; do shift; done
     echo fake-image > "$2" ;;
+  compose) echo "env ZONE_BIND=$ZONE_BIND ZONE_UID=$ZONE_UID ZONE_GID=$ZONE_GID ZONE_BUILD=$ZONE_BUILD" >> "$FAKE_LOG" ;;
   create) echo fake-container ;;
   image) exit 1 ;;
   run|start) exit "${FAKE_EXIT:-0}" ;;
@@ -40,10 +41,12 @@ def _git(cwd, *args, env=None):
 
 @pytest.fixture
 def sandbox(tmp_path):
-    """A git repo with run.sh and the hook, and an env whose engine is the stub."""
+    """A git repo with run.sh and the hook, and an env whose engine is the stub.
+    A checkout to run.sh: the Containerfile and the compose files beside it."""
     repo = tmp_path / "repo"
     (repo / ".githooks").mkdir(parents=True)
-    shutil.copy(REPO / "run.sh", repo / "run.sh")
+    for name in ("run.sh", "Containerfile", "compose.yaml", "compose.build.yaml", "compose.podman.yaml"):
+        shutil.copy(REPO / name, repo / name)
     shutil.copy(REPO / ".githooks" / "pre-commit", repo / ".githooks" / "pre-commit")
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
@@ -439,3 +442,112 @@ def test_the_other_own_hooks_run_too(worktree):
     (repo / ".git" / "hooks" / "post-rewrite").chmod(0o755)
     assert _git(tree, "commit", "-q", "--no-verify", "--amend", "-m", "again", env=env).returncode == 0
     assert (repo.parent / "seen-post-rewrite").read_text().split("\n")[0] == "amend"
+
+
+@pytest.fixture
+def beside_compose(sandbox, tmp_path):
+    """run.sh downloaded on its own, next to compose.yaml (the prebuilt image),
+    with a wiki and its .env: no checkout, no git."""
+    _, env, log = sandbox
+    folder = tmp_path / "zone"
+    folder.mkdir()
+    for name in ("run.sh", "compose.yaml", "compose.podman.yaml"):
+        shutil.copy(REPO / name, folder / name)
+    wiki = tmp_path / "wiki"
+    wiki.mkdir()
+    (folder / ".env").write_text(f"ZONE_DATA={wiki}\n")
+    return folder, env, log
+
+
+def _compose_calls(log, what):
+    return [l for l in _engine_calls(log, "compose") if " version" not in l and what in l]
+
+
+def test_beside_compose_yaml_up_runs_the_prebuilt_image(beside_compose):
+    folder, env, log = beside_compose
+    r = subprocess.run(["./run.sh", "up"], cwd=folder, env=env, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    assert "from the prebuilt image" in r.stderr
+    (up,) = _compose_calls(log, " up ")
+    assert up.startswith("compose -f compose.yaml ") and up.endswith(" up -d")
+    assert "compose.build.yaml" not in log.read_text() and not _engine_calls(log, "build")
+
+
+def test_in_a_checkout_up_builds_from_it(sandbox, tmp_path):
+    repo, env, log = sandbox
+    wiki = tmp_path / "wiki"
+    wiki.mkdir()
+    (repo / ".env").write_text(f"ZONE_DATA={wiki}\n")
+    r = subprocess.run(["./run.sh", "up"], cwd=repo, env=env, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    assert "from this checkout" in r.stderr
+    (up,) = _compose_calls(log, " up ")
+    assert up.startswith("compose -f compose.build.yaml ") and up.endswith(" up -d --build")
+
+
+def test_beside_compose_yaml_the_checkouts_commands_say_they_need_one(beside_compose):
+    folder, env, log = beside_compose
+    for cmd in ("build", "test", "e2e", "bench", "retrieval", "binaries", "leaks", "screenshots", "eval"):
+        r = subprocess.run(["./run.sh", cmd], cwd=folder, env=env, capture_output=True, text=True)
+        assert r.returncode == 1 and "needs a checkout of Zone" in r.stderr, (cmd, r.stderr)
+    assert not log.exists() or not [l for l in log.read_text().splitlines()
+                                    if not l.startswith(("compose version", "info ", "env "))]
+
+
+def test_beside_compose_yaml_the_settings_commands_build_nothing(beside_compose):
+    folder, env, log = beside_compose
+    r = subprocess.run(["./run.sh", "user", "add", "alice"], cwd=folder, env=env, capture_output=True,
+                       text=True, stdin=subprocess.DEVNULL)
+    assert r.returncode == 0, r.stderr
+    assert not _compose_calls(log, " build ")
+    (run,) = _compose_calls(log, " run ")
+    assert run.startswith("compose -f compose.yaml ") and run.endswith("zonewiki /app/zonewiki user add alice")
+
+
+def test_update_pulls_the_image_or_the_code_then_starts_again(beside_compose, sandbox, tmp_path):
+    folder, env, log = beside_compose
+    r = subprocess.run(["./run.sh", "update"], cwd=folder, env=env, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    calls = [l for l in _compose_calls(log, "") if l.endswith((" pull", " up -d"))]
+    assert len(calls) == 2 and calls[0].endswith(" pull") and calls[1].endswith(" up -d"), calls
+    assert calls[0].startswith("compose -f compose.yaml ")
+    # A clone of the checkout: git pull, then the image built again.
+    repo, _, _ = sandbox
+    clone = tmp_path / "clone"
+    assert _git(tmp_path, "clone", "-q", str(repo), str(clone)).returncode == 0
+    (clone / ".env").write_text(f"ZONE_DATA={tmp_path / 'wiki'}\n")
+    log.unlink()
+    r = subprocess.run(["./run.sh", "update"], cwd=clone, env=env, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    assert "git pull" in r.stderr
+    (up,) = _compose_calls(log, " up ")
+    assert up.endswith(" up -d --build") and not _compose_calls(log, " pull")
+
+
+def test_env_names_the_address_and_the_user_unless_remote_is_allowed(beside_compose, tmp_path):
+    # compose without run.sh takes ZONE_BIND/ZONE_UID from .env; run.sh's
+    # exports would win over them, so it reads them itself.
+    folder, env, log = beside_compose
+    wiki = tmp_path / "wiki"
+    (folder / ".env").write_text(f"ZONE_DATA={wiki}\nZONE_BIND=0.0.0.0\nZONE_UID=1026\nZONE_GID=100\nZONE_PORT=5080\n")
+    r = subprocess.run(["./run.sh", "up"], cwd=folder, env=env, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    assert "ZONE_BIND=0.0.0.0 ZONE_UID=1026 ZONE_GID=100 " in log.read_text()
+    assert "Zone running at http://localhost:5080" in r.stdout
+    log.unlink()
+    (folder / ".env").write_text(f"ZONE_DATA={wiki}\n")
+    r = subprocess.run(["./run.sh", "up"], cwd=folder, env=env, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    assert f"ZONE_BIND=127.0.0.1 ZONE_UID={os.getuid()} " in log.read_text()
+    log.unlink()
+    (folder / ".env").write_text(f"ZONE_DATA={wiki}\nZONE_ALLOW_REMOTE=1\n")
+    r = subprocess.run(["./run.sh", "up"], cwd=folder, env=env, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    assert "ZONE_BIND=0.0.0.0 " in log.read_text()
+
+
+def test_run_sh_alone_says_what_it_needs(tmp_path, sandbox):
+    _, env, _ = sandbox
+    shutil.copy(REPO / "run.sh", tmp_path / "run.sh")
+    r = subprocess.run(["./run.sh", "up"], cwd=tmp_path, env=env, capture_output=True, text=True)
+    assert r.returncode == 1 and "needs compose.yaml beside it" in r.stderr

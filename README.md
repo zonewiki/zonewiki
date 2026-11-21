@@ -85,12 +85,14 @@ It is tested on Linux, and should work on macOS and in WSL2.
 
 ```bash
 mkdir -p ~/zonewiki ~/zonewiki-docker && cd ~/zonewiki-docker
-curl -fsSLO https://raw.githubusercontent.com/zonewiki/zonewiki/main/compose.image.yaml
-printf 'ZONE_DATA=%s\nZONE_UID=%s\nZONE_GID=%s\nTZ=Europe/Vienna\n' ~/zonewiki "$(id -u)" "$(id -g)" > .env
-docker compose -f compose.image.yaml up -d
+base=https://raw.githubusercontent.com/zonewiki/zonewiki/main
+curl -fsSL -O $base/run.sh -O $base/compose.yaml -O $base/compose.podman.yaml
+chmod +x run.sh
+echo 'ZONE_DATA=~/zonewiki' > .env      # your wiki folder
+./run.sh up                            # ./run.sh update for a new version
 ```
 
-To build the image from a checkout instead (to change Zone, or for search by meaning), use `./run.sh up`: see [From the repository](docs/manual/self-hosting.md#from-the-repository).
+In a checkout of the repository, the same `./run.sh up` builds the image from it instead (to change Zone, or for search by meaning): see [From the repository](docs/manual/self-hosting.md#from-the-repository).
 
 ### From source
 

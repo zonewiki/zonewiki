@@ -216,7 +216,7 @@ func main() {
 
 	// Localhost by default (listenAddr); in the container every interface
 	// (the Containerfile's --addr 0.0.0.0:5000), so its network bridge can
-	// forward connections, and exposure is the port mapping's (compose.yaml:
+	// forward connections, and exposure is the port mapping's (the compose files'
 	// ZONE_BIND, 127.0.0.1 = localhost only). The Host check is the
 	// DNS-rebinding defence, not a door. Or a Unix socket, for a reverse proxy.
 	ln, err := listen(*addr)
@@ -507,7 +507,7 @@ func healthClient(args []string) *http.Client {
 
 // health: whether Zone answers at url within the client's 5 seconds, its
 // settings file taken (0), or not (1), for the container's healthcheck
-// (compose.yaml), which has no curl.
+// (the compose files'), which has no curl.
 func health(client *http.Client, url string) int {
 	resp, err := client.Get(url)
 	if err != nil {

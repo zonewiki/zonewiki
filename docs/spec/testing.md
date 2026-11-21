@@ -128,7 +128,7 @@ Tests that fail when a change forgets a step elsewhere: a new route, tool, setti
 | `tests/test_text_parity.py` | The browser's copies in `public/js/mdtext.js` give the same answers | Change the JavaScript along with the Go |
 | `*_cases.json` runners (Shared case files) | The server's and the browser's task rules agree on one table | Change both sides, add the case to the table |
 | `tests/test_image.py` | Base images and CI actions pinned by hash; the model's revision and hashes are `go/embed.go`'s; both images build with the same Go and fetch the modules with the root's `go.mod`; the build stage copies what `zonefiles.go` builds in, and the image no copy beside the binary; the image ships the licenses; a `v*` tag releases the four binaries `./run.sh binaries` builds; `THIRD_PARTY_LICENSES` names what is pinned; every `public/vendor/` library has a `LICENSE`; Mermaid's notices match the vendored bundle | Update the pin, hash or notice that drifted (Dependencies in `AGENTS.md`; for Mermaid `python3 docs/licenses/mermaid_notices.py VERSION`) |
-| `tests/test_env_example.py` | `.env.example` lists every setting the source, `run.sh` and `compose.yaml` read, and nothing else | Add the new variable to `.env.example`, or to `INTERNAL` if no user sets it (run, build, test or bench only) |
+| `tests/test_env_example.py` | `.env.example` lists every setting the source, `run.sh` and the compose files read, and nothing else | Add the new variable to `.env.example`, or to `INTERNAL` if no user sets it (run, build, test or bench only) |
 | `TestUsage` (`tests/test_routes.py`) | `zonewiki --help` names its commands, environment and flags (with two dashes); each command answers `--help` with exit 0 and without a wiki | Fix the usage text; a new command goes in the test's list |
 | Browser harness (`tests/e2e/conftest.py`) | No request to another host, no uncaught JS error, no CSP violation | Load from `public/vendor/`, fix the error, move inline script into Zone's script files |
 
@@ -217,7 +217,7 @@ Prefer an API test when the behaviour shows through a route, a Go test when it d
 | `tests/test_rendering.py` | rendering.md | Rendering through the server: wikilinks, image widths, callouts, autolinks, a heading's id and its link's anchor |
 | `tests/test_roles.py` | users.md | Viewers: every write refused, the interface; guides written by admins only |
 | `tests/test_routes.py` | routes.md, editor.md, security.md, deployment.md | The wiki's routes: pages, save and merge, uploads, search, Host and Origin checks, body limits, `TestUsage`, the binary started on its own (`TestTheBinaryAlone`) |
-| `tests/test_run_sh.py` | deployment.md | `run.sh`'s container calls and what each command says it does, and the pre-commit hook, against a stub engine; the pre-push hook |
+| `tests/test_run_sh.py` | deployment.md | `run.sh`'s container calls and what each command says it does, in a checkout and beside `compose.yaml` alone (the prebuilt image, `update`, the checkout's commands refused, `.env`'s address and user), and the pre-commit hook, against a stub engine; the pre-push hook |
 | `tests/test_section_editing.py` | editor.md | Section editing over HTTP: a stale ✎, Keep mine |
 | `tests/test_semantic.py` | search.md | Semantic search through the server with the fake embedder |
 | `tests/test_setup.py` | security.md | The first-run page (`/setup`) |

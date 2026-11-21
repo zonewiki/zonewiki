@@ -1,10 +1,25 @@
 #!/usr/bin/env bash
-# Build and run Zone with compose (compose.yaml), and run its tests. This
-# script works out what compose can't: the build string from git, the port's
-# bind address from ZONE_ALLOW_REMOTE, the host's timezone, and the wiki path.
+# Run Zone with compose, and run its tests. Where it is decides which Zone:
+# in a checkout (a Containerfile beside it) it builds the image from the code
+# there (compose.build.yaml); downloaded on its own next to compose.yaml, it
+# runs the prebuilt image (ghcr.io/zonewiki/zonewiki). The tests and the other
+# commands for working on Zone need the checkout. This script works out what
+# compose can't: the build string from git, the port's bind address from
+# ZONE_ALLOW_REMOTE, your user ID, the host's timezone, and the wiki path.
 set -e
 
 cd "$(dirname "$0")"
+
+if [[ -f Containerfile ]]; then
+  CHECKOUT=1
+  COMPOSE_FILES=(-f compose.build.yaml)
+elif [[ -f compose.yaml ]]; then
+  CHECKOUT=
+  COMPOSE_FILES=(-f compose.yaml)
+else
+  echo "Error: run.sh needs compose.yaml beside it (the prebuilt image), or a checkout of Zone." >&2
+  exit 1
+fi
 
 # Read an optional KEY from .env (empty when unset).
 env_val() {
@@ -46,23 +61,32 @@ esac
 export ZONE_DATA
 
 # The port's bind address from ZONE_ALLOW_REMOTE: 1 → all interfaces (LAN),
-# unset/empty → loopback only (localhost only, more secure). Lowercased with
-# tr, not ${,,}: macOS ships bash 3.2, which this script must run on.
+# unset/empty → ZONE_BIND from .env (what compose used without this script
+# takes), else loopback only (localhost only, more secure). Exported, it
+# would win over .env's, hence read here. Lowercased with tr, not ${,,}:
+# macOS ships bash 3.2, which this script must run on.
 ZONE_ALLOW_REMOTE=$(env_val ZONE_ALLOW_REMOTE | tr '[:upper:]' '[:lower:]')
 case "$ZONE_ALLOW_REMOTE" in
-  1|true|yes) export ZONE_BIND="0.0.0.0" ;;
-  *) export ZONE_BIND="127.0.0.1" ;;
+  1|true|yes) ZONE_BIND="0.0.0.0" ;;
+  *) ZONE_BIND=$(env_val ZONE_BIND) ;;
 esac
+export ZONE_BIND="${ZONE_BIND:-127.0.0.1}"
 
-# The user Zone runs as (compose.yaml), so the files it writes are the host
-# user's: your own IDs. Rootless podman maps them into the container as they
-# are (keep-id, compose.podman.yaml). Rootless docker can't: there the
-# container's root is you, and any other UID would be a subordinate one.
-export ZONE_UID="$(id -u)" ZONE_GID="$(id -g)"
-COMPOSE_FILES=(-f compose.yaml)
+# The user Zone runs as (the compose files' user:), so the files it writes
+# are the host user's: your own IDs, unless .env names others (a NAS, where
+# the wiki folder's owner isn't who runs this). Rootless podman maps them
+# into the container as they are (keep-id, compose.podman.yaml, which has to
+# be beside this script). Rootless docker can't: there the container's root
+# is you, and any other UID would be a subordinate one.
+ZONE_UID=$(env_val ZONE_UID) ZONE_GID=$(env_val ZONE_GID)
+export ZONE_UID="${ZONE_UID:-$(id -u)}" ZONE_GID="${ZONE_GID:-$(id -g)}"
 if [[ $ENGINE == podman && "$(id -u)" -ne 0 ]]; then
+  if [[ ! -f compose.podman.yaml ]]; then
+    echo "Error: rootless podman needs compose.podman.yaml beside run.sh (it keeps your user ID in the container)." >&2
+    exit 1
+  fi
   COMPOSE_FILES+=(-f compose.podman.yaml)
-elif [[ $ENGINE == docker && "$(id -u)" -ne 0 ]] &&
+elif [[ $ENGINE == docker && "$(id -u)" -ne 0 && -z "$(env_val ZONE_UID)" ]] &&
      docker info --format '{{.SecurityOptions}}' 2>/dev/null | grep -q rootless; then
   export ZONE_UID=0 ZONE_GID=0
 fi
@@ -70,7 +94,10 @@ fi
 # The build Zone's image comes from ("<hash> <commit date>", "+dirty" with
 # uncommitted source changes), shown next to Zone's version; same format as
 # a local go build's (go/config.go sourceBuild).
-ZONE_BUILD=$(git log -1 --format='%h %cd' --date=format:'%Y-%m-%d %H:%M' 2>/dev/null || true)
+# Only a checkout's: the prebuilt image carries CI's.
+ZONE_BUILD=
+[[ -z "$CHECKOUT" ]] ||
+  ZONE_BUILD=$(git log -1 --format='%h %cd' --date=format:'%Y-%m-%d %H:%M' 2>/dev/null || true)
 if [[ -n "$ZONE_BUILD" && -n "$(git status --porcelain -- go public 2>/dev/null)" ]]; then
   ZONE_BUILD="$ZONE_BUILD +dirty"
 fi
@@ -139,26 +166,67 @@ build_image() {
   rm -f "$log" "$iid"
 }
 
+# The commands for working on Zone need a checkout: say so instead of
+# failing somewhere in compose.
+needs_checkout() {
+  if [[ -z "$CHECKOUT" ]]; then
+    echo "./run.sh $1 needs a checkout of Zone (git clone https://github.com/zonewiki/zonewiki);" \
+         "beside compose.yaml alone, run.sh runs the prebuilt image: up, down, logs, update, user, group, config." >&2
+    exit 1
+  fi
+}
+
+# up and the settings file's commands need the wiki and .env: Zone doesn't
+# make a wiki where a typo in .env points.
+needs_wiki() {
+  if [[ ! -d "$ZONE_DATA" ]]; then
+    echo "No wiki at $ZONE_DATA. Create the folder, or set ZONE_DATA in .env to your wiki." >&2
+    exit 1
+  fi
+  if [[ ! -f .env ]]; then
+    echo "No .env: create one with ZONE_DATA=<your wiki folder> (in a checkout: cp .env.example .env, see README)." >&2
+    exit 1
+  fi
+}
+
+# Start Zone (up, update): a checkout builds the image first, compose.yaml
+# pulls the prebuilt one if it isn't here yet.
+start() {
+  needs_wiki
+  if [[ -n "$CHECKOUT" ]]; then
+    say "Building Zone's image from this checkout with $ENGINE compose (the binary is compiled inside it, not into this folder) and starting it…"
+    compose up -d --build
+  else
+    say "Starting Zone from the prebuilt image (ghcr.io/zonewiki/zonewiki) with $ENGINE compose…"
+    compose up -d
+  fi
+  local port
+  port=$(env_val ZONE_PORT)
+  echo "Zone running at http://localhost:${port:-5000}"
+  echo "Zone data: $ZONE_DATA"
+}
+
 case "${1:-up}" in
   build)
+    needs_checkout build
     say "Building Zone's image with $ENGINE compose (the binary is compiled inside it, not into this folder)…"
     compose build
     say "Built. ./run.sh up starts it; ./run.sh binaries builds binaries into dist/."
     ;;
   up)
-    # The wiki must exist: Zone doesn't make one where a typo in .env points.
-    if [[ ! -d "$ZONE_DATA" ]]; then
-      echo "No wiki at $ZONE_DATA. Create the folder, or set ZONE_DATA in .env to your wiki." >&2
-      exit 1
+    start
+    ;;
+  update)
+    # A checkout pulls the code and builds it; beside compose.yaml, the
+    # newest prebuilt image. Then Zone starts again on it.
+    if [[ -n "$CHECKOUT" ]]; then
+      say "Pulling the newest code (git pull)…"
+      git pull
+    else
+      say "Pulling the newest prebuilt image…"
+      compose pull
     fi
-    if [[ ! -f .env ]]; then
-      echo "No .env: create one (cp .env.example .env, see README)." >&2
-      exit 1
-    fi
-    say "Building Zone's image with $ENGINE compose (the binary is compiled inside it, not into this folder) and starting it…"
-    compose up -d --build
-    echo "Zone running at http://localhost:5000"
-    echo "Zone data: $ZONE_DATA"
+    start
     ;;
   down)
     say "Stopping Zone…"
@@ -168,6 +236,7 @@ case "${1:-up}" in
     compose logs -f
     ;;
   test)
+    needs_checkout test
     # The server's own checks (gofmt, go vet, go test under the race detector,
     # which needs cgo: the image is without it otherwise), then the unit/API
     # tests against it, in the tools image (Containerfile.tools), one worker per
@@ -187,6 +256,7 @@ case "${1:-up}" in
        python3 -m pytest -q -p no:cacheprovider -n auto "$@"' -- "${@:2}"
     ;;
   bench)
+    needs_checkout bench
     # The tasks at a team's size (tests/bench_tasks.py: 100 users, 40 lists,
     # 5,000 open and 25,000 closed tasks), in the tools image: its table, and
     # a failure where a budget is passed; then once more against a server
@@ -201,6 +271,7 @@ case "${1:-up}" in
        ZONE_TEST_RACE=1 python3 -m pytest -q -p no:cacheprovider -n 0 tests/bench_tasks.py "$@"' -- "${@:2}"
     ;;
   e2e)
+    needs_checkout e2e
     # Browser tests (headless Chromium via Playwright) plus the Node-run
     # tasks-core.js tests, in the tools image (Containerfile.tools).
     # Screenshots land in tests/e2e/_screenshots/. In parallel (pytest-xdist),
@@ -215,6 +286,7 @@ case "${1:-up}" in
          -n "$n" "$@"' -- "${@:2}"
     ;;
   retrieval)
+    needs_checkout retrieval
     # Search's quality against its floor (tests/retrieval: a sample wiki, the
     # questions asked of it and the least each ranking must find; Measuring
     # retrieval in docs/spec/search.md), in the app's image with the model
@@ -229,6 +301,7 @@ case "${1:-up}" in
       /app/zonewiki eval --floor /repo/tests/retrieval/floors.json /repo/tests/retrieval/questions.json "${@:2}"
     ;;
   binaries)
+    needs_checkout binaries
     # The release binaries (Release binaries in docs/spec/deployment.md):
     # zonewiki for Linux and macOS, amd64 and arm64, without cgo (keyword
     # search), the browser code and the docs built in (zonefiles.go), into
@@ -259,6 +332,7 @@ case "${1:-up}" in
     fi
     ;;
   leaks)
+    needs_checkout leaks
     # Secrets in the git history (gitleaks, in the tools image); extra args
     # go to `gitleaks git`, e.g. --pre-commit --staged for staged changes
     # only (the pre-commit hook). A leak exits with 3, so the hook can tell
@@ -293,6 +367,7 @@ case "${1:-up}" in
       gitleaks git --redact --no-banner --exit-code 3 "${@:2}" .
     ;;
   screenshots)
+    needs_checkout screenshots
     # The README's screenshots (docs/screenshots/*.png), from a sample wiki,
     # in the tools image (Playwright).
     image=$(build_image zonewiki-tools -f Containerfile.tools)
@@ -301,6 +376,7 @@ case "${1:-up}" in
     say "The screenshots are in $PWD/docs/screenshots/."
     ;;
   eval)
+    needs_checkout eval
     # Retrieval quality on your wiki (zonewiki eval, go/eval.go): the questions
     # are a file in the wiki (default _eval/retrieval.json), the wiki is
     # mounted read-only. The image is the app's with ZONE_SEMANTIC_SEARCH's model
@@ -323,33 +399,36 @@ case "${1:-up}" in
     # docs/spec/users.md), in a one-off container of the app's image, with
     # .env and the wiki as up gives them, so the file is written as Zone's
     # user and import sees .env. A running Zone takes the change itself.
-    if [[ ! -d "$ZONE_DATA" ]]; then
-      echo "No wiki at $ZONE_DATA. Create the folder, or set ZONE_DATA in .env to your wiki." >&2
-      exit 1
-    fi
-    if [[ ! -f .env ]]; then
-      echo "No .env: create one (cp .env.example .env, see README)." >&2
-      exit 1
-    fi
-    # The image as up builds it, its output only when the build fails.
-    say "Building Zone's image with $ENGINE compose…"
-    log=$(mktemp)
-    if ! compose build -q zonewiki >"$log" 2>&1; then
-      cat "$log" >&2
+    needs_wiki
+    # In a checkout, the image as up builds it, its output only when the
+    # build fails; the prebuilt image compose run pulls if it isn't here.
+    if [[ -n "$CHECKOUT" ]]; then
+      say "Building Zone's image with $ENGINE compose…"
+      log=$(mktemp)
+      if ! compose build -q zonewiki >"$log" 2>&1; then
+        cat "$log" >&2
+        rm -f "$log"
+        exit 1
+      fi
       rm -f "$log"
-      exit 1
     fi
-    rm -f "$log"
     tty=()
     [[ -t 0 ]] || tty=(-T)
     compose run --rm --no-deps "${tty[@]}" zonewiki /app/zonewiki "$@"
     ;;
   *)
-    echo "Usage: $0 [build|up|down|logs|test|e2e|bench|retrieval|binaries|leaks|screenshots|eval|user|group|config]"
-    echo "  build  - build the container image only"
-    echo "  up     - build and start Zone (default)"
+    echo "Usage: $0 [up|down|logs|update|user|group|config|build|test|e2e|bench|retrieval|binaries|leaks|screenshots|eval]"
+    echo "In a checkout, Zone's image is built from it; beside compose.yaml alone, the prebuilt image runs."
+    echo "  up     - start Zone (default); in a checkout, build its image first"
     echo "  down   - stop Zone"
     echo "  logs   - follow container logs"
+    echo "  update - pull the newest code (checkout) or prebuilt image, and start Zone again"
+    echo "  user add|passwd|token|role|email|group|disable|enable|invite|reset|remove NAME, user list - the users in the wiki's settings file"
+    echo "  group includes NAME [+G] [-G], group owners NAME [+U] [-U], group list - groups made of groups and a group's owners, in the wiki's settings file"
+    echo "  config check|set|unset|passwd|token - the wiki's settings file: check it, set a key, the password"
+    echo "                and MCP token without users"
+    echo "Only in a checkout:"
+    echo "  build  - build the container image only"
     echo "  test   - gofmt, go vet, go test -race and the unit/API tests in the tools image (extra args go to pytest)"
     echo "  e2e    - run browser and tasks-core tests in the tools image (extra args go to pytest)"
     echo "  bench  - measure the tasks at a team's size against their budgets, then under the race detector"
@@ -358,10 +437,6 @@ case "${1:-up}" in
     echo "  leaks  - scan the git history for secrets (extra args go to gitleaks git)"
     echo "  screenshots - redo the README's screenshots (docs/screenshots/)"
     echo "  eval [FILE] - measure search on your wiki against questions in FILE (in the wiki)"
-    echo "  user add|passwd|token|role|email|group|disable|enable|invite|reset|remove NAME, user list - the users in the wiki's settings file"
-    echo "  group includes NAME [+G] [-G], group owners NAME [+U] [-U], group list - groups made of groups and a group's owners, in the wiki's settings file"
-    echo "  config check|set|unset|passwd|token - the wiki's settings file: check it, set a key, the password"
-    echo "                and MCP token without users"
     exit 1
     ;;
 esac

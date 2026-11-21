@@ -1,0 +1,73 @@
+# Zone: build the image from this checkout and run it.
+#
+# ./run.sh up drives this file in a checkout (beside compose.yaml alone, it
+# runs the prebuilt image instead): it fills in what compose can't work out
+# itself (the build string from git, the port's bind address from
+# ZONE_ALLOW_REMOTE, your user ID, the host's timezone, the wiki path with ~
+# expanded) and refuses a wiki folder that doesn't exist. Used directly, it
+# works too:
+#
+#   docker compose -f compose.build.yaml up -d --build
+#
+# Settings come from .env (see README); used directly, also set
+# ZONE_BIND=0.0.0.0 there for LAN access, and ZONE_DATA as an absolute path.
+name: zonewiki
+
+services:
+  zonewiki:
+    build:
+      context: .
+      dockerfile: Containerfile
+      args:
+        # "<hash> <commit date>" shown next to the version; run.sh sets it.
+        ZONE_BUILD: ${ZONE_BUILD:-unknown}
+        # Semantic search: the model and what runs it are baked into the image.
+        ZONE_SEMANTIC_SEARCH: ${ZONE_SEMANTIC_SEARCH:-}
+    image: zonewiki
+    container_name: zonewiki
+    # Not root: Zone runs as the host user, so the files it writes in the wiki
+    # are theirs. run.sh sets your id -u/-g (with rootless podman plus
+    # compose.podman.yaml's keep-id, which maps them in unchanged). Used
+    # directly, set ZONE_UID/ZONE_GID in .env if yours aren't 1000.
+    user: "${ZONE_UID:-1000}:${ZONE_GID:-1000}"
+    # A minimal init as PID 1 reaps orphaned processes (Zone as PID 1
+    # wouldn't, and they would pile up as zombies until the PID limit).
+    init: true
+    restart: unless-stopped
+    # Every setting, secrets included. Docker compose hands them over through
+    # its API; podman-compose as podman -e arguments (briefly visible in ps).
+    env_file: .env
+    environment:
+      ZONE_DATA: /wiki-data
+      # Where the port below is published: beyond localhost, a wiki without
+      # a login asks for a password in the browser first (First run, README).
+      ZONE_BIND: ${ZONE_BIND:-127.0.0.1}
+      # The wiki's folder on the host, for the MCP tools' file: lines.
+      ZONE_HOST_DATA: ${ZONE_DATA:-~/zonewiki}
+      # The user's timezone, so "today" is their day; run.sh sets the host's.
+      TZ: ${TZ:-UTC}
+    ports:
+      # Localhost only unless ZONE_ALLOW_REMOTE (run.sh sets ZONE_BIND=0.0.0.0);
+      # ZONE_PORT for another port on the host.
+      - "${ZONE_BIND:-127.0.0.1}:${ZONE_PORT:-5000}:5000"
+    volumes:
+      - type: bind
+        source: ${ZONE_DATA:-~/zonewiki}
+        target: /wiki-data
+        bind:
+          # A mistyped path must not start an empty wiki somewhere else.
+          create_host_path: false
+          # Relabel for SELinux (ignored where SELinux is off).
+          selinux: Z
+    # Reported as unhealthy when Zone stops answering (compose ps); restarting
+    # then is podman's --health-on-failure or an autoheal container's job.
+    healthcheck:
+      test: ["CMD", "/app/zonewiki", "health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      # Docker's default, and podman's name for its k8s-file driver: `logs -f`
+      # works with both (podman's journald default doesn't follow everywhere).
+      driver: json-file

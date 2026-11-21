@@ -19,11 +19,11 @@ What each file and folder of the repository is for.
 ├── docs/licenses/mermaid_notices.py  # Writes public/vendor/mermaid/THIRD_PARTY_LICENSES from the bundle's source map
 ├── docs/screenshots/       # The README's and the manual's screenshots + make_screenshots.py (./run.sh screenshots)
 ├── Containerfile           # The image: a Go build stage (Zone's own files built in), onnxruntime + the model (opt-in), an Ubuntu 26.04 LTS runtime with the binary and the licenses
-├── compose.yaml            # Builds and runs the image (run.sh drives it)
-├── compose.podman.yaml     # Rootless podman only: userns keep-id (run.sh adds it; with compose.image.yaml, a second -f)
-├── compose.image.yaml      # Runs the prebuilt ghcr.io image, no checkout or build (see docs/spec/deployment.md)
+├── compose.yaml            # Runs the prebuilt ghcr.io image, no checkout or build; run.sh drives it beside it alone (see docs/spec/deployment.md)
+├── compose.build.yaml      # Builds the image from the checkout and runs it (run.sh drives it in a checkout)
+├── compose.podman.yaml     # Rootless podman only: userns keep-id (run.sh adds it to either)
 ├── Containerfile.tools     # Tools image: Go (and gcc, for its race detector), Playwright + Chromium, the tests' Python packages, Node for tasks-core tests, gitleaks, git, pngquant
-├── run.sh                  # Helper script: build/up/down/logs, user/config (via compose), test/e2e/bench/retrieval/binaries/leaks (CI runs these too); bash 3.2-compatible (macOS)
+├── run.sh                  # Helper script: up/down/logs/update, user/config (via compose; beside compose.yaml alone the prebuilt image, in a checkout a build), build, test/e2e/bench/retrieval/binaries/leaks (CI runs these too); bash 3.2-compatible (macOS)
 ├── .githooks/pre-commit    # Refuses a commit with a secret in it (gitleaks); on with git config core.hooksPath .githooks
 ├── .githooks/pre-push      # Runs the clone's own .git/hooks/<same name>, if any (core.hooksPath would skip it); post-commit and post-rewrite are copies
 ├── .gitleaks.toml          # gitleaks: the default rules; the generic key rule skips public/vendor/ (minified names)

@@ -55,7 +55,7 @@ COPY go/ ./
 RUN go build -trimpath -ldflags="-s -w" -o /zonewiki .
 
 # ── Semantic search: onnxruntime and the model (opt-in) ─────────────────────
-# With ZONE_SEMANTIC_SEARCH=on in .env, compose.yaml passes it here and both
+# With ZONE_SEMANTIC_SEARCH=on in .env, compose.build.yaml passes it here and both
 # are baked into the image, so the first search doesn't wait for a download
 # and Zone works offline. Without it, the folders stay empty. Pinned and
 # checked against their SHA-256: onnxruntime's GitHub release (the sums of
@@ -101,7 +101,7 @@ RUN mkdir -p /opt/onnxruntime /opt/onnxruntime-licenses /opt/zonewiki-model \
 # ── The image ────────────────────────────────────────────────────────────────
 FROM ${UBUNTU}
 
-# git: the wiki's history. tzdata: TZ (compose.yaml, from the host or .env)
+# git: the wiki's history. tzdata: TZ (compose.build.yaml, from the host or .env)
 # names the user's timezone. ca-certificates: a git-remote over https,
 # and fetching the model when it isn't baked in.
 RUN apt-get update && \
@@ -124,12 +124,12 @@ COPY --from=semantic /opt/onnxruntime-licenses/ licenses/onnxruntime/
 COPY --from=build /zonewiki ./zonewiki
 
 # The build ("<hash> <commit date>") shown next to Zone's version, passed in by
-# run.sh (through compose.yaml): the image has no .git to read it from. Last, so a new commit only rebuilds this layer.
+# run.sh (through compose.build.yaml): the image has no .git to read it from. Last, so a new commit only rebuilds this layer.
 ARG ZONE_BUILD=unknown
 ENV ZONE_BUILD=$ZONE_BUILD
 
-# compose.yaml runs Zone as the host user's UID (any UID, maybe without an
-# account here): git gets a HOME it can use.
+# The compose files run Zone as the host user's UID (any UID, maybe without
+# an account here): git gets a HOME it can use.
 ENV HOME=/tmp
 
 EXPOSE 5000
