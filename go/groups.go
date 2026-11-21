@@ -99,7 +99,7 @@ func groupsRoute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := r.URL.Query()
-	done := groupsDone(q.Get("done"), q.Get("group"), q.Get("left"))
+	done := groupsDone(userOf(r), q.Get("done"), q.Get("group"), q.Get("left"))
 	if g := q.Get("group"); q.Get("done") == "left" && groupNameRE.MatchString(g) && !latestSettings().memberOf(userOf(r).Name, g) {
 		done = "You are no longer in " + g + ": what is for @" + g + " you no longer see. Its owners can put you back."
 	}
@@ -110,9 +110,15 @@ func groupsRoute(w http.ResponseWriter, r *http.Request) {
 }
 
 // groupsDone: what the change before did, from a fixed set and names that
-// are a group's and users' (a link can't make the page say anything else).
-func groupsDone(done, group, left string) string {
+// are a group's and users' (a link can't make the page say anything else),
+// and only to who the Groups page shows the group's people anyway: who is
+// in it, its owners and an admin. To anyone else the link says nothing,
+// not even that there is such a group.
+func groupsDone(user asker, done, group, left string) string {
 	s := latestSettings()
+	if !s.isAdmin(user.Name) && !s.ownerOf(user.Name, group) && !s.memberOf(user.Name, group) {
+		return ""
+	}
 	// A group an admin made of no groups any more may be gone: that is said.
 	if !groupNameRE.MatchString(group) || (done != "includes" && !slices.Contains(knownGroups(s), group)) {
 		return ""
@@ -1045,7 +1051,7 @@ func groupRenameRoute(w http.ResponseWriter, r *http.Request) {
 	name, err := renameGroupOp(userOf(r), r.PathValue("group"), r.PostFormValue("name"))
 	if err != nil && name != "" {
 		// Renamed, but not all of it is committed: the page says both.
-		showGroups(w, r, http.StatusInternalServerError, groupsDone("renamed", name, ""), err.Error(), "", "")
+		showGroups(w, r, http.StatusInternalServerError, groupsDone(userOf(r), "renamed", name, ""), err.Error(), "", "")
 		return
 	}
 	if err != nil {

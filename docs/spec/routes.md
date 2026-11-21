@@ -133,6 +133,8 @@ Version history is in `docs/spec/rendering.md`.
 | GET    | `/groups/<group>`     | A group's home `groups/<group>/index` (made on the first visit of someone in the group who may write); 404 for anyone not in it |
 
 For an admin `/groups` also lists every other group, what each includes, the form for a group of groups and the folders no one sees (Groups in `docs/spec/users.md`).
+After a change the page says what was done (`?done=…&group=…`: the group's people, who is no longer in it), to who sees that group's people on the page anyway: who is in it, its owners and an admin.
+To anyone else such a link says nothing, not even that there is such a group (`groupsDone`).
 
 `POST /groups/<group>/remove` takes `pages=move` with `folder`, which takes its pages to a folder of the shared wiki, or `pages=delete`, which deletes them (one of the two when its folder holds anything).
 

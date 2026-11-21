@@ -625,3 +625,25 @@ def test_a_removal_whose_commit_fails_is_made_all_the_same(client, wiki, free):
     body = said(resp)
     assert resp.status_code == 500 and "Removed the group apollo" in body and "written but not committed" in body, body[:400]
     assert "[group apollo]" not in config(wiki) and (wiki / "apollo/roadmap.md").exists() and not (wiki / "groups/apollo").exists()
+
+
+def test_what_was_done_is_said_only_to_who_sees_the_group(client, wiki):
+    """/groups?done=…&group=… says who is in a group (and that there is one)
+    to its people, its owners and an admin: to nobody else, whatever the
+    link says."""
+    sign_in(client, "alice")
+    assert make(client, "Apollo", "bob").status_code == 303
+    links = ["/groups?done=people&group=apollo", "/groups?done=made&group=apollo",
+             "/groups?done=renamed&group=apollo", "/groups?done=includes&group=apollo&left=carol",
+             "/groups?done=people&group=dev", "/groups?done=includes&group=product&left=alice"]
+    for who, sees in (("alice", {"apollo"}), ("bob", {"apollo"}), ("carol", {"dev", "product"}),
+                      ("vera", set()), ("dana", {"apollo", "dev", "product"})):
+        sign_in(client, who)
+        for link in links:
+            group = link.split("group=")[1].split("&")[0]
+            body = html.unescape(page(client, link))
+            said = any(text in body for text in (f"Made the group {group}", f"The group is called {group} now",
+                                                 f'<p class="users-done" role="status">{group}'))
+            assert said == (group in sees), (who, link)
+            if group not in sees:
+                assert "No longer in it" not in body, (who, link)

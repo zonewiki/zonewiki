@@ -109,9 +109,9 @@ func TestAskersAreMadeInFewPlaces(t *testing.T) {
 func TestWhatIsTheirsIsAskedInOnePlace(t *testing.T) {
 	// file: the lines there that may, each said why.
 	allowed := map[string][]string{
-		"merge.go":      {`owner != "" && owner != user.Name`},                                                                 // whose a draft is: its author, for the commit
-		"tasksyntax.go": {`t.Assignee == user.Name || t.Owner == user.Name`},                                                   // "me" in a filter, of tasks already seen
-		"groups.go":     {"latestSettings().memberOf(userOf(r).Name, g)", "s.groupsOf(user.Name)", "s.memberOf(user.Name, g)"}, // the Groups page: who is in which, for the person in the browser
+		"merge.go":      {`owner != "" && owner != user.Name`},                                                                                                 // whose a draft is: its author, for the commit
+		"tasksyntax.go": {`t.Assignee == user.Name || t.Owner == user.Name`},                                                                                   // "me" in a filter, of tasks already seen
+		"groups.go":     {"latestSettings().memberOf(userOf(r).Name, g)", "s.groupsOf(user.Name)", "s.memberOf(user.Name, g)", "s.memberOf(user.Name, group)"}, // the Groups page: who is in which, for the person in the browser
 	}
 	owner := regexp.MustCompile(`[Oo]wner [!=]= (user|rq\.user|rq\.who\(\)|userOf\(r\))\.Name|(user|rq\.user)\.Name [!=]= \w*[Oo]wner`)
 	groups := regexp.MustCompile(`(memberOf|groupsOf)\((user|rq\.user|rq\.who\(\)|userOf\(r\))\.Name`)
