@@ -11,12 +11,18 @@ Any **AI assistant** that speaks MCP can [work with them](#connect-an-ai-assista
 It sees and changes only what you are allowed to, and you can review and undo every edit it makes.
 One binary, no database, no outside services: Zone sends nothing anywhere on its own.
 
+[![CI](https://github.com/zonewiki/zonewiki/actions/workflows/ci.yml/badge.svg)](https://github.com/zonewiki/zonewiki/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/zonewiki/zonewiki)](https://github.com/zonewiki/zonewiki/releases/latest)
+[![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-2f6f4f)](LICENSE)
+
 > [!NOTE]
 > **Zone is an alpha (0.x).**
 > Your pages stay readable without Zone.
 > Until 1.0, how tasks are stored, the settings file's keys, the MCP tools and URLs may still change; the release notes say what to do when they do.
 > Read the release notes before upgrading, and keep a backup of your wiki (it is a git repository, so a copy of the folder is enough).
 > From 1.0, a newer Zone will upgrade an older wiki by itself.
+>
+> Zone's code is written by AI coding agents, directed by one developer and held to a spec and to tests: [How Zone is made](#how-zone-is-made) says what that means for you.
 
 ![A wiki page in Zone: the page in the middle, its table of contents on the left, backlinks and linked tasks on the right](docs/screenshots/page.png)
 
@@ -25,20 +31,19 @@ One binary, no database, no outside services: Zone sends nothing anywhere on its
 ## Why Zone
 
 - **Your files stay yours.** Pages are Markdown, tasks are JSON beside them, history is git. Any tool can read them: grep them, back them up with `git push`. If you ever stop using Zone, you lose nothing.
-- **A real task manager, not just checkboxes in a page.** Plan your days on a board, keep the day you'll work on a task apart from its deadline, and give tasks lists, repeats, assignees and comments. It can replace the separate task app you run beside your notes.
-- **Good for you and for your AI assistant.** For you: a quick editor with live preview, search as you type, a Today view and a plan board, in any browser on a laptop or a phone, with nothing to install. For your AI assistant: everything you can do in the browser, over MCP, built in from the start.
-- **Assistants on your terms.** An assistant can do what you can, never more. Connect one that only reads, or keep it out of your private pages. Its edits are commits you can undo one at a time or all at once. Zone brings no model of its own: use the assistant you already have.
-- **Private, shared or a group's.** Each user has private pages and tasks, groups get their own folders, and one permission model decides who sees what: in the browser, in search and for assistants alike.
-- **Pages, notes and tasks in one place.** They share links, search, history and permissions: turn a meeting's action items into tasks, show a project's tasks on its page, and find both with one search.
-- **Nothing is lost by accident.** Every version of every page, one-click restore, deleted pages brought back, and links that follow a rename.
+- **A real task manager, not just checkboxes in a page.** Plan your days on a board, keep the day you'll work on a task apart from its deadline, and give tasks lists, repeats, assignees and comments. It can replace the separate task app you run beside your notes, and tasks and pages link to each other.
+- **Assistants on your terms.** What you do in the browser, an assistant does over MCP: what you can, never more. Connect one that only reads, or keep it out of your private pages. Its edits are marked, and you undo them one at a time or all at once. Zone brings no model of its own: use the assistant you already have, or none.
+- **For one person or a team.** Each user has private pages and tasks, groups get their own folders, and one permission model decides who sees what: in the browser, in search and for assistants alike.
 - **Simple to run.** One binary on a laptop, a NAS or a server; no database, no plugins, no npm.
+
+![Changes: three edits an assistant made, each marked "through Claude", with Undo beside each and Undo all 3 on the latest](docs/screenshots/changes.png)
 
 ## Features
 
 **Wiki.** `[[Wikilinks]]`, backlinks and red links to pages not written yet.
 An editor with live preview, auto-save and a formatting bar. Two people can edit one page at once, and what they type merges.
 Math, Mermaid diagrams, callouts, sortable tables and foldable sections.
-Version history and a wiki-wide Changes view.
+Every version of every page with one-click restore, a wiki-wide Changes view, deleted pages brought back, and links that follow a rename.
 Present a page as slides, or print it.
 
 **Tasks.** A task app in its own right: Today shows what you planned for today, and on the plan board you drag the rest onto the days ahead.
@@ -49,7 +54,7 @@ Turn lines of a page into tasks, and embed a task list or a single task in any p
 
 **Notes.** Write a thought down first (`c n`), then move it into the wiki or append it to a page later.
 
-**Search.** Full-text search across pages and tasks (Ctrl+P): typo tolerance, `"phrases"`, `#tags` and dates.
+**Search.** One full-text search across pages and tasks (Ctrl+P): typo tolerance, `"phrases"`, `#tags` and dates.
 
 **Assistants.** Over MCP, an assistant searches, reads and writes pages, notes and tasks on your behalf.
 History shows which changes it made ("Anna through Claude"), and you undo them one at a time or all at once.
@@ -62,6 +67,16 @@ A wiki can also be public, to read or to edit.
 **Everywhere.** Keyboard shortcuts (`?` lists them), light and dark mode, and a phone layout you can install on the home screen.
 
 <p align="center"><img src="docs/screenshots/phone.png" width="640" alt="Zone on a phone: a wiki page, and the Today view of Tasks"></p>
+
+## What Zone is not
+
+Zone is the wrong tool, at least today, when you need:
+
+- a desktop app with nothing to host, or your notes offline: Zone is a server and a browser, and needs the server in reach;
+- plugins or scripting: Zone has none, on purpose;
+- single sign-on (OIDC, LDAP, SAML): Zone has its own logins only;
+- CalDAV, or a native phone app: on a phone Zone is a web page you can put on the home screen;
+- something many organisations already run: Zone is an alpha by one developer.
 
 ## Quick start
 
@@ -149,9 +164,19 @@ The full rules for each feature, written for whoever builds Zone, are in the spe
 ## How Zone is made
 
 Zone is developed by Gernot Klingler, who has worked in software engineering for more than 25 years, mostly on scalable, low-level monitoring systems where security and reliability come first.
-He sets the goals and the principles.
-The code, the spec and the tests are all written by AI coding agents, and the result is checked by its test suites, benchmarks and secret scanning, not by a human reading every line.
-The guardrails are in the repository: [`AGENTS.md`](AGENTS.md) holds the principles and conventions, `docs/spec/` describes every feature and changes with it, and every change comes with tests (unit, API and browser).
+He sets the goals and the principles, decides what is built and how it should behave, and uses Zone every day: for his own notes and tasks, and to plan Zone itself.
+The code, the spec and the tests are all written by AI coding agents.
+
+**What holds it together** is in the repository, for you to judge:
+
+- [`AGENTS.md`](AGENTS.md) holds the principles and the rules every change keeps to, and `docs/spec/` describes every feature and changes with it.
+- Every change comes with tests: Go tests for the server's internals, API tests against the real server, and browser tests. CI runs them all, with benchmarks at a team's size and a secret scan of the whole history.
+- Who may see or change what is decided in one place that every door asks, and the tests probe each door for what must be refused ([security.md](docs/spec/security.md) says what each protection is).
+- Before the first release, agents audited the code for security against that spec, and what they found was fixed.
+
+**What it does not have**: a human who has read every line, or a security review by someone independent.
+So treat it as the alpha it is: start on your own computer, where it is to begin with, keep it behind a login and HTTPS (or your VPN) when you open it up, and keep the backup that a git repository makes easy.
+A report of what breaks is the most useful thing you can give: see [Contributing](#contributing), and [SECURITY.md](SECURITY.md) for a vulnerability.
 
 ## Contributing
 

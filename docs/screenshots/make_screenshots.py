@@ -186,6 +186,26 @@ def main():
         f"- Shelves now, or once the walls are stained?\n\nNext: [[task:{ids[0][:8]}]]\n"))
     subprocess.run(["git", "commit", "-qm", "Next step", "--", str(shed)], cwd=WIKI, check=True)
 
+    # An assistant's run of work, for Changes: commits with the trailer every
+    # assistant's write carries (Which assistant in docs/spec/mcp.md), written
+    # by hand since the sample wiki has no login for an assistant to sign in to.
+    def assistant_edit(slug, before, after, message, source=""):
+        path = WIKI / f"{slug}.md"
+        path.write_text(path.read_text().replace(before, after))
+        trailers = "Assistant: Claude" + (f"\nSource: {source}" if source else "")
+        subprocess.run(["git", "commit", "-qm", f"{message} (MCP)\n\n{trailers}", "--", str(path)],
+                       cwd=WIKI, check=True)
+
+    assistant_edit("projects/garden-shed", "(warped).\n",
+                   "(warped).\n- **Week 3**: roofer's quote: 480 € for the gutter, two weeks' lead time.\n",
+                   "Update projects/garden-shed: add the quote", source="the roofer's mail")
+    assistant_edit("reading-list", "*The Backyard Builder*\n",
+                   "*The Backyard Builder*\n- *Braiding Sweetgrass*, Robin Wall Kimmerer\n",
+                   "Update reading-list: add Braiding Sweetgrass")
+    assistant_edit("garden/rain-barrel", "gravel bed.\n",
+                   "gravel bed.\n\nThe shed's gutter feeds it: see the roofer's quote in the shed's log.\n",
+                   "Update garden/rain-barrel: link the gutter")
+
     with sync_playwright() as p:
         browser = p.chromium.launch()
 
@@ -216,7 +236,13 @@ def main():
         settle(pg)
         pg.screenshot(path=OUT / "editor.png")
 
-        # 4. On a phone: a page and the task app's Focus, side by side. Each phone
+        # 4. Changes: an assistant's edits, marked and undone from here.
+        pg = page(1280, 560)
+        pg.goto("/changes")
+        settle(pg)
+        pg.screenshot(path=OUT / "changes.png")
+
+        # 5. On a phone: a page and the task app's Focus, side by side. Each phone
         # is shown at two thirds of its size (260 of 390 px), so the pair reads
         # as phones next to the desktop shots rather than as a wall of text;
         # at 2x the text stays sharp. The README shows it at PHONE_WIDTH.
