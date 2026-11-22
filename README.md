@@ -172,7 +172,7 @@ The code, the spec and the tests are all written by AI coding agents.
 - [`AGENTS.md`](AGENTS.md) holds the principles and the rules every change keeps to, and `docs/spec/` describes every feature and changes with it.
 - Every change comes with tests: Go tests for the server's internals, API tests against the real server, and browser tests. CI runs them all, with benchmarks at a team's size and a secret scan of the whole history.
 - Who may see or change what is decided in one place that every door asks, and the tests probe each door for what must be refused ([security.md](docs/spec/security.md) says what each protection is).
-- Before the first release, agents audited the code for security against that spec, and what they found was fixed.
+- Agents audit the code for security regularly, at different stages of development, and what they find is fixed.
 
 **What it does not have**: a human who has read every line, or a security review by someone independent.
 So treat it as the alpha it is: start on your own computer, where it is to begin with, keep it behind a login and HTTPS (or your VPN) when you open it up, and keep the backup that a git repository makes easy.
