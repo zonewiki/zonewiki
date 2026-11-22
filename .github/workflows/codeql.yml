@@ -1,0 +1,58 @@
+# GitHub's code scanning (CodeQL) of Zone's Go, its browser code, its
+# scripts and these workflows: on every push to main and pull request, and
+# once a week for what CodeQL has learned since.
+#
+# A workflow of its own instead of GitHub's default setup, which takes no
+# configuration from the repository: .github/codeql/codeql-config.yml
+# leaves the tests out, and .github/codeql/extensions/ tells CodeQL which
+# of Zone's functions check a path, a redirect or HTML (Code scanning in
+# docs/spec/security.md). Default setup must be off in the repository's
+# settings, or GitHub refuses this workflow's results.
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '23 4 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: ${{ matrix.language }}
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+      security-events: write   # to upload the results
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: actions
+            build-mode: none
+          # Built as go build does it (the module in go/, with cgo): CodeQL
+          # reads Go as it compiles.
+          - language: go
+            build-mode: autobuild
+          - language: javascript-typescript
+            build-mode: none
+          - language: python
+            build-mode: none
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: github/codeql-action/init@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          config-file: ./.github/codeql/codeql-config.yml
+      - uses: github/codeql-action/analyze@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
+        with:
+          category: /language:${{ matrix.language }}

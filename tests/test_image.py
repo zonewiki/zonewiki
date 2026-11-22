@@ -42,14 +42,42 @@ def test_base_images_and_ci_actions_are_pinned_by_hash():
     assert froms.count("${UBUNTU}") == 3 and len(froms) == 4
     for image in [bases["UBUNTU"]] + [f for f in froms if f != "${UBUNTU}"]:
         assert re.fullmatch(r"[\w./-]+:[\w.-]+@sha256:[0-9a-f]{64}", image), image
-    ci = "".join((REPO / d / "workflows" / "ci.yml").read_text(encoding="utf-8") for d in (".github", ".forgejo"))
+    # Every workflow, whatever it is called: a new one is held to the same.
+    workflows = [p for d in (".github", ".forgejo") for p in sorted((REPO / d / "workflows").glob("*.yml"))]
+    assert {p.name for p in workflows} >= {"ci.yml", "codeql.yml"}
+    ci = "".join(p.read_text(encoding="utf-8") for p in workflows)
     for image in re.findall(r"^\s+image: (\S+)$", ci, re.M):   # a job's container (Forgejo)
         assert re.fullmatch(r"[\w./-]+:[\w.-]+@sha256:[0-9a-f]{64}", image), image
     uses = re.findall(r"uses: (\S+)(.*)", ci)
-    assert len(uses) > 8
+    assert len(uses) > 10
     for action, comment in uses:
-        assert re.fullmatch(r"[\w-]+/[\w-]+@[0-9a-f]{40}", action), action
+        # owner/repo, maybe a folder of it (github/codeql-action/init).
+        assert re.fullmatch(r"[\w-]+/[\w-]+(/[\w-]+)*@[0-9a-f]{40}", action), action
         assert re.fullmatch(r" # v\d+\.\d+\.\d+", comment), action   # the release it is
+
+
+def test_codeql_is_told_of_checks_that_exist():
+    """The functions .github/codeql/extensions/ calls Zone's checks are in
+    the code under those names: CodeQL says nothing of a row that matches
+    no function, it only reports again what the check had settled. And the
+    workflow reads the config that leaves the tests out."""
+    ext = REPO / ".github" / "codeql" / "extensions" / "zone-go"
+    pack = (ext / "codeql-pack.yml").read_text(encoding="utf-8")
+    assert "codeql/go-all" in pack and "- models.yml" in pack
+    rows = re.findall(r'^\s+- \["([\w/]+)", "(\w*)", False, "(\w+)", "", "", "[\w\[\]]+", (?:"true", )?"([\w-]+)", "manual"\]$',
+                      (ext / "models.yml").read_text(encoding="utf-8"), re.M)
+    assert len(rows) >= 9
+    for package, typ, func, kind in rows:
+        assert kind in ("path-injection", "html-injection", "url-redirection"), func
+        assert package == "zonewiki" or package.startswith("zonewiki/internal/"), package
+        folder = REPO / "go" / package.removeprefix("zonewiki").lstrip("/")
+        source = "".join(p.read_text(encoding="utf-8") for p in sorted(folder.glob("*.go")) if not p.name.endswith("_test.go"))
+        decl = rf"^func \(\w+ \*?{typ}\) {func}\(" if typ else rf"^func {func}\("
+        assert re.search(decl, source, re.M), f"{package}: no {typ + '.' if typ else ''}{func}"
+    workflow = (REPO / ".github" / "workflows" / "codeql.yml").read_text(encoding="utf-8")
+    assert "config-file: ./.github/codeql/codeql-config.yml" in workflow
+    config = (REPO / ".github" / "codeql" / "codeql-config.yml").read_text(encoding="utf-8")
+    assert "\npaths-ignore:\n  - tests\n" in config
 
 
 def test_both_images_build_with_the_same_go():

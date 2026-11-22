@@ -911,6 +911,30 @@ Tests: `go/stalls_test.go`.
 `.env` (tokens, password) is gitignored.
 A pre-commit hook (`.githooks/pre-commit`, gitleaks) refuses a commit with a secret in it, and CI's **leaks** job scans every commit (`./run.sh leaks`; Secret scanning in `docs/spec/testing.md`).
 
+### Code scanning
+
+On GitHub, CodeQL reads Zone's Go, its browser code, its scripts and the workflows for flaws (`.github/workflows/codeql.yml`): on every push to main and pull request, and once a week.
+Its findings are under the repository's **Security** tab, **Code scanning**.
+
+CodeQL follows a request's value to where it is used (a file opened, a redirect sent, HTML written) and reports the way unless something it knows as a check lies on it.
+Zone's checks are its own functions, which CodeQL can't judge, so two files tell it:
+
+| File | Says |
+|------|------|
+| `.github/codeql/extensions/zone-go/models.yml` | Which functions make a value safe, and for what: `safePath`, `uploadPath`, `uploadName`, `placeOf`, `mdtext.ToSlug`, a list's folder and an archive's month for a path, `renderMd` for HTML, `isLocalPath` for a redirect |
+| `.github/codeql/codeql-config.yml` | What is not scanned: `tests/`, whose test doubles read as flaws and ship nowhere |
+
+A row in the models stops CodeQL from looking behind that function, so only one that really checks or cleans goes there, never one that trusts its caller.
+A new check gets a row when its alerts show it is needed; a renamed one takes its row along (the test fails for a row without its function).
+
+Some checks can't be said this way, and their alerts are dismissed by hand on GitHub, each with its reason:
+a name looked up in the settings or compared with a list of known ones,
+a check inside the function that is the check (`safePath` asks the file system about the path it judges),
+and browser code, whose functions the models don't reach.
+
+It is a workflow of its own because GitHub's default setup reads neither file from the repository; default setup stays off in the repository's settings, or GitHub refuses the workflow's results.
+Test: `test_codeql_is_told_of_checks_that_exist` in `tests/test_image.py`.
+
 ### CI runs no stranger's code with the host's engine
 
 Forgejo's runner gives its jobs the host engine's socket, which is root on the host, and the image job pushes with the registry's token from there (Forgejo's runner in `docs/spec/deployment.md`).
@@ -927,7 +951,7 @@ The CI that follows it builds and pushes the image every NAS pulls, with the reg
 So what builds Zone is named by hash:
 
 - **the base images by digest**, each the tag's multi-arch index: `ARG UBUNTU=ubuntu:26.04@sha256:…` in the `Containerfile`, used by its three stages; the Playwright image in `Containerfile.tools`; the job container `docker:…-cli@sha256:…` in `.forgejo/workflows/ci.yml`;
-- **every CI action by its commit**, in both workflows: `uses: actions/checkout@<40 hex> # v4.4.0`;
+- **every CI action by its commit**, in every workflow: `uses: actions/checkout@<40 hex> # v4.4.0`;
 - **Go, gitleaks, onnxruntime and the model**, by version and SHA-256 (Dependencies in `AGENTS.md`).
 
 One thing is not: on GitHub `docker/setup-buildx-action` (pinned by its commit) starts BuildKit from the `moby/buildkit` image by its tag (`buildx-stable-1`, its default).

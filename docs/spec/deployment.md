@@ -547,6 +547,11 @@ It logs in with the workflow's own `GITHUB_TOKEN` (`packages: write`), so the re
 The image carries `org.opencontainers.image.source`, which links the package to the repo.
 A new package on ghcr.io is private: make it public once in its settings on GitHub, so a NAS pulls without logging in.
 
+### GitHub's code scanning
+
+`.github/workflows/codeql.yml` is a second workflow: CodeQL over the Go, the browser code, the scripts and the workflows, a job a language, on a push to main, a pull request and once a week.
+What it leaves out and what it is told of Zone's checks is in `.github/codeql/` (Code scanning in `docs/spec/security.md`).
+
 ## Network access
 
 `ZONE_ALLOW_REMOTE` is the single knob for network access, with `run.sh` and for the binary run by hand.

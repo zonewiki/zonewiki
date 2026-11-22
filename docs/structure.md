@@ -34,6 +34,8 @@ What each file and folder of the repository is for.
 ├── dist/                   # The release binaries ./run.sh binaries builds, with SHA256SUMS (gitignored)
 ├── .forgejo/workflows/ci.yml  # Forgejo Actions: checks (run.sh test, e2e, leaks), the bench (run.sh bench), search's floor (run.sh retrieval), build + push the image
 ├── .github/workflows/ci.yml   # GitHub Actions: the same checks, the image for amd64 + arm64 to ghcr.io, a v* tag's release binaries
+├── .github/workflows/codeql.yml  # GitHub's code scanning (CodeQL): Go, the browser code, scripts and workflows
+├── .github/codeql/            # What CodeQL scans (codeql-config.yml: not tests/) and Zone's own checks told to it (extensions/zone-go/models.yml)
 ├── .forgejo/issue_template/   # Issue templates: bug.md, feature.md
 ├── .github/ISSUE_TEMPLATE/    # The same two for GitHub, and config.yml (a security problem goes to a private report)
 ├── go/                     # The server: package main, a file per area; pure code without Zone's state in go/internal/

@@ -1,0 +1,8 @@
+# What CodeQL scans (.github/workflows/codeql.yml): Zone, not its tests,
+# whose test doubles (a proxy that copies headers, an assertion on rendered
+# HTML) read as flaws and ship nowhere.
+# Zone's own checks are told to CodeQL in extensions/zone-go/models.yml,
+# which CodeQL finds there by itself.
+name: Zone
+paths-ignore:
+  - tests
