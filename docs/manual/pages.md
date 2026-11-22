@@ -167,7 +167,7 @@ The home page can't be deleted.
 ## The home page
 
 Your wiki's home page is the page `index`, the file `index.md`.
-The Z logo and **Wiki** at the top left lead to it, and so does `g` then `h`.
+The logo and **Wiki** at the top left lead to it, and so does `g` then `h`.
 It's an ordinary page: put on it whatever helps you find your way, such as links to your main pages.
 It can't be renamed or deleted.
 

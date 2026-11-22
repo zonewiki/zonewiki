@@ -1173,7 +1173,7 @@ main > .sheet > h2 { font-family: var(--serif); font-size: 1.45rem; font-weight:
 }
 .breadcrumb a { color: var(--muted); text-decoration: none; }
 .breadcrumb a:hover { color: var(--link); }
-/* The breadcrumb's root is the module switcher (modules.html): the Z logo
+/* The breadcrumb's root is the module switcher (modules.html): the logo
    with Wiki, then Tasks and Notes (with users Wiki · Private | Tasks · Notes). It is a control, not part
    of the trail: a pill group with the current module shaded, and a thin
    vertical divider (the first separator) between it and the pages. Phones

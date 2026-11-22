@@ -185,7 +185,7 @@ The server marks the matching `.module-link`s `aria-current="page"` (`moduleLink
 
 ### Module switcher
 
-The **module switcher** (`switch` in `templates/partials/modules.html`, `.breadcrumb-home.module-switch`) is the root of every breadcrumb: Z logo + Wiki, Tasks, and Notes; with users Wiki · Private, then Tasks · Notes (`.module-group`, one pill each).
+The **module switcher** (`switch` in `templates/partials/modules.html`, `.breadcrumb-home.module-switch`) is the root of every breadcrumb: the logo + Wiki, Tasks, and Notes; with users Wiki · Private, then Tasks · Notes (`.module-group`, one pill each).
 On desktop it is set apart from the trail as a control: bordered white pills (`--surface`) with the current module shaded, and the first separator drawn as a thin vertical divider instead of `›` (`.module-switch + .breadcrumb-sep`).
 On phones and in the editor only the logo shows (the way home).
 

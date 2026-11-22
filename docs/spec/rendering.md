@@ -14,7 +14,7 @@ How it is built comes after: how a page is rendered on the server (goldmark and 
 The HTML shell includes: the notice line across the top when the settings file has one (The notice in `docs/spec/users.md`), status badges, breadcrumb (with the module switcher), page header (title, Edit, the ⋯ page menu), content area, backlinks, the action bar, and the search/shortcut/new-note modals.
 There is no nav bar (see Modules in `docs/spec/navigation.md`).
 
-The shared shell renders the product brand as `Zone` (page titles, the switcher's accessible name), with a small green inline SVG Z logo (`site-logo` in `templates/partials/icons.html`) on the breadcrumb's Wiki link.
+The shared shell renders the product brand as `Zone` (page titles, the switcher's accessible name), with a small green inline SVG logo, the open frame (`site-logo` in `templates/partials/icons.html`) on the breadcrumb's Wiki link.
 
 ### Page header
 

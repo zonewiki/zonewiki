@@ -12,7 +12,7 @@ You switch between them with the pills at the top left of every page (on a phone
 
 | Module | What it is |
 |--------|------------|
-| **Wiki** | Your pages: Markdown, linked to each other. The Z logo next to it takes you to the home page. |
+| **Wiki** | Your pages: Markdown, linked to each other. The logo next to it takes you to the home page. |
 | **Tasks** | A task manager of its own: what's on today, a board to plan the days ahead, lists, repeating tasks. |
 | **Notes** | Quick notes, written down now and filed into the wiki later. |
 

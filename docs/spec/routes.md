@@ -350,7 +350,7 @@ Every page view includes the breadcrumb at the top, and at the bottom Backlinks,
 
 ### Breadcrumb
 
-`Wiki Tasks Notes › Page Title` above the page header: its root is the module switcher (see Modules in `docs/spec/navigation.md`), the green Z logo in front of Wiki, the home page.
+`Wiki Tasks Notes › Page Title` above the page header: its root is the module switcher (see Modules in `docs/spec/navigation.md`), the green logo in front of Wiki, the home page.
 After some navigation it becomes a trail of up to 6 recently visited pages (`js/chrome.js`, `sessionStorage`); a phone (≤640px) shows at most 4 of them, the last 3 visited plus the current page.
 It stays on one line: the page titles shrink with an ellipsis, while the module switcher, separators, × and the backlinks chip keep their size.
 A trail that could not shrink once made the page wider than a phone, which pushed the full-screen tasks edit modal's buttons off-screen.

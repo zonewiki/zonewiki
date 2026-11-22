@@ -1,8 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <!-- App icon (home screen). Full-bleed: iOS rounds the corners itself and
-       Android crops "maskable" icons, so the Z stays inside the central
-       80% safe zone. The PNGs next to it are rendered from this file (see
-       docs/spec/deployment.md, "Home-screen app"). -->
+  <!-- Written by docs/logo/make_logo.py: the mark, full-bleed, inside the maskable safe zone. -->
   <rect width="512" height="512" fill="#3a7563"/>
-  <path d="M164 178H348L164 334H348" fill="none" stroke="#fff" stroke-width="60" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M356.5 227.5L356.5 371.5L140.5 371.5L140.5 155.5L284.5 155.5" fill="none" stroke="#fff" stroke-width="42" stroke-linejoin="miter"/>
+<rect x="320.5" y="119.5" width="72" height="72" fill="#fff"/>
 </svg>
