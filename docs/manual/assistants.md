@@ -6,7 +6,7 @@ This page gets you connected first, then explains what a connection may do and h
 
 ## Connect in five minutes
 
-Every way starts from the wiki's assistant address: your wiki's address followed by `/mcp`, for example `https://wiki.example.com/mcp`.
+Every way starts from the wiki's assistant address: your wiki's address followed by `/mcp`, for example `https://wiki.example.com/mcp`, or `http://localhost:5080/mcp` for a wiki on your own computer.
 You find it at the top of **Connect an assistant**, with a **Copy** button: it is in the menu at the top right (your initial; without users, the three lines), and on a phone behind your name or the three lines at the top of the page.
 
 There are two ways in:
@@ -15,14 +15,16 @@ There are two ways in:
   You give the assistant the address, it opens your wiki in the browser, and you allow it.
   There is nothing to copy but the address.
   This works when your wiki has a login (users or a password).
+  A wiki on your own computer starts without one: set one first ([Setting a login](self-hosting.md#setting-a-login)), or use a token.
 - **A token.**
   You make a token on **Connect an assistant** and paste it into the assistant's settings.
-  This works with any wiki and any client, also one that can't open a browser, or a script.
+  This works with any wiki, also one without a login, and any client, also one that can't open a browser, or a script.
 
 > [!NOTE]
 > Claude.ai, the Claude apps and ChatGPT run on their makers' servers and reach your wiki from there.
 > They can connect only to a wiki that is on the internet over https.
-> Claude Code runs on your computer and reaches any wiki your computer does.
+> Claude Code runs on your computer and reaches any wiki your computer does, one at `http://localhost:5080` too.
+> Putting a wiki on the internet: [HTTPS with a reverse proxy](self-hosting.md#https-with-a-reverse-proxy).
 
 ### Claude.ai and the Claude desktop app
 
@@ -38,14 +40,18 @@ A connector you add on claude.ai is there in the desktop and mobile apps too.
 
 ### Claude Code
 
-In a terminal, run:
+In a terminal, run this with your wiki's assistant address:
 
 ```sh
 claude mcp add --transport http zone https://wiki.example.com/mcp
+claude mcp add --transport http zone http://localhost:5080/mcp     # a wiki on your own computer
 ```
 
 Then start Claude Code, type `/mcp`, pick `zone` and sign in.
 Your browser opens the same **Connect an assistant?** page; click **Allow** and go back to the terminal.
+
+A wiki without a login has nothing to sign in to, and Claude Code can't connect this way: Zone answers that MCP is off.
+There, connect it with a token (below): **Connect an assistant** shows the whole command.
 
 ### ChatGPT and other MCP clients
 
@@ -61,7 +67,8 @@ Other clients follow the same standard, but how each one sets up a server is up 
 ### A token for any client
 
 1. Open **Connect an assistant** in the menu at the top right.
-2. Under **Your token**, type your password and click **Make a token**.
+2. Under **Your token** (**The wiki's token** in a wiki without users), type your password and click **Make a token**.
+   A wiki without a login asks for no password.
 3. Copy the token.
    It is shown only this once: Zone keeps only a fingerprint of it.
 4. Give it to your assistant:
