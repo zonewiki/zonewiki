@@ -670,7 +670,7 @@ iOS Safari ignores the setting.
 ## Version
 
 Zone's version is a semver constant, `version` in `go/config.go`, bumped by hand.
-Zone is a beta, so its version starts with 0:
+Zone is an alpha, so its version starts with 0:
 a release that changes something people rely on (how tasks are stored, the settings file's keys, the MCP tools, URLs) raises the minor number,
 a release of fixes the patch number.
 1.0 will promise that a newer Zone takes an older wiki over by itself (a step for each change of The data format, below) and that the MCP tools and settings don't break without notice.

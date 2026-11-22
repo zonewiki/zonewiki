@@ -12,9 +12,10 @@ It sees and changes only what you are allowed to, and you can review and undo ev
 One binary, no database, no outside services: Zone sends nothing anywhere on its own.
 
 > [!NOTE]
-> **Zone is a beta (0.x).**
+> **Zone is an alpha (0.x).**
 > Your pages stay readable without Zone.
 > Until 1.0, how tasks are stored, the settings file's keys, the MCP tools and URLs may still change; the release notes say what to do when they do.
+> Read the release notes before upgrading, and keep a backup of your wiki (it is a git repository, so a copy of the folder is enough).
 > From 1.0, a newer Zone will upgrade an older wiki by itself.
 
 ![A wiki page in Zone: the page in the middle, its table of contents on the left, backlinks and linked tasks on the right](docs/screenshots/page.png)
