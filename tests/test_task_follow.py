@@ -26,6 +26,11 @@ def mine(client):
     return {t["id"]: t for t in client.get("/api/tasks?mine=1&with=order", headers=HOST).get_json()["tasks"]}
 
 
+def updates(client):
+    """What Updates holds for who is signed in (GET /api/tasks?updates=1), by id."""
+    return {t["id"]: t for t in client.get("/api/tasks?updates=1", headers=HOST).get_json()}
+
+
 def comment(client, task, text):
     assert client.post(f"/api/tasks/{task['id']}/comments", json={"text": text}, headers=HOST).status_code == 201
 
@@ -66,8 +71,8 @@ def test_who_follows_is_told_what_its_maker_is_told(alice, smtp):
     comment(alice, other, "Nothing yet")
     login(alice, "dan")
     assert count(alice) == 1
-    held = mine(alice)
-    assert task["id"] in held and other["id"] not in held                               # for its Updates
+    assert set(updates(alice)) == {task["id"]}                                          # in Updates,
+    assert task["id"] not in mine(alice)                                                # and still not his to do
     # He looks: gone. bob closes it: news again; reopened: again.
     assert put(alice, task, seen=True).status_code == 200
     assert count(alice) == 0

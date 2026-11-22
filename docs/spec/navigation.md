@@ -143,7 +143,7 @@ Its counts are of My tasks (Counts, below).
 
 **Once you switched lists it comes back to the one you were on.**
 Open a list from the list switcher, go to the wiki, click Tasks: you are on that list again, not on My tasks.
-The link goes to the view of the list switcher `/tasks` showed last in this browser — My tasks, the Inbox, a list or All tasks, without the tab or filter it had — on every page, the phone's tab bar and **g t** too; the `/tasks` page's own link already names the view it shows.
+The link goes to the view of the list switcher `/tasks` showed last in this browser — My tasks, the Inbox, a list or All tasks, without the tab or filter it had; not Updates, which is looked into and left — on every page, the phone's tab bar and **g t** too; the `/tasks` page's own link already names the view it shows.
 It goes to My tasks again in a new browser session, and whenever you no longer see that view there: a list deleted or no longer shared with you, one left out in sharing mode.
 A list's address that names no list (`/tasks?list=nosuch`) changes nothing.
 
@@ -265,7 +265,7 @@ They replaced the separate due badge at the top left.
 |-------|-------|------|
 | Due | `.module-due`, orange | tasks due today or overdue |
 | Today | `.module-focus`, muted | tasks in Today (`TasksCore.isFocus`: started, or due today or earlier) |
-| New | `.module-new`, filled in the accent | with users, how many tasks have news for you (`updatesFor`: given to you, commented on, a mention, closed or reopened …; News on your tasks in `docs/spec/tasks.md`), open or recently closed: such a task often has no date and is in neither of the others |
+| New | `.module-new`, filled in the accent | with users, how many tasks have news for you (`updatesFor`: given to you, commented on, a mention, closed or reopened …; News on your tasks in `docs/spec/tasks.md`), open or recently closed: such a task often has no date and is in neither of the others; they are listed in Updates (`/tasks?updates=1`), whose pill has the number |
 
 `taskCounts()` counts My tasks (`mineFilter`), which is every task in a wiki without lists.
 

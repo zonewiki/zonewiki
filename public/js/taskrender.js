@@ -38,10 +38,14 @@ function htmlOf(kind, text) {
 // The shown tab's tasks in its order. Open and Focus show the manual order
 // as one list (ORDERED), Focus being Open filtered. A due task has no
 // section of its own: it keeps its place in the order, and its urgency
-// colour marks it.
+// colour marks it. Updates: the latest news first (of many, the top is what
+// just happened), a read task where its news put it.
 function inViewOrder(filtered) {
   let orderedTasks;
-  if (st.activeView === 'open' && app.activeSort()) {
+  if (st.activeView === 'updates') {
+    const at = t => app.newsOf(t)?.at || '';
+    orderedTasks = [...filtered].reverse().sort((a, b) => at(b).localeCompare(at(a)));
+  } else if (st.activeView === 'open' && app.activeSort()) {
     orderedTasks = [...filtered].reverse().sort(SORTS[app.activeSort()]);
   } else if (app.ORDERED[st.activeView]) {
     // TasksCore.byOpenOrder, which the Plan board uses too. Reversed first,
@@ -51,23 +55,16 @@ function inViewOrder(filtered) {
   } else {
     orderedTasks = app.sortTasks(filtered);
   }
-  // My tasks' Focus: the tasks with news for the user (TasksCore.newsFor)
-  // are on top, under Updates, whatever their dates, and not in the list below.
-  let updates = [];
-  if (st.today && st.activeView === 'open' && app.initMine) {
-    const given = t => !!TasksCore.newsFor(t, people.me);
-    // The latest news first: of many, the top is what just happened.
-    const at = t => TasksCore.newsFor(t, people.me).at;
-    updates = [...filtered].reverse().filter(given).sort((a, b) => at(b).localeCompare(at(a)));
-    orderedTasks = orderedTasks.filter(t => !given(t));
-  }
-  return { orderedTasks, updates };
+  return orderedTasks;
 }
 
 // A tab with nothing to show says so (Focus offers the Plan board).
 function renderEmpty() {
   if (st.selectedIds.size) app.clearSelection();
-  if (st.today && st.activeView !== 'closed') {
+  if (st.activeView === 'updates') {
+    app.listEl.innerHTML = '<li class="tasks-empty">No updates. A task someone gives you, a comment on one of yours ' +
+      'or a mention shows here.</li>';
+  } else if (st.today && st.activeView !== 'closed') {
     app.listEl.innerHTML = '<li class="tasks-empty">Nothing planned for today. ' +
       '<button type="button" class="btn btn-sm" data-goto-tab="plan">Plan your day</button></li>';
     app.listEl.querySelector('[data-goto-tab]').addEventListener('click', () => { st.cut = 'day'; app.switchTab('plan'); });
@@ -151,12 +148,18 @@ function taskHTML(task, draggable = !!app.ORDERED[st.activeView], extraClass = '
   const leftList = formerAssignee && !!people.users?.has(assignee);   // none of the list's members now
   // What the task has for you that you haven't seen (TasksCore.newsFor): a
   // task someone gave you is marked new, any other news says what it is.
-  const news = TasksCore.newsFor(task, people.me);
+  // In Updates a task read since keeps its mark, quiet (app.newsOf), and one
+  // not read yet has Mark read: the news seen without opening the task.
+  const news = app.newsOf(task);
+  const unread = !!news && !!TasksCore.newsFor(task, people.me);
   const NEWS = { comment: 'commented', mention: 'mentioned you', closed: 'closed it', reopened: 'reopened it', handed: 'gave it on' };
+  const readCls = news && !unread ? ' task-news-read' : '';
   const newDisplay = !news ? ''
     : news.kind === 'given'
-      ? `<span class="task-new" title="${esc(`${news.by} gave you this task on ${shortDate(news.at.slice(0, 10))}`)}">new</span>`
-      : `<span class="task-new task-update-mark" title="${esc(`${shortDate(news.at.slice(0, 10))} ${news.at.slice(11)}: open the task to mark it seen`)}">${esc(news.by)} ${NEWS[news.kind]}</span>`;
+      ? `<span class="task-new${readCls}" title="${esc(`${news.by} gave you this task on ${shortDate(news.at.slice(0, 10))}`)}">new</span>`
+      : `<span class="task-new task-update-mark${readCls}" title="${esc(`${shortDate(news.at.slice(0, 10))} ${news.at.slice(11)}${unread ? ': open the task to mark it read' : ''}`)}">${esc(news.by)} ${NEWS[news.kind]}</span>`;
+  const readBtn = st.activeView === 'updates' && unread && app.appEl.dataset.writes === '1'
+    ? `<button type="button" class="task-read-btn" data-id="${esc(task.id)}" title="Mark as read, without opening it">Mark read</button>` : '';
   // By person the section says who has it (not of a former assignee, whose
   // task is under Unassigned).
   const sectionSays = st.activeView === 'plan' && st.cut === 'person' && !formerAssignee;
@@ -166,7 +169,7 @@ function taskHTML(task, draggable = !!app.ORDERED[st.activeView], extraClass = '
         esc(leftList ? `Assigned to ${assignee}, who doesn’t see this list anymore: it counts as no one’s`
           : formerAssignee ? `Was assigned to ${assignee}, who can no longer be given tasks`
           : assignee === people.me ? 'Assigned to you' : `Assigned to ${assignee}`)}">@${esc(assignee)}</span>`;
-  const tagsRight = tags || assigneeDisplay ? `<span class="task-tags-right">${tags}${assigneeDisplay}</span>` : '';
+  const tagsRight = tags || assigneeDisplay || readBtn ? `<span class="task-tags-right">${tags}${assigneeDisplay}${readBtn}</span>` : '';
   const privateDisplay = task.private
     ? '<span class="task-private" title="Private: only you see it" aria-label="Private">🔒</span>' : '';
   const hasRealMeta = !!(tags || assigneeDisplay || task.due_date || task.start_date || task.recurrence ||
@@ -220,9 +223,7 @@ function taskHTML(task, draggable = !!app.ORDERED[st.activeView], extraClass = '
 // be seen, a link's, a new one, which their section then shows whole): All
 // tasks of a large wiki is thousands of cards, and a list is read from its
 // top. The filter still searches every task, and counts are of all.
-// Updates draws UPDATES_DRAW: it is above what is yours to do today, and in
-// a team someone back from a week away has dozens.
-const DRAW = 200, UPDATES_DRAW = 7;
+const DRAW = 200;
 function windowed(key, tasks, draw = DRAW) {
   if (tasks.length <= draw || st.drawAll.has(key) || tasks.slice(draw).some(t => st.mustDraw.has(t.id))) return [tasks, ''];
   return [tasks.slice(0, draw), `<li class="tasks-show-more tasks-draw-more"><button type="button" class="btn" ` +
@@ -285,7 +286,7 @@ function planHTML(filtered) {
 }
 
 // Focus, Open and Closed: the list's HTML.
-function listHTML(orderedTasks, updates = []) {
+function listHTML(orderedTasks) {
   let html = '';
   let truncated = false;
   if (st.today && st.activeView === 'open') {
@@ -328,18 +329,15 @@ function listHTML(orderedTasks, updates = []) {
   }
   // Open and Focus: the manual order, one list, a new task on top.
   else if (app.ORDERED[st.activeView]) {
-    // Updates (My tasks' Focus): in no order, so nothing is dropped or
-    // ranked there (shownIds leaves it out); the tab's own tasks follow
-    // under the tab's name.
-    if (updates.length) {
-      html += `<li class="plan-subdivider updates-heading"><span>Updates</span><span class="board-day-count">${updates.length}</span></li>` +
-        (([shown, more]) => shown.map(t => taskHTML(t, false, 'task-update')).join('') + more)(windowed('updates', updates, UPDATES_DRAW));
-      if (displayTasks.length) {
-        html += `<li class="plan-subdivider list-heading"><span>${esc(app.tabLabel('focus'))}</span><span class="board-day-count">${displayTasks.length}</span></li>`;
-      }
-    }
     const [shown, more] = windowed(st.activeView + ':list', displayTasks);
     html += shown.map(t => taskHTML(t)).join('') + more;
+    displayTasks = [];
+  }
+  // Updates: in no order of the user's, so nothing is dragged or ranked; a
+  // task read since is dimmed (task-read).
+  else if (st.activeView === 'updates') {
+    const [shown, more] = windowed('updates', displayTasks);
+    html += shown.map(t => taskHTML(t, false, 'task-update' + (TasksCore.newsFor(t, people.me) ? '' : ' task-read'))).join('') + more;
     displayTasks = [];
   }
   html += displayTasks.map(t => taskHTML(t)).join('');
@@ -424,6 +422,11 @@ function wireListHandlers() {
     btn.addEventListener('click', e => { e.stopPropagation(); app.openEditModal(btn.dataset.id, { focusComment: true }); });
   });
 
+  // Updates' Mark read: the task's news seen, its card stays.
+  app.listEl.querySelectorAll('.task-read-btn').forEach(btn => {
+    btn.addEventListener('click', e => { e.stopPropagation(); app.markSeen(btn.dataset.id); });
+  });
+
   app.listEl.querySelectorAll('.task-skip-btn').forEach(btn => {
     btn.addEventListener('click', e => { e.stopPropagation(); app.skipOccurrence(btn.dataset.id); });
   });
@@ -484,43 +487,29 @@ function render() {
   app.closedStale();   // the Closed view: another filter by now, asked for again
   app.applyGroup();   // who can be assigned may have arrived since
   app.syncClosedLink();
-  syncUpdatesNote();
+  syncReadAll();
   app.syncFilterShown();   // a phone shows the filter field while it filters
   let filtered = app.filterTasks();
-  // Today as a board: the tasks to do now in their sections. Those My tasks
-  // holds for its Updates alone are listed where Today is one list (the
-  // line above the list leads there: syncUpdatesNote).
-  if (st.today && st.activeView === 'plan') filtered = filtered.filter(t => !t.extra && TasksCore.isFocus(t, todayStr()));
-  const { orderedTasks, updates } = inViewOrder(filtered);
-  const nothing = st.activeView === 'plan' ? st.today && !filtered.length
-    : orderedTasks.length === 0 && updates.length === 0;
+  // Today as a board: the tasks to do now in their sections.
+  if (st.today && st.activeView === 'plan') filtered = filtered.filter(t => TasksCore.isFocus(t, todayStr()));
+  const orderedTasks = inViewOrder(filtered);
+  const nothing = st.activeView === 'plan' ? st.today && !filtered.length : orderedTasks.length === 0;
   if (nothing) {
     renderEmpty();
     return;
   }
-  app.listEl.innerHTML = st.activeView === 'plan' ? planHTML(filtered) : listHTML(orderedTasks, updates);
+  app.listEl.innerHTML = st.activeView === 'plan' ? planHTML(filtered) : listHTML(orderedTasks);
   highlightIn(app.listEl);
   renderFigures(app.listEl);
   wireListHandlers();
 }
 
-// The tasks with news for the user are listed on My tasks' Today, as one
-// list, under Updates; on its Open tab, and on Today as a board, a line
-// above the list says that there are some and leads there, so the count on the Tasks links is never of something the
-// page doesn't show.
-function syncUpdatesNote() {
-  const n = app.initMine && st.activeView !== 'closed' && !(st.today && st.activeView === 'open') ? app.updatesNow().length : 0;
-  let note = app.appEl.querySelector('.tasks-updates-note');
-  if (n && !note) {
-    note = document.createElement('p');
-    note.className = 'tasks-updates-note';
-    note.innerHTML = '<button type="button" class="btn btn-sm"></button>';
-    note.firstChild.addEventListener('click', () => { app.setGroupOf(true, 'none'); app.switchTab('focus'); });
-    app.listEl.before(note);
-  }
-  if (!note) return;
-  note.hidden = !n;
-  note.firstChild.textContent = `${n} update${n === 1 ? '' : 's'} for you →`;
+// Updates' Mark all read, beside the page's heading (templates/tasks_page.html):
+// there while a task has news, for who may write tasks.
+const readAllBtn = app.initUpdates && app.appEl.dataset.writes === '1' ? document.getElementById('updates-read-btn') : null;
+readAllBtn?.addEventListener('click', () => app.markAllSeen());
+function syncReadAll() {
+  if (readAllBtn) readAllBtn.hidden = !app.updatesNow().length;
 }
 
 return { htmlOf, render };

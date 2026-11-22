@@ -1527,20 +1527,21 @@ def test_a_new_task_that_names_no_list_goes_to_its_makers_inbox(bob, wiki, named
     assert '"id"' not in shared_tasks(wiki)
     # Nobody else sees them, whatever they ask for.
     sign_in(bob, "alice")
-    for url in ("/api/tasks", "/api/tasks/export?list=inbox", "/api/tasks/export?mine=1", "/tasks?list=inbox", "/tasks"):
+    for url in ("/api/tasks", "/api/tasks/export?list=inbox", "/api/tasks/export?mine=1", "/tasks?list=inbox", "/tasks",
+                "/api/tasks?updates=1", "/tasks?updates=1"):
         seen = bob.get(url, headers=HOST).get_data(as_text=True)
         assert "Call the bank" not in seen and "Renew the passport" not in seen, url
     assert "Call the bank" not in mcp(bob, "search_tasks", token="alice-token", query="bank passport")
 
 
 def test_the_inbox_is_a_pill_and_a_view(bob, wiki):
-    """The switcher has the Inbox after My tasks, with its counts; its view
+    """The switcher has the Inbox after My tasks and Updates, with its counts; its view
     is headed Inbox, marked private, and has its tasks; a task filed into a
     shared list leaves it."""
     made = bob.post("/api/tasks", json={"title": "Call the bank", "due_date": "2020-01-01"}, headers=HOST).get_json()
     page = bob.get("/tasks?list=inbox", headers=HOST).get_data(as_text=True)
     places = re.findall(r'data-place="([^"]+)"', page)
-    assert places[:2] == ["mine", "inbox"]
+    assert places[:3] == ["mine", "updates", "inbox"]
     pill = page.split('data-place="inbox"', 1)[1].split("</a>", 1)[0]
     assert 'aria-current="page"' in pill and "(only you see it)" in pill and ">Inbox<" in pill
     assert '<a href="/tasks?list=inbox" class="tasks-place" data-place="inbox"' in page

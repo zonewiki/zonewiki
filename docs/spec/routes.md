@@ -221,9 +221,10 @@ Every link to "the tasks" goes here (the Tasks module links without a task list 
 - `?list=inbox` shows the Inbox, the tasks in no list, with users your own (Lists → The Inbox in `docs/spec/tasks.md`; `?list=none` too).
 - A name no list has shows a line that says so.
 - `?mine=1` shows My tasks, your home view, as one task app (Lists → My tasks in `docs/spec/tasks.md`; in a wiki without lists a redirect to `/tasks`).
+- `?updates=1` shows Updates, the tasks with news for you (News on your tasks → Updates in `docs/spec/tasks.md`; without users and in sharing mode a redirect to `/tasks`).
 - `?view=`, `?task=`, `?tag=`, `?search=`, `?new=1` work as for any embed.
 
-The list switcher sits above the heading: My tasks, the Inbox and the pinned lists as pills, the others and All tasks under More; this view's is the current one.
+The list switcher sits above the heading: My tasks, with users Updates, the Inbox and the pinned lists as pills, the others and All tasks under More; this view's is the current one.
 On a big screen (from 1320px) it is the page's left column instead, every list a line (The lists in the left column in `docs/spec/tasks.md`).
 The heading reads "All tasks", "My tasks" or "List: <name>".
 
@@ -281,7 +282,7 @@ Comments, Keep tasks and Sections, which the rows and sections here name, are in
 `GET /api/tasks` reads `_tasks/tasks.json` and each list's `_tasks/lists/<name>/tasks.json`.
 
 - `?held=a,b`: the lists the page holds, for the `Zone-Tasks` word.
-- `?list=<ref>`, `?lists=a|b`, `?mine=1`: those a view of that scope shows (what a task list loads).
+- `?list=<ref>`, `?lists=a|b`, `?mine=1`, `?updates=1`: those a view of that scope shows (what a task list loads); Updates' are the tasks with news for who asks, the closed ones of this month and the last among them.
 - `?with=order`: `{ tasks, order }`, with the user's own order of My tasks (task ids; Lists → My tasks in `docs/spec/tasks.md`).
 
 ### Updating a task

@@ -27,6 +27,7 @@ type tasksEmbedView struct {
 	List          string           // the list it shows, as the user names it (a ref); "" none
 	Out           string           // My tasks: the lists left out of it, their refs, "|" between
 	Mine          string           // My tasks (mine=1): "assign" where assignment counts for the user, else "lists"
+	Updates       bool             // Updates (/tasks?updates=1): the tasks with news for the user, in no tab and no order
 	Group         string           // none, day, person, list (tasksGroups) or "": the embed doesn't say
 	Limit         string           // the WIP limit, "" none
 	Labels        []string         // the Open and Focus tabs' names
@@ -43,7 +44,7 @@ type tasksEmbedView struct {
 	InboxPrivate  bool             // with users: a task without a list is in the user's Inbox, private
 	Settings      *embedSettingsAt // where the settings dialog writes; nil: no dialog (List settings… in the ⋯ menu)
 	Menu          bool             // the ⋯ menu: Export tasks for whoever sees them, the rest as Writes and Settings say
-	Writes        bool             // the user may write tasks here (data-writes): the menu's Import tasks… and Mark all read
+	Writes        bool             // the user may write tasks here (data-writes): the menu's Import tasks…, Updates' Mark all read
 	Data          template.HTML    // the page's data block of tasks (tasksInitial), as the first list's first child; "" none
 }
 
@@ -90,11 +91,15 @@ func onPage(shown, embed TasksParams) TasksParams {
 }
 
 // paramsScope: which tasks a view with these params shows: My tasks
-// (mine=1: mineScope), one list's ref, or "" for every task. (Several
-// lists as one are a request's, ?lists=: queryScope.)
+// (mine=1: mineScope), Updates (updates=1: updatesScope, /tasks' alone: no
+// embed's), one list's ref, or "" for every task. (Several lists as one
+// are a request's, ?lists=: queryScope.)
 func paramsScope(p TasksParams) string {
 	if isTrue(p.Get("mine")) {
 		return mineScope
+	}
+	if isTrue(p.Get("updates")) {
+		return updatesScope
 	}
 	return cleanList(p.Get("list"))
 }
@@ -216,7 +221,12 @@ func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless bool, p
 	case shown && !list.Private() && settings().Users != nil, isInbox(scope, lists), allTasksPage:
 		v.DefaultView = "open"
 	}
-	if scope == mineScope {
+	if scope == updatesScope {
+		// Updates: news, in no tab; nothing to set, export or import.
+		// Writes: Mark all read, for who may write tasks.
+		v.Updates, v.Menu, v.Settings, v.DefaultView = true, false, nil, "open"
+		v.Writes = !headless && rq != nil && mayWriteTasks(user) == nil
+	} else if scope == mineScope {
 		// My tasks: the browser needs the lists left out of it and whether
 		// assignment counts (TasksCore.inMine, as mineFilter).
 		refs := []string{}
@@ -459,10 +469,7 @@ func assignablePeople(r *http.Request) map[string]any {
 // takes them all.
 func tasksInitial(rq *Req, scopes ...string) string {
 	word := tasksWord(rq.who(), scopes...) // of these tasks: read before them (tasksapi.go, Zone-Tasks)
-	tasks := scopedTasks(rq.who(), rq.openTasks(), rq.taskLists(), scopes...)
-	if slices.Contains(scopes, mineScope) && !slices.Contains(scopes, "") {
-		tasks = withUpdates(rq.who(), tasks, rq.openTasks(), rq.recentClosed()) // My tasks' Updates
-	}
+	tasks := viewTasks(rq.who(), rq.openTasks(), rq.taskLists(), rq.recentClosed, scopes...)
 	block := map[string]any{}
 	// With users, who a task can be assigned to and who looks, as GET
 	// /api/tasks/assignable answers (js/taskutil.js setPeople).
@@ -547,10 +554,9 @@ type TaskCounts struct {
 	Overdue int `json:"overdue"`
 	Today   int `json:"today"`
 	Focus   int `json:"focus"`
-	// New: the open tasks someone else gave the user that they haven't
-	// touched yet (newsFor: newsGiven). Such a task often has no date, so it is in
-	// neither of the counts above; without this one, nothing outside My
-	// tasks would say that it is there.
+	// New: the tasks with news for the user (updatesFor): the Tasks links'
+	// and Updates' pill's alone. Such a task often has no date, and may not
+	// be the user's to do, so it is in neither of the counts above.
 	New   int    `json:"new,omitempty"`
 	Title string `json:"-"`
 }
@@ -625,6 +631,10 @@ func (rq *Req) tasksStamp() string {
 	return rq.stamp
 }
 
+// updatesParams: the params of Updates (/tasks?updates=1): its scope, and
+// nothing to set.
+var updatesParams = TasksParams{}.With("updates", "1")
+
 // mineScopeParams: params of the scope of My tasks, without its settings
 // (mineParams has those), for counting.
 var mineScopeParams = TasksParams{}.With("mine", "1")
@@ -692,9 +702,6 @@ func countTasks(user asker, tasks []*Task, lists map[string]ListInfo, params ...
 		} else if t.DueDate == day {
 			c.Today++
 		}
-		if newsFor(t, user).Kind != "" {
-			c.New++
-		}
 	}
 	c.Count = c.Overdue + c.Today
 	return c
@@ -721,7 +728,8 @@ type TaskPlace struct {
 }
 
 // taskPlaces: the pills of the list switcher: My tasks (/tasks?mine=1,
-// with the counts the Tasks links have), the Inbox (for who has one: not a
+// with the counts the Tasks links have, but the news), with users Updates
+// (/tasks?updates=1, with how many tasks have news), the Inbox (for who has one: not a
 // viewer among users), then the pinned lists in their order, each at
 // /tasks?list=, each with its counts; in sharing mode not a list that is
 // not for sharing, nor a user's Inbox. What isn't pinned is under More
@@ -733,7 +741,14 @@ func (rq *Req) taskPlaces() []TaskPlace {
 	if mineAssigns(user) {
 		title = "Your own tasks and what is assigned to you"
 	}
-	out := []TaskPlace{{Key: "mine", Label: "My tasks", Title: title, Href: mineHref, Counts: taskCounts(rq)}}
+	// My tasks: the Tasks links' counts but the news, which is Updates'.
+	mine := taskCounts(rq)
+	updates := TaskCounts{New: mine.New}
+	mine.New = 0
+	out := []TaskPlace{{Key: "mine", Label: "My tasks", Title: title, Href: mineHref, Counts: mine}}
+	if rq.hasUpdates() {
+		out = append(out, TaskPlace{Key: updatesPlace, Label: "Updates", Title: "News on your tasks: given to you, commented, mentioned, closed", Href: updatesHref, Counts: updates})
+	}
 	if rq.hasInbox() {
 		p := TaskPlace{Key: inboxRef, Label: "Inbox", Title: "Inbox: new tasks land here", Href: listHref(inboxRef),
 			Private: inboxOwner(user) != "",
@@ -749,6 +764,15 @@ func (rq *Req) taskPlaces() []TaskPlace {
 			Counts: rq.keptCounts("list:"+l.Ref, func() TaskCounts { return countTasks(user, rq.openTasks(), lists, l.Params) })})
 	}
 	return out
+}
+
+// updatesPlace: Updates' key among the switcher's places.
+const updatesPlace = "updates"
+
+// hasUpdates: the request's user has Updates to show (hasUpdates): not in
+// sharing mode, where what others wrote to them isn't shown.
+func (rq *Req) hasUpdates() bool {
+	return hasUpdates(rq.who()) && !(rq != nil && rq.sharing)
 }
 
 // listHidden: in sharing mode a list that is not for sharing shows nowhere

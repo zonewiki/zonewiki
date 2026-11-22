@@ -290,11 +290,30 @@ func inMine(t *Task, out bool, user asker, assigns bool) bool {
 	return !out
 }
 
+// updatesScope: the scope of Updates (/tasks?updates=1): the tasks with
+// news for the user (newsFor), wherever they are, the closed ones of this
+// month and the last among them (updatesFor). No list's ref, as mineScope.
+const updatesScope = "|updates"
+
+// updatesHref: where Updates is.
+const updatesHref = "/tasks?updates=1"
+
+// hasUpdates: user has an Updates view: with users, anyone who sees tasks
+// (news is what someone else did).
+func hasUpdates(user asker) bool {
+	return settings().Users != nil && user.Name != "" && user.Name != visitor
+}
+
 // scopeFilter: the tasks a view of scope shows user: My tasks (mineScope),
-// or what inScope says of a list's ref, "none" or "".
+// Updates (updatesScope: those with news for them), or what inScope says
+// of a list's ref, "none" or "".
 func scopeFilter(user asker, scope string, lists map[string]ListInfo) func(*Task) bool {
 	if scope == mineScope {
 		return mineFilter(user, lists)
+	}
+	if scope == updatesScope {
+		has := hasUpdates(user)
+		return func(t *Task) bool { return has && newsFor(t, user).Kind != "" }
 	}
 	return func(t *Task) bool { return inScope(t, scope, lists) }
 }

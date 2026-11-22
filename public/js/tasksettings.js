@@ -229,8 +229,8 @@ export function initTaskSettings(app) {
   if (!moreBtn) return {};   // no ⋯ menu: sharing mode, the headless app
   const dialog = document.getElementById('task-settings-modal' + sfx);
   const form = document.getElementById('task-settings-form' + sfx);
-  // List settings… where the server says where they go; Import… and Mark
-  // all read where the user may write tasks.
+  // List settings… where the server says where they go; Import… where the
+  // user may write tasks.
   const hasSettings = !!(dialog && form) && appEl.dataset.settingsIndex !== undefined;
   const writes = appEl.dataset.writes === '1';
   const page = appEl.dataset.settingsPage || '';
@@ -323,17 +323,14 @@ export function initTaskSettings(app) {
   const n = count => `${count} task${count === 1 ? '' : 's'}`;
   let picked = null;   // the file's content, while the dialog asks for the tag
 
-  // What the menu offers: List settings…, Mark all read (My tasks, while a
-  // task has news for the user: all of them seen), Export, Import.
+  // What the menu offers: List settings…, Export, Import.
   const actions = () => [
     ...(hasSettings ? [['settings', 'List settings…']] : []),
-    ...(writes && app.initMine && app.updatesNow().length ? [['read', 'Mark all read']] : []),
     ['export', 'Export tasks'],
     ...(writes ? [['import', 'Import tasks…']] : []),
   ];
   function run(action) {
     if (action === 'settings') { open(); return; }
-    if (action === 'read') { app.markAllSeen(); return; }
     if (action === 'import') { importFile.click(); return; }
     const a = document.createElement('a');
     a.href = '/api/tasks/export?' + new URLSearchParams(scope);

@@ -1108,9 +1108,20 @@ body:has(.tasks-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
 
 
 
-/* My tasks' Open tab: there are updates, on Today (js/taskrender.js). */
+/* There is news: the line that leads to Updates (My tasks; templates/tasks_page.html). */
 .tasks-updates-note { margin: .2rem 0 .6rem; }
 .tasks-updates-note[hidden] { display: none; }
+/* Updates (/tasks?updates=1): news, in no tab and no order: the filter
+   field alone above the list. A task read since stays, dimmed; Mark read
+   sees one without opening it. */
+.tasks-app[data-init-updates] .view-tabs, .tasks-app[data-init-updates] .tasks-cut, .tasks-app[data-init-updates] .tasks-sort,
+.tasks-app[data-init-updates] [id^="task-add-btn"], .tasks-app[data-init-updates] .tasks-footer { display: none; }
+#updates-read-btn[hidden] { display: none; }
+.task-item.task-update.task-closed { opacity: 1; }   /* news that a task was closed is as loud as any */
+.task-item.task-update.task-read { opacity: .6; }
+.task-new.task-news-read { background: none; color: var(--muted); box-shadow: inset 0 0 0 1px var(--border); }
+.task-read-btn { font: inherit; font-size: .72rem; padding: .05rem .4rem; border: 1px solid var(--border); border-radius: 3px; background: none; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.task-read-btn:hover { color: var(--fg); border-color: var(--muted); }
 .tasks-empty { text-align: center; color: var(--muted); padding: .6rem; font-style: italic; font-size: .85rem; }
 
 .tasks-show-more { text-align: center; padding: 1rem; }

@@ -178,7 +178,7 @@ A **list** is a place a task is in: `shop`, `team`, `garden`.
 A tag sorts tasks; a list holds them.
 A task is in one list and can have any number of tags.
 
-The Tasks page has a row of pills at the top: **My tasks**, **Inbox**, your pinned lists, and **More ▾** with every other list and **All tasks**.
+The Tasks page has a row of pills at the top: **My tasks**, in a wiki with users **Updates** ([News about your tasks](#news-about-your-tasks)), **Inbox**, your pinned lists, and **More ▾** with every other list and **All tasks**.
 Each pill counts what is due today or overdue there.
 The pill you pick is remembered: go to the wiki and click Tasks again, and you are back on it.
 
@@ -264,10 +264,13 @@ The full rules are in [Assigning tasks](../spec/users.md#assigning-tasks).
 
 You are told what happens on a task you are assigned, made, or follow: someone gave it to you, commented, mentioned you, closed or reopened it, or gave it to someone else.
 
-- **On the card** a mark says what happened: **new**, **anna commented**, **ben closed it**.
+- **On the card** a mark says what happened: **new**, **anna commented**, **ben closed it**, in every list.
   Opening the task takes the mark away.
-- **On the Tasks link** a dot says there is news (pointing at it says how many tasks have some), and My tasks' Today tab lists them first under **Updates**.
-  **Mark all read** in My tasks' ⋯ menu clears them all.
+- **Updates**, beside **My tasks** in the row of lists, holds every task with news, the latest first, also the ones that aren't yours to do.
+  Its number is how many there are; in My tasks a line, **2 updates for you →**, leads there.
+- **Reading one**: open the task, or click **Mark read** on its card in Updates; **Mark all read** beside the heading clears them all.
+  A task you have read stays in Updates, dimmed, until you leave the page.
+- **On the Tasks link** a dot says there is news (pointing at it says how many tasks have some).
 - **Follow** in a shared task's ⋯ menu or dialog tells you its news without making it yours to do.
 - **Mentions**: `@name` in a comment or description tells that person, even on a task they have nothing else to do with.
 - **Mail**: in My tasks' **List settings…**, **Mail me when** has three boxes: a task is given to me, someone mentions me, someone comments on a task I have, gave or follow.

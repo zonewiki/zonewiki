@@ -167,10 +167,6 @@ function setGroup(group) {
   if (group !== 'none') st.cut = group;
   app.switchTab(viewOf(group), true);
 }
-// setGroupOf: a tab's choice, without showing the tab.
-function setGroupOf(today, group) {
-  try { sessionStorage.setItem(groupKey(today), storedAs(group)); } catch (_) {}
-}
 // d: the next choice (with two, it flips, as the Plan switch did).
 function cycleGroup() {
   const offered = groupsOffered();
@@ -292,5 +288,5 @@ function finishCollapse() {
   }
 }
 
-return { foldId, toggleFold, unfoldFor, SORT_TITLES, activeSort, applySort, cycleSort, isOpenTab, groupKey, applyGroup, setGroup, cycleGroup, setGroupOf, initCut, tabView, openView, todayView, collapseAll, EXPAND_ICON, MORE_ICON, setExpanded, toggleDetails, expandSelected };
+return { foldId, toggleFold, unfoldFor, SORT_TITLES, activeSort, applySort, cycleSort, isOpenTab, groupKey, applyGroup, setGroup, cycleGroup, initCut, tabView, openView, todayView, collapseAll, EXPAND_ICON, MORE_ICON, setExpanded, toggleDetails, expandSelected };
 }

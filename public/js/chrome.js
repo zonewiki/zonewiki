@@ -308,6 +308,13 @@ export async function refreshDueBadge(poll = false) {
       showCount(a.querySelector('.module-new'), c.new || 0);
       a.title = taskCountsTitle(c);
     });
+    // The line that leads to Updates (My tasks: templates/tasks_page.html).
+    const note = document.querySelector('.tasks-updates-note');
+    if (note) {
+      const n = c.new || 0;
+      note.hidden = !n;
+      if (n) note.firstElementChild.textContent = `${n} update${n === 1 ? '' : 's'} for you →`;
+    }
     places.forEach(a => {
       const p = c.places?.[a.dataset.place];
       showCount(a.querySelector('.module-due'), p ? p.count : 0);

@@ -122,12 +122,19 @@ async function fetchTasks() {
   });
   if (initial && app.ownsOrder) app.setOwnOrder(initialOrder || []);
   const [all] = await Promise.all([initial || load(), loadPeople()]);
-  // My tasks also holds the tasks with news for the user that aren't in it
-  // (what they gave away, what mentions them, a closed one): for its
-  // Updates alone (t.extra; no other tab shows them).
-  const me = people.me, news = t => app.initMine && !!TasksCore.newsFor(t, me);
-  const fetched = all.filter(t => (app.inScope(t) && !t.closed_at) || news(t))
-    .map(t => { if (!app.inScope(t) || t.closed_at) t.extra = true; return app.own(t); });
+  let fetched;
+  if (app.initUpdates) {
+    // Updates: the tasks with news, open or closed, each with the news it
+    // came with (st.news); and those shown before that have none anymore
+    // (read since: the server no longer answers them), as they are held, so
+    // a card stays until the page is left.
+    fetched = all.filter(t => TasksCore.newsFor(t, people.me));
+    for (const t of fetched) st.news.set(t.id, TasksCore.newsFor(t, people.me));
+    const have = new Set(fetched.map(t => t.id));
+    fetched.push(...st.tasks.filter(t => st.news.has(t.id) && !have.has(t.id)));
+  } else {
+    fetched = all.filter(t => app.inScope(t) && !t.closed_at).map(app.own);
+  }
   await lazyTexts(fetched);
   st.tasks = fetched;
   st.loadedAt = Date.now();
@@ -148,6 +155,7 @@ async function fetchTasks() {
 // closed tasks themselves are only loaded when the view is opened.
 st.closedCount = null;
 async function refreshClosedCount() {
+  if (app.initUpdates) return;   // no Closed view
   try {
     const res = await fetch('/api/tasks/closed-count' + app.scopeQuery());
     if (res.ok) { st.closedCount = (await res.json()).count; app.syncClosedLink(); }
@@ -196,9 +204,8 @@ async function loadClosed() {
     total = page.total || 0;
     await lazyTexts(closed);
   } while (gen !== tasksGen || asked !== closedQuery());
-  // The page in the place of the closed tasks held (but those My tasks
-  // holds for its Updates).
-  st.tasks = st.tasks.filter(t => !t.closed_at || t.extra);
+  // The page in the place of the closed tasks held.
+  st.tasks = st.tasks.filter(t => !t.closed_at);
   const existingIds = new Set(st.tasks.map(t => t.id));
   for (const t of closed) {
     if (!existingIds.has(t.id)) st.tasks.push(app.own(t));
@@ -279,14 +286,21 @@ function markSeen(id) {
   return updateTask(id, { seen: true });   // the task as it is now, for who shows its history
 }
 // The tasks with news for the user among those this list holds, and all of
-// them seen at once (My tasks' Mark all read).
+// them seen at once (Updates' Mark all read): each as the server answers
+// it, in the place of the one held, so its card stays, read.
 const updatesNow = () => st.tasks.filter(t => TasksCore.newsFor(t, people.me));
 async function markAllSeen() {
   const ids = updatesNow().map(t => t.id);
   if (!ids.length) return;
-  await Promise.all(ids.map(id => fetch(`/api/tasks/${id}`, {
-    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ seen: true }) }).catch(() => null)));
-  await refresh();
+  const seen = await Promise.all(ids.map(id => fetch(`/api/tasks/${id}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ seen: true }) })
+    .then(res => res.ok ? res.json() : null).catch(() => null)));
+  for (const t of seen) {
+    const i = t ? st.tasks.findIndex(o => o.id === t.id) : -1;
+    if (i !== -1) st.tasks[i] = app.own(t);
+  }
+  await renderTexts(textsOf(seen.filter(Boolean)));
+  app.render();
   refreshDueBadge();
   app.refreshOtherInstances(app.instanceId);
 }
@@ -329,7 +343,7 @@ async function updateTask(id, data) {
 async function setFollow(id, follow) {
   const updated = await updateTask(id, { follow });
   if (updated) {
-    showUndo(follow ? `You follow “${plainTitle(updated.title)}”: its news is under Updates in My tasks` : `You no longer follow “${plainTitle(updated.title)}”`,
+    showUndo(follow ? `You follow “${plainTitle(updated.title)}”: its news is under Updates` : `You no longer follow “${plainTitle(updated.title)}”`,
       () => updateTask(id, { follow: !follow }));
   }
   return updated;

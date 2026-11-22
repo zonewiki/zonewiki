@@ -453,19 +453,19 @@ def test_a_list_you_are_one_of_is_under_your_lists_until_you_pin_it(client, wiki
     # among her lists, and a pill once she pins it.
     sign_in(client, "carol")
     pills, more = places(client)
-    assert pills == ["mine", "inbox"] and more == ["Your lists", LIST, "Other lists", "team"]
+    assert pills == ["mine", "updates", "inbox"] and more == ["Your lists", LIST, "Other lists", "team"]
     page = client.get(f"/tasks?list={LIST}", headers=HOST).get_data(as_text=True)
     assert 'id="list-pin-btn"' in page and 'id="list-unpin-btn"' not in page
     assert client.post("/tasks/pin-list", data={"list": LIST, "pin": "1"}, headers=HOST).status_code == 302
     own = json.loads((wiki / "private/carol/_tasks/lists.json").read_text())
     assert own["pinned"] == [LIST]
-    assert places(client)[0] == ["mine", "inbox", f"list:{LIST}"]
+    assert places(client)[0] == ["mine", "updates", "inbox", f"list:{LIST}"]
     # Renamed, her pin follows it.
     sign_in(client, "alice")
     assert client.post("/tasks/rename-list", data={"list": LIST, "new_name": "recruiting"}, headers=HOST).status_code == 302
     sign_in(client, "carol")
     assert json.loads((wiki / "private/carol/_tasks/lists.json").read_text())["pinned"] == ["recruiting"]
-    assert places(client)[0] == ["mine", "inbox", "list:recruiting"]
+    assert places(client)[0] == ["mine", "updates", "inbox", "list:recruiting"]
 
 
 def test_more_has_your_lists_before_the_others(client, wiki):
@@ -477,7 +477,7 @@ def test_more_has_your_lists_before_the_others(client, wiki):
     client.post("/tasks/new-list", data={"name": "own", "private": "1", "pin": "0"}, headers=HOST)
     # His: the private one, the one with a task of his; the rest are other lists.
     pills, more = places(client)
-    assert pills == ["mine", "inbox"]
+    assert pills == ["mine", "updates", "inbox"]
     assert more == ["Your lists", "misc", "own", "Other lists", "archive", "team"]
     # carol's: the group's list, then the others.
     sign_in(client, "carol")
@@ -504,7 +504,7 @@ def test_a_pin_is_only_the_users_own(client, wiki):
     assert json.loads((wiki / "private/alice/_tasks/lists.json").read_text())["pinned"][-1] == "team"
     assert git(wiki, "log", "-1", "--format=%s").strip() == "Pin list #team"
     sign_in(client, "bob")
-    assert places(client)[0] == ["mine", "inbox"]
+    assert places(client)[0] == ["mine", "updates", "inbox"]
 
 def test_a_list_is_of_groups_there_are(client, wiki):
     """A name no group has is refused, at every door: nothing is kept in a

@@ -306,16 +306,15 @@ function matchesFilter(t, f) {
 // that are the tab's kind. Focus: open and available now (isFocus);
 // Closed: the closed (done or won't do); Open and the Plan board: every open task (one
 // still waiting for a day is in the board's Unplanned section).
-// me: in My tasks, the user: Focus then also holds every task with news
-// for them (newsFor), whatever its dates: its Updates. Among them the ones
-// My tasks holds for that alone (t.extra: what the user gave away, a closed
-// one), which no other tab shows.
-function tasksInView(tasks, f, view, today, me) {
+// Updates ('updates', a view of its own with no tabs): every task it
+// holds, the closed ones too: what it holds is the news.
+function tasksInView(tasks, f, view, today) {
   const filtering = filterActive(f);
   return tasks.filter(t => (!filtering || matchesFilter(t, f)) &&
-    (view === 'closed' ? !!t.closed_at
-      : view === 'focus' ? (!t.closed_at && !t.extra && isFocus(t, today)) || !!(me && newsFor(t, me))
-      : !t.closed_at && !t.extra));
+    (view === 'updates' ? true
+      : view === 'closed' ? !!t.closed_at
+      : view === 'focus' ? !t.closed_at && isFocus(t, today)
+      : !t.closed_at));
 }
 
 // The [[tasks: tag=…]] / ?tag= form ("a,b" = all, "a|b" = any) as filter words.

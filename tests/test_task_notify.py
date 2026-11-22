@@ -9,7 +9,7 @@ import time
 import pytest
 
 from tests import settings
-from tests.conftest import HOST, make_list
+from tests.conftest import HOST, make_list, write_page
 from tests.test_signup import FakeSMTP
 
 BASE = "http://wiki.example.org"
@@ -178,12 +178,14 @@ def test_the_tasks_links_count_what_is_new_for_you(alice, smtp):
     login(alice, "bob")
     counts = alice.get("/api/tasks/due-count?places=1", headers=HOST).get_json()
     assert counts["new"] == 1 and counts["count"] == 0 and counts["focus"] == 0
-    assert counts["places"]["mine"]["new"] == 1 and "new" not in counts["places"]["inbox"]
+    # Of the pills Updates' alone has it: news is counted where it is listed.
+    assert counts["places"]["updates"] == {"count": 0, "overdue": 0, "today": 0, "focus": 0, "new": 1}
+    assert "new" not in counts["places"]["mine"] and "new" not in counts["places"]["inbox"]
     page = alice.get("/page/index", headers=HOST).get_data(as_text=True)
     assert '<span class="module-new">1</span>' in page and 'title="Tasks: 1 update for you"' in page
-    # In the list's own counts too (its pill), for him; the list has no pill here, so ask the route with it pinned.
+    # Not in the list's own counts (its pill, once pinned).
     assert alice.post("/tasks/pin-list", data={"list": "team", "pin": "1"}, headers=HOST).status_code == 302
-    assert alice.get("/api/tasks/due-count?places=1", headers=HOST).get_json()["places"]["list:team"]["new"] == 1
+    assert "new" not in alice.get("/api/tasks/due-count?places=1", headers=HOST).get_json()["places"]["list:team"]
     # He touches it (a date): no longer new.
     assert alice.put(f"/api/tasks/{task['id']}", json={"due_date": "2031-01-01"}, headers=HOST).status_code == 200
     counts = alice.get("/api/tasks/due-count", headers=HOST).get_json()
@@ -257,8 +259,8 @@ def test_a_comment_and_a_mention_are_mailed_to_who_asked(alice, smtp):
     (to, text), = mails(smtp, 1)
     assert to == "alice@example.org" and "bob mentioned you" in text
     login(alice, "alice")
-    mine = alice.get("/api/tasks?mine=1&with=order", headers=HOST).get_json()["tasks"]
-    assert [e["event"] for e in next(t for t in mine if t["id"] == other["id"])["history"]][-1] == "mentioned"
+    news = alice.get("/api/tasks?updates=1", headers=HOST).get_json()
+    assert [e["event"] for e in next(t for t in news if t["id"] == other["id"])["history"]][-1] == "mentioned"
 
 
 def test_the_count_is_of_every_task_with_news_for_you(alice, smtp):
@@ -274,8 +276,9 @@ def test_the_count_is_of_every_task_with_news_for_you(alice, smtp):
     assert count() == 0                                                     # his own comment: he has seen it
     login(alice, "alice")
     assert count() == 1                                                     # bob commented on what she gave him
-    held = {t["id"]: t for t in alice.get("/api/tasks?mine=1&with=order", headers=HOST).get_json()["tasks"]}
-    assert given["id"] in held                                               # My tasks holds it, for its Updates
+    updates = lambda: {t["id"]: t for t in alice.get("/api/tasks?updates=1", headers=HOST).get_json()}
+    mine = lambda: {t["id"] for t in alice.get("/api/tasks?mine=1&with=order", headers=HOST).get_json()["tasks"]}
+    assert set(updates()) == {given["id"]} and given["id"] not in mine()     # in Updates; not hers to do
     assert alice.put(f"/api/tasks/{given['id']}", json={"seen": True}, headers=HOST).status_code == 200
     assert count() == 0
     # bob closes it: news again, though it is closed; she looks again: one seen of hers.
@@ -283,11 +286,60 @@ def test_the_count_is_of_every_task_with_news_for_you(alice, smtp):
     assert alice.put(f"/api/tasks/{given['id']}", json={"completed": True}, headers=HOST).status_code == 200
     login(alice, "alice")
     assert count() == 1
-    closed = next(t for t in alice.get("/api/tasks?mine=1&with=order", headers=HOST).get_json()["tasks"] if t["id"] == given["id"])
-    assert closed["closed_at"]
+    assert updates()[given["id"]]["closed_at"] and given["id"] not in mine()  # a closed task is in Updates too
     seen = alice.put(f"/api/tasks/{given['id']}", json={"seen": True}, headers=HOST).get_json()
-    assert count() == 0
+    assert count() == 0 and updates() == {}
     assert sum(1 for e in seen["history"] if e["event"] == "seen" and e["by"] == "alice") == 1
+
+
+def test_updates_is_a_view_of_the_tasks_with_news(alice, wiki_dir, smtp):
+    """Updates (/tasks?updates=1; docs/spec/tasks.md, News on your tasks): a
+    view beside My tasks that holds the tasks with news for who looks, and
+    nobody else's; My tasks says that there are some, and holds only what
+    is one's own to do."""
+    given = new(alice, title="Check the invoice", assignee="bob")
+    new(alice, title="Hers", assignee="alice")
+    page = lambda url: alice.get(url, headers=HOST).get_data(as_text=True)
+    ids = lambda: [t["id"] for t in alice.get("/api/tasks?updates=1", headers=HOST).get_json()]
+    assert ids() == []                                                      # she gave it: no news for her
+    html = page("/tasks?updates=1")
+    assert 'data-init-updates="1"' in html and "<h1>Updates</h1>" in html and "<title>Updates" in html
+    assert 'data-place="updates"' in html and 'id="updates-read-btn"' in html
+    # No settings, no menu of the list's, no tasks of anyone's in the page.
+    assert "data-settings-" not in html and 'id="task-more-btn"' not in html
+    assert "Check the invoice" not in html and "Hers" not in html
+    # The Tasks links don't come back to it: they keep the view before.
+    assert 'href="/tasks?mine=1" class="module-link" data-module="tasks"' in page("/page/index")
+    mine = page("/tasks?mine=1")
+    assert 'class="tasks-updates-note" hidden' in mine and "data-init-updates" not in mine
+    # bob has it: in his Updates, with the task in the page, and My tasks leads there.
+    login(alice, "bob")
+    assert ids() == [given["id"]]
+    assert "Check the invoice" in page("/tasks?updates=1") and "Hers" not in page("/tasks?updates=1")
+    assert '<p class="tasks-updates-note"><a class="btn btn-sm" href="/tasks?updates=1">1 update for you →</a></p>' in page("/tasks?mine=1")
+    assert "tasks-updates-note" not in page("/tasks?list=team")
+    # dan sees the list and has nothing to do with the task: no news.
+    login(alice, "dan")
+    assert ids() == [] and "Check the invoice" not in page("/tasks?updates=1")
+    # An embed doesn't show it: updates=1 on a page is every task.
+    write_page(wiki_dir, "desk", "# Desk\n\n[[tasks: updates=1]]\n")
+    assert "data-init-updates" not in page("/page/desk") and "Check the invoice" in page("/page/desk")
+    # In sharing mode what others wrote to you isn't shown: no view, no pill.
+    login(alice, "bob")
+    alice.set_cookie("zone-sharing", "1")
+    resp = alice.get("/tasks?updates=1", headers=HOST)
+    assert resp.status_code == 302 and resp.headers["Location"] == "/tasks"
+    assert 'data-place="updates"' not in page("/tasks?mine=1") and "tasks-updates-note" not in page("/tasks?mine=1")
+
+
+def test_updates_needs_users(client):
+    """Without users nobody gives anyone a task: no Updates, its address
+    goes to /tasks and its scope holds nothing."""
+    assert client.post("/api/tasks", json={"title": "Mine"}).status_code == 201
+    resp = client.get("/tasks?updates=1")
+    assert resp.status_code == 302 and resp.headers["Location"] == "/tasks"
+    assert client.get("/api/tasks?updates=1").get_json() == []
+    assert 'data-place="updates"' not in client.get("/tasks").get_data(as_text=True)
 
 
 def test_a_look_is_the_users_not_the_tasks(alice, wiki_dir, smtp):

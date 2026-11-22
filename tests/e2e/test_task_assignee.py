@@ -560,10 +560,12 @@ def test_the_tasks_link_says_that_something_is_new_for_you(alice):
     badge = alice.locator('.module-link[data-module="tasks"] .module-new').first
     expect(badge).to_have_text("1")
     expect(alice.locator('.module-link[data-module="tasks"]').first).to_have_attribute("title", "Tasks: 1 update for you")
-    # On My tasks its pill has it too, and it goes when she sets a date, without a reload.
+    # On the Tasks page Updates' pill has it (My tasks' counts what is due
+    # alone), and it goes when she sets a date, without a reload.
     alice.goto("/tasks?mine=1&view=open&group=none")
-    pill = alice.locator('.tasks-place[data-place="mine"] .module-new')
+    pill = alice.locator('.tasks-place[data-place="updates"] .module-new')
     expect(pill).to_have_text("1")
+    expect(alice.locator('.tasks-place[data-place="mine"] .module-new')).to_be_hidden()
     card(alice, "From bob").locator(".task-title").click()
     alice.keyboard.press("f")                        # starts today: hers now
     expect(pill).to_be_hidden()
@@ -678,26 +680,44 @@ def test_one_person_has_list_and_plan(page, wiki):
     expect(page.locator(".board-day-divider[data-drop-bucket='unplanned']")).to_be_visible()
 
 
-def test_a_task_given_to_you_is_on_focus_under_updates(alice, new_page):
-    """My tasks' Focus holds what someone gave you and you haven't opened,
-    under Updates, whatever its dates (docs/spec/tasks.md, Views): a task
-    without a date was on no tab the Tasks links open."""
+def test_a_task_given_to_you_is_in_updates_and_stays_there_when_read(alice, new_page):
+    """Updates (docs/spec/tasks.md, News on your tasks) holds what someone
+    gave you and you haven't opened, whatever its dates: a view of its own,
+    with no tabs. Opened, the task is read and its card stays, dimmed, until
+    the page is left; it is in My tasks all along, as it is hers to do."""
     bob = new_page()
     bob.request.post("/login", form={"username": "bob", "password": "pw"})
     assert bob.request.post("/api/tasks", data={"title": "From bob", "list": "team", "assignee": "alice"}).ok
     new(alice, "Own, today", assignee="alice", start_date=date.today().isoformat())
-    alice.goto("/tasks?mine=1")
-    expect(alice.locator("#tasks-tabs [aria-selected='true']")).to_have_text(["Today"])
-    expect(alice.locator(".updates-heading")).to_contain_text("Updates")
-    expect(alice.locator(".task-item.task-update .task-title")).to_have_text(["From bob"])
-    expect(card(alice, "From bob").locator(".task-assignee")).to_have_count(0)   # in My tasks a card doesn't say your name
+    alice.goto("/tasks?updates=1")
+    expect(alice.locator(".page-header h1")).to_have_text("Updates")
+    expect(alice.locator('.tasks-place[data-place="updates"]')).to_have_attribute("aria-current", "page")
+    for gone in ("#tasks-tabs", "#task-add-btn", "#task-closed-link", "#task-cut"):
+        expect(alice.locator(gone)).to_be_hidden()
+    expect(alice.locator(".task-item .task-title")).to_have_text(["From bob"])     # her own task is no news
+    expect(alice.locator(".task-item.task-update[draggable]")).to_have_count(0)    # nothing is ranked there
     expect(card(alice, "From bob").locator(".task-new")).to_be_visible()
-    # Opened, it is no update anymore; without a date it is on Open.
+    pill = alice.locator('.tasks-place[data-place="updates"] .module-new')
+    expect(pill).to_have_text("1")
+    # Opened: read, and still there.
     open_edit(alice, "From bob")
     alice.keyboard.press("Escape")
+    expect(pill).to_be_hidden()
+    expect(alice.locator(".task-item.task-update.task-read .task-title")).to_have_text(["From bob"])
+    expect(card(alice, "From bob").locator(".task-new.task-news-read")).to_have_text("new")
+    expect(card(alice, "From bob").locator(".task-read-btn")).to_have_count(0)
+    # Left and come back to: nothing is new.
+    alice.reload()
+    expect(alice.locator(".tasks-empty")).to_contain_text("No updates.")
+    # It is hers to do: in My tasks, and without a date on Open.
+    alice.goto("/tasks?mine=1&view=open&group=none")
+    expect(card(alice, "From bob")).to_be_visible()
     expect(alice.locator(".updates-heading")).to_have_count(0)
-    expect(card(alice, "From bob")).to_have_count(0)
-    expect(card(alice, "Own, today")).to_be_visible()
+    # The Tasks links keep going to the view before Updates.
+    alice.goto("/tasks?list=team")
+    alice.goto("/tasks?updates=1")
+    alice.goto("/page/index")
+    expect(alice.locator(".breadcrumb .module-link[data-module=tasks]")).to_have_attribute("href", "/tasks?list=team")
 
 
 def test_a_shared_list_opens_on_open_and_your_own_on_focus(alice):
@@ -767,28 +787,41 @@ def test_a_comment_is_its_authors(alice, new_page):
 
 
 def test_updates_show_what_happened_on_your_tasks(alice, new_page):
-    """My tasks' Updates (docs/spec/tasks.md, Views): a comment on a task you
-    gave away, with what happened in words; opening the task clears it, and
-    the Tasks link counts it meanwhile."""
+    """Updates (docs/spec/tasks.md, News on your tasks): a comment on a task
+    you gave away, with what happened in words, though it is not yours to
+    do; Mark read sees one without opening it, Mark all read all of them,
+    and the cards stay; the Tasks link counts them meanwhile."""
     t = new(alice, "For bob", assignee="bob")
+    other = new(alice, "Also for bob", assignee="bob")
     bob = new_page()
     bob.request.post("/login", form={"username": "bob", "password": "pw"})
     assert bob.request.post(f"/api/tasks/{t['id']}/comments", data={"text": "Need the contract first"}).ok
+    assert bob.request.put(f"/api/tasks/{other['id']}", data={"completed": True}).ok
+    # Not hers to do: My tasks has neither, and a line that leads to Updates.
     alice.goto("/tasks?mine=1")
-    expect(alice.locator(".updates-heading")).to_contain_text("Updates")
-    expect(alice.locator(".task-item.task-update .task-title")).to_have_text(["For bob"])
+    expect(alice.locator(".tasks-app[data-loaded]")).to_be_visible()
+    expect(alice.locator(".task-item")).to_have_count(0)
+    note = alice.locator(".tasks-updates-note")
+    expect(note).to_have_text("2 updates for you →")
+    note.locator("a").click()
+    expect(alice).to_have_url(re.compile(r"/tasks\?updates=1$"))
+    expect(alice.locator(".task-item.task-update")).to_have_count(2)
     expect(card(alice, "For bob").locator(".task-update-mark")).to_have_text("bob commented")
-    expect(alice.locator('.module-link[data-module="tasks"] .module-new').first).to_have_text("1")
-    # Not hers to do: on no other tab.
-    alice.locator("#tasks-tabs [data-view='open']").click()
-    expect(card(alice, "For bob")).to_have_count(0)
-    alice.locator("#tasks-tabs [data-view='focus']").click()
-    # The list's menu marks all read.
-    more_menu(alice)
-    alice.get_by_role("menuitem", name="Mark all read").click()
-    expect(alice.locator(".updates-heading")).to_have_count(0)
-    expect(alice.locator('.module-link[data-module="tasks"] .module-new').first).to_be_hidden()
+    expect(card(alice, "Also for bob").locator(".task-update-mark")).to_have_text("bob closed it")   # a closed task too
+    dot = alice.locator('.module-link[data-module="tasks"] .module-new').first
+    expect(dot).to_have_text("2")
+    # Mark read on a card: that one is read, and stays.
+    card(alice, "For bob").locator(".task-read-btn").click()
+    expect(alice.locator(".task-item.task-read .task-title")).to_have_text(["For bob"])
+    expect(dot).to_have_text("1")
     assert [e["event"] for e in task(alice, "For bob")["history"]][-1] == "seen"
+    # Mark all read, beside the heading: the rest, and the button goes.
+    button = alice.locator("#updates-read-btn")
+    button.click()
+    expect(alice.locator(".task-item.task-read")).to_have_count(2)
+    expect(button).to_be_hidden()
+    expect(dot).to_be_hidden()
+    expect(alice.locator('.tasks-place[data-place="updates"] .module-new')).to_be_hidden()
 
 
 def test_the_closed_view_shows_a_page_and_asks_for_more(alice):
@@ -866,20 +899,19 @@ def test_the_tasks_link_has_one_number_and_a_dot(alice):
     expect(link).to_have_attribute("title", re.compile(r"1 update for you"))
 
 
-def test_my_tasks_open_tab_says_that_there_are_updates(alice):
-    """Updates are listed on My tasks' Today tab; its Open tab says that
-    there are some and leads there, so the Tasks links never count what the
-    page doesn't show."""
+def test_my_tasks_says_that_there_are_updates(alice):
+    """Updates are listed in Updates; My tasks says that there are some, on
+    each of its tabs, and leads there; a list's view has no such line."""
     alice.request.post("/login", form={"username": "bob", "password": "pw"})
     new(alice, "From bob", assignee="alice")
     alice.request.post("/login", form={"username": "alice", "password": "pw"})
-    alice.goto("/tasks?mine=1&view=open&group=none")
-    note = alice.locator(".tasks-updates-note")
-    expect(note).to_have_text("1 update for you →")
-    note.locator("button").click()
-    expect(alice.locator("#tasks-tabs .active")).to_have_text(["Today"])
-    expect(alice.locator(".updates-heading")).to_be_visible()
-    expect(note).to_be_hidden()
+    for view in ("today", "open&group=none"):
+        alice.goto("/tasks?mine=1&view=" + view)
+        expect(alice.locator(".tasks-updates-note")).to_have_text("1 update for you →")
+    # Read where it is, the line goes without a reload.
+    card(alice, "From bob").locator(".task-title").click()
+    alice.keyboard.press("f")                        # starts today: hers now
+    expect(alice.locator(".tasks-updates-note")).to_be_hidden()
     alice.goto("/tasks?list=team&view=open&group=none")
     expect(card(alice, "From bob")).to_be_visible()
     expect(alice.locator(".tasks-updates-note")).to_have_count(0)      # a list's view has none
@@ -1093,8 +1125,8 @@ def test_who_no_longer_sees_a_list_no_longer_has_its_tasks(page, wiki, monkeypat
 
 def test_follow_a_task_and_its_news_is_under_updates(alice, new_page):
     """Follow in a shared task's menu (docs/spec/tasks.md, News on your
-    tasks): the task is not yours to do, and what happens on it is under
-    My tasks' Updates; the dialog says who follows
+    tasks): the task is not yours to do, and what happens on it is in
+    Updates; the dialog says who follows
     and unfollows; is:following lists what you follow."""
     t = new(alice, "Bob's work", assignee="bob")
     new(alice, "Nobody follows", assignee="bob")
@@ -1115,6 +1147,9 @@ def test_follow_a_task_and_its_news_is_under_updates(alice, new_page):
     bob.request.post("/login", form={"username": "bob", "password": "pw"})
     assert bob.request.post(f"/api/tasks/{t['id']}/comments", data={"text": "Half done"}).ok
     alice.goto("/tasks?mine=1")
+    expect(alice.locator(".tasks-app[data-loaded]")).to_be_visible()
+    expect(card(alice, "Bob's work")).to_have_count(0)                  # still not hers to do
+    alice.goto("/tasks?updates=1")
     expect(alice.locator(".task-item.task-update .task-title")).to_have_text(["Bob's work"])
     expect(card(alice, "Bob's work").locator(".task-update-mark")).to_have_text("bob commented")
     expect(alice.locator('.module-link[data-module="tasks"] .module-new').first).to_have_text("1")
@@ -1134,20 +1169,3 @@ def test_follow_a_task_and_its_news_is_under_updates(alice, new_page):
     expect(alice.get_by_role("menuitem", name="Follow", exact=True)).to_have_count(0)
     alice.get_by_role("menuitem", name="Edit…").click()
     expect(alice.locator("#task-edit-follow")).to_be_hidden()
-
-
-def test_many_updates_show_their_first_and_a_row_for_the_rest(alice, new_page):
-    """Updates is above what is yours to do today: of many it draws the first
-    seven and Show N more (docs/spec/tasks.md, Long sections)."""
-    bob = new_page()
-    bob.request.post("/login", form={"username": "bob", "password": "pw"})
-    for i in range(9):
-        assert bob.request.post("/api/tasks", data={"title": f"From bob {i}", "list": "team", "assignee": "alice"}).ok
-    new(alice, "Own, today", assignee="alice", start_date=date.today().isoformat())
-    alice.goto("/tasks?mine=1")
-    expect(alice.locator(".updates-heading .board-day-count")).to_have_text("9")
-    expect(alice.locator(".task-item.task-update")).to_have_count(7)
-    expect(card(alice, "Own, today")).to_be_visible()
-    alice.get_by_role("button", name="Show 2 more").click()
-    expect(alice.locator(".task-item.task-update")).to_have_count(9)
-    expect(alice.get_by_role("button", name="Show 2 more")).to_have_count(0)

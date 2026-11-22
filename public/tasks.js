@@ -167,6 +167,8 @@ const app = {
   get inboxView() { return inboxView; },
   get inboxPrivate() { return inboxPrivate; },
   get initMine() { return initMine; },
+  get initUpdates() { return initUpdates; },
+  newsOf,
   isPrivateList,
   get ownsOrder() { return !!initMine; },
   own, setOwnOrder,
@@ -404,6 +406,20 @@ const initList = cleanList(appEl?.dataset.initList);
 // and the lists left out of it.
 const initMine = appEl?.dataset.initMine || '';
 const initOut = (appEl?.dataset.initOut || '').split('|').filter(Boolean);
+// Updates (/tasks?updates=1, data-init-updates): the tasks with news for
+// the user (TasksCore.newsFor), wherever they are, open or closed; one view,
+// no tabs, the latest news first, nothing ranked. A task shown there stays
+// until the page is left: read (opened, Mark all read, anything done with
+// it), its card stays where it was, dimmed, with the news it had (st.news:
+// what each task shown here had when it came). So nothing goes away under
+// the eyes, and what was just read can be opened again.
+const initUpdates = appEl?.dataset.initUpdates === '1';
+st.news = new Map();
+// What the task's card says of its news: what it has now, in Updates else
+// what it had when it came (read since).
+function newsOf(t) {
+  return TasksCore.newsFor(t, people.me) || (initUpdates && st.news.get(t.id)) || null;
+}
 // My tasks has a manual order of its own, the user's (mineOrder in
 // go/tasklists.go): a list's order (a task's sort_order) is the list's, for
 // everyone who looks at it, and ranking across lists in My tasks moves
@@ -497,6 +513,7 @@ function taskList(t) {
 // go/tasklists.go).
 const inboxView = initList === 'inbox' && !listSet.has('inbox');
 function inScope(t) {
+  if (initUpdates) return !!newsOf(t);
   if (initMine) {
     return TasksCore.inMine(t, initOut.includes(taskList(t)), { me: people.me, assigns: initMine === 'assign' });
   }
@@ -505,7 +522,7 @@ function inScope(t) {
 }
 // The scope of the server's closed counts, matching inScope.
 function scopeQuery() {
-  return initMine ? '?mine=1' : initList ? `?list=${encodeURIComponent(initList)}` : '';
+  return initUpdates ? '?updates=1' : initMine ? '?mine=1' : initList ? `?list=${encodeURIComponent(initList)}` : '';
 }
 // The list a new task starts in here: the view's own, else none: the Inbox.
 function newTaskList() { return inboxView ? '' : initList; }
@@ -566,7 +583,7 @@ const { headerTasksMenu, confirmDeadlineMove } = app;
 // field minus the word being typed.
 function filterTasks(query = filterQuery()) {
   // Today is Open with a filter (tasktabs.js): 'focus' is the word for it.
-  return tasksInView(st.tasks, parseFilter(query, people), app.shown(), todayStr(), initMine ? people.me : '');
+  return tasksInView(st.tasks, parseFilter(query, people), app.shown(), todayStr());
 }
 
 Object.assign(app, initTaskOrder(app));
@@ -674,8 +691,15 @@ initCut(urlView === 'plan' && ['day', 'person', 'list'].includes(urlGroup) && by
 st.today = asked === 'focus';
 st.activeView = !st.today ? asked
   : urlView === 'focus' && byLink && ['none', 'person', 'list'].includes(urlGroup) ? app.todayView(urlGroup) : app.todayView();
-saveShownTab(app.shown());
-if (st.activeView !== 'closed') st.lastTab = app.shown();
+if (initUpdates) {
+  // Updates is one view ('updates'), whatever a link or this browser tab
+  // says of tabs; it remembers none.
+  st.today = false;
+  st.activeView = 'updates';
+} else {
+  saveShownTab(app.shown());
+  if (st.activeView !== 'closed') st.lastTab = app.shown();
+}
 applySort();
 applyGroup();
 markActiveTab(st.activeView);

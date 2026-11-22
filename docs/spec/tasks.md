@@ -249,7 +249,7 @@ The names of before 2026-11 (`view=focus`, `view=plan`, `plan=on|off`) are no vi
 | Closed | The closed tasks, a page at a time; a link under the list, no tab | Closed |
 
 Today is Open with a filter (`st.today`, set in `tasks.js` and `js/tasktabs.js`): the Today tab shows the Open tab's tasks that are to do now, and draws them as the Open tab draws its own (`st.activeView`: `open` one list, `plan` the board by what `st.cut` says, `closed`), so the grouping below works on both tabs, each keeping its own choice.
-What is Today's alone is a rule on the filter, not a view of its own: a new task there starts today, the limit's warning, My tasks' Updates, the empty state, no Order (Today is in the manual order), which way a swipe goes.
+What is Today's alone is a rule on the filter, not a view of its own: a new task there starts today, the limit's warning, the empty state, no Order (Today is in the manual order), which way a swipe goes.
 A tab is asked for and remembered by a word (`focus` Today, `open` or `plan` the Open tab drawn that way, `closed`); `namedView` turns the names of links and embeds into that where a page opens.
 
 ### The tabs and the Open tab's control
@@ -414,19 +414,6 @@ With a limit, a warning shows when Today reaches it.
 Empty Today says "Nothing planned for today" and links to Plan (the Open tab by day, `data-goto-tab`).
 New tasks created here get today as start date.
 
-#### Updates
-
-**Updates** (My tasks' Today only; `.updates-heading`, cards `.task-update`; `inViewOrder` in `js/taskrender.js`, `tasksInView` given the user) lists above the tab's tasks **the tasks with news for you** (`TasksCore.newsFor`: News on your tasks), **whatever their dates**, each card saying what the news is.
-A task given to you often has no date, and would otherwise be on no tab the Tasks links open, while their count says it is there.
-
-Among them are tasks that aren't in My tasks otherwise: what you gave away (someone commented, it was done), what mentions you, a task closed this month or last;
-the server sends those along with My tasks (`withUpdates`: `GET /api/tasks?mine=1`, and the tasks a page of My tasks brings), the list holds them for Updates alone (`t.extra`) and no other tab shows them.
-A task there is not in the list below (headed by the tab's name, `.list-heading`, while Updates shows), nothing is dragged into Updates and nothing ranks there (`shownIds` leaves its cards out);
-opening the task, or doing something with it, takes it out: one of yours with a start date not after today is in Today below, else on Open.
-Updates draws its first seven (Long sections); its heading counts them all, and **Mark all read** in the ⋯ menu sees them all.
-
-On My tasks' Open tab a line says that there are some (`.tasks-updates-note`, `syncUpdatesNote` in `js/taskrender.js`: "2 updates for you →", which opens Today), so the Tasks links never count what the page doesn't show; the tasks themselves stay in the list there.
-
 ### Closed
 
 **Closed** is not a tab but a link under the list (`#task-closed-link`, `Closed (N) →`, count from `/api/tasks/closed-count`, refreshed after every write): it is seldom looked at, and a tab would put it beside what is done every day.
@@ -480,7 +467,6 @@ The order is one for all tasks, so the place holds in every view that shows both
 ### Long sections
 
 A long section draws its top (`windowed`, `DRAW` = 200 in `js/taskrender.js`): a list or section of more than 200 cards (Open's or Today's list, a sort's group, a Plan section) draws its first 200 and a row **Show N more** (`[data-draw-more]`), which shows that section whole from then on (`st.drawAll`).
-**Updates draws its first seven** (`UPDATES_DRAW`), the latest news first, and the same row: it is above what is yours to do today, and in a team someone back from a week away has dozens.
 A section's count is of all its tasks, the filter searches all of them, and a task that has to be seen (a `?task=` link's, a new one: `unfoldFor`, `st.mustDraw`) shows its section whole.
 All tasks of a large wiki is thousands of cards, and a list is read from its top.
 
@@ -592,7 +578,7 @@ A list's tasks can be saved as a file, to keep a copy, move a list to another wi
 **Export tasks** and **Import tasks…** are in the list's **⋯ menu** in the toolbar, under List settings… (`#task-more-btn`, `.tasks-more-btn`; the cards' menu, `showMenu` in `js/taskmenu.js`, a bottom sheet on phones; the code in `js/tasksettings.js`).
 The ⋯ menu is there for whoever sees the tasks, not only where a list has settings (`Menu` in `buildTasksEmbed`): not in sharing mode, nor in the headless app or for a name no list has.
 **Export tasks** is in it for whoever sees the tasks, a viewer and a list's member who doesn't manage it too (the route answers what they see);
-**Import tasks…** (and Mark all read) for who may write the tasks (`data-writes`: not a viewer), as the route asks: `mayWriteTasks`, and `canWriteList` for the list imported into.
+**Import tasks…** for who may write the tasks (`data-writes`: not a viewer), as the route asks: `mayWriteTasks`, and `canWriteList` for the list imported into.
 
 ### Export tasks
 
@@ -1230,7 +1216,7 @@ A look that names no comment (an older one), or one whose comment is gone, goes 
 ### Following a task
 
 **Follow** in a shared task's ⋯ menu and in its dialog (**Unfollow** the other way; a toast with Undo) makes you one of its followers (`applyFollow` in `go/tasks.go`, `Task.Followers`), and from then on you are told what its maker is told: a comment, closed, reopened, given to someone else.
-It is not yours to do for that: it is in no My tasks, and with news it is under Updates there, as what you gave away is.
+It is not yours to do for that: it is in no My tasks, and with news it is in Updates, as what you gave away is.
 At a team's size most of what matters to you is neither assigned to you nor made by you: a task your work waits for, one of your team's.
 The dialog names the followers above History ("👁 Followed by you, bob"; `renderFollow` in `js/taskmodal.js`), and the button there is saved at once as a comment is (`setFollow` in `js/taskdata.js`).
 A series' next occurrence keeps them.
@@ -1247,19 +1233,51 @@ Who follows is kept in the task (`"followers": ["dan", "alice"]`, in the order t
 | Nothing follows by itself | Not who commented, not a former assignee; a mention reaches whoever is named anyway |
 | Only who sees a task is told | A follower who is none of its list's members anymore (a list narrowed, a group left) stays in the file, is not among the names the API answers (`followersSeen`), and has no news, count or mail of it; among them again, they follow as before |
 
+### Updates
+
+**Updates** (`/tasks?updates=1`, with users) is where the news is: **every task with news for you** (`updatesFor`, `TasksCore.newsFor`), wherever it is and whatever its dates,
+the ones that aren't yours to do among them: what you gave away (someone commented, it was done), what mentions you, what you follow, a task closed this month or last.
+It is a view beside My tasks, the second entry of the list switcher (The list switcher), with how many tasks have news on its pill;
+My tasks and the lists show what is to do, and no news but the mark on a card (The marks and the counts).
+
+What you see and do there:
+
+| | |
+|---|---|
+| The cards | the latest news first, each saying what happened ("new", "bob commented"); the cards are the tasks' own, so a task is opened, commented, ticked off as anywhere |
+| Reading one | opening the task (its dialog or its details) marks it read, as everywhere; **Mark read** on its card does so without opening it |
+| **Mark all read** | beside the heading, while a task has news: all of them read at once |
+| A task read | stays where it was, dimmed, its mark quiet, **until you leave the page**: nothing goes away while you look, and what you just read can be opened again |
+| Nothing there | "No updates. A task someone gives you, a comment on one of yours or a mention shows here." |
+
+It has **no tabs, no order of your own and no new task**: nothing is dragged or ranked there, no Closed link, no settings, export or import; the filter field is there.
+A task given to you is also in My tasks, as before, where it is ranked; Updates only says that it came.
+
+**From My tasks a line leads there** while there is news, "2 updates for you →" (`.tasks-updates-note`, under the heading; kept current with the counts by `js/chrome.js`);
+in a wiki without lists, which has no switcher, the line is on `/tasks`.
+The Tasks links don't come back to Updates (it is looked into, not worked in): they keep going to the view shown before it (The Tasks link in `docs/spec/navigation.md`).
+Without users there is no news and no such view, and in sharing mode it isn't shown: `/tasks?updates=1` goes to `/tasks`, and the switcher has no entry for it (`hasUpdates`).
+No embed shows it (`[[tasks: updates=1]]` is All tasks).
+
+#### How Updates works
+
+It is a scope of its own, as My tasks is (`updatesScope` in `go/tasklists.go`; `paramsScope`, `queryScope`): `GET /api/tasks?updates=1` and the page's data block answer the open tasks with news and the closed ones of this month and the last (`viewTasks`, `recentUpdates`), each only where you see the task.
+The task app shows them as one view (`data-init-updates`; `st.activeView` is `updates`, which no tab names, `initUpdates` in `tasks.js`; the tabs, the grouping, the order, + New and the Closed link aren't shown: `tasks.css`), sorted by the time of the news (`inViewOrder`).
+What a task had when it came is kept while the page is open (`st.news`, `app.newsOf`): a task read since has no news by the rule, and is still in the view (`inScope`), drawn with the news it had (`.task-read`, `.task-news-read`); a reload of the list (another tab's write, the minute's check) keeps those cards as they are held (`fetchTasks`).
+**Mark read** is `markSeen`, **Mark all read** `markAllSeen` (`#updates-read-btn`), each a `seen` in `PUT /api/tasks/<id>`, for who may write tasks (`data-writes`).
+
 ### The marks and the counts
 
-On its card a task with news says what it is (before your name): **new** for a task just given to you (`.task-new`; its tooltip says who gave it and when), and in words for anything else, **bob commented**, **bob mentioned you**, **anna closed it**, **anna reopened it**, **anna gave it on** (`.task-update-mark`).
+On its card a task with news says what it is (before your name), in every view: **new** for a task just given to you (`.task-new`; its tooltip says who gave it and when), and in words for anything else, **bob commented**, **bob mentioned you**, **anna closed it**, **anna reopened it**, **anna gave it on** (`.task-update-mark`).
 
 Opening the task takes it away (`markSeen` in `js/taskdata.js`; `seen` in `PUT /api/tasks/<id>`, `updateTaskLocked`): when you open its dialog or its details, the browser says so and Zone notes your look.
 So the mark goes when you have looked, and whoever gave you the task reads in its History that it arrived ("Seen · anna").
 For a task that has no news for whoever opens it, `seen` notes nothing.
-**Mark all read**, in My tasks' ⋯ menu while there is news, sees them all.
+**Mark read** and **Mark all read** in Updates see a task without opening it (Updates).
 No time takes it away: a task given to you weeks ago and never opened is the one that needs the mark.
 
-The Tasks links say how many (`TaskCounts.New`, `updatesFor`): the notifications badge of the tasks, a filled count in the accent beside the due and Today counts (`.module-new`), with "2 updates for you" in the link's tooltip, on every page and on My tasks' pill: every task with news for you, wherever it is, and also one closed this month or last (`Store.RecentClosed`: the current closed files and last month's archives, which a page view may read; an older archive is never read for it, so news on a task closed longer ago isn't told).
-A list's pill counts those in the list.
-A click goes to My tasks, whose Today tab lists them under **Updates** (Updates), the ones that aren't yours to do among them: what you gave away, what mentions you, what was closed.
+The Tasks links say how many (`TaskCounts.New`, `updatesFor`): the notifications badge of the tasks, a filled count in the accent beside the due and Today counts (`.module-new`), with "2 updates for you" in the link's tooltip, on every page: every task with news for you, wherever it is, and also one closed this month or last (`Store.RecentClosed`: the current closed files and last month's archives, which a page view may read; an older archive is never read for it, so news on a task closed longer ago isn't told).
+Updates' pill has the same number, and it is the only pill with one: news is counted where it is shown, so My tasks' pill and a list's count what is due alone.
 
 ### Mentions
 
@@ -1484,13 +1502,13 @@ The ⋯ beside the heading of `/tasks` (`.page-menu-btn`, on every view of it; t
 | **Who sees it…** | with users, a shared list, for who manages it, where they are in a group (or it is a group's) |
 | **Delete…** | a list, for who manages it |
 | **Rename tag…** | a tag's view, `/tasks?tag=<tag>` (Renaming a tag), for who may write tasks |
-| **Mark all read** | My tasks, while a task has news for you |
 | **Export tasks**, **Import tasks…** | last: Export for whoever sees the tasks, Import for who may write them (Export and import) |
 
 The view's own actions (`[data-tasks-action]`) are shown and run by `js/tasksettings.js` where the view has them.
 Each but the pins is a dialog with a form the server answers (`data-dialog` on the menu item; a refusal comes back with the message in the dialog).
 Not in sharing mode; a viewer's has Export tasks alone (`Menu`, `Write` in `tasksPageView`; none for a name no list has), and the pills don't reorder for them.
-The ⋯ of an embed on a wiki page offers the view's own actions only: List settings…, Mark all read, Export tasks and Import tasks….
+The ⋯ of an embed on a wiki page offers the view's own actions only: List settings…, Export tasks and Import tasks….
+Updates has **Mark all read** beside its heading, before the ⋯ (Updates).
 
 #### Renaming a list
 
@@ -1595,14 +1613,15 @@ The page gets the lists left out and whether assignment counts (`data-init-out`,
 
 `/tasks` opens with a row of pills above its heading (on a big screen the left column instead: The lists in the left column, below) (`.tasks-places` in `templates/tasks_page.html`, `taskPlaces` and `taskMore` in `go/tasksembed.go`, `js/listsrow.js`),
 on the page's white sheet with it, looking as the module switcher at the top of the page does (`.tasks-places-group`: one white capsule with a border, the pills inside it without one, in its type and height, the current one shaded).
-**My tasks is the first pill, the Inbox the second; a pinned list is a pill; a list that isn't pinned is under More.**
+**My tasks is the first pill, with users Updates the second, then the Inbox; a pinned list is a pill; a list that isn't pinned is under More.**
 In order: **My tasks** (above), whenever there is a row;
+**Updates** (`data-place="updates"`; with users, not in sharing mode: `hasUpdates`; tooltip "News on your tasks: given to you, commented, mentioned, closed"; Updates);
 **Inbox** (`data-place="inbox"`; for who has one, `hasInbox`: with a lock with users; tooltip "Inbox: new tasks land here");
 then **the pinned lists** in their order,
 then **More ▾**.
 The pinned lists carry a pin (`.tasks-place-pin`, tooltip "Pinned list #<name>"), a private list a lock (tooltip "… (only you see it)").
 
-The heading names what is shown: **List: <name>** (with 🔒 for a private one), **My tasks**, **Inbox** or **All tasks** (the window's title likewise).
+The heading names what is shown: **List: <name>** (with 🔒 for a private one), **My tasks**, **Updates**, **Inbox** or **All tasks** (the window's title likewise).
 Every list's pill or link goes to `/tasks?list=<ref>`: the list with its settings,
 and as its **Backlinks** every page that embeds it (`listPages`: any `[[tasks: list=<name>]]` outside code on a page you may see that shows this list, A–Z by title; at the end, in the right column on big screens and as the breadcrumb's `← N` chip, as on a page view).
 
@@ -1614,9 +1633,9 @@ The pills wrap onto more lines on a narrow window and are finger-sized under `(p
 
 #### The counts on the pills
 
-Each pill but More carries **one number: what is due today or overdue** there (a list's own, `countTasks` over the list: everyone's tasks in it), and how many of its tasks are new for you; the Today count is on the Tasks module links alone, where it is the day's load (`.tasks-place .module-focus` is not shown);
-the current one is shaded (`aria-current`): My tasks on `?mine=1`, the Inbox on `?list=inbox`, the list on `?list=<ref>`, More for a view under it, none for a name no list has.
-`js/chrome.js` keeps the counts current with the Tasks link's (`refreshDueBadge`: `GET /api/tasks/due-count?places=1` adds `places`, each pill's counts by its key: `list:<ref>`, `mine`, `inbox`).
+Each pill but More carries **one number: what is due today or overdue** there (a list's own, `countTasks` over the list: everyone's tasks in it); Updates' pill carries how many tasks have news for you, and no other pill counts news (The marks and the counts); the Today count is on the Tasks module links alone, where it is the day's load (`.tasks-place .module-focus` is not shown);
+the current one is shaded (`aria-current`): My tasks on `?mine=1`, Updates on `?updates=1`, the Inbox on `?list=inbox`, the list on `?list=<ref>`, More for a view under it, none for a name no list has.
+`js/chrome.js` keeps the counts current with the Tasks link's (`refreshDueBadge`: `GET /api/tasks/due-count?places=1` adds `places`, each pill's counts by its key: `list:<ref>`, `mine`, `updates`, `inbox`).
 
 #### More
 
@@ -1642,20 +1661,20 @@ It is the browser's memory, not the wiki's: another browser marks it again.
 
 A pinned list's pill dragged with the mouse to another place among the pinned lists puts the pins in that order (`data-reorder` on the row, for who may pin; `POST /tasks/pin-order`, `pinOrderOp`), in one commit ("Reorder the pinned lists").
 Let go outside the row, it goes back.
-My tasks, the Inbox and More stay where they are.
+My tasks, Updates, the Inbox and More stay where they are.
 With a finger there is no dragging (it scrolls and taps): **Unpin** and **Pin** again puts a list last.
 
 #### The lists in the left column
 
 **On a big screen (from 1320px wide, where pages get their side columns) the lists are the left column of `/tasks`, and the row of pills isn't shown**: the same entries, a line each, where there is room for all of them (`lists_rail` in `templates/tasks_page.html`, `.lists-rail`; the row stays for every narrower screen).
 In three groups, from the top:
-**the views**, My tasks, the Inbox and All tasks (no list of their own);
+**the views**, My tasks, Updates, the Inbox and All tasks (no list of their own);
 **Pinned**, the pinned lists in their order;
 **Lists**, every other list A–Z (with users **Your lists** and **Other lists**, as in More), with the find field from 8 lists on.
 The current view's line is shaded.
 It keeps one rhythm: every line as high, the same room before each group and heading, a heading small, light and spaced, close to the lists it names;
 the names start in one line, with no pin (the heading says it), and a list's lock or people after its name (the Inbox, always yours, has none there).
-My tasks, the Inbox and the pins carry the pills' counts, kept current with them (`js/chrome.js` refreshes `.lists-rail-place` by `data-place` too); the other lists none, as under More.
+My tasks, Updates, the Inbox and the pins carry the pills' counts, kept current with them (`js/chrome.js` refreshes `.lists-rail-place` by `data-place` too); the other lists none, as under More.
 The pins can be dragged up and down with the mouse, for who may pin, as the pills can (Dragging the pills).
 A list new to this browser has "new" beside its name there as under More, and counts as seen once the column has shown it (More then gets no dot).
 The column starts level with the sheet's title and scrolls on its own when it is taller than the window; the sheet keeps a page's width, centred, so the heading is where a page's is.

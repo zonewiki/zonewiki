@@ -106,16 +106,13 @@ func tasksRoutes(mux *http.ServeMux) {
 		// Zone-Tasks: the word of the tasks the page holds (tasksWord of ?held=, read
 		// before them: a write in between only shows as one more change).
 		w.Header().Set("Zone-Tasks", tasksWord(userOf(r), heldScopes(r)...))
-		// ?list=, ?lists=, ?mine=1: the tasks a view of that scope shows
-		// (queryScope), which is what a task list asks for; without, all.
+		// ?list=, ?lists=, ?mine=1, ?updates=1: the tasks a view of that
+		// scope shows (queryScope), which is what a task list asks for;
+		// without, all. Updates' are open and closed (viewTasks).
 		user := userOf(r)
 		tasks := taskFiles.Open(user)
 		if scope := queryScope(r); scope != "" {
-			open := tasks
-			tasks = scopedTasks(user, open, taskLists(user), scope)
-			if scope == mineScope {
-				tasks = withUpdates(user, tasks, open, recentUpdates(user)) // My tasks' Updates
-			}
+			tasks = viewTasks(user, tasks, taskLists(user), func() []*Task { return recentUpdates(user) }, scope)
 		}
 		// ?with=order: {tasks, order}, with the user's own order of My tasks
 		// (mineOrder), which that view lays over the lists' order.

@@ -480,7 +480,7 @@ class TestModuleMenu:
         make_list(client, "gifts", private=True, headers=HOST)
         nav = client.get("/tasks", headers=HOST).data.decode().split('<nav class="tasks-places"', 1)[1].split("</nav>", 1)[0]
         entries = dict(re.findall(r'data-place="([^"]+)"(.*?)</a>', nav, re.S))
-        assert list(entries) == ["mine", "inbox", "list:gifts", "list:shop"]   # My tasks, her Inbox; neither list pinned: under More
+        assert list(entries) == ["mine", "updates", "inbox", "list:gifts", "list:shop"]   # My tasks, Updates, her Inbox; neither list pinned: under More
         assert "tasks-place-lock" in entries["inbox"] and "only you see it" in entries["inbox"]   # her Inbox is hers alone
         assert "tasks-place-lock" in entries["list:gifts"] and "only you see it" in entries["list:gifts"]
         assert "tasks-place-lock" not in entries["list:shop"]

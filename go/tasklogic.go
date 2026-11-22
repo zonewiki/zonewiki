@@ -114,11 +114,14 @@ func heldScopes(r *http.Request) []string {
 }
 
 // queryScope: the scope a request names: ?mine=1 My tasks (mineScope),
-// ?list= one list (by its ref), ?lists= several ("|" between), as
-// scopeFilter takes them; "" for every task.
+// ?updates=1 Updates (updatesScope), ?list= one list (by its ref), ?lists=
+// several ("|" between), as scopeFilter takes them; "" for every task.
 func queryScope(r *http.Request) string {
 	if isTrue(r.URL.Query().Get("mine")) {
 		return mineScope
+	}
+	if isTrue(r.URL.Query().Get("updates")) {
+		return updatesScope
 	}
 	if s := strings.TrimSpace(r.URL.Query().Get("lists")); s != "" {
 		return strings.ToLower(s)
@@ -309,9 +312,9 @@ func newsIn(t *Task, history []HistoryEntry, user asker) News {
 // updatesFor: the tasks with news for user (newsFor): of the open tasks
 // they see, whatever list they are in, and of the closed ones of this month
 // and the last (a task they gave away that was done). What the Tasks links
-// count, and what My tasks shows under Updates.
+// count, and what Updates shows (/tasks?updates=1).
 func updatesFor(user asker, open, recentClosed []*Task) []*Task {
-	if user.Name == "" || settings().Users == nil {
+	if !hasUpdates(user) {
 		return nil
 	}
 	var out []*Task
@@ -326,27 +329,21 @@ func updatesFor(user asker, open, recentClosed []*Task) []*Task {
 // recentUpdates: the closed tasks of this month and the last that have news
 // for user (taskFiles.RecentClosed copies those alone).
 func recentUpdates(user asker) []*Task {
-	if user.Name == "" || settings().Users == nil {
+	if !hasUpdates(user) {
 		return nil
 	}
 	return taskFiles.RecentClosed(user, func(t *Task) bool { return newsFor(t, user).Kind != "" })
 }
 
-// withUpdates: tasks (those a view of My tasks holds) and, after them, the
-// tasks with news for user that aren't among them: what they gave away,
-// what mentions them, what was closed. My tasks shows those under Updates
-// alone.
-func withUpdates(user asker, tasks, open, recentClosed []*Task) []*Task {
-	have := make(map[string]bool, len(tasks))
-	for _, t := range tasks {
-		have[t.ID] = true
+// viewTasks: the tasks the views of scopes hold for user (scopedTasks of
+// the open ones), and with Updates among them the closed tasks with news
+// (recentClosed: asked for only then).
+func viewTasks(user asker, open []*Task, lists map[string]ListInfo, recentClosed func() []*Task, scopes ...string) []*Task {
+	tasks := scopedTasks(user, open, lists, scopes...)
+	if !slices.Contains(scopes, updatesScope) || !hasUpdates(user) {
+		return tasks
 	}
-	for _, t := range updatesFor(user, open, recentClosed) {
-		if !have[t.ID] {
-			tasks = append(tasks, t)
-		}
-	}
-	return tasks
+	return append(slices.Clone(tasks), recentClosed()...)
 }
 
 // mentionRE: @name in a text: a user's name after a space, a bracket or the

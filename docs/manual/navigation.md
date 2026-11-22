@@ -65,7 +65,7 @@ The bar hides while you type, since the keyboard needs the room.
 The **Tasks** pill (and the Tasks tab on a phone) shows how your tasks stand, so you see it from any page:
 
 - **A number** is how many tasks are due today or overdue.
-- **A dot**, in a wiki with users, means there is news on your tasks: one given to you, a comment, a mention ([News about your tasks](tasks.md#news-about-your-tasks)).
+- **A dot**, in a wiki with users, means there is news on your tasks: one given to you, a comment, a mention; **Updates** in Tasks lists them ([News about your tasks](tasks.md#news-about-your-tasks)).
 
 Point at the pill to read the details, such as "Tasks: 2 updates for you · 5 for today · 1 overdue · 1 due today".
 Nothing shows when there's nothing to say.

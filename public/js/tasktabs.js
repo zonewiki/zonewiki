@@ -65,7 +65,7 @@ function markActiveTab(view) {
 // Closed view. keepTab: only how the tab shown draws its tasks changes (the
 // grouping control).
 function switchTab(view, keepTab = false) {
-  if (!VIEWS.includes(view)) return;
+  if (app.initUpdates || !VIEWS.includes(view)) return;   // Updates has no tabs
   if (st.selectMode) app.exitSelectMode();
   if (view === 'focus') {
     st.today = true;

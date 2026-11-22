@@ -24,14 +24,14 @@ const TAB_SORT = {
 const ORDERED = { open: true, focus: true };
 
 // Every open task in the manual order, the ones the view or filter hides
-// too (not Updates' extras, which are in no order here): byOpenOrder, a task
-// not yet placed (no sort_order) on top, newest first.
+// too: byOpenOrder, a task not yet placed (no sort_order) on top, newest
+// first.
 function manualOrderIds() {
-  return [...st.tasks].filter(t => !t.closed_at && !t.extra).reverse().sort(byOpenOrder).map(t => t.id);
+  return [...st.tasks].filter(t => !t.closed_at).reverse().sort(byOpenOrder).map(t => t.id);
 }
-// The tasks the list shows, top to bottom (not Updates, which ranks nothing).
+// The tasks the list shows, top to bottom.
 function shownIds() {
-  return app.visibleItems().filter(el => !el.classList.contains('task-update')).map(el => el.dataset.id);
+  return app.visibleItems().map(el => el.dataset.id);
 }
 // Save the shown tasks `shown`, rearranged so that the tasks `moved` changed
 // place (TasksCore.placeInOrder: every other task keeps its place, hidden

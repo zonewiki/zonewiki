@@ -605,6 +605,11 @@ class TestTasksInView:
     def test_completed_shows_only_the_completed(self):
         assert self.ids("closed") == ["done"]
 
+    def test_updates_shows_every_task_it_holds_the_closed_too(self):
+        # Updates (a view of its own): what it holds is the news, whatever a task's dates or state.
+        assert self.ids("updates") == ["started", "later", "due", "plain", "done"]
+        assert self.ids("updates", "#work") == ["later", "due", "done"]
+
     def test_the_filter_takes_an_importance(self):
         tasks = [{"id": "a", "importance": "high"}, {"id": "b"}, {"id": "c", "importance": "low", "tags": ["work"]}]
         ids = lambda q: run_core(f"TasksCore.tasksInView({json.dumps(tasks)}, TasksCore.parseFilter({json.dumps(q)}), "
