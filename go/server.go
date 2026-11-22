@@ -50,6 +50,7 @@ Commands:
   health [ADDR]              whether a Zone running here answers (the container's healthcheck)
   manual DIR                 write the manual and the spec to DIR as HTML fragments, for a website
   licenses                   the licenses of what this binary holds (Zone's, Go's, the libraries')
+  version                    this binary's version and build (--version too)
   help                       this text; zonewiki COMMAND --help a command's
 
 Environment:
@@ -116,6 +117,9 @@ func main() {
 		case "help":
 			flag.CommandLine.SetOutput(os.Stdout)
 			printUsage()
+			os.Exit(0)
+		case "version", "--version", "-version":
+			fmt.Printf("Zone %s (%s)\n", version, buildOf(environ))
 			os.Exit(0)
 		case "eval":
 			os.Exit(evalMain(os.Args[2:], os.Stdout, os.Stderr))

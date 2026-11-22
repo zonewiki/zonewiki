@@ -130,14 +130,11 @@ func loadConfig(getenv func(string) string) (*Config, *Settings, error) {
 // loadWiki: the settings fixed for the process (Config), the wiki first.
 func loadWiki(getenv func(string) string) (*Config, error) {
 	c := &Config{
-		Build:       getenv("ZONE_BUILD"),
+		Build:       buildOf(getenv),
 		HostData:    strings.TrimRight(strings.TrimSpace(getenv("ZONE_HOST_DATA")), "/"),
 		AllowRemote: truthy(getenv("ZONE_ALLOW_REMOTE")),
 		Published:   published(getenv("ZONE_BIND")),
 		PortMapped:  strings.TrimSpace(getenv("ZONE_BIND")) != "",
-	}
-	if c.Build == "" {
-		c.Build = sourceBuild()
 	}
 	// A ZONE_DATA that is set must exist: Zone doesn't make a wiki where a
 	// mistyped one points. Unset, the wiki is ~/zonewiki, made if need be.
@@ -276,6 +273,15 @@ func published(bind string) bool {
 	}
 	addr, err := netip.ParseAddr(bind)
 	return err != nil || !addr.IsLoopback()
+}
+
+// buildOf: the build shown next to the version: ZONE_BUILD when the
+// environment names it (the container image), else what go build recorded.
+func buildOf(getenv func(string) string) string {
+	if build := getenv("ZONE_BUILD"); build != "" {
+		return build
+	}
+	return sourceBuild()
 }
 
 // sourceBuild is the build Zone runs from, as "<short hash> <commit date>"

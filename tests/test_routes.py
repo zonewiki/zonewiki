@@ -2797,7 +2797,7 @@ class TestUsage:
         r = self._run(arg)
         assert r.returncode == 0, r.stderr
         out = r.stdout + r.stderr
-        for word in ("Usage: zonewiki", "user COMMAND", "config COMMAND", "eval ", "health ", "licenses ",
+        for word in ("Usage: zonewiki", "user COMMAND", "config COMMAND", "eval ", "health ", "licenses ", "version ",
                      "ZONE_DATA", "ZONE_ALLOW_REMOTE", "ZONE_SEMANTIC_SEARCH",
                      "--addr ADDRESS", "--public FOLDER", "--docs FOLDER", "--semantic-test JSON",
                      "(default :5080)"):
@@ -2812,6 +2812,14 @@ class TestUsage:
         assert f"zonewiki {command}" in r.stdout + r.stderr
         assert "ZONE_DATA isn't set" not in r.stderr
         assert not re.search(r"^ +-[a-z]", r.stdout + r.stderr, re.M)
+
+    @pytest.mark.parametrize("arg", ["version", "--version", "-version"])
+    def test_version(self, arg):
+        # The version and the build, as the start-up line names them, without a wiki.
+        r = self._run(arg)
+        assert r.returncode == 0, r.stderr
+        assert re.fullmatch(r"Zone \d+\.\d+\.\d+ \(.+\)\n", r.stdout), r.stdout
+        assert r.stderr == ""
 
     def test_licenses(self):
         # The binary carries the licenses of what it holds, also when passed on alone.

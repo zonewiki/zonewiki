@@ -68,7 +68,7 @@ xattr -d com.apple.quarantine zonewiki
 If port 5080 is taken, Zone says so and stops.
 Start Zone on another port, `./zonewiki --addr :5081`, and open <http://localhost:5081>.
 
-`./zonewiki --help` lists its commands and settings.
+`./zonewiki --help` lists its commands and settings, `./zonewiki --version` says which version it is.
 The binary searches by keywords, not by meaning; how it is built is in [Release binaries](../spec/deployment.md#release-binaries).
 
 ## With Docker

@@ -254,6 +254,7 @@ It listens on localhost only: a port alone in `--addr` (`:5080`, the default; `:
 An address with a host is taken as written (`--addr 0.0.0.0:5080`), and asks for a login first, as `ZONE_ALLOW_REMOTE` does (First run in `docs/spec/security.md`).
 A port another program has stops Zone with what to do (`portTaken` in `go/server.go`): the default is not 5000, which a Mac's AirPlay Receiver and a Synology's DSM use, but another program may have 5080 too: `--addr :5081`.
 `zonewiki --help` lists the flags, the commands (`user`, `group`, `config`, `eval`, `health`, `manual`, `licenses`; each takes `--help` too) and the environment.
+`zonewiki version` (or `--version`) prints the version and the build, as the start-up line does (`Zone 0.5.0 (c28ec9e 2026-09-26 19:22)`), without a wiki.
 
 ### What the binary holds
 
@@ -684,6 +685,7 @@ Next to it the build is shown: the commit it was built from plus that commit's d
 | Every page's bottom-left corner | The version and short hash (`Zone 0.5.0 · c28ec9e`, `+dirty` when so) |
 | The `<meta name="generator">` tag | The version |
 | `/api/version` | `{ version, build }` |
+| `zonewiki version`, `--version` | Both, as the start-up line (`Zone 0.5.0 (c28ec9e 2026-09-26 19:22)`) |
 
 The corner shows the full build on hover (`.zone-build` in `layout.html`); it is faint, only from 1140px wide where the margin beside the text column has room, and not in the editor.
 
