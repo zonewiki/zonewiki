@@ -11,6 +11,10 @@ Any **AI assistant** that speaks MCP can [work with them](#connect-an-ai-assista
 It sees and changes only what you are allowed to, and you can review and undo every edit it makes.
 One binary, no database, no outside services: Zone sends nothing anywhere on its own.
 
+**[Try the demo](https://demo.zonewiki.org)**: sign in as `demo` with the password `zonewiki-demo`.
+It is one wiki that every visitor shares and that is put back every hour, so write nothing private there.
+You can connect your own AI assistant to it too: its home page says how.
+
 [![CI](https://github.com/zonewiki/zonewiki/actions/workflows/ci.yml/badge.svg)](https://github.com/zonewiki/zonewiki/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/zonewiki/zonewiki)](https://github.com/zonewiki/zonewiki/releases/latest)
 [![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-2f6f4f)](LICENSE)
@@ -79,6 +83,8 @@ Zone is the wrong tool, at least today, when you need:
 - something many organisations already run: Zone is an alpha by one developer.
 
 ## Quick start
+
+To look before you install anything, there is [the demo](https://demo.zonewiki.org) (`demo` / `zonewiki-demo`).
 
 Three ways to run Zone: the binary (the quickest), a container, or built from source.
 Whichever you pick, Zone is then at <http://localhost:5080>.
