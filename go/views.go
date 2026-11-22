@@ -400,6 +400,7 @@ type pageShell struct {
 	Dirty, AllowRemote bool
 	Locale, DateFormat string
 	SignOut            bool   // signed in, so Sign out is offered
+	Notice             string // the notice setting: a line at the top of every page, for everyone
 	ChangePassword     bool   // signed in, and the password is theirs to change (no shared account's)
 	SetLogin           string // the wiki asks for no login: where the menu's Set a login leads (setLoginHref)
 	User               string // who is signed in, with users
@@ -435,7 +436,7 @@ func page(w http.ResponseWriter, rq *Req, status int, name, title string, o shel
 		Locale: s.Locale, DateFormat: s.DateFormat,
 		// Only signed in: the login page has no one to sign out.
 		SignOut: s.authOn() && isSignedIn(rq.r), ChangePassword: s.authOn() && isSignedIn(rq.r) && !s.sharedAccount(rq.user.Name), SetLogin: setLoginHref(), User: rq.user.Name, Users: s.Users != nil, Admin: s.isAdmin(rq.user.Name),
-		Viewer: s.isViewer(rq.user.Name),
+		Viewer: s.isViewer(rq.user.Name), Notice: s.Notice,
 	}
 	if rq.user.Name == visitor {
 		// No name, nothing of users (private pages, assignees), nothing to

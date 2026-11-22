@@ -24,7 +24,7 @@
   <script type="module" src="/public/zonewiki.js"></script>
 </head>
 <body
-  {{- if .Shell.Editor}} class="editor-page"{{end}}
+  {{- if or .Shell.Editor .Shell.Notice}} class="{{if .Shell.Editor}}editor-page{{end}}{{if and .Shell.Editor .Shell.Notice}} {{end}}{{if .Shell.Notice}}has-notice{{end}}"{{end}}
   {{- if .Shell.Module}} data-module="{{.Shell.Module}}"{{end}}
   {{- /* How dates read and the week starts (locale, date-format in the
       settings file; tasks-core.js). */}}
@@ -38,6 +38,12 @@
   {{- if .Shell.Visitor}} data-visitor="1"{{end}}
   {{- if .Shell.Locale}} data-locale="{{.Shell.Locale}}"{{end}}
   {{- if .Shell.DateFormat}} data-date-format="{{.Shell.DateFormat}}"{{end}}>
+  {{- /* The notice setting (docs/spec/users.md): one line across the top of
+      every page, the login page and the editor too, for whoever looks;
+      the whole of it in the title where a phone cuts it short. */}}
+  {{- with .Shell.Notice}}
+  <div class="wiki-notice" role="note" title="{{.}}">{{.}}</div>
+  {{- end}}
   <dialog id="search-modal" class="search-modal">
     <div class="search-modal-controls">
       <input type="text" id="modal-filter" placeholder="Search pages…" autocomplete="off" spellcheck="false">

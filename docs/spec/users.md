@@ -86,12 +86,30 @@ Edit it by hand or with the commands (Commands, below); a running Zone takes eac
 | `trusted-proxies` | Reverse proxies whose `X-Forwarded-For` names the client, for the throttle on wrong passwords (`clientKey`, Throttling in `docs/spec/security.md`) | IP addresses or networks (`172.17.0.1, 10.0.0.0/8`); empty: none | loopback (`127.0.0.0/8, ::1`) |
 | `upload-max` | The biggest upload (`Settings.uploadMax`, Request bodies in `docs/spec/security.md`) | a size (`25MB`; Sizes, below) | 100 MB |
 | `external-content` | Hosts a page may load images, media and frames from (A page loads nothing from other hosts, `docs/spec/security.md`) | host names (`upload.wikimedia.org, *.example.org`); `*`: any | none: only Zone itself |
+| `notice` | A line across the top of every page, for everyone (The notice, below) | text, one line, at most 200 characters | none |
 | `no-login` | The wiki has no login on purpose, though other devices reach it, so Zone shows no first-run page (First run, `docs/spec/security.md`) | `yes`/`no` (as `query-log`) | no |
 | `mcp-oauth` | `no`: assistants connect with a static token only, not by signing in through the browser (Connecting with OAuth, `docs/spec/mcp.md`) | `yes`/`no` (as `query-log`) | yes, with a login |
 | `storage-max` | How much the wiki may hold: past it, nothing new is made (Storage limit, below) | a size (`5GB`) | no limit |
 | `signup-domains` | Sign-up takes only addresses at these domains (Sign-up, below) | domains, comma-separated (`example.org, example.net`), a leading `@` allowed | any address |
 | `signup-role` | The role an account made by sign-up gets | `viewer` or `editor` (never `admin`), any case | `viewer` |
 | `signup-approval` | An account made by sign-up can't sign in until an admin approves it | `yes`/`no` (as `query-log`) | no |
+
+### The notice
+
+`notice` puts one line of text across the top of every page of the wiki: the login page, the editor, Tasks and Notes too, for every user, a viewer and a public wiki's visitor alike.
+It is for what everyone should know now: "This demo is put back at every full hour", "Down for maintenance tonight at 22:00".
+
+```bash
+zonewiki config set notice This demo is put back at every full hour
+zonewiki config unset notice
+```
+
+It is plain text, escaped as any other (no link, no Markdown), one line of at most 200 characters (`noticeMax`), trimmed.
+It shows from the next request, as every key does (Reloading, below).
+The line is ink on paper turned round (`.wiki-notice`), fixed at the top; what else is fixed there (the badges, the editor) moves down by its height (`--notice-h`), so it covers nothing.
+On a narrow screen a long one is cut short with "…", the whole of it in its title; it isn't printed.
+It is in the layout (`pageShell.Notice`, `layout.html`), so every view has it and none can leave it out.
+Tests: `tests/test_notice.py`, `tests/e2e/test_notice.py`, `TestTheNotice` in `go/configfile_test.go`.
 
 ### A user's keys
 

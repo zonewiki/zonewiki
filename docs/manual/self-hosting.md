@@ -224,6 +224,7 @@ A running Zone then keeps the settings it had and says so in its log; a Zone sta
 | `storage-max` | `.zone/config` | How much the wiki may hold (default: no limit) |
 | `external-content` | `.zone/config` | Sites pages may show images and frames from: `upload.wikimedia.org` |
 | `trusted-proxies` | `.zone/config` | A reverse proxy's address, when it isn't on the same machine |
+| `notice` | `.zone/config` | A line across the top of every page, for everyone: `Down for maintenance tonight at 22:00` ([The notice](../spec/users.md#the-notice)) |
 
 Every environment setting is in `.env.example` with a comment (`ZONE_PORT` is the compose file's alone).
 Every `.zone/config` key is in [The wiki's keys](../spec/users.md#the-wikis-keys).

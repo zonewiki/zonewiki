@@ -1841,9 +1841,21 @@ kbd {
   .users-table td { border: none; padding: .2rem 0; }
 }
 
+/* The notice setting's line (layout.html): fixed across the top, and what
+   is fixed at the top (the badges, the editor) moves down by its height. */
+body { --notice-h: 0px; }
+body.has-notice { --notice-h: 2rem; padding-top: var(--notice-h); }
+.wiki-notice {
+  position: fixed; inset: 0 0 auto; z-index: 300; height: var(--notice-h);
+  padding: 0 1rem; line-height: var(--notice-h); text-align: center;
+  background: var(--fg); color: var(--bg); font-size: .85rem;   /* ink on paper, turned round: plain in both schemes */
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+@media print { .wiki-notice { display: none; } body.has-notice { padding-top: 0; } }
+
 .top-badges {
   position: fixed;
-  top: .6rem;
+  top: calc(.6rem + var(--notice-h));
   left: .6rem;
   z-index: 200;
   display: flex;
@@ -1857,7 +1869,7 @@ kbd {
 @media (min-width: 641px) {
   body.editor-page .top-badges { left: auto; right: .6rem; }
   body.editor-page:has(.remote-badge) .top-badges { right: 2.4rem; }
-  body.editor-page .remote-badge { position: fixed; top: .6rem; right: .6rem; z-index: 200; line-height: 24px; }
+  body.editor-page .remote-badge { position: fixed; top: calc(.6rem + var(--notice-h)); right: .6rem; z-index: 200; line-height: 24px; }
   /* 🌐 left of the module switcher, in the margin outside the content's
      edge, on the row's centre line. */
   body:not(.editor-page) main > .remote-badge {
@@ -1961,7 +1973,7 @@ body.editor-page main {
 .editor-wrap {
   display: flex;
   position: fixed;
-  inset: 0;
+  inset: var(--notice-h) 0 0;
   justify-content: center;
 }
 

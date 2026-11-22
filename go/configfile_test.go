@@ -859,6 +859,30 @@ func TestUserLinks(t *testing.T) {
 	}
 }
 
+// notice: a line every page shows; one line, trimmed, at most noticeMax
+// characters (not bytes), and a change of it named so.
+func TestTheNotice(t *testing.T) {
+	s, err := loadSettings(mustParse(t, "notice =   Put back at every full hour  \n"))
+	if err != nil || s.Notice != "Put back at every full hour" {
+		t.Fatalf("%q, %v", s.Notice, err)
+	}
+	none, _ := loadSettings(mustParse(t, ""))
+	if none.Notice != "" {
+		t.Errorf("none: %q", none.Notice)
+	}
+	if got := settingsChange(none, s); got != "Change settings: notice" {
+		t.Errorf("change: %q", got)
+	}
+	long := strings.Repeat("ä", noticeMax)
+	if s, err := loadSettings(mustParse(t, "notice = "+long+"\n")); err != nil || s.Notice != long {
+		t.Errorf("%d characters, more bytes: %v", noticeMax, err)
+	}
+	_, err = loadSettings(mustParse(t, "\nnotice = "+long+"x\n"))
+	if err == nil || !strings.Contains(err.Error(), "line 2: notice = … is 201 characters: a notice is one line of at most 200") {
+		t.Errorf("too long: %v", err)
+	}
+}
+
 func TestRolesInTheFile(t *testing.T) {
 	hash := hashPassword("p")
 	f, err := parseConfig("[user a]\npassword = " + hash + "\nrole = Admin\n\n[user b]\npassword = " + hash +

@@ -33,11 +33,16 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 	"zonewiki/internal/settingsfile"
 )
 
 // configName(): the file as messages name it, relative to the wiki.
 func configName() string { return stateDirName + "/config" }
+
+// noticeMax: the longest notice, in characters: it is one line at the top of
+// every page, cut short on a phone (the whole of it in its title).
+const noticeMax = 200
 
 func configPath() string { return statePath("config") }
 
@@ -45,7 +50,7 @@ func configPath() string { return statePath("config") }
 // config check` shows them.
 var configKeys = []string{"password", "mcp-token", "hosts", "base-url", "git-remote", "noshare", "locale",
 	"date-format", "query-log", "semantic-min-score", "trusted-proxies", "upload-max", "storage-max",
-	"external-content", "no-login", "mcp-oauth", "signup-domains", "signup-role", "signup-approval"}
+	"external-content", "notice", "no-login", "mcp-oauth", "signup-domains", "signup-role", "signup-approval"}
 
 // userKeys: the keys of a [user …] section.
 var userKeys = []string{"password", "mcp-token", "role", "disabled", "email", "pending", "groups", "shared"}
@@ -121,6 +126,7 @@ type Settings struct {
 	UploadMax        int64          // the biggest upload in bytes; 0: 100 MB (uploadMax)
 	StorageMax       int64          // what the wiki may hold in bytes (storage.go); 0: no limit
 	External         []string       // the hosts pages may load images, media and frames from (security.go: externalRE); "*": any
+	Notice           string         // a line every page shows at the top, for everyone (layout.html); "": none
 	NoLogin          bool           // no login on purpose, though other devices reach Zone: no first-run page (setup.go)
 	SignupDomains    []string       // the mail domains sign-up takes (signup.go), lowercase; none: any
 	SignupRole       string         // the role an account made by sign-up gets: roleViewer (default) or roleEditor
@@ -216,6 +222,10 @@ func loadSettings(f *settingsfile.File) (*Settings, error) {
 	locale, where, _ := get("locale")
 	if s.Locale = locale; s.Locale != "" && !localeRE.MatchString(s.Locale) {
 		return nil, fmt.Errorf("%s%s isn't a locale. Use a tag like de-AT or en-GB.", where, s.Locale)
+	}
+	notice, where, _ := get("notice")
+	if s.Notice = strings.TrimSpace(notice); utf8.RuneCountInString(s.Notice) > noticeMax {
+		return nil, fmt.Errorf("%s… is %d characters: a notice is one line of at most %d.", where, utf8.RuneCountInString(s.Notice), noticeMax)
 	}
 	dateFormat, where, _ := get("date-format")
 	if s.DateFormat = strings.ToLower(dateFormat); s.DateFormat != "" && s.DateFormat != "iso" {
@@ -755,6 +765,7 @@ func settingsChange(old, s *Settings) string {
 		{"trusted-proxies", !slices.Equal(old.TrustedProxies, s.TrustedProxies)},
 		{"upload-max", old.UploadMax != s.UploadMax}, {"storage-max", old.StorageMax != s.StorageMax},
 		{"external-content", !slices.Equal(old.External, s.External)},
+		{"notice", old.Notice != s.Notice},
 		{"no-login", old.NoLogin != s.NoLogin},
 		{"signup-domains", !slices.Equal(old.SignupDomains, s.SignupDomains)},
 		{"signup-role", old.SignupRole != s.SignupRole}, {"signup-approval", old.SignupApproval != s.SignupApproval},

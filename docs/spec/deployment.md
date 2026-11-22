@@ -171,7 +171,7 @@ With rootless podman, keep-id (`compose.podman.yaml`) runs Zone as the host user
 ### .zone/config
 
 The wiki's own settings and its users
-(a password, MCP tokens, `hosts`, `base-url`, `git-remote`, `noshare`, `locale`, `date-format`, `query-log`, `semantic-min-score`, `trusted-proxies`, `upload-max`, `storage-max`, `external-content`, `no-login`, `mcp-oauth`, `signup-domains`, `signup-role`, `signup-approval`),
+(a password, MCP tokens, `hosts`, `base-url`, `git-remote`, `noshare`, `locale`, `date-format`, `query-log`, `semantic-min-score`, `trusted-proxies`, `upload-max`, `storage-max`, `external-content`, `notice`, `no-login`, `mcp-oauth`, `signup-domains`, `signup-role`, `signup-approval`),
 in the wiki,
 kept out of git (it holds the users: back it up with the data folder),
 reloaded when it changes,
