@@ -218,7 +218,7 @@ and where what it makes lands (`binaries`: the `dist/` folder by its full path; 
 - `leaks`: extra args go to `gitleaks git`; a leak exits with 3.
 - `screenshots`: `docs/screenshots/*.png`, compressed with pngquant (the README shows phone.png at 640px).
 - `eval`: see Measuring retrieval in `docs/spec/search.md`; with semantic search as `ZONE_SEMANTIC_SEARCH` says.
-- `user`: `user add|passwd|token|role|email|group|disable|enable|invite|reset|remove NAME`, `user list`, in a one-off container (compose run; see `docs/spec/users.md`); in a checkout the image is built first, quietly.
+- `user`: `user add|passwd|token|role|email|group|disable|enable|shared|invite|reset|remove NAME`, `user list`, in a one-off container (compose run; see `docs/spec/users.md`); in a checkout the image is built first, quietly.
 - `group`: `group includes NAME [+G] [-G]`, `group owners NAME [+U] [-U]`, `group list`.
 - `config`: `config check|set|unset|passwd|token`: check it, set a key, the password and MCP token without users.
 

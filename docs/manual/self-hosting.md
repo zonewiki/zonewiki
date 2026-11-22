@@ -397,6 +397,7 @@ The version is shown in the shortcuts list (press `?`).
 | `./run.sh user email NAME ADDRESS` | A user's mail address |
 | `./run.sh user group NAME +dev -design` | Put a user in a group, or take them out |
 | `./run.sh user disable NAME` | They can't sign in; `user enable NAME` undoes it |
+| `./run.sh user shared NAME` | Several people sign in to this account: its password and token can't be changed in the browser |
 | `./run.sh user remove NAME` | Remove a user; their private pages stay on disk |
 | `./run.sh user list` | The users, their roles and who has a token |
 | `./run.sh group list` | The groups and who is in each |

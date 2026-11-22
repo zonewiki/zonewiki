@@ -36,6 +36,8 @@ An assistant you connected stays connected; you end that on **Connect an assista
 
 Forgot your password? Zone doesn't mail one: ask an admin for a reset link ([Reset links](#reset-links)).
 
+An account several people share (a demo's) has no **Change password**: see [A shared account](#a-shared-account).
+
 ## Where a page lives decides who sees it
 
 In Zone the folder a page is in is the only thing that decides who sees it.
@@ -276,6 +278,18 @@ Their open invite or reset link goes too.
 
 Tasks still assigned to a disabled user or a viewer show under their status as "2 open tasks to hand on", linked to the list where you select them and **Assign…** them to someone else.
 
+### A shared account
+
+For a demo, or a screen in the office, several people sign in to one account with one password.
+Mark it with `./run.sh user shared NAME`, so that none of them locks the others out:
+**Change password** is gone from its menu, and **Connect an assistant** offers no token to make or revoke.
+You set its password and token with `./run.sh user passwd NAME` and `./run.sh user token NAME`.
+
+Each assistant that signs in through the browser is still a connection of its own.
+A shared account can be an editor or a viewer, never an admin, and the **Users** tab marks it **shared**.
+`./run.sh user shared NAME --remove` makes it one person's account again.
+The full rules: [Shared accounts](../spec/users.md#shared-accounts).
+
 ### Mail addresses
 
 A user's mail address is used for task mails and to tell sign-ups apart.
@@ -308,6 +322,7 @@ Use `./run.sh user …` in the repository, or `zonewiki user …` without the co
 | `./run.sh group includes product +dev +design` | makes a group of groups |
 | `./run.sh group owners q3-plan +anna` | gives a group an owner |
 | `./run.sh user disable ben` | disables them (`user enable` undoes it) |
+| `./run.sh user shared demo` | marks an account several people sign in to (`--remove` undoes it) |
 | `./run.sh user remove ben` | removes them; their private files stay |
 | `./run.sh user list` | lists users, roles and who is disabled |
 

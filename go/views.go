@@ -400,6 +400,7 @@ type pageShell struct {
 	Dirty, AllowRemote bool
 	Locale, DateFormat string
 	SignOut            bool   // signed in, so Sign out is offered
+	ChangePassword     bool   // signed in, and the password is theirs to change (no shared account's)
 	SetLogin           string // the wiki asks for no login: where the menu's Set a login leads (setLoginHref)
 	User               string // who is signed in, with users
 	Admin              bool   // they are an admin: the user menu offers Admin
@@ -433,7 +434,7 @@ func page(w http.ResponseWriter, rq *Req, status int, name, title string, o shel
 		AppName: appName, Version: version, Build: cfg.Build, SourceURL: sourceURL, AllowRemote: cfg.AllowRemote,
 		Locale: s.Locale, DateFormat: s.DateFormat,
 		// Only signed in: the login page has no one to sign out.
-		SignOut: s.authOn() && isSignedIn(rq.r), SetLogin: setLoginHref(), User: rq.user.Name, Users: s.Users != nil, Admin: s.isAdmin(rq.user.Name),
+		SignOut: s.authOn() && isSignedIn(rq.r), ChangePassword: s.authOn() && isSignedIn(rq.r) && !s.sharedAccount(rq.user.Name), SetLogin: setLoginHref(), User: rq.user.Name, Users: s.Users != nil, Admin: s.isAdmin(rq.user.Name),
 		Viewer: s.isViewer(rq.user.Name),
 	}
 	if rq.user.Name == visitor {

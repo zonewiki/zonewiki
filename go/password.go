@@ -24,23 +24,31 @@ type passwordView struct {
 	view
 	BreadcrumbHTML template.HTML
 	User           string // whose password it is; "": the wiki's (no users)
+	Shared         bool   // a shared account's: not changed here (sharedAccount)
 	Done           bool   // it was just changed
 	Error          string // why it wasn't
 }
 
 // passwordOwner: whose password the request's is about, as the latest
 // settings have them: the user signed in, or with no users the wiki ("").
-// ok false: there is no login, or the user is no longer there.
-func passwordOwner(r *http.Request) (name, hash string, ok bool) {
+// ok false: there is no login, or the user is no longer there. shared: an
+// account several people sign in to, whose password isn't changed here.
+func passwordOwner(r *http.Request) (name, hash string, shared, ok bool) {
 	s := latestSettings()
 	if s.Users == nil {
-		return "", s.PasswordHash, s.authOn()
+		return "", s.PasswordHash, false, s.authOn()
 	}
 	u := s.Users[userOf(r).Name]
 	if u == nil {
-		return "", "", false
+		return "", "", false, false
 	}
-	return u.Name, u.PasswordHash, true
+	return u.Name, u.PasswordHash, u.Shared, true
+}
+
+// sharedPasswordMsg: why a shared account's password isn't changed in the
+// browser.
+func sharedPasswordMsg(name string) string {
+	return name + " is an account several people sign in to: its password is set by whoever runs this wiki, not here."
 }
 
 func showPassword(w http.ResponseWriter, r *http.Request, status int, v *passwordView) {
@@ -55,12 +63,12 @@ func showPassword(w http.ResponseWriter, r *http.Request, status int, v *passwor
 // passwordPage: GET /password. ?done says it was changed (a link can make
 // the page say only that).
 func passwordPage(w http.ResponseWriter, r *http.Request) {
-	name, _, ok := passwordOwner(r)
+	name, _, shared, ok := passwordOwner(r)
 	if !ok {
 		http.NotFound(w, r)
 		return
 	}
-	showPassword(w, r, http.StatusOK, &passwordView{User: name, Done: r.URL.Query().Has("done")})
+	showPassword(w, r, http.StatusOK, &passwordView{User: name, Shared: shared, Done: !shared && r.URL.Query().Has("done")})
 }
 
 // passwordRoute: POST /password: the password they have (current), the new
@@ -68,12 +76,19 @@ func passwordPage(w http.ResponseWriter, r *http.Request) {
 // client like a wrong login, so the page guesses a password no faster than
 // the login page does.
 func passwordRoute(w http.ResponseWriter, r *http.Request) {
-	name, old, ok := passwordOwner(r)
+	name, old, shared, ok := passwordOwner(r)
 	if !ok {
 		http.NotFound(w, r)
 		return
 	}
-	v := &passwordView{User: name}
+	v := &passwordView{User: name, Shared: shared}
+	if shared {
+		// Before the password is looked at: nothing here tells a guess
+		// from the right one, and nothing counts against the client.
+		v.Error = sharedPasswordMsg(name)
+		showPassword(w, r, http.StatusForbidden, v)
+		return
+	}
 	right, wait := loginThrottle.try(clientKey(r), name, func() bool {
 		return checkPassword(r.PostFormValue("current"), old)
 	})
@@ -102,6 +117,8 @@ func passwordRoute(w http.ResponseWriter, r *http.Request) {
 			return errors.New("there is no user " + name + " any more.")
 		case name == "" && len(f.Users) > 0:
 			return errors.New("this wiki has users now: sign in again.")
+		case name != "" && truthy(f.User(name).Values["shared"].Value):
+			return errors.New(sharedPasswordMsg(name)) // made shared meanwhile
 		}
 		f.Set(name, "password", hash)
 		return nil

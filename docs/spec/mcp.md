@@ -42,6 +42,7 @@ The page says where a client connects (`/mcp` on `base-url`, else on the address
 It works without JavaScript.
 What is to be copied (the address at the top, a new token, the commands) is a line of its own with a **Copy** button (`.copy-line`, `js/copyline.js`; without JavaScript there is no button, and a click selects the line).
 The token's two actions are a row each: what there is ("Set" or "None") with Make a token, and Revoke.
+A shared account has neither: its token is set on the host, and the row says so (Shared accounts in `docs/spec/users.md`).
 
 #### Make a token
 

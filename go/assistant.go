@@ -35,6 +35,7 @@ type assistantView struct {
 	URL            string // /mcp's address, as a client is given it
 	User           string // whose token it is; "": the wiki's (no users)
 	Has            bool   // a token is set
+	Shared         bool   // a shared account's token: not made or revoked here (sharedAccount)
 	AskPassword    bool   // making one asks for the password (there is a login)
 	Viewer         bool   // their assistant reads, and changes nothing
 	Token          string // a token just made, shown once
@@ -78,6 +79,7 @@ func tokenOwner(r *http.Request) (s *Settings, name, kept string, ok bool) {
 func assistantData(r *http.Request) *assistantView {
 	s, name, kept, _ := tokenOwner(r)
 	v := &assistantView{URL: siteURL(s.BaseURL, r, "/mcp"), User: name, Has: kept != "",
+		Shared:      s.sharedAccount(name),
 		AskPassword: s.authOn(), Viewer: s.isViewer(name), OAuth: oauthOn(s), Connections: grantsOf(name),
 		BreadcrumbHTML: breadcrumb(newReq(r), []crumb{{"Assistant", ""}}, "", false, "", "")}
 	for i := range v.Connections {
@@ -138,9 +140,30 @@ func passwordAgain(r *http.Request, s *Settings, name string) (right bool, wait 
 	})
 }
 
+// sharedTokenMsg: why a shared account's token isn't made or revoked in
+// the browser.
+func sharedTokenMsg(name string) string {
+	return name + " is an account several people sign in to: its token is set by whoever runs this wiki, not here."
+}
+
+// refusedShared answers a change to a shared account's token (403, the
+// page saying why), before any password is looked at; false: not shared.
+func refusedShared(w http.ResponseWriter, r *http.Request, s *Settings, name string) bool {
+	if !s.sharedAccount(name) {
+		return false
+	}
+	v := assistantData(r)
+	v.Error = sharedTokenMsg(name)
+	showAssistant(w, r, http.StatusForbidden, v)
+	return true
+}
+
 // setToken writes the owner's token (hash; "": none) to the settings file.
 func setToken(r *http.Request, name, hash string) error {
 	return changeSettings(userOf(r).Name, func(f *settingsfile.File) error {
+		if name != "" && f.User(name) != nil && truthy(f.User(name).Values["shared"].Value) {
+			return errors.New(sharedTokenMsg(name)) // made shared meanwhile
+		}
 		if hash == "" {
 			f.Unset(name, "mcp-token")
 		} else {
@@ -158,6 +181,9 @@ func assistantTokenRoute(w http.ResponseWriter, r *http.Request) {
 	s, name, _, ok := tokenOwner(r)
 	if !ok {
 		http.NotFound(w, r)
+		return
+	}
+	if refusedShared(w, r, s, name) {
 		return
 	}
 	if s.authOn() {
@@ -187,9 +213,12 @@ func assistantTokenRoute(w http.ResponseWriter, r *http.Request) {
 // assistantRevokeRoute: POST /assistant/revoke takes the token away. No
 // password: it only ends access.
 func assistantRevokeRoute(w http.ResponseWriter, r *http.Request) {
-	_, name, _, ok := tokenOwner(r)
+	s, name, _, ok := tokenOwner(r)
 	if !ok {
 		http.NotFound(w, r)
+		return
+	}
+	if refusedShared(w, r, s, name) {
 		return
 	}
 	if err := setToken(r, name, ""); err != nil {

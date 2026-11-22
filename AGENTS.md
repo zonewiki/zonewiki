@@ -134,7 +134,7 @@ It lives in the host directory pointed to by `ZONE_DATA` (default: `~/zonewiki`)
 ./run.sh leaks      # scan the git history for secrets (gitleaks, in the tools image)
 ./run.sh screenshots  # redo the README's screenshots from a sample wiki
 ./run.sh eval [FILE]  # measure retrieval on your wiki (questions in FILE, default _eval/retrieval.json in the wiki)
-./run.sh user add|passwd|token|role|email|group|disable|enable|invite|reset|remove NAME, user list  # the users in the wiki's settings file (.zone/config)
+./run.sh user add|passwd|token|role|email|group|disable|enable|shared|invite|reset|remove NAME, user list  # the users in the wiki's settings file (.zone/config)
 ./run.sh group includes NAME [+G] [-G], group owners NAME [+U] [-U], group list  # groups made of groups and a group's owners ([group NAME] in the settings file)
 ./run.sh config check|set|unset|passwd|token  # the wiki's settings file: check it, set a key, password and MCP token without users
 ```

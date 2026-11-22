@@ -202,3 +202,42 @@ class TestWithoutUsers:
 
     def test_the_help_dialog_links_to_it(self, client):
         assert '<a href="/assistant">Connect an AI assistant</a>' in client.get("/page/index", headers=HOST).data.decode()
+
+
+class TestASharedAccount:
+    """An account several people sign in to (shared = yes): none of them
+    makes or revokes its token, which would end the others' assistants."""
+
+    @pytest.fixture()
+    def demo(self, client, monkeypatch):
+        monkeypatch.setattr(settings, "USERS", {**USERS, "demo": ("demo-pw", "demo-token")})
+        monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"role": "admin"}, "demo": {"shared": "yes"}})
+        client.post("/logout", headers=HOST)
+        assert client.post("/login", data={"username": "demo", "password": "demo-pw"}, headers=HOST).status_code == 302
+        return client
+
+    def test_the_page_offers_no_token_form(self, demo):
+        body = demo.get("/assistant", headers=HOST).data.decode()
+        assert "<h1>Connect an assistant</h1>" in body and "You have a token" in body
+        assert 'action="/assistant/token"' not in body and 'action="/assistant/revoke"' not in body
+        assert "its token is set by whoever runs this wiki, not here" in body
+
+    def test_no_token_is_made_even_with_the_password(self, demo, wiki_dir):
+        before = section(wiki_dir, "demo")
+        resp, token = make(demo, "demo-pw")
+        assert resp.status_code == 403 and token is None
+        assert "demo is an account several people sign in to: its token is set by whoever runs this wiki" in resp.data.decode()
+        assert section(wiki_dir, "demo") == before
+        assert mcp(demo, "demo-token")[0] == 200       # the one from the host goes on
+
+    def test_the_token_is_not_revoked(self, demo, wiki_dir):
+        resp = demo.post("/assistant/revoke", headers=HOST)
+        assert resp.status_code == 403
+        assert kept("demo-token") in section(wiki_dir, "demo")
+        assert mcp(demo, "demo-token")[0] == 200
+
+    def test_a_wrong_password_is_not_counted(self, demo):
+        for _ in range(12):
+            assert make(demo, "wrong")[0].status_code == 403
+        demo.post("/logout", headers=HOST)
+        assert demo.post("/login", data={"username": "demo", "password": "demo-pw"}, headers=HOST).status_code == 302

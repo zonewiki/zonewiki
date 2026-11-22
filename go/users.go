@@ -34,6 +34,7 @@ type User struct {
 	Role                         string   // roleAdmin, roleEditor or roleViewer
 	Disabled                     bool     // can't sign in; sessions and token refused
 	Pending                      bool     // made by sign-up, waiting for an admin's approval (Disabled too)
+	Shared                       bool     // several people sign in as them: password and token are the host's to set (sharedAccount)
 	Email                        string   // their mail address, lowercase; "": none known
 	Groups                       []string // the groups their section names (groups = dev, hiring), A–Z
 	// In: every group they are in, A–Z: those their section names, and the
@@ -235,6 +236,16 @@ func (s *Settings) isViewer(name string) bool {
 	}
 	u := s.Users[name]
 	return u != nil && u.Role == roleViewer
+}
+
+// sharedAccount: name is an account several people sign in to (shared =
+// yes in their section, docs/spec/users.md): whoever knows its password is
+// many people, so its password and its MCP token are set on the host
+// (zonewiki user passwd, token), never in the browser, where any one of
+// them would lock the others out.
+func (s *Settings) sharedAccount(name string) bool {
+	u := s.Users[name]
+	return u != nil && u.Shared
 }
 
 // reservedNames: what no user is called: where a task's assignee is named,

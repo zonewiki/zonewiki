@@ -48,7 +48,7 @@ var configKeys = []string{"password", "mcp-token", "hosts", "base-url", "git-rem
 	"external-content", "no-login", "mcp-oauth", "signup-domains", "signup-role", "signup-approval"}
 
 // userKeys: the keys of a [user …] section.
-var userKeys = []string{"password", "mcp-token", "role", "disabled", "email", "pending", "groups"}
+var userKeys = []string{"password", "mcp-token", "role", "disabled", "email", "pending", "groups", "shared"}
 
 func knownKey(key string) bool { return slices.Contains(configKeys, key) }
 
@@ -340,6 +340,15 @@ func fileUsers(f *settingsfile.File) (map[string]*User, error) {
 		if !slices.Contains([]string{"", "0", "false", "no", "1", "true", "yes"}, strings.ToLower(pending.Value)) {
 			return nil, lineError(pending.Line, "%s's pending = %s isn't yes or no.", u.Name, pending.Value)
 		}
+		shared := u.Values["shared"]
+		if !slices.Contains([]string{"", "0", "false", "no", "1", "true", "yes"}, strings.ToLower(shared.Value)) {
+			return nil, lineError(shared.Line, "%s's shared = %s isn't yes or no.", u.Name, shared.Value)
+		}
+		// Whoever knows a shared account's password is many people: none
+		// of them administers the wiki.
+		if truthy(shared.Value) && role == roleAdmin {
+			return nil, lineError(shared.Line, "%s is shared and an admin: an account several people sign in to can't be an admin.", u.Name)
+		}
 		email := u.Values["email"]
 		if email.Value != "" && !validEmail(email.Value) {
 			return nil, lineError(email.Line, "%s's email %s isn't a mail address.", u.Name, email.Value)
@@ -352,7 +361,7 @@ func fileUsers(f *settingsfile.File) (map[string]*User, error) {
 		// keeps a disabled user out keeps them out.
 		users[u.Name] = &User{Name: u.Name, PasswordHash: hash.Value, MCPToken: token.Value, Role: role,
 			Disabled: truthy(disabled.Value) || truthy(pending.Value), Pending: truthy(pending.Value),
-			Email: strings.ToLower(email.Value), Groups: groups}
+			Email: strings.ToLower(email.Value), Groups: groups, Shared: truthy(shared.Value)}
 	}
 	return users, nil
 }
@@ -688,6 +697,13 @@ func settingsChange(old, s *Settings) string {
 		}
 		if was != nil && !slices.Equal(was.Groups, now.Groups) {
 			changes = append(changes, name+"'s groups")
+		}
+		if was != nil && was.Shared != now.Shared {
+			if now.Shared {
+				changes = append(changes, name+" is shared")
+			} else {
+				changes = append(changes, name+" is no longer shared")
+			}
 		}
 		if was != nil && was.Disabled != now.Disabled {
 			switch {

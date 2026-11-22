@@ -472,7 +472,7 @@ case "${1:-up}" in
     echo "  down   - stop Zone"
     echo "  logs   - follow container logs"
     echo "  update - pull the newest code (checkout) or prebuilt image, and start Zone again"
-    echo "  user add|passwd|token|role|email|group|disable|enable|invite|reset|remove NAME, user list - the users in the wiki's settings file"
+    echo "  user add|passwd|token|role|email|group|disable|enable|shared|invite|reset|remove NAME, user list - the users in the wiki's settings file"
     echo "  group includes NAME [+G] [-G], group owners NAME [+U] [-U], group list - groups made of groups and a group's owners, in the wiki's settings file"
     echo "  config check|set|unset|passwd|token - the wiki's settings file: check it, set a key, the password"
     echo "                and MCP token without users"

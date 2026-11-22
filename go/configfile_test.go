@@ -522,6 +522,26 @@ func TestUserRoles(t *testing.T) {
 	if code, _, _ := run("", "enable", "bob"); code != 0 || users()["bob"].Disabled || strings.Contains(readFile(t, path), "disabled") {
 		t.Error("enable")
 	}
+	// shared: an account several people sign in to; no admin is one.
+	if code, out, _ := run("", "shared", "bob"); code != 0 || !users()["bob"].Shared || !strings.Contains(out, "shared bob --remove") ||
+		!strings.Contains(readFile(t, path), "shared = yes") {
+		t.Errorf("shared: %d %q", code, out)
+	}
+	if code, out, _ := run("", "list"); code != 0 || out != "  alice (admin)\n  bob (shared)\n  carol (viewer)\n" {
+		t.Errorf("list, shared: %q", out)
+	}
+	if code, _, errs := run("", "role", "bob", "admin"); code == 0 || !strings.Contains(errs, "bob is shared and an admin") ||
+		users()["bob"].Role != roleEditor {
+		t.Errorf("a shared admin: %d %q", code, errs)
+	}
+	if code, _, errs := run("", "shared", "alice"); code == 0 || !strings.Contains(errs, "alice is shared and an admin") ||
+		users()["alice"].Shared {
+		t.Errorf("an admin shared: %d %q", code, errs)
+	}
+	if code, out, _ := run("", "shared", "bob", "--remove"); code != 0 || users()["bob"].Shared ||
+		strings.Contains(readFile(t, path), "shared") || !strings.Contains(out, "one person's account again") {
+		t.Errorf("shared --remove: %d %q", code, out)
+	}
 	// Groups: who belongs together, said on the users.
 	if code, out, _ := run("", "group", "bob", "+Hiring", "+dev"); code != 0 || out != "bob is in: dev, hiring.\n" ||
 		!slices.Equal(users()["bob"].Groups, []string{"dev", "hiring"}) || !strings.Contains(readFile(t, path), "groups = dev, hiring") {
@@ -855,8 +875,10 @@ func TestRolesInTheFile(t *testing.T) {
 		t.Errorf("%+v %+v %+v", s.Users["a"], s.Users["b"], s.Users["c"])
 	}
 	for text, want := range map[string]string{
-		"[user a]\npassword = " + hash + "\nrole = boss\n":      "line 3: a's role boss isn't one",
-		"[user a]\npassword = " + hash + "\ndisabled = maybe\n": "line 3: a's disabled = maybe isn't yes or no",
+		"[user a]\npassword = " + hash + "\nrole = boss\n":                                                                   "line 3: a's role boss isn't one",
+		"[user a]\npassword = " + hash + "\ndisabled = maybe\n":                                                              "line 3: a's disabled = maybe isn't yes or no",
+		"[user a]\npassword = " + hash + "\nshared = maybe\n":                                                                "line 3: a's shared = maybe isn't yes or no",
+		"[user a]\npassword = " + hash + "\nrole = admin\n\n[user d]\npassword = " + hash + "\nrole = admin\nshared = yes\n": "line 8: d is shared and an admin",
 		"role = admin\n": `"role" isn't a setting Zone knows`,
 	} {
 		f, err := parseConfig(text)
@@ -875,6 +897,18 @@ func TestRolesInTheFile(t *testing.T) {
 	}
 	if got := settingsChange(old, now); got != "Change settings: disable a" {
 		t.Errorf("change: %q", got)
+	}
+	// A shared account: said in the file, and in what a change is called.
+	one, _ := loadSettings(mustParse(t, "[user a]\npassword = "+hash+"\nrole = admin\n\n[user d]\npassword = "+hash+"\n"))
+	many, _ := loadSettings(mustParse(t, "[user a]\npassword = "+hash+"\nrole = admin\n\n[user d]\npassword = "+hash+"\nshared = Yes\n"))
+	if one.sharedAccount("d") || !many.sharedAccount("d") || many.sharedAccount("a") || many.sharedAccount("nobody") {
+		t.Error("sharedAccount")
+	}
+	if got := settingsChange(one, many); got != "Change settings: d is shared" {
+		t.Errorf("change to shared: %q", got)
+	}
+	if got := settingsChange(many, one); got != "Change settings: d is no longer shared" {
+		t.Errorf("change from shared: %q", got)
 	}
 }
 

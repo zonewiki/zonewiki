@@ -173,3 +173,50 @@ class TestWithoutUsers:
         assert client.get("/password", headers=HOST).status_code == 404
         assert change(client, "").status_code == 404
         assert 'href="/password"' not in client.get("/page/index", headers=HOST).data.decode()
+
+
+class TestASharedAccount:
+    """An account several people sign in to (shared = yes): none of them
+    changes its password, or the others are locked out."""
+
+    @pytest.fixture()
+    def demo(self, client, monkeypatch):
+        monkeypatch.setattr(settings, "USERS", {**USERS, "demo": ("demo-pw", "")})
+        monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"role": "admin"}, "demo": {"shared": "yes"}})
+        assert client.post("/login", data={"username": "demo", "password": "demo-pw"}, headers=HOST).status_code == 302
+        return client
+
+    def test_the_menu_and_the_help_dialog_leave_it_out(self, demo):
+        body = demo.get("/page/index", headers=HOST).data.decode()
+        assert 'href="/password"' not in body
+        assert 'class="menu-signout"' in body and 'class="menu-assistant"' in body   # the rest of the menu is there
+
+    def test_the_page_says_why_and_has_no_form(self, demo):
+        resp = demo.get("/password?done", headers=HOST)
+        body = resp.data.decode()
+        assert resp.status_code == 200 and "<h1>Change your password</h1>" in body
+        assert "<strong>demo</strong> is an account several people sign in to" in body
+        assert "<form method=\"post\" action=\"/password\"" not in body and 'type="password"' not in body
+        assert "is changed" not in body
+
+    def test_the_right_password_changes_nothing(self, demo, wiki_dir):
+        before = section(wiki_dir, "demo")
+        resp = change(demo, "demo-pw")
+        assert resp.status_code == 403
+        assert "demo is an account several people sign in to: its password is set by whoever runs this wiki" in resp.data.decode()
+        assert section(wiki_dir, "demo") == before
+        assert signed_in(demo)
+        assert login(demo, "demo", NEW).status_code == 200            # the new one signs nobody in
+        assert login(demo, "demo", "demo-pw").status_code == 302
+
+    def test_a_wrong_password_is_not_counted(self, demo):
+        """Refused before the password is looked at: a visitor's wrong tries
+        there don't make the others wait at the login."""
+        for _ in range(12):
+            assert change(demo, "wrong").status_code == 403
+        assert login(demo, "demo", "demo-pw").status_code == 302
+
+    def test_another_user_of_the_wiki_still_changes_theirs(self, demo, wiki_dir):
+        assert login(demo, "bob").status_code == 302
+        assert 'href="/password"' in demo.get("/page/index", headers=HOST).data.decode()
+        assert change(demo, "bob-pw").status_code == 303

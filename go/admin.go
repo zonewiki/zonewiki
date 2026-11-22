@@ -88,6 +88,7 @@ type userRow struct {
 	Groups          string // the groups their section names, "dev, hiring"
 	Also            string // the groups they are in by way of those ("product"), "" none
 	Token, Disabled bool
+	Shared          bool // an account several people sign in to
 	Pending         bool // signed up, waiting for approval
 	Me, Private     bool // the admin themselves; has a private folder
 	// Tasks: the open tasks still assigned to a user who can't be given
@@ -163,7 +164,7 @@ func usersData(r *http.Request) *usersView {
 		u := s.Users[name]
 		row := userRow{Name: name, Role: u.Role, Email: u.Email, Groups: strings.Join(u.Groups, ", "), Token: u.MCPToken != "",
 			Also:     strings.Join(slices.DeleteFunc(slices.Clone(u.In), func(g string) bool { return slices.Contains(u.Groups, g) }), ", "),
-			Disabled: u.Disabled, Pending: u.Pending,
+			Disabled: u.Disabled, Pending: u.Pending, Shared: u.Shared,
 			Me: name == me.Name, Private: isDir(filepath.Join(cfg.Data, privateDir, name))}
 		if !s.assignable(name) {
 			row.Tasks = assigned[name]

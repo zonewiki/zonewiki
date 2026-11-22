@@ -102,6 +102,7 @@
       <p><span class="assistant-state">None</span> {{if .User}}You have no token{{else}}The wiki has no token{{end}}: no assistant can connect{{if .User}} as you{{end}}{{if .OAuth}} with one{{end}}.</p>
       {{- end}}
     </div>
+    {{- if not .Shared}}
     <form method="post" action="/assistant/token" class="assistant-form">
       {{- if .AskPassword}}
       {{- with .User}}<input type="text" name="username" value="{{.}}" autocomplete="username" hidden>{{end}}
@@ -109,8 +110,13 @@
       {{- end}}
       <button type="submit" class="btn btn-primary">{{if .Has}}Make a new token{{else}}Make a token{{end}}</button>
     </form>
+    {{- end}}
   </div>
-  {{- if .Has}}
+  {{- if .Shared}}
+  <div class="assistant-row">
+    <p class="users-help"><strong>{{.User}}</strong> is an account several people sign in to: its token is set by whoever runs this wiki, not here.</p>
+  </div>
+  {{- else if .Has}}
   <div class="assistant-row">
     <p class="users-help">Revoked, the token stops working: an assistant using it is refused from then on.</p>
     <form method="post" action="/assistant/revoke" class="assistant-form">

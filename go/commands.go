@@ -33,6 +33,8 @@ const userUsage = `Usage: zonewiki user COMMAND
                           alone: their address
   group NAME [+G] [-G]    put a user in a group (+dev) or take them out (-dev); alone: their groups
   disable NAME            stop a user signing in (their files stay); enable NAME undoes it
+  shared NAME             an account several people sign in to (a demo's): its password and token
+                          can't be changed in the browser; --remove undoes it
   invite NAME             a link for a new user to choose their password, for 7 days (shown once)
     [--role ROLE]         their role: admin, editor (the default) or viewer
   reset NAME              a link for a user to set a new password, for 24 hours (shown once)
@@ -185,6 +187,8 @@ func userMain(args []string, getenv func(string) string, stdin io.Reader, stdout
 		return c.setEmail()
 	case "disable", "enable":
 		return c.setDisabled()
+	case "shared":
+		return c.setShared()
 	}
 	return c.remove()
 }
@@ -248,9 +252,9 @@ func (c *userCommand) parse(cmd string, args []string) bool {
 			wantArgs = 2
 		}
 	}
-	if !slices.Contains([]string{"add", "passwd", "token", "role", "email", "group", "disable", "enable", "invite",
+	if !slices.Contains([]string{"add", "passwd", "token", "role", "email", "group", "disable", "enable", "shared", "invite",
 		"reset", "remove", "list"}, cmd) ||
-		len(args) != wantArgs || c.removeFlag && cmd != "email" || c.tokenFlag && cmd != "add" || c.roleFlag && cmd != "add" && cmd != "invite" ||
+		len(args) != wantArgs || c.removeFlag && cmd != "email" && cmd != "shared" || c.tokenFlag && cmd != "add" || c.roleFlag && cmd != "add" && cmd != "invite" ||
 		(c.passwordFlag || c.openFlag) && cmd != "remove" || c.passwordFlag && c.openFlag ||
 		slices.ContainsFunc(args, func(a string) bool { return strings.HasPrefix(a, "-") }) {
 		return false
@@ -645,6 +649,27 @@ func leftGroup(before, now *Settings, group string) []string {
 	return left
 }
 
+// setShared: shared NAME makes a user an account several people sign in
+// to (sharedAccount); --remove makes it one person's again.
+func (c *userCommand) setShared() int {
+	if c.removeFlag {
+		c.f.Unset(c.name, "shared")
+	} else {
+		c.f.Set(c.name, "shared", "yes")
+	}
+	if !c.save() {
+		return 1
+	}
+	if c.removeFlag {
+		fmt.Fprintf(c.stdout, "%s is one person's account again: they change its password and token in the browser.\n", c.name)
+		return 0
+	}
+	fmt.Fprintf(c.stdout, "%s is shared now: its password and MCP token can't be changed in the browser. "+
+		"Set them with: zonewiki user passwd %s, zonewiki user token %s. Undo it with: zonewiki user shared %s --remove\n",
+		c.name, c.name, c.name, c.name)
+	return 0
+}
+
 // setDisabled: disable NAME and enable NAME.
 func (c *userCommand) setDisabled() int {
 	disable := c.cmd == "disable"
@@ -741,6 +766,9 @@ func userLine(u *User) string {
 		facts = append(facts, "waiting for approval: zonewiki user enable "+u.Name)
 	case u.Disabled:
 		facts = append(facts, "disabled")
+	}
+	if u.Shared {
+		facts = append(facts, "shared")
 	}
 	if u.Email != "" {
 		facts = append(facts, u.Email)

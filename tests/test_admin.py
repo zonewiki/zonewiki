@@ -195,6 +195,20 @@ class TestChanges:
         assert post(admin, "/admin/users/bob/enable").status_code == 303
         assert "disabled" not in section(git_wiki_dir, "bob")
 
+    def test_a_shared_account_is_marked_and_is_made_no_admin(self, monkeypatch, users, client, git_wiki_dir):
+        """shared = yes (zonewiki user shared): several people sign in to
+        it, so the Users tab says so and none of them administers the wiki."""
+        monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"role": "admin"}, "bob": {"shared": "yes"}})
+        admin = login(client, "alice")
+        body = admin.get("/admin/users", headers=HOST).data.decode()
+        assert body.count('class="user-fact" title="Several people sign in to this account') == 1
+        resp = post(admin, "/admin/users/bob/role", role="admin")
+        assert "role = admin" not in section(git_wiki_dir, "bob")
+        page = resp.data.decode() if resp.status_code != 303 else admin.get(resp.headers["Location"], headers=HOST).data.decode()
+        assert "bob is shared and an admin" in page
+        assert post(admin, "/admin/users/bob/role", role="viewer").status_code == 303   # a viewer it may be
+        assert "role = viewer" in section(git_wiki_dir, "bob")
+
     def test_remove_says_their_files_stay(self, admin, git_wiki_dir):
         (git_wiki_dir / "private" / "carol").mkdir(parents=True)
         (git_wiki_dir / "private" / "carol" / "x.md").write_text("# X\n")

@@ -104,6 +104,7 @@ A user's section, `[user NAME]` (the name: lowercase letters, digits and inner h
 | `role` | What they may do (Roles, below; `zonewiki user role`, the Users tab) | `admin`, `editor` or `viewer`, any case | `editor` |
 | `groups` | The groups they are in (Groups, below; `zonewiki user group`, the Users tab, Groups) | group names, by commas or spaces, a leading `@` allowed | none |
 | `disabled` | They can't sign in, their token is refused (`zonewiki user disable`, the Users tab) | `yes`/`no`, `true`/`false`, `1`/`0` | no |
+| `shared` | Several people sign in to this account: its password and token aren't changed in the browser, and it is no admin (Shared accounts, below; `zonewiki user shared`) | as `disabled` | no |
 | `pending` | A sign-up waiting for an admin's approval: disabled until approved (Sign-up, below) | as `disabled` | no |
 | `email` | Their mail address: for task mails (Assigning tasks, below) and to tell sign-ups apart (`zonewiki user email`, sign-up) | a bare address (`name@example.org`, `validEmail`) | none: no mail |
 
@@ -228,10 +229,11 @@ With `run.sh` they are `./run.sh user …`, `./run.sh group …` and `./run.sh c
 | `user email NAME ADDRESS` | Sets their mail address, for task mails; `--remove` instead of the address takes it out; NAME alone says it (A user's mail address, above) |
 | `user group NAME [+G] [-G]` | Puts them in a group (`+dev`) or takes them out (`-hiring`); alone: their groups |
 | `user disable NAME`, `user enable NAME` | They can't sign in, and their token stops; `enable` undoes it, and approves a sign-up |
+| `user shared NAME` | Several people sign in to this account (a demo's): its password and token are set by these commands only; `--remove` undoes it (Shared accounts, below) |
 | `user invite NAME [--role ROLE]` | A link for a new user to choose their password, for 7 days, shown once (Invite and reset links, below) |
 | `user reset NAME` | A link for a user to set a new password, for 24 hours, shown once |
 | `user remove NAME [--password\|--open]` | Removes a user: their private pages and tasks stay on disk; the last one only with `--password` or `--open` (Between a password and users, below) |
-| `user list` | The users: each one's role (but editor), "MCP token", their groups, whether they wait for approval or are disabled, their address |
+| `user list` | The users: each one's role (but editor), "MCP token", their groups, whether they wait for approval or are disabled, "shared", their address |
 | `group includes NAME [+G] [-G]` | A group made of groups: who is in G is in NAME too (`+dev`), or no longer by way of it (`-dev`); alone: what it includes, and who is in it |
 | `group owners NAME [+USER] [-USER]` | Who says who is in the group, in the browser (A group's owners, below); alone: its owners |
 | `group list` | The groups: what each includes, its owners, and who is in it |
@@ -414,6 +416,33 @@ and their MCP token is refused (401; `mcpAuthorized`; a disabled user's token al
 Their pages, tasks and private folder stay as they are.
 Enabled again, they sign in as before, and a session from before not yet expired works again: disabling isn't how to end a stolen session, a new password is (Sessions and passwords, below).
 A disabled admin counts as no admin.
+
+### Shared accounts
+
+An account several people sign in to with one password, as a demo wiki's `demo` is: `zonewiki user shared NAME` (`shared = yes` in its section), `--remove` to make it one person's again.
+It reads and writes as its role says, an editor or a viewer.
+What it can't do is what would lock the others out, since each of them knows the password:
+
+| In the browser | A shared account |
+|----------------|------------------|
+| **Change password** | Not in the menu or the shortcuts dialog; `/password` says "… is an account several people sign in to: its password is set by whoever runs this wiki, not here." and has no form; a `POST` is 403 and changes nothing |
+| **Connect an assistant**: the token | No **Make a token** and no **Revoke**; both `POST`s are 403. A token set with `zonewiki user token` goes on working |
+| **Connect an assistant**: connections | As for anyone: each assistant that signs in is its own connection, to be changed or ended on the page, by whoever is signed in |
+| The Users tab | A **shared** mark beside the name |
+
+The password and the token are set on the host (`zonewiki user passwd NAME`, `zonewiki user token NAME`), and an admin's reset link still sets a new password.
+A shared account can't be an admin: `role = admin` with `shared = yes` is an error of the file, so the commands and the Users tab refuse either change ("… is shared and an admin: an account several people sign in to can't be an admin.").
+
+It is one user to Zone: its private folder, its groups and its assistants' connections are everyone's who signs in to it, and what one of them writes is in the history under its name.
+Signing out ends only the session it is done in.
+
+#### How a shared account is kept from changing its login
+
+`Settings.sharedAccount` (`go/users.go`) is the one place that says an account is shared.
+The password page and the token's two routes ask it before they look at a password (`passwordRoute`, `refusedShared` in `go/assistant.go`), so a refusal tells a right password from a wrong one in nothing and counts against no client;
+each also looks at the file it is about to change (`changeSettings`), for an account made shared meanwhile.
+The menu's entry follows `pageShell.ChangePassword`.
+Tests: `TestASharedAccount` in `tests/test_password.py` and `tests/test_assistant.py`, the Users tab in `tests/test_admin.py`, the command and the file in `go/configfile_test.go`.
 
 ### Viewers
 
@@ -895,6 +924,7 @@ without users, with the wiki's one password, it is in the menu at the top right 
 The shortcuts dialog (`?`) links to it too, wherever there is a login, which is how a phone reaches it.
 A wiki without a login has no such page (404).
 A viewer may change theirs (`viewerWrites`).
+A shared account's isn't changed here: the page says so and has no form (Shared accounts, above).
 
 The form takes the password you have (`current`) and the new one twice (`password`, `again`; at least 8 characters, `passwordMin`).
 The password you have is asked for because a session someone else got hold of (an unlocked laptop, a copied cookie) mustn't be enough to take the account over.
