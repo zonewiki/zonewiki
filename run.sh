@@ -210,6 +210,9 @@ needs_wiki() {
 # pulls the prebuilt one if it isn't here yet.
 start() {
   needs_wiki
+  local since started
+  since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  started=$(container_started)
   if [[ -n "$CHECKOUT" ]]; then
     say "Building Zonewiki's image from this checkout with $ENGINE compose (the binary is compiled inside it, not into this folder) and starting it…"
     compose up -d --build
@@ -217,10 +220,44 @@ start() {
     say "Starting Zonewiki from the prebuilt image (ghcr.io/zonewiki/zonewiki) with $ENGINE compose…"
     compose up -d
   fi
+  wait_up "$since" "$started"
   local port
   port=$(env_val ZONE_PORT)
   echo "Zonewiki running at http://localhost:${port:-5080}"
   echo "Zonewiki data: $ZONE_DATA"
+}
+
+# When the container's current run began (empty: none, or not running).
+container_started() {
+  $ENGINE inspect -f '{{if .State.Running}}{{.State.StartedAt}}{{end}}' zonewiki 2>/dev/null || true
+}
+
+# Say that Zonewiki runs only once it does. A start that fails (a folder
+# Zonewiki won't make a wiki, a wiki a newer Zonewiki wrote) exits at once,
+# and restart: unless-stopped starts it again, so compose up -d is content
+# either way: wait for the line Zonewiki prints when it listens, in the log
+# since this start ($1). A container compose left as it was (the same run
+# as before up, $2) is up already. One that isn't running any more (exited,
+# or restarting after an exit), or hasn't listened within a minute, shows
+# the log's end instead, and the start fails.
+wait_up() {
+  local since=$1 started=$2 i log
+  for i in $(seq 1 60); do
+    log=$($ENGINE logs --since "$since" zonewiki 2>&1 || true)
+    if grep -q " listening on " <<<"$log"; then
+      return 0
+    fi
+    if [[ -n "$started" && "$(container_started)" == "$started" ]]; then
+      return 0
+    fi
+    if [[ -z "$(container_started)" ]]; then
+      break
+    fi
+    sleep 1
+  done
+  echo "Zonewiki didn't start. The end of its log (./run.sh logs follows it; ./run.sh down stops the retries):" >&2
+  tail -n 5 <<<"$log" | sort -u >&2
+  exit 1
 }
 
 case "${1:-up}" in

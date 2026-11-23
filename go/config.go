@@ -221,14 +221,20 @@ func defaultData(getenv func(string) string) (string, error) {
 // wiki: a checkout and a home folder kept in git have one, and Zonewiki would
 // commit its pages into that repository. An empty folder needs nothing, nor
 // one with only what Zonewiki's own commands write before a first start
-// (.zone/, the settings file) or an older start made (_assets/). Asked at
-// start before Zonewiki writes anything in the folder.
+// (.zone/, the settings file) or an older start made (_assets/). A wiki
+// from before .zone-format is one too: only a start writes the session key
+// (.zone/secret_key, secretKey), so a folder with one has been served by
+// Zonewiki, and noteWikiFormat gives it the file. Asked at start before
+// Zonewiki writes anything in the folder.
 func newWikiError() error {
 	if cfg.Init {
 		return nil
 	}
 	if _, err := os.Lstat(formatPath()); err == nil {
 		return nil
+	}
+	if _, err := os.Lstat(filepath.Join(stateDirIn(cfg.Data), "secret_key")); err == nil {
+		return nil // an older Zonewiki started here
 	}
 	entries, err := os.ReadDir(cfg.Data)
 	if err != nil {

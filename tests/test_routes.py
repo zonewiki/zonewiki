@@ -2767,6 +2767,20 @@ class TestVersion:
         r = self._start(tmp_path, home=tmp_path)
         assert r.returncode == 0, r.stderr
 
+    def test_a_wiki_from_before_the_format_file_needs_no_init(self, tmp_path):
+        # A wiki an older Zonewiki served has no .zone-format yet but its
+        # session key, which only a start writes: it starts as it did, and
+        # gets the file.
+        wiki = Path(os.path.realpath(tmp_path))
+        subprocess.run(["git", "init", "-q", str(wiki)], check=True)
+        (wiki / "index.md").write_text("# Home\n", encoding="utf-8")
+        (wiki / "notes.md").write_text("# Notes\n", encoding="utf-8")
+        (wiki / ".zone").mkdir()
+        (wiki / ".zone" / "secret_key").write_text("k" * 64, encoding="utf-8")
+        r = self._start(wiki, home=tmp_path)
+        assert r.returncode == 0, r.stderr
+        assert (wiki / ".zone-format").exists()
+
     def test_settings_written_before_the_first_start_need_no_init(self, tmp_path):
         # zonewiki user add before the first start writes .zone/config:
         # the folder holds no files of its own yet.

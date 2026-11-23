@@ -26,6 +26,8 @@ case "$1" in
   compose) echo "env ZONE_BIND=$ZONE_BIND ZONE_UID=$ZONE_UID ZONE_GID=$ZONE_GID ZONE_BUILD=$ZONE_BUILD" >> "$FAKE_LOG" ;;
   create) echo fake-container ;;
   ps) [ -z "$FAKE_PS" ] || echo "$FAKE_PS" ;;
+  logs) echo "${FAKE_LOGS-Zonewiki 0.5 (fake) listening on [::]:5080}" ;;
+  inspect) echo "$FAKE_STARTED" ;;
   image) exit 1 ;;
   run|start) exit "${FAKE_EXIT:-0}" ;;
 esac
@@ -582,6 +584,26 @@ def test_env_names_the_address_and_the_user_unless_remote_is_allowed(beside_comp
     r = subprocess.run(["./run.sh", "up"], cwd=folder, env=env, capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
     assert "ZONE_BIND=0.0.0.0 " in log.read_text()
+
+
+def test_up_says_running_only_once_zonewiki_listens(beside_compose):
+    # compose up -d is content with a container that exits and is restarted:
+    # up waits for Zonewiki's "listening on" line and, when the container
+    # isn't running, fails with the end of its log instead.
+    folder, env, log = beside_compose
+    refused = "Zonewiki: /wiki-data holds files (a.md) but isn't a wiki yet."
+    env["FAKE_LOGS"] = refused
+    r = subprocess.run(["./run.sh", "up"], cwd=folder, env=env, capture_output=True, text=True)
+    assert r.returncode == 1
+    assert "Zonewiki running at" not in r.stdout
+    assert "Zonewiki didn't start" in r.stderr and refused in r.stderr and "./run.sh logs" in r.stderr
+    # A container compose left running as it was (nothing new in its log,
+    # the same run before and after up) is up already.
+    env["FAKE_LOGS"] = ""
+    env["FAKE_STARTED"] = "2026-11-23T20:00:00Z"
+    r = subprocess.run(["./run.sh", "up"], cwd=folder, env=env, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    assert "Zonewiki running at http://localhost:5080" in r.stdout
 
 
 def test_run_sh_alone_says_what_it_needs(tmp_path, sandbox):

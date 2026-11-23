@@ -136,6 +136,10 @@ It works out and exports what compose interpolates:
 - With rootless docker, which has no keep-id, `ZONE_UID`/`ZONE_GID` are 0 (the container's root is the host user there; another UID would be a subordinate one).
 
 `up` refuses a missing wiki folder or `.env`, then starts Zonewiki as the table says; `update` first pulls the newest code (`git pull`, in a checkout) or image (`compose pull`), then does the same.
+It says where Zonewiki runs only once it does (`wait_up`):
+compose is content with a container that exits at once and is started again (`restart: unless-stopped`), so `up` waits for the line Zonewiki prints when it listens, in the container's log since this start;
+a container compose left running as it was counts as up.
+One that stops running (a folder Zonewiki won't make a wiki, a wiki a newer Zonewiki wrote), or doesn't listen within a minute, fails the start, with the end of its log, how to follow it (`./run.sh logs`) and how to stop the retries (`./run.sh down`).
 `test`/`e2e` use the engine directly (no `.env` needed), in the tools image.
 
 Platforms: Linux is the only tested one; it is meant to work also on macOS and, on Windows, in WSL2 (Docker Desktop and Podman run on it there).
@@ -735,7 +739,8 @@ Inside the container it is always mounted at `/wiki-data`.
 
 ### A new wiki
 
-A folder is a wiki when it has a `.zone-format`.
+A folder is a wiki when it has a `.zone-format`,
+or a `.zone/secret_key`, which only a start writes: a wiki an older Zonewiki served, from before the format file, starts as it did and gets the file (The data format, below).
 A start on one that isn't makes it one: a home page, `_assets/`, `.zone/`, `.zone-format`, and, with git, a repository whose first commit holds its files as they are.
 An empty folder (or one with only `.zone/`, which the commands write before a first start, `_assets/`, and an empty repository's `.git`) is made a wiki without asking.
 A folder that holds files is made one only with `--init` or `ZONE_INIT=1` (`newWikiError`):

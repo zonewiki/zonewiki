@@ -95,6 +95,7 @@ echo 'ZONE_DATA=~/zonewiki' > .env
 Open <http://localhost:5080>; Zonewiki answers only on this computer.
 The first start downloads the image.
 Each `./run.sh` command says what it is doing in lines starting with `==>`; `./run.sh --help` lists them.
+`./run.sh up` says **Zonewiki running at** once Zonewiki answers; if it doesn't start, it shows the end of Zonewiki's log instead, which says why.
 
 `./run.sh` works out what compose can't: your user ID (so the wiki's files stay yours), your timezone, and whether to listen beyond localhost.
 Beside `compose.yaml` it runs the prebuilt image; in a checkout of the repository it builds Zonewiki instead ([From the repository](#from-the-repository)).
