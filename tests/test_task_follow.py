@@ -196,3 +196,30 @@ def test_is_following_filters_and_an_assistant_follows_for_its_user(alice, smtp)
     call("dan", "update_task", id=task["id"], follow=False)
     login(alice, "dan")
     assert alice.get("/api/tasks/closed", query_string={"limit": "10", "q": "is:following"}, headers=HOST).get_json()["total"] == 0
+
+
+def test_an_assistant_is_told_all_that_happened_since_its_user_looked(alice, smtp):
+    """search_tasks says of a task with news all of it, the oldest first, as
+    its card in Updates does: not the latest alone."""
+    task = new(alice, title="Offer for Acme", assignee="bob")
+    call = lambda who, tool, **args: "".join(c["text"] for c in alice.post(
+        "/mcp", headers={**HOST, "Authorization": f"Bearer {who}-token"},
+        json={"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": tool, "arguments": args}}).get_json()["result"]["content"])
+    assert "update:" not in call("alice", "search_tasks", status="updated")
+    login(alice, "bob")
+    comment(alice, task, "Called them")
+    assert "update: bob commented (" in call("alice", "search_tasks", status="updated")
+    comment(alice, task, "They said yes")
+    login(alice, "dan")
+    comment(alice, task, "Nice")
+    login(alice, "bob")
+    assert put(alice, task, completed=True).status_code == 200
+    out = call("alice", "search_tasks", status="updated")
+    # (All within a minute here, where a comment counts as the later one:
+    # the order of the three isn't what this asks.)
+    said = out.split("update: ", 1)[1].split(" (", 1)[0].split(", ")
+    assert sorted(said) == ["bob closed it", "bob commented twice", "dan commented"]
+    # Her look takes all of it away.
+    login(alice, "alice")
+    assert put(alice, task, seen=True).status_code == 200
+    assert "update:" not in call("alice", "search_tasks", status="updated")

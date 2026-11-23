@@ -154,7 +154,19 @@ function taskHTML(task, draggable = !!app.ORDERED[st.activeView], extraClass = '
   const unread = !!news && !!TasksCore.newsFor(task, people.me);
   const NEWS = { comment: 'commented', mention: 'mentioned you', closed: 'closed it', reopened: 'reopened it', handed: 'gave it on' };
   const readCls = news && !unread ? ' task-news-read' : '';
-  const newDisplay = !news ? ''
+  // In Updates the card says it all on a line of its own: everything since
+  // you last looked, the oldest first ("bob commented twice · anna closed
+  // it"), when the latest was, and under it what the latest comment among
+  // them says, so most news is read without opening the task. Plain text,
+  // a line or two (the task's dialog has the comment as written).
+  const inUpdates = st.activeView === 'updates';
+  const said = inUpdates && news ? (news.all || []).filter(n => n.kind === 'comment' && (n.text || '').trim()).pop() : null;
+  const newsHtml = inUpdates && news
+    ? `<div class="task-news${readCls}"><span class="task-news-what">${esc(TasksCore.newsText(news.all || [news]))}</span>` +
+      `<span class="task-news-when">${esc(`${shortDate(news.at.slice(0, 10))} ${news.at.slice(11)}`)}</span>` +
+      (said ? `<div class="task-news-comment" title="${esc(`${said.by}'s comment`)}">${esc(said.text.trim().replace(/\s+/g, ' ').slice(0, 400))}</div>` : '') + '</div>'
+    : '';
+  const newDisplay = !news || inUpdates ? ''
     : news.kind === 'given'
       ? `<span class="task-new${readCls}" title="${esc(`${news.by} gave you this task on ${shortDate(news.at.slice(0, 10))}`)}">new</span>`
       : `<span class="task-new task-update-mark${readCls}" title="${esc(`${shortDate(news.at.slice(0, 10))} ${news.at.slice(11)}${unread ? ': open the task to mark it read' : ''}`)}">${esc(news.by)} ${NEWS[news.kind]}</span>`;
@@ -214,7 +226,7 @@ function taskHTML(task, draggable = !!app.ORDERED[st.activeView], extraClass = '
       <div class="task-actions">
         ${expandBtn}<button type="button" class="task-menu-btn" data-id="${esc(task.id)}" aria-label="More actions" aria-haspopup="menu" title="More actions">${app.MORE_ICON}</button>
       </div>
-      ${metaHtml}${descHtml}${commentsHtml}
+      ${metaHtml}${newsHtml}${descHtml}${commentsHtml}
     </li>`;
 }
 

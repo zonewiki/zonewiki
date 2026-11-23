@@ -416,9 +416,13 @@ const initOut = (appEl?.dataset.initOut || '').split('|').filter(Boolean);
 const initUpdates = appEl?.dataset.initUpdates === '1';
 st.news = new Map();
 // What the task's card says of its news: what it has now, in Updates else
-// what it had when it came (read since).
+// what it had when it came (read since). The latest ({ kind, by, at }) with
+// all of it since the user last looked (all: TasksCore.newsAll), which its
+// card in Updates says.
 function newsOf(t) {
-  return TasksCore.newsFor(t, people.me) || (initUpdates && st.news.get(t.id)) || null;
+  const all = TasksCore.newsAll(t, people.me);
+  if (all.length) return { ...all[all.length - 1], all };
+  return (initUpdates && st.news.get(t.id)) || null;
 }
 // My tasks has a manual order of its own, the user's (mineOrder in
 // go/tasklists.go): a list's order (a task's sort_order) is the list's, for

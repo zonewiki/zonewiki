@@ -54,10 +54,10 @@ func mcpTaskText(t *Task, base string, user asker) string {
 	}
 	// What it has for the user that they haven't seen. Reading it here
 	// doesn't see it for them: their own look does.
-	if news := newsFor(t, user); news.Kind != "" {
-		what := map[string]string{newsGiven: "gave it to the user", newsComment: "commented", newsMention: "mentioned the user",
-			newsClosed: "closed it", newsReopened: "reopened it", newsHandedOn: "gave it to someone else"}[news.Kind]
-		facts = append(facts, "update: "+news.By+" "+what+" ("+strings.Replace(news.At, "T", " ", 1)+")")
+	// All of it since their last look, the oldest first, with the time of
+	// the latest (newsText: what its card in Updates says).
+	if all := newsAll(t, user); len(all) > 0 {
+		facts = append(facts, "update: "+newsText(all, "the user", ", ")+" ("+strings.Replace(all[len(all)-1].At, "T", " ", 1)+")")
 	}
 	if settings().Users != nil && slices.Contains(t.Followers, user.Name) {
 		facts = append(facts, "the user follows it")

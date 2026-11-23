@@ -406,11 +406,14 @@ func TestNewsCases(t *testing.T) {
 			Comments  []Comment
 		}
 		Want string
+		// Text: what newsText says of all the task has (the cases that have it).
+		Text *string
 	}
 	if err := json.Unmarshal(raw, &cases); err != nil || len(cases) < 30 {
 		t.Fatalf("the cases: %v", err)
 	}
 	// anna asks.
+	texts := 0
 	for _, c := range cases {
 		task := &Task{Assignee: c.Task.Assignee, CreatedBy: c.Task.CreatedBy, Followers: c.Task.Followers, ClosedAt: c.Task.ClosedAt, History: c.Task.History, Comments: c.Task.Comments}
 		if c.Task.Private {
@@ -423,5 +426,14 @@ func TestNewsCases(t *testing.T) {
 		if got := news.Kind; got != c.Want {
 			t.Errorf("%s: %q, want %q", c.Name, got, c.Want)
 		}
+		if c.Text != nil && !task.Private() {
+			texts++
+			if got := newsText(newsAllIn(task, task.History, asUser("anna")), "you", " · "); got != *c.Text {
+				t.Errorf("%s: says %q, want %q", c.Name, got, *c.Text)
+			}
+		}
+	}
+	if texts < 8 {
+		t.Errorf("%d cases say what all the news is", texts)
 	}
 }

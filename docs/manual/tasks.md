@@ -273,6 +273,7 @@ You are told what happens on a task you are assigned, made, or follow: someone g
   Opening the task takes the mark away.
 - **Updates**, beside **My tasks** in the row of lists, holds every task with news, the latest first, also the ones that aren't yours to do.
   Its number is how many there are; in My tasks a line, **2 updates for you →**, leads there.
+  Each card there says everything that happened since you last looked, "ben commented twice · anna closed it", and shows the latest comment under it, so you can read most news without opening the task.
 - **Reading one**: open the task, or click **Mark read** on its card in Updates; **Mark all read** beside the heading clears them all.
   A task you have read stays in Updates, dimmed, until you leave the page.
 - **On the Tasks link** a dot says there is news (pointing at it says how many tasks have some).

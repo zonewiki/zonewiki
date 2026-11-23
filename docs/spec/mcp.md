@@ -215,7 +215,7 @@ Tasks filtered by these, separate lists included:
 | `status` | `open`, `closed` = done or won't do, `all`, or `updated`: the tasks with news for the user that they haven't seen, open or closed, as their Tasks links count them. |
 | `assignee` | With users, a user's tasks, read as an embed's `assignee=` (`assigneeParamMatches`): `me` (the assistant's user: "my tasks"), a user name, `none`, `a\|b`, `-a`; without users it is a tool error. |
 
-With `status="updated"` a task's line of facts says what is new, "update: bob commented (2026-03-12 09:30)"; an assistant reading a task doesn't see it for the user: no tool logs `seen`.
+A task with news says in its line of facts what is new, all of it since the user last looked, the oldest first, with the time of the latest, as its card in Updates does: "update: bob commented twice, anna closed it (2026-03-12 09:30)" (`newsAll`, `newsText`; Updates in `docs/spec/tasks.md`); an assistant reading a task doesn't see it for the user: no tool logs `seen`.
 
 With a query (at most 500 characters, as `search_wiki`'s), ranked by BM25 within the filter (fused with semantic hits: Retrieval).
 Without, open tasks by deadline, then start date, then title, done ones newest first.

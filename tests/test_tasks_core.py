@@ -759,6 +759,21 @@ class TestNewsCases:
         given = run_core(f"{json.dumps(self.CASES)}.map(c => !!TasksCore.givenToMe(c.task, 'anna'))")
         assert given == [c["want"] == "given" for c in self.CASES]
 
+    def test_all_of_a_tasks_news_in_words(self):
+        """newsAll and newsText: everything since the user last looked, the
+        oldest first, as its card in Updates says it; the cases with a text."""
+        said = [c for c in self.CASES if "text" in c]
+        got = run_core(f"{json.dumps(said)}.map(c => TasksCore.newsText(TasksCore.newsAll(c.task, 'anna')))")
+        wrong = [(c["name"], g) for c, g in zip(said, got) if g != c["text"]]
+        assert not wrong and len(said) >= 8
+        # The last of them is the news, and a comment comes with its text.
+        every = run_core(f"{json.dumps(self.CASES)}.map(c => (TasksCore.newsAll(c.task, 'anna').pop() || {{}}).kind || '')")
+        assert every == [c["want"] for c in self.CASES]
+        task = next(c["task"] for c in said if c["text"] == "bob commented twice · carl commented")
+        assert run_core(f"TasksCore.newsAll({json.dumps(task)}, 'anna').map(n => n.text)") == ["x", "y", "z"]
+        # To an assistant the user is "the user", and the parts stand in a sentence.
+        assert run_core(f"TasksCore.newsText(TasksCore.newsAll({json.dumps(said[0]['task'])}, 'anna'), 'the user', ', ')") == "bob gave it to the user"
+
 
 class TestGivenToMe:
     """givenToMe: a task someone else gave the user, which they haven't

@@ -129,7 +129,7 @@ async function fetchTasks() {
     // (read since: the server no longer answers them), as they are held, so
     // a card stays until the page is left.
     fetched = all.filter(t => TasksCore.newsFor(t, people.me));
-    for (const t of fetched) st.news.set(t.id, TasksCore.newsFor(t, people.me));
+    for (const t of fetched) st.news.set(t.id, app.newsOf(t));
     const have = new Set(fetched.map(t => t.id));
     fetched.push(...st.tasks.filter(t => st.news.has(t.id) && !have.has(t.id)));
   } else {

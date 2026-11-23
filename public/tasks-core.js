@@ -221,7 +221,18 @@ function inMine(t, out, who) {
 // comment's id, '-' for none), and every comment after that one is news,
 // whatever the minute; a look whose comment is gone goes by the minute.
 function newsFor(t, me) {
-  if (!me || !t || t.private) return null;
+  const all = newsAll(t, me);
+  if (!all.length) return null;
+  const { kind, by, at } = all[all.length - 1];
+  return { kind, by, at };
+}
+
+// Everything the task has for the user that they haven't seen, the oldest
+// first (newsAll in go/tasklogic.go; the same cases): newsFor's rule, which
+// keeps the last of them. Each is { kind, by, at }, a comment with its text.
+// What Updates says on a card: all that happened since the user last looked.
+function newsAll(t, me) {
+  if (!me || !t || t.private) return [];
   const minute = at => String(at || '').slice(0, 16);
   const history = t.history || [], comments = t.comments || [];
   const open = !t.closed_at;
@@ -234,8 +245,8 @@ function newsFor(t, me) {
   });
   let myComment = -1, said = '';
   comments.forEach((c, i) => { if (c.by === me) { myComment = i; said = minute(c.at); } });
-  let news = null;
-  const take = (kind, by, at) => { if (!news || at >= news.at) news = { kind, by, at }; };
+  const all = [];
+  const take = (kind, by, at, text) => { all.push(text === undefined ? { kind, by, at } : { kind, by, at, text }); };
   for (let i = mine + 1; i < history.length; i++) {
     const e = history[i], at = minute(e.at);
     if (!e.by || e.by === me || (said && at <= said)) continue;
@@ -259,10 +270,32 @@ function newsFor(t, me) {
     if (saw >= 0) { from = Math.max(from, saw + 1); after = true; }
     for (const c of comments.slice(from)) {
       const at = minute(c.at);
-      if (c.by && c.by !== me && (after || !myAct || at > myAct || (at === myAct && !sawIt))) take('comment', c.by, at);
+      if (c.by && c.by !== me && (after || !myAct || at > myAct || (at === myAct && !sawIt))) take('comment', c.by, at, c.text || '');
     }
   }
-  return news;
+  // By the minute; within one, the history's before the comments, each in
+  // its order (the sort is stable), so the last is the news.
+  return all.sort((a, b) => a.at < b.at ? -1 : a.at > b.at ? 1 : 0);
+}
+
+// What newsAll's list says, in words: "bob commented twice · anna closed
+// it" (newsText in go/tasklogic.go; the same cases). What one person did
+// several times in a row is said once with how often; a comment that
+// mentions the user is the mention alone (both are logged, in one minute).
+// you: how the user is called ("you" on their card, "the user" to their
+// assistant); sep: what stands between two things.
+const NEWS_WORDS = { given: 'gave it to YOU', comment: 'commented', mention: 'mentioned YOU', closed: 'closed it',
+  reopened: 'reopened it', handed: 'gave it to someone else' };
+function newsText(all, you = 'you', sep = ' · ') {
+  const said = [];
+  for (const n of all || []) {
+    if (n.kind === 'comment' && all.some(m => m.kind === 'mention' && m.by === n.by && m.at === n.at)) continue;
+    const last = said[said.length - 1];
+    if (last && last.kind === n.kind && last.by === n.by) last.n++;
+    else said.push({ kind: n.kind, by: n.by, n: 1 });
+  }
+  return said.map(s => `${s.by} ${(NEWS_WORDS[s.kind] || s.kind).replace('YOU', you)}` +
+    (s.n === 2 ? ' twice' : s.n > 2 ? ` ${s.n} times` : '')).join(sep);
 }
 
 // A task someone else gave the user that they haven't opened: the news its
@@ -703,7 +736,7 @@ function dropQuickWord(input, today, people, field, value) {
 const TasksCore = {
   dateToStr, addDays, isOverdue, isFocus, isCarried, byOpenOrder, byDeadline, byCreated, SORTS, placeInOrder, tagMatchScore, tagCounts, selectionTags, bulkTagChange,
   rankTags, sanitizeTagInput,
-  parseFilter, matchesFilter, filterActive, assigneeIs, assigneeGone, inMine, newsFor, givenToMe, orderMoves, tasksInView, tagParamToQuery, importanceWord,
+  parseFilter, matchesFilter, filterActive, assigneeIs, assigneeGone, inMine, newsFor, newsAll, newsText, givenToMe, orderMoves, tasksInView, tagParamToQuery, importanceWord,
   bucketKey, fullDayLabel, boardBuckets, personBuckets, listBuckets, parseQuickAdd, dropQuickWord, parseDateWord,
   dateSettings, localeDate, shortDate, longDayLabel, weekStart, weekdayNames, monthTitle,
 };

@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 	"zonewiki/internal/jsonobj"
@@ -234,6 +235,63 @@ func newsFor(t *Task, user asker) News {
 // newsIn: newsFor over a history that has the looks in it, as the API
 // answers it (and the shared cases write it).
 func newsIn(t *Task, history []HistoryEntry, user asker) News {
+	all := newsAllIn(t, history, user)
+	if len(all) == 0 {
+		return News{}
+	}
+	return all[len(all)-1]
+}
+
+// newsAll: everything a shared task has for user that they haven't seen,
+// the oldest first: newsFor's rule, which keeps the last of them. What
+// Updates says on a card and search_tasks of a task: all that happened
+// since the user last looked (newsText). The browser has the same
+// (TasksCore.newsAll; the shared cases).
+func newsAll(t *Task, user asker) []News {
+	if user.Name == "" || t.Private() {
+		return nil
+	}
+	return newsAllIn(t, historyWithSeen(t), user)
+}
+
+// newsText: what all says, in words: "bob commented twice, anna closed it"
+// (TasksCore.newsText; the shared cases). What one person did several times
+// in a row is said once with how often; a comment that mentions the user is
+// the mention alone (both are logged, in one minute). you: how the user is
+// called; sep: what stands between two things.
+func newsText(all []News, you, sep string) string {
+	words := map[string]string{newsGiven: "gave it to YOU", newsComment: "commented", newsMention: "mentioned YOU",
+		newsClosed: "closed it", newsReopened: "reopened it", newsHandedOn: "gave it to someone else"}
+	type said struct {
+		kind, by string
+		n        int
+	}
+	var out []said
+	for _, n := range all {
+		if n.Kind == newsComment && slices.ContainsFunc(all, func(m News) bool { return m.Kind == newsMention && m.By == n.By && m.At == n.At }) {
+			continue
+		}
+		if l := len(out) - 1; l >= 0 && out[l].kind == n.Kind && out[l].by == n.By {
+			out[l].n++
+		} else {
+			out = append(out, said{n.Kind, n.By, 1})
+		}
+	}
+	parts := make([]string, len(out))
+	for i, s := range out {
+		parts[i] = s.by + " " + strings.Replace(words[s.kind], "YOU", you, 1)
+		switch {
+		case s.n == 2:
+			parts[i] += " twice"
+		case s.n > 2:
+			parts[i] += " " + strconv.Itoa(s.n) + " times"
+		}
+	}
+	return strings.Join(parts, sep)
+}
+
+// newsAllIn: newsAll over a history that has the looks in it.
+func newsAllIn(t *Task, history []HistoryEntry, user asker) []News {
 	minute := func(at string) string { return runePrefix(at, 16) }
 	has, made := t.Assignee == user.Name, t.CreatedBy == user.Name || slices.Contains(t.Followers, user.Name)
 	mine, myAct, sawIt, sawComment := -1, "", false, ""
@@ -255,12 +313,8 @@ func newsIn(t *Task, history []HistoryEntry, user asker) News {
 			myComment, said = i, minute(c.At)
 		}
 	}
-	var news News
-	take := func(kind, by, at string) {
-		if at >= news.At {
-			news = News{kind, by, at}
-		}
-	}
+	var all []News
+	take := func(kind, by, at string) { all = append(all, News{kind, by, at}) }
 	for i := mine + 1; i < len(history); i++ {
 		e := history[i]
 		at := minute(e.At)
@@ -306,7 +360,10 @@ func newsIn(t *Task, history []HistoryEntry, user asker) News {
 			}
 		}
 	}
-	return news
+	// By the minute; within one, the history's before the comments, each in
+	// its order, so the last is the news.
+	slices.SortStableFunc(all, func(a, b News) int { return strings.Compare(a.At, b.At) })
+	return all
 }
 
 // updatesFor: the tasks with news for user (newsFor): of the open tasks

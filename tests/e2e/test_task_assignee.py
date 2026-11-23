@@ -696,7 +696,7 @@ def test_a_task_given_to_you_is_in_updates_and_stays_there_when_read(alice, new_
         expect(alice.locator(gone)).to_be_hidden()
     expect(alice.locator(".task-item .task-title")).to_have_text(["From bob"])     # her own task is no news
     expect(alice.locator(".task-item.task-update[draggable]")).to_have_count(0)    # nothing is ranked there
-    expect(card(alice, "From bob").locator(".task-new")).to_be_visible()
+    expect(card(alice, "From bob").locator(".task-news-what")).to_have_text("bob gave it to you")
     pill = alice.locator('.tasks-place[data-place="updates"] .module-new')
     expect(pill).to_have_text("1")
     # Opened: read, and still there.
@@ -704,7 +704,7 @@ def test_a_task_given_to_you_is_in_updates_and_stays_there_when_read(alice, new_
     alice.keyboard.press("Escape")
     expect(pill).to_be_hidden()
     expect(alice.locator(".task-item.task-update.task-read .task-title")).to_have_text(["From bob"])
-    expect(card(alice, "From bob").locator(".task-new.task-news-read")).to_have_text("new")
+    expect(card(alice, "From bob").locator(".task-news.task-news-read .task-news-what")).to_have_text("bob gave it to you")
     expect(card(alice, "From bob").locator(".task-read-btn")).to_have_count(0)
     # Left and come back to: nothing is new.
     alice.reload()
@@ -806,9 +806,21 @@ def test_updates_show_what_happened_on_your_tasks(alice, new_page):
     note.locator("a").click()
     expect(alice).to_have_url(re.compile(r"/tasks\?updates=1$"))
     expect(alice.locator(".task-item.task-update")).to_have_count(2)
-    expect(card(alice, "For bob").locator(".task-update-mark")).to_have_text("bob commented")
-    expect(card(alice, "Also for bob").locator(".task-update-mark")).to_have_text("bob closed it")   # a closed task too
-    dot = alice.locator('.module-link[data-module="tasks"] .module-new').first
+    expect(card(alice, "For bob").locator(".task-news-what")).to_have_text("bob commented")
+    expect(card(alice, "Also for bob").locator(".task-news-what")).to_have_text("bob closed it")   # a closed task too
+    # The card says what the comment says, so it is read without opening the
+    # task; a card whose news is no comment has no such line, and the small
+    # mark other views have isn't there beside the line.
+    expect(card(alice, "For bob").locator(".task-news-comment")).to_have_text("Need the contract first")
+    expect(card(alice, "Also for bob").locator(".task-news-comment")).to_have_count(0)
+    expect(alice.locator(".task-item.task-update .task-new")).to_have_count(0)
+    # More since she last looked: all of it on the line, the latest comment under it.
+    assert bob.request.post(f"/api/tasks/{t['id']}/comments", data={"text": "Got it, *starting* now"}).ok
+    alice.reload()
+    expect(card(alice, "For bob").locator(".task-news-what")).to_have_text("bob commented twice")
+    expect(card(alice, "For bob").locator(".task-news-comment")).to_have_text("Got it, *starting* now")
+    expect(card(alice, "For bob").locator(".task-news-when")).to_be_visible()
+    dot =alice.locator('.module-link[data-module="tasks"] .module-new').first
     expect(dot).to_have_text("2")
     # Mark read on a card: that one is read, and stays.
     card(alice, "For bob").locator(".task-read-btn").click()
@@ -1151,7 +1163,7 @@ def test_follow_a_task_and_its_news_is_under_updates(alice, new_page):
     expect(card(alice, "Bob's work")).to_have_count(0)                  # still not hers to do
     alice.goto("/tasks?updates=1")
     expect(alice.locator(".task-item.task-update .task-title")).to_have_text(["Bob's work"])
-    expect(card(alice, "Bob's work").locator(".task-update-mark")).to_have_text("bob commented")
+    expect(card(alice, "Bob's work").locator(".task-news-what")).to_have_text("bob commented")
     expect(alice.locator('.module-link[data-module="tasks"] .module-new').first).to_have_text("1")
     # Its dialog says who follows, and unfollows: saved at once.
     modal = open_edit(alice, "Bob's work")

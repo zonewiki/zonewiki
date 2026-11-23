@@ -1265,7 +1265,9 @@ What you see and do there:
 
 | | |
 |---|---|
-| The cards | the latest news first, each saying what happened ("new", "bob commented"); the cards are the tasks' own, so a task is opened, commented, ticked off as anywhere |
+| The cards | the latest news first; the cards are the tasks' own, so a task is opened, commented, ticked off as anywhere |
+| What happened | on a line of its own under the card's: **all of it since you last looked**, the oldest first, and when the latest was: "bob commented twice · anna closed it  Nov 24 09:05" |
+| What was said | under that line, the latest comment among the news, as plain text, two lines at most: most news is a comment, and it is read without opening the task |
 | Reading one | opening the task (its dialog or its details) marks it read, as everywhere; **Mark read** on its card does so without opening it |
 | **Mark all read** | beside the heading, while a task has news: all of them read at once |
 | A task read | stays where it was, dimmed, its mark quiet, **until you leave the page**: nothing goes away while you look, and what you just read can be opened again |
@@ -1273,6 +1275,11 @@ What you see and do there:
 
 It has **no tabs, no order of your own and no new task**: nothing is dragged or ranked there, no Closed link, no settings, export or import; the filter field is there.
 A task given to you is also in My tasks, as before, where it is ranked; Updates only says that it came.
+
+**The line says everything, not only the latest**, so several things on one task need no sorting into kinds: a task is one card, and its line is as long as what happened.
+What one person did several times in a row is said once with how often ("bob commented twice", "bob commented 3 times"), and a comment that mentions you is "bob mentioned you" alone.
+The words: **gave it to you**, **commented**, **mentioned you**, **closed it**, **reopened it**, **gave it to someone else**.
+A card in Updates has no small mark beside your name (The marks and the counts): the line says it.
 
 **From My tasks a line leads there** while there is news, "2 updates for you →" (`.tasks-updates-note`, under the heading; kept current with the counts by `js/chrome.js`);
 in a wiki without lists, which has no switcher, the line is on `/tasks`.
@@ -1286,10 +1293,12 @@ It is a scope of its own, as My tasks is (`updatesScope` in `go/tasklists.go`; `
 The task app shows them as one view (`data-init-updates`; `st.activeView` is `updates`, which no tab names, `initUpdates` in `tasks.js`; the tabs, the grouping, the order, + New and the Closed link aren't shown: `tasks.css`), sorted by the time of the news (`inViewOrder`).
 What a task had when it came is kept while the page is open (`st.news`, `app.newsOf`): a task read since has no news by the rule, and is still in the view (`inScope`), drawn with the news it had (`.task-read`, `.task-news-read`); a reload of the list (another tab's write, the minute's check) keeps those cards as they are held (`fetchTasks`).
 **Mark read** is `markSeen`, **Mark all read** `markAllSeen` (`#updates-read-btn`), each a `seen` in `PUT /api/tasks/<id>`, for who may write tasks (`data-writes`).
+The line is `TasksCore.newsText` of `TasksCore.newsAll` (`.task-news`, with `.task-news-what`, `.task-news-when` and `.task-news-comment`, a row `news` of the card's grid in `tasks.css`): `newsAll` is the rule of the news (The marks and the counts) keeping everything it counts, by the minute, where `newsFor` keeps the last; a comment comes with its text.
+The server has both too (`newsAll`, `newsText` in `go/tasklogic.go`), for what `search_tasks` says of a task, and `go/testdata/news_cases.json` runs through both, the words included.
 
 ### The marks and the counts
 
-On its card a task with news says what it is (before your name), in every view: **new** for a task just given to you (`.task-new`; its tooltip says who gave it and when), and in words for anything else, **bob commented**, **bob mentioned you**, **anna closed it**, **anna reopened it**, **anna gave it on** (`.task-update-mark`).
+On its card a task with news says the latest of it (before your name), in every view but Updates, whose cards say all of it on a line (Updates): **new** for a task just given to you (`.task-new`; its tooltip says who gave it and when), and in words for anything else, **bob commented**, **bob mentioned you**, **anna closed it**, **anna reopened it**, **anna gave it on** (`.task-update-mark`).
 
 Opening the task takes it away (`markSeen` in `js/taskdata.js`; `seen` in `PUT /api/tasks/<id>`, `updateTaskLocked`): when you open its dialog or its details, the browser says so and Zonewiki notes your look.
 So the mark goes when you have looked, and whoever gave you the task reads in its History that it arrived ("Seen · anna").
