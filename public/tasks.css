@@ -764,6 +764,21 @@ div.task-card-comment > .task-comment-when { display: block; }
 .tasks-more-btn { display: inline-flex; align-items: center; justify-content: center; padding-inline: .45rem; color: var(--muted); }
 .tasks-toolbar select.tasks-sort { flex: none; }
 .tasks-sort[hidden] { display: none; }
+/* Sorted (not the manual order): the dropdown takes the accent, and the ×
+   after it, joined to it, goes back to the order that is dragged in. */
+.tasks-toolbar select.tasks-sort--on {
+  border-color: var(--btn-primary); border-radius: 4px 0 0 4px;
+  background-color: color-mix(in srgb, var(--btn-primary) 14%, var(--surface));
+  font-weight: 600; align-self: stretch;
+}
+.tasks-sort-reset[hidden] { display: none; }
+.tasks-header .tasks-sort-reset {
+  flex: none; align-self: stretch; margin-left: -.4rem; padding: 0 .5rem;
+  border: 1px solid var(--btn-primary); border-left: none; border-radius: 0 4px 4px 0;
+  background: color-mix(in srgb, var(--btn-primary) 14%, var(--surface));
+  color: var(--fg); font-size: 1rem; line-height: 1;
+}
+.tasks-header .tasks-sort-reset:hover { background: color-mix(in srgb, var(--btn-primary) 28%, var(--surface)); }
 /* What the Open tab shows: one list, the Plan board, by person, by list.
    A segmented control lighter than the tabs it modifies: an outline in the
    border's grey, the current choice shaded, not filled. */
@@ -1141,7 +1156,7 @@ body:has(.tasks-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
 /* Updates (/tasks?updates=1): news, in no tab and no order: the filter
    field alone above the list. A task read since stays, dimmed; Mark read
    sees one without opening it. */
-.tasks-app[data-init-updates] .view-tabs, .tasks-app[data-init-updates] .tasks-cut, .tasks-app[data-init-updates] .tasks-sort,
+.tasks-app[data-init-updates] .view-tabs, .tasks-app[data-init-updates] .tasks-cut, .tasks-app[data-init-updates] .tasks-sort, .tasks-app[data-init-updates] .tasks-sort-reset,
 .tasks-app[data-init-updates] [id^="task-add-btn"], .tasks-app[data-init-updates] .tasks-footer { display: none; }
 #updates-read-btn[hidden] { display: none; }
 .task-item.task-update.task-closed { opacity: 1; }   /* news that a task was closed is as loud as any */
@@ -1445,6 +1460,7 @@ ul.task-comment-list { list-style: none; margin: .3rem 0 0; padding: 0; font-siz
   .tasks-cut { order: 6; display: flex; flex: 1 1 0; }
   .tasks-cut button { flex: 1 1 0; height: 1.95rem; padding: 0 .45rem; }
   .tasks-header select.tasks-sort { order: 7; }
+  .tasks-header .tasks-sort-reset { order: 7; margin-left: -.6rem; }
   .tasks-header div.chip-input, .tasks-header > input, .tasks-toolbar > input { order: 8; flex: 1 1 100%; }
   .tasks-header:not(.tasks-searching):not(.tasks-filtered) :is(div.chip-input, .tasks-toolbar > input) { display: none; }
   /* Task editor: full screen on phones (it is a whole form, not a popup). */

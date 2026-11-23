@@ -17,7 +17,7 @@
         the toolbar: it modifies the Open tab, and on phones it shares the
         tabs' row while it has two choices. */}}
     <div class="tasks-cut" id="task-cut{{.Sfx}}" role="group" aria-label="The Open tab shows" hidden>
-      <button type="button" data-group="none" aria-pressed="false" title="One list (d)">List</button>
+      <button type="button" data-group="none" aria-pressed="false" title="Flat: one list, no sections (d)">Flat</button>
       <button type="button" data-group="day" aria-pressed="false" title="Plan: by start date (d)">Plan</button>
       <button type="button" data-group="person" aria-pressed="false" title="By person: who has what (d)" hidden>By person</button>
       <button type="button" data-group="list" aria-pressed="false" title="By list (d)" hidden>By list</button>
@@ -27,6 +27,8 @@
       <button type="button" class="btn tasks-search-btn" aria-label="Search and filter" aria-expanded="false" title="Search and filter (/)">{{template "icon_search"}}</button>
       <input type="text" id="task-filter-search{{.Sfx}}" placeholder="Search… #tag" title="Text searches title and description · #tag filters by tag · #a #b = both tags · #a|b = either · -#tag = without · list:name = in that list (list:inbox) · !high, !low = that importance{{if .CanAssign}} · is:updated = with news for you · is:following = what you follow{{end}}" autocomplete="off">
       <select class="tasks-sort" id="task-sort{{.Sfx}}" aria-label="Order" title="Order (o){{if .Mine}}. My order is yours alone: ranking here moves nothing in a list{{end}}" hidden><option value="manual">{{if .Mine}}My order{{else}}Manual{{end}}</option><option value="due">Due date</option><option value="created">Created</option></select>
+      {{- /* Shown while the tab is sorted (js/taskview.js applySort): a sort turns dragging off, and this is the click back. */}}
+      <button type="button" class="btn tasks-sort-reset" id="task-sort-reset{{.Sfx}}" aria-label="Back to {{if .Mine}}My order{{else}}Manual{{end}}" title="Back to {{if .Mine}}My order{{else}}Manual{{end}}, the order you drag in (o)" hidden>×</button>
       {{- /* The list's ⋯ menu (js/tasksettings.js): List settings… (the dialog where this app's params can be changed), and its tasks as a file, Export (whoever sees them) and Import… (who may write them). */}}
       {{if .Menu}}<button type="button" class="btn tasks-more-btn" id="task-more-btn{{.Sfx}}" aria-haspopup="menu" aria-label="More" title="More: list settings, export, import">⋯</button>{{end}}
       <button class="btn btn-primary" id="task-add-btn{{.Sfx}}" aria-label="New task" title="New task (n)">+<span class="task-add-label"> New</span></button>
@@ -285,7 +287,7 @@
     </div>
     <div class="task-field">
       <label for="task-settings-group{{.Sfx}}">The Open tab shows</label>
-      <select id="task-settings-group{{.Sfx}}" name="group"><option value="none">List: one list</option><option value="day">Plan: by start date</option><option value="person">By person</option><option value="list">By list</option></select>
+      <select id="task-settings-group{{.Sfx}}" name="group"><option value="none">Flat: one list</option><option value="day">Plan: by start date</option><option value="person">By person</option><option value="list">By list</option></select>
     </div>
     {{- /* The rest shows only when set, or once asked for in the line below
         (js/tasksettings.js showField), as the task dialog's rarer fields do. */}}

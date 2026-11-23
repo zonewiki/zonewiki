@@ -624,7 +624,7 @@ def test_by_person_shows_who_has_what_and_a_drop_assigns(alice):
     new(alice, "Mine", assignee="alice")
     new(alice, "No one's")
     alice.goto("/tasks?list=team&view=open&group=none")
-    assert cut(alice) == ["List", "Plan", "By person"]
+    assert cut(alice) == ["Flat", "Plan", "By person"]
     alice.locator(".tasks-cut [data-group=person]").click()
     expect(alice.locator(".board-day-label")).to_have_text(["Unassigned", "You", "@bob"])
     expect(section(alice, "p:bob").locator(".board-day-count")).to_have_text("1")
@@ -654,7 +654,7 @@ def test_by_list_in_my_tasks_and_a_drop_moves(alice):
     new(alice, "Shared", assignee="alice")
     new(alice, "Private", list=None)
     alice.goto("/tasks?mine=1&view=open&group=none")
-    assert cut(alice) == ["List", "Plan", "By list"]      # My tasks are all yours: not By person
+    assert cut(alice) == ["Flat", "Plan", "By list"]      # My tasks are all yours: not By person
     alice.locator(".tasks-cut [data-group=list]").click()
     expect(alice.locator(".board-day-label")).to_have_text(["🔒 Inbox", "team"])
     card(alice, "Shared").drag_to(section(alice, "l:"))
@@ -675,7 +675,7 @@ def test_one_person_has_list_and_plan(page, wiki):
     was: List and Plan."""
     page.request.post("/api/tasks", data={"title": "One"})
     page.goto("/tasks?view=open&group=none")
-    assert cut(page) == ["List", "Plan"]
+    assert cut(page) == ["Flat", "Plan"]
     expect(page.locator(".tasks-cut [data-group=none]")).to_have_attribute("aria-pressed", "true")
     page.locator(".tasks-cut [data-group=day]").click()
     expect(page.locator(".board-day-divider[data-drop-bucket='unplanned']")).to_be_visible()
@@ -1117,8 +1117,8 @@ def test_today_is_open_with_a_filter_and_groups_as_open_does(alice):
     active = alice.locator("#tasks-tabs .active")
     expect(active).to_have_text(["Today"])
     cut = alice.locator(".tasks-cut")
-    expect(cut.locator("button:visible")).to_have_text(["List", "By person"])
-    expect(cut.locator("[aria-pressed='true']")).to_have_text(["List"])
+    expect(cut.locator("button:visible")).to_have_text(["Flat", "By person"])
+    expect(cut.locator("[aria-pressed='true']")).to_have_text(["Flat"])
     expect(alice.locator(".task-item")).to_have_count(3)
     cut.get_by_role("button", name="By person").click()
     expect(active).to_have_text(["Today"])
@@ -1145,7 +1145,7 @@ def test_today_is_open_with_a_filter_and_groups_as_open_does(alice):
     expect(active).to_have_text(["Today"])
     expect(heads).to_have_text(["Unassigned", "You", "@bob"])
     alice.goto("/tasks?list=team&view=today&group=day")            # by day is no choice of Today's
-    expect(cut.locator("[aria-pressed='true']")).to_have_text(["List"])
+    expect(cut.locator("[aria-pressed='true']")).to_have_text(["Flat"])
 
 
 # ── A group's lists ──────────────────────────────────────────────────────────

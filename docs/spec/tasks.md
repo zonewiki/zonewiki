@@ -265,13 +265,14 @@ not `p`, which starts presentation mode on a page with an embedded tasks.
 
 | Choice | `group` | Sections | A drop on a section | Offered |
 |--------|---------|----------|---------------------|---------|
-| **List** | `none` | none: one list, the manual order | ranks | always |
+| **Flat** | `none` | none: one list, the manual order | ranks | always |
 | **Plan** | `day` | Unplanned, Today, Tomorrow, the weekdays, Later (the board, below) | sets the start date | on the Open tab (on Today every task is today's) |
 | **By person** | `person` | Unassigned, You, then everyone else who has tasks here, A–Z | assigns | with users, where tasks have assignees: not in My tasks, a private list or your Inbox |
 | **By list** | `list` | Inbox, then each list with tasks here, your own before the shared ones | moves the task there | where the view holds several lists (My tasks, All tasks, a tag's view) and the wiki has a list |
 
-One person without lists sees List and Plan, and **d** flips between them.
+One person without lists sees Flat and Plan, and **d** flips between them.
 A control of named choices rather than a dropdown: each is one click, the one shown is seen at a glance, and "Plan" names what the board by day is for.
+"Flat", not "List": a list is a place a task is in (Lists), and By list, beside it, means that.
 
 Its default is the view's `group=` (Plan without it; `data-init-group`), set in the settings dialog (The Open tab shows).
 A choice is remembered for the browser tab only (`sessionStorage` `zone-tasks-group:<path>|<list>|<tag>|<instance>`, with `|today` after it for Today's: `list`, `days`, `person` or `lists`), as the active tab is, so a fresh load is back at the default, and the Open tab (a click, Tab) opens it (`tabView`, `openGroup`); one the view doesn't offer is Plan on the Open tab and one list on Today (`groupsOffered`, `defaultGroup`, `todayView`).
@@ -295,7 +296,7 @@ Opening the page anew (a link, the address bar, another browser tab) follows the
 
 ### Open as one list
 
-**List** (`open`) shows every open task as one list, in the manual order (The manual order): a new task on top, where you see it, and wherever you drag it, there it stays.
+**Flat** (`open`) shows every open task as one list, in the manual order (The manual order): a new task on top, where you see it, and wherever you drag it, there it stays.
 Open has no filter for unplanned tasks: those are the Plan board's Unplanned section, where dragging to a day plans them.
 A leftover `unplanned=` embed param is ignored.
 
@@ -310,6 +311,10 @@ They answer "what is due soonest" and "what came in lately", which the manual or
 A sorted list (Today's or Open's) is flat: Due under **By deadline** and **No deadline**, Created under **Newest first**.
 On Plan the sections stay (the board still places tasks by start date) and each is sorted inside; Unplanned's overdue and Today's carried-over lists stay by deadline and by start.
 Nothing reorders in a sort, since the manual order is only edited where it is shown: a list doesn't drag, on Plan no section is `ordered`, so a card dropped on another card is a drop on its section (dragging between days still plans), and Ctrl+Shift+↑/↓ only says to press `o` until Manual.
+
+**A sort shows, and one click ends it**: while the tab is sorted the Order dropdown is marked (the accent's border and tint, its text bold; `.tasks-sort--on`), and a **×** joined to it goes back to Manual (My order in My tasks; `.tasks-sort-reset`, "Back to Manual", set by `applySort` in `js/taskview.js`).
+So a task that doesn't drag has its reason on the screen, and the way out beside it.
+The × is the shown tab's, as the sort is: Open sorted leaves Today without one.
 
 Each tab's sort is remembered per task list for this browser tab only, as the grouping and the active tab are: it survives a reload and a visit to another page, and a new browser tab starts in the manual order again.
 A sort answers a passing question, and the manual order is the one you drag in, so a sort picked last week doesn't decide what you see today.
@@ -338,7 +343,7 @@ Day headers show a count and turn amber at the limit.
 Each day's header also says how many tasks are **due** that day, wherever their cards sit (`· 2 due`, muted, `.board-day-due`; `boardBuckets` gives each day its `due` list): the board places cards by start date, so without it a deadline would be invisible until its day.
 A click (or tap) on it, or on Unplanned's overdue count, lists those tasks in a menu (a bottom sheet on phones; `headerTasksMenu`), and picking one selects its card; the tooltip names them too.
 
-The board is Open grouped by day: every section is its share of the manual order, and the List is what's left of Open: ranking across days.
+The board is Open grouped by day: every section is its share of the manual order, and Flat is what's left of Open: ranking across days.
 
 #### Folding
 
@@ -504,7 +509,7 @@ A setting is kept where it belongs: what the tasks shown are with them (a list's
 | Field | Setting | Whose | |
 |-------|---------|-------|---|
 | Opens on | `view` | the page's embed; the list's on `/tasks?list=` | The Open or the Today tab (by their names here); Closed is offered only where the page says `view=closed` |
-| The Open tab shows | `group` | the page's embed; the list's on `/tasks?list=` | One list, Plan (the board by start date), By person or By list: those the view offers (and the one set) |
+| The Open tab shows | `group` | the page's embed; the list's on `/tasks?list=` | Flat (one list), Plan (the board by start date), By person or By list: those the view offers (and the one set) |
 | WIP limit (on request) | `limit` | the list's | 1–99, empty for none (The WIP limit) |
 | Tab names (on request) | `labels` | the list's | The Open tab's and the Today tab's; empty keeps Open and Today (Tab names) |
 | Tags of a new task (on request) | `new` | the list's | Comma-separated, in place of the filter's single tags; empty: the single tags the view shows |

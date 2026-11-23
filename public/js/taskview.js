@@ -65,6 +65,7 @@ const SORT_MODES = ['manual', 'due', 'created'];
 const SORT_TITLES = { manual: 'the manual order', due: 'by deadline', created: 'newest first' };
 const sortKey = () => 'zone-tasks-sort:' + [location.pathname, app.appEl?.dataset.initList || '',
   app.appEl?.dataset.initTag || '', app.instanceId].join('|');
+const sortReset = app.sortSel?.parentElement.querySelector('.tasks-sort-reset');
 let sortModes = {};   // sortTab() → 'due' | 'created'; missing: manual
 try { sortModes = JSON.parse(sessionStorage.getItem(sortKey())) || {}; } catch (_) {}
 // The shown tab's sort, when not the manual order. Today's is its own
@@ -78,6 +79,10 @@ function applySort() {
   if (!app.sortSel) return;
   app.sortSel.hidden = !sorts();
   app.sortSel.value = activeSort() || 'manual';
+  // A sort shows: the dropdown is tinted and has the click back beside it,
+  // so a task that doesn't drag has its reason on the screen.
+  app.sortSel.classList.toggle('tasks-sort--on', !!activeSort());
+  if (sortReset) sortReset.hidden = !activeSort();
 }
 function setSort(mode) {
   if (!sorts()) return;
@@ -92,10 +97,11 @@ function cycleSort() {
   setSort(SORT_MODES[(SORT_MODES.indexOf(mode) + 1) % SORT_MODES.length]);
 }
 app.sortSel?.addEventListener('change', () => setSort(app.sortSel.value));
+sortReset?.addEventListener('click', () => { setSort('manual'); app.sortSel.focus(); });
 
 // The Open tab shows every open task one of a few ways, which the control
 // beside the tabs picks (.tasks-cut; d goes through them): as one list
-// (List: view 'open', the manual order, where it is ranked
+// (Flat: view 'open', the manual order, where it is ranked
 // across everything), or in sections (view 'plan', the board), by what
 // st.cut says: by start date (Plan: 'day'), a section per assignee (By
 // person: 'person') or per list (By list: 'list'). A drop on a section
@@ -114,7 +120,7 @@ const initGroup = app.appEl?.dataset.initGroup || '';   // [[tasks: group=none|d
 // are from when it was the Plan switch).
 const STORED = { list: 'none', days: 'day', person: 'person', lists: 'list' };
 const storedAs = group => Object.keys(STORED).find(k => STORED[k] === group);
-// The choices this view offers: List always, Plan (by day) on the Open tab
+// The choices this view offers: Flat always, Plan (by day) on the Open tab
 // (on Today every task is today's); By person where tasks have assignees
 // (with users, not in My tasks, a list of the user's own or their Inbox,
 // where every task is theirs); By list where the view holds several lists

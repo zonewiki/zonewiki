@@ -94,13 +94,14 @@ The control next to the tabs (or **d**) picks how the tasks are grouped:
 
 | Choice | Shows | Dragging a card onto a section |
 |--------|-------|-------------------------------|
-| **List** | One list in your order, a new task on top | puts it there in the order |
+| **Flat** | One list in your order, a new task on top | puts it there in the order |
 | **Plan** | A board by start date: Unplanned, Today, Tomorrow, the next days, Later (Open tab only) | sets its start date |
 | **By person** | A section per assignee: Unassigned, You, then everyone else (with several users) | assigns it |
 | **By list** | A section per list, the Inbox first (where a view holds several lists) | moves it to that list |
 
 On the Today and Open tabs the **Order** menu (or **o**) sorts by **Manual**, **Due date** or **Created**.
 Only Manual can be reordered by dragging; the others are for reading.
+While a tab is sorted the menu is marked in green, and the **×** beside it goes back to Manual.
 A sort lasts while the browser tab is open; a new one starts in Manual again.
 The manual order is one for everyone: where you drag a task in a list, it is for all who see the list.
 In **My tasks** the menu says **My order** instead: that order is yours alone ([My tasks](#my-tasks)).
@@ -241,7 +242,7 @@ Pins are your own: a list you make is pinned for you, and a list someone else ma
 | Setting | What it does |
 |---------|--------------|
 | Opens on | The Open or the Today tab |
-| The Open tab shows | List, Plan, By person or By list |
+| The Open tab shows | Flat, Plan, By person or By list |
 | WIP limit | Today warns at this many tasks; Plan's days turn amber |
 | Tab names | Your own words for the tabs, such as Catalogue and Shopping |
 | Tags of a new task | The tags a new task in this list gets |

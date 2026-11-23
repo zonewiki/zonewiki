@@ -403,6 +403,13 @@ def test_ranking_in_my_tasks_leaves_the_lists_order_alone(alice):
     order = page.locator("select.tasks-sort")
     expect(order.locator("option").first).to_have_text("My order")
     expect(order).to_have_attribute("title", "Order (o). My order is yours alone: ranking here moves nothing in a list")
+    # And the way back from a sort names it.
+    order.select_option("due")
+    back = page.locator(".tasks-sort-reset")
+    expect(back).to_have_attribute("aria-label", "Back to My order")
+    back.click()
+    expect(order).to_have_value("manual")
+    expect(titles).to_have_text(["Two", "One"])
     one, two = task(page, "One")["id"], task(page, "Two")["id"]
     card(page, "One").locator(".task-title").click()
     with page.expect_request(lambda r: r.url.endswith("/api/tasks/reorder")) as sent:

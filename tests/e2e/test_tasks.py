@@ -909,7 +909,7 @@ def test_a_link_names_the_tab_and_how_open_shows_its_tasks(page, wiki):
     expect(pressed).to_have_text(["Plan"])
     page.goto("/tasks?view=open&group=none")
     expect(active).to_have_text(["Open"])
-    expect(pressed).to_have_text(["List"])
+    expect(pressed).to_have_text(["Flat"])
     expect(page.locator(".board-day-divider")).to_have_count(0)
     page.goto("/tasks?view=today")
     expect(active).to_have_text(["Today"])
@@ -930,7 +930,7 @@ def test_today_of_one_person_without_lists_has_no_grouping_to_choose(page, wiki)
     expect(card(page, "One")).to_be_visible()
     expect(page.locator(".tasks-cut")).to_be_hidden()
     page.locator('#tasks-tabs [data-view="open"]').click()
-    expect(page.locator(".tasks-cut button:visible")).to_have_text(["List", "Plan"])
+    expect(page.locator(".tasks-cut button:visible")).to_have_text(["Flat", "Plan"])
 
 
 def test_save_writes_only_what_was_changed_in_the_dialog(page, wiki):
@@ -5348,6 +5348,50 @@ def test_today_sorts_as_open_does_and_keeps_its_own_sort(page, wiki):
     other.close()
     sel.select_option("manual")
     assert _list_rows(page) == ["Plain", "Soon due", "Due today"]
+
+
+def test_a_sort_shows_and_one_click_goes_back_to_the_manual_order(page, wiki):
+    """A sort turns dragging off, so it is seen: the Order menu is marked
+    while the tab is sorted, and a button beside it goes back to the manual
+    order. Each tab has its own, as it has its own sort."""
+    today = date.today().isoformat()
+    for t in ("Alpha", "Bravo"):
+        page.request.post("/api/tasks", data={"title": t, "start_date": today})
+    page.goto("/tasks?view=open&group=none")
+    sel = page.locator("select.tasks-sort")
+    back = page.locator(".tasks-sort-reset")
+    expect(sel).to_have_value("manual")
+    expect(sel).not_to_have_class(re.compile("tasks-sort--on"))
+    expect(back).to_be_hidden()
+    plain = sel.evaluate("el => getComputedStyle(el).backgroundColor")
+    sel.select_option("due")
+    expect(sel).to_have_class(re.compile("tasks-sort--on"))
+    assert sel.evaluate("el => getComputedStyle(el).backgroundColor") != plain
+    expect(back).to_be_visible()
+    expect(back).to_have_attribute("aria-label", "Back to Manual")
+    expect(page.locator(".task-item[data-drag]")).to_have_count(0)
+    # Today is not sorted: nothing to go back from.
+    open_tab(page, "focus")
+    expect(sel).to_have_value("manual")
+    expect(back).to_be_hidden()
+    # Marked after a reload too, and on the board.
+    open_tab(page, "open")
+    page.reload()
+    expect(sel).to_have_class(re.compile("tasks-sort--on"))
+    page.locator(".tasks-cut [data-group=day]").click()
+    expect(back).to_be_hidden()                       # Plan's sort is its own
+    page.keyboard.press("o")
+    expect(back).to_be_visible()
+    page.locator(".tasks-cut [data-group=none]").click()
+    # One click: the manual order, which drags, and the mark is gone.
+    back.click()
+    expect(sel).to_have_value("manual")
+    expect(sel).not_to_have_class(re.compile("tasks-sort--on"))
+    expect(back).to_be_hidden()
+    expect(page.locator(".task-item[data-drag]")).to_have_count(2)
+    page.reload()
+    expect(sel).to_have_value("manual")
+    expect(back).to_be_hidden()
 
 
 def test_open_by_deadline_does_not_reorder(page, wiki):

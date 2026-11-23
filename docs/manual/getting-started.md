@@ -88,7 +88,7 @@ The number on the **Tasks** pill counts what's due.
 
 Click **Tasks** (or press `g`, then `t`).
 **Today** shows what you planned for today, and what is due or overdue.
-On **Open**, switch from **List** to **Plan**: a board with a section for each day.
+On **Open**, switch from **Flat** to **Plan**: a board with a section for each day.
 Drag a task from **Unplanned** onto a day, and it's on Today when that day comes.
 Tick a task's box when it's done.
 
