@@ -126,8 +126,10 @@ func TestMCPToolDefinitions(t *testing.T) {
 	// does, an assistant does too. From 36600 for history's assistant and
 	// outside (2026-11): Changes' filters by connection and by text from
 	// elsewhere, at both doors. From 36900 for the name Zonewiki (2026-11).
+	// From 36950 for update_task's mine (2026-11): a place in the user's
+	// own order of My tasks, which they rank in the browser.
 	// tests/test_mcp.py caps what is served (the same list, compact).
-	if len(mcpToolsJSON) > 36950 {
+	if len(mcpToolsJSON) > 37150 {
 		t.Errorf("the definitions grew to %d bytes: every session loads them", len(mcpToolsJSON))
 	}
 }

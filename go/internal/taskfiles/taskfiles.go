@@ -98,6 +98,12 @@ type Store struct {
 	// touched: the tasks the write in progress changed (note, Touched).
 	// Lives as long as the lock is held, or until the write's commit.
 	touched touchedTasks
+	// others: open tasks of owners the write in progress's user doesn't
+	// read, which it gave new places in the manual order
+	// (WriteOthersLocked); othersChanged: their files, once written, for a
+	// commit of their own. Live as long as the lock is held.
+	others        []*Task
+	othersChanged []string
 }
 
 // touchedTasks: of each task a write's files held or hold, by id, what the
@@ -119,6 +125,7 @@ func (s *Store) Lock() { s.mu.Lock(); s.locked = true }
 func (s *Store) Unlock() {
 	s.Release()
 	s.scope, s.locked, s.touched = nil, false, touchedTasks{}
+	s.others, s.othersChanged = nil, nil
 	s.mu.Unlock()
 }
 
@@ -275,7 +282,8 @@ var Everyone = asker.Asker{Name: "\x00everyone"}
 // dirs: the folders that hold task files of owner's: their Dir, then each
 // list's that is there, A–Z. **Who sees a task is decided by where it is
 // kept**: whose files a user reads and writes is Owners, so a write never
-// touches the files of a place its user doesn't see.
+// touches the files of a place its user doesn't see (but for the places in
+// the manual order, which is one for every task: OthersOpenLocked).
 func (s *Store) dirs(who asker.Asker, owner string) []string {
 	out := []string{s.Dir(owner)}
 	entries, _ := os.ReadDir(filepath.Join(s.Dir(owner), ListsDirName))
@@ -1098,6 +1106,97 @@ func (s *Store) unfiledOf(who asker.Asker, owners []string) bool {
 	return false
 }
 
+// ---- the manual order, which is one for every owner's tasks ----
+
+// others: the owners whose task files user doesn't read.
+func (s *Store) otherOwners(user asker.Asker) []string {
+	mine := s.Owners(user)
+	var owners []string
+	for _, o := range s.EveryOwner() {
+		if !slices.Contains(mine, o) {
+			owners = append(owners, o)
+		}
+	}
+	return owners
+}
+
+// OthersOrderEnds: the lowest and the highest place in the manual order
+// (Task.SortOrder) among the open tasks of every owner user doesn't read;
+// any: there is one. The order is one for all tasks, so its top is above
+// every task, those the user who puts a task there doesn't see too. Only
+// the two numbers leave here, and nothing is copied.
+func (s *Store) OthersOrderEnds(user asker.Asker) (lo, hi float64, any bool) {
+	for _, o := range s.otherOwners(user) {
+		for _, d := range s.dirs(Everyone, o) {
+			tasks, _, _ := peekFile(openIn(d))
+			for _, t := range tasks {
+				if t.SortOrder == nil {
+					continue
+				}
+				if !any || *t.SortOrder < lo {
+					lo = *t.SortOrder
+				}
+				if !any || *t.SortOrder > hi {
+					hi = *t.SortOrder
+				}
+				any = true
+			}
+		}
+	}
+	return lo, hi, any
+}
+
+// OthersOpenLocked: the open tasks of every owner user doesn't read, for
+// the write in progress to make room in the manual order where the numbers
+// between two tasks are used up: tasks of both sides stand there, and all
+// of them keep their order. Nothing but their places (SortOrder) may be
+// changed, and nothing of them shown. An owner whose files can't be read
+// is left out: their tasks stay as they are.
+func (s *Store) OthersOpenLocked(user asker.Asker) []*Task {
+	return eachOwner(s.otherOwners(user), func(o string) []*Task {
+		tasks, err := s.openOf(Everyone, o, true)
+		if err != nil {
+			return nil
+		}
+		return tasks
+	})
+}
+
+// WriteOthersLocked: tasks (OthersOpenLocked's, all of them) have new
+// places in the manual order: the write in progress writes them with its
+// own open tasks, and commits their files apart, as Zonewiki's own (they
+// are not its user's, and no task of theirs changed but for its number).
+func (s *Store) WriteOthersLocked(tasks []*Task) { s.others = tasks }
+
+// writeOthers writes what WriteOthersLocked left, each owner's tasks into
+// their files (those that changed), outside what the write names as
+// changed (Touched).
+func (s *Store) writeOthers() error {
+	if s.others == nil {
+		return nil
+	}
+	by := map[string][]*Task{}
+	var owners []string
+	for _, t := range s.others {
+		if _, ok := by[t.Owner]; !ok {
+			owners = append(owners, t.Owner)
+		}
+		by[t.Owner] = append(by[t.Owner], t)
+	}
+	s.others = nil
+	touched := s.touched
+	defer func() { s.touched = touched }()
+	for _, o := range owners {
+		s.touched = touchedTasks{}
+		more, err := s.writeOpenOf(Everyone, o, by[o], false, false)
+		s.othersChanged = append(s.othersChanged, more...)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // ---- writing ----
 
 // byOwner: tasks split by their owner, each of user's owners present (one
@@ -1171,7 +1270,7 @@ func (s *Store) writeOpenLocked(user asker.Asker, tasks []*Task) ([]string, erro
 			return changed, err
 		}
 	}
-	return changed, nil
+	return changed, s.writeOthers()
 }
 
 // writeOpenOf writes owner's open tasks, each folder's file when its tasks
@@ -1333,6 +1432,10 @@ func sameTasks(raw []byte, text string) bool {
 // tasks it changed (Touched).
 func (s *Store) CommitFiles(user asker.Asker, message string, changed []string) {
 	s.Release()
+	if len(s.othersChanged) > 0 {
+		_ = s.Commit("", "Make room in the tasks' order", nil, s.othersChanged...)
+		s.othersChanged = nil
+	}
 	touched := s.Touched()
 	if len(changed) > 0 {
 		_ = s.Commit(user.Name, message, touched, changed...)

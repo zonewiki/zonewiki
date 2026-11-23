@@ -198,12 +198,12 @@ func createTask(user asker, data jsonObj, message string) (*Task, error) {
 	}
 	active = append(active, t)
 	// position: where it goes in the manual order; without, at the top, as
-	// a new task goes (unless the write gives it a sort_order itself).
+	// a new task goes.
 	if !positioned && t.SortOrder == nil {
 		pos, positioned = orderPos{At: "top"}, true
 	}
 	if positioned {
-		if err := moveTo(active, []string{t.ID}, pos); err != nil {
+		if err := moveTo(user, active, []string{t.ID}, pos); err != nil {
 			return nil, err
 		}
 	}
@@ -314,19 +314,12 @@ func applyDate(user asker, t *Task, data jsonObj, key, event string, field *stri
 	return nil
 }
 
-// applyOrder: a write's sort_order and keep.
+// applyOrder: a write's keep and importance. Not a sort_order: a task's
+// place in the manual order is given as a position or a move (moveTo,
+// placeTasks), which place it by its neighbours as the server has them; a
+// number sent with a task (one read earlier and sent back whole) is left
+// aside.
 func applyOrder(t *Task, data jsonObj) error {
-	if data.Has("sort_order") {
-		f, ok := jsonobj.As[float64](data["sort_order"])
-		switch {
-		case data.Null("sort_order"):
-			t.SortOrder = nil
-		case ok:
-			t.SortOrder = &f
-		default:
-			return refuse("sort_order must be a number")
-		}
-	}
 	if data.Has("keep") {
 		keep, err := asBool(data["keep"], "keep")
 		if err != nil {
@@ -820,7 +813,7 @@ func updateTaskLocked(user asker, id string, data jsonObj, suffix string) (*Task
 	// position: its place in the manual order, which only an open task has
 	// (still, or reopened by this write).
 	if positioned {
-		if err := moveTo(active, []string{t.ID}, pos); err != nil {
+		if err := moveTo(user, active, []string{t.ID}, pos); err != nil {
 			return nil, err
 		}
 	}
@@ -1050,24 +1043,70 @@ func tagTasks(user asker, ids, add, remove []string, message string) ([]*Task, e
 // (movesTo).
 type taskMove struct{ ID, After, Before string }
 
-// placeTasks gives each moved task of active (the open tasks a write has)
-// its place between its two (placeBetween), one after the other, in the
-// order the server has by then: so a list that is stale in a browser
+// manualOrder: the manual order as a write places tasks in it. The order is
+// one for every open task of the wiki, and a user sees their part of it:
+// active is that part (the open tasks the write has, and writes), and of
+// every other owner's tasks it knows what the order needs, never more: the
+// two ends (a task put on top is above every task), and, where room has to
+// be made, their places (others, read then).
+type manualOrder struct {
+	user   asker
+	active []*Task
+	// The ends of the others' part of the order (any: they have one).
+	lo, hi float64
+	any    bool
+	// others: every other owner's open tasks, once room had to be made
+	// (loaded); they are written when a place of theirs changed.
+	others []*Task
+	loaded bool
+}
+
+// orderFor: the manual order for a write by user that has the open tasks
+// active (under the task lock).
+func orderFor(user asker, active []*Task) *manualOrder {
+	o := &manualOrder{user: user, active: active}
+	o.lo, o.hi, o.any = taskFiles.OthersOrderEnds(user)
+	return o
+}
+
+// ends: the lowest and highest place in the whole order, t's own aside;
+// any: a task has one.
+func (o *manualOrder) ends(t *Task) (lo, hi float64, any bool) {
+	lo, hi, any = o.lo, o.hi, o.any
+	for _, x := range o.active {
+		if x == t || x.SortOrder == nil {
+			continue
+		}
+		if !any || *x.SortOrder < lo {
+			lo = *x.SortOrder
+		}
+		if !any || *x.SortOrder > hi {
+			hi = *x.SortOrder
+		}
+		any = true
+	}
+	return lo, hi, any
+}
+
+// placeTasks gives each moved task of active (the open tasks a write by
+// user has) its place between its two (placeBetween), one after the other,
+// in the order the server has by then: so a list that is stale in a browser
 // doesn't put its old order back over what someone ranked meanwhile. A
 // task or neighbour that isn't among active counts as none. A task not yet
 // placed is placed first where it is shown (placeUnplaced).
-func placeTasks(active []*Task, moves []taskMove) {
+func placeTasks(user asker, active []*Task, moves []taskMove) {
 	if len(moves) == 0 {
 		return
 	}
-	placeUnplaced(active)
+	o := orderFor(user, active)
+	o.placeUnplaced()
 	byID := make(map[string]*Task, len(active))
 	for _, t := range active {
 		byID[t.ID] = t
 	}
 	for _, m := range moves {
 		if t := byID[m.ID]; t != nil {
-			placeBetween(active, t, byID[m.After], byID[m.Before])
+			o.placeBetween(t, byID[m.After], byID[m.Before])
 		}
 	}
 }
@@ -1079,17 +1118,14 @@ func placeTasks(active []*Task, moves []taskMove) {
 // (TasksCore.byOpenOrder, which reverses the list first, so of two made at
 // the same moment the later in the file comes first). So a move, or a
 // position, lands where it was asked for, and nothing jumps.
-func placeUnplaced(active []*Task) {
+func (o *manualOrder) placeUnplaced() {
 	var unplaced []*Task
-	top, placed := 0.0, false
-	for _, t := range active {
-		switch {
-		case t.SortOrder == nil:
+	for _, t := range o.active {
+		if t.SortOrder == nil {
 			unplaced = append(unplaced, t)
-		case !placed || *t.SortOrder < top:
-			top, placed = *t.SortOrder, true
 		}
 	}
+	top, _, _ := o.ends(nil)
 	slices.Reverse(unplaced)
 	slices.SortStableFunc(unplaced, func(a, b *Task) int { return strings.Compare(b.CreatedAt, a.CreatedAt) })
 	for i, t := range unplaced {
@@ -1101,53 +1137,124 @@ func placeUnplaced(active []*Task) {
 // placeBetween gives t the place in the manual order between the tasks
 // after (the one before it; nil: none) and before (the one that follows;
 // nil: none): a number between theirs (Task.SortOrder), so no other task
-// is written. A neighbour that is in no order (anymore) counts as none, and
-// two that are not in that order (the other way round, or one number: a
-// list in a browser that was stale, lists numbered apart) leave after to
-// say where. When the numbers between two are used up, the tasks' order is
-// numbered anew, as it stands, and the place taken then.
-func placeBetween(tasks []*Task, t, after, before *Task) {
+// is written. With none before it, it is the first of what its user sees,
+// and goes above every task; with none after it, below every task. A
+// neighbour that is in no order (anymore) counts as none, and two that are
+// not in that order (the other way round, or one number: a list in a
+// browser that was stale) leave after to say where. When the numbers
+// between two are used up, room is made there (makeRoom).
+func (o *manualOrder) placeBetween(t, after, before *Task) {
 	val := func(n *Task) (float64, bool) {
 		if n == nil || n == t || n.SortOrder == nil {
 			return 0, false
 		}
 		return *n.SortOrder, true
 	}
-	place := func() (float64, bool) {
-		lo, hasLo := val(after)
-		hi, hasHi := val(before)
-		if hasLo && hasHi && hi <= lo {
-			hasHi = false
+	lo, hasLo := val(after)
+	hi, hasHi := val(before)
+	crossed := hasLo && hasHi && hi <= lo
+	top, bottom, any := o.ends(t)
+	var f float64
+	switch {
+	case hasLo && hasHi && !crossed:
+		if f = lo + (hi-lo)/2; !(f > lo && f < hi && hi-lo > orderRoom) {
+			f = o.makeRoom(t, lo)
 		}
-		switch {
-		case hasLo && hasHi:
-			mid := lo + (hi-lo)/2
-			return mid, mid > lo && mid < hi && hi-lo > 1e-6
-		case hasLo:
-			return lo + 1, true
-		case hasHi:
-			return hi - 1, true
-		}
-		return 0, true
-	}
-	f, ok := place()
-	if !ok {
-		// No room left between them: every ranked task numbered 0, 1, 2 … in
-		// the order they are in.
-		var ranked []*Task
-		for _, x := range tasks {
-			if x.SortOrder != nil && x != t {
-				ranked = append(ranked, x)
-			}
-		}
-		slices.SortStableFunc(ranked, func(a, b *Task) int { return cmp.Compare(*a.SortOrder, *b.SortOrder) })
-		for i, x := range ranked {
-			n := float64(i)
-			x.SortOrder = &n
-		}
-		f, _ = place()
+	case crossed:
+		f = lo + 1
+	case hasLo:
+		f = max(lo, bottom) + 1
+	case hasHi:
+		f = min(hi, top) - 1
+	case any:
+		f = top - 1
 	}
 	t.SortOrder = &f
+}
+
+// orderRoom: two places in the manual order nearer than this have no room
+// between them (the numbers are halved at every task put between two);
+// orderStep: the least distance makeRoom leaves between two tasks, which
+// is room for a dozen more between them.
+const (
+	orderRoom = 1e-6
+	orderStep = 1.0 / 64
+)
+
+// makeRoom makes room for t right after the place lo, where the numbers
+// are used up, and returns its place there. It numbers anew only the tasks
+// around that place, as few as give every two of them orderStep between
+// them (twice as many at each try, the ends of the order moving out
+// freely), each in the order it is in: so a team's ranking in one spot
+// writes the tasks crowded there, not every task of the wiki. The order is
+// one for all tasks, so tasks of owners the user doesn't read may stand
+// there: their places change with the others (the store writes them in a
+// commit of Zonewiki's own, taskfiles.Store.WriteOthersLocked), and nothing
+// else of them is read here.
+func (o *manualOrder) makeRoom(t *Task, lo float64) float64 {
+	if !o.loaded {
+		o.others, o.loaded = taskFiles.OthersOpenLocked(o.user), true
+	}
+	var ranked []*Task
+	for _, x := range slices.Concat(o.active, o.others) {
+		if x.SortOrder != nil && x != t {
+			ranked = append(ranked, x)
+		}
+	}
+	slices.SortStableFunc(ranked, func(a, b *Task) int { return cmp.Compare(*a.SortOrder, *b.SortOrder) })
+	// at: the last task at lo or before it; t goes between it and the next.
+	at := len(ranked) - 1
+	for at > 0 && *ranked[at].SortOrder > lo {
+		at--
+	}
+	a, b := at, min(at+1, len(ranked)-1)
+	var from, step float64
+	for width := 4; ; width *= 2 {
+		// The tasks a…b share the places from…from+n·step, one left free.
+		n := float64(b - a + 1)
+		first, last := a == 0, b == len(ranked)-1
+		from, step = *ranked[a].SortOrder, (*ranked[b].SortOrder-*ranked[a].SortOrder)/n
+		switch {
+		case first && last:
+			from, step = 0, 1
+		case first:
+			from, step = *ranked[b].SortOrder-n, 1
+		case last:
+			step = 1
+		}
+		if step >= orderStep {
+			break
+		}
+		a, b = max(a-width, 0), min(b+width, len(ranked)-1)
+	}
+	changed := false
+	for i, x := range ranked[a : b+1] {
+		slot := i
+		if a+i > at {
+			slot++ // past the place left for t
+		}
+		if f := from + step*float64(slot); f != *x.SortOrder {
+			x.SortOrder = &f
+			changed = changed || slices.Contains(o.others, x)
+		}
+	}
+	if changed {
+		taskFiles.WriteOthersLocked(o.others)
+	}
+	// The others' ends are their places now.
+	o.lo, o.hi, o.any = 0, 0, false
+	for _, x := range o.others {
+		if x.SortOrder != nil {
+			if !o.any || *x.SortOrder < o.lo {
+				o.lo = *x.SortOrder
+			}
+			if !o.any || *x.SortOrder > o.hi {
+				o.hi = *x.SortOrder
+			}
+			o.any = true
+		}
+	}
+	return from + step*float64(at-a+1)
 }
 
 // orderPos: a position in the manual order that a write puts tasks at: At
@@ -1272,11 +1379,11 @@ func movesTo(active []*Task, ids []string, pos orderPos) ([]taskMove, error) {
 
 // moveTo puts the tasks ids, in that order, at pos in the manual order of
 // active (movesTo, placeTasks), or refuses with nothing changed.
-func moveTo(active []*Task, ids []string, pos orderPos) error {
-	placeUnplaced(active)
+func moveTo(user asker, active []*Task, ids []string, pos orderPos) error {
+	orderFor(user, active).placeUnplaced()
 	moves, err := movesTo(active, ids, pos)
 	if err == nil {
-		placeTasks(active, moves)
+		placeTasks(user, active, moves)
 	}
 	return err
 }
@@ -1295,7 +1402,7 @@ func reorderTasks(user asker, ids []string, pos orderPos, message string) ([]*Ta
 	if err != nil {
 		return nil, err
 	}
-	if err := moveTo(active, ids, pos); err != nil {
+	if err := moveTo(user, active, ids, pos); err != nil {
 		return nil, err
 	}
 	byID := make(map[string]*Task, len(active))

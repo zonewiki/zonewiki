@@ -6,7 +6,7 @@ from datetime import date, timedelta
 import pytest
 from playwright.sync_api import expect
 
-from conftest import LONG_PRESS_MS, TOUCH_PHONE, box_of, make_list, open_tab, pick_date, quick_touch, still, wait_until
+from conftest import LONG_PRESS_MS, TOUCH_PHONE, box_of, make_list, open_tab, pick_date, quick_touch, rank, still, wait_until
 
 
 def day(offset: int) -> str:
@@ -563,7 +563,7 @@ def test_touch_drag_to_unplanned_clears_start(new_page, wiki):
 def test_touch_drag_reorders_all_tab(new_page, wiki):
     pg = new_page(**TOUCH_PHONE)
     ids = [pg.request.post("/api/tasks", data={"title": t}).json()["id"] for t in ("One", "Two", "Three")]
-    pg.request.post("/api/tasks/reorder", data={"order": ids})
+    rank(pg, ids)
     wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
     pg.goto("/page/tasks?view=open&group=none")
     open_tab(pg, "open")
@@ -582,7 +582,7 @@ def test_touch_drag_reorders_a_plan_day(new_page, wiki):
     pg = new_page(**TOUCH_PHONE)
     ids = [pg.request.post("/api/tasks", data={"title": t, "start_date": day(0)}).json()["id"]
            for t in ("One", "Two", "Three")]
-    pg.request.post("/api/tasks/reorder", data={"order": ids})
+    rank(pg, ids)
     pg.goto("/tasks?view=open&group=day")
     send = touch_drag(pg, card(pg, "Three"), card(pg, "One"), release=False, at=0.25)
     expect(card(pg, "One")).to_have_class(re.compile(r"\btask-drop-before\b"))
@@ -670,7 +670,7 @@ def test_touch_press_turns_off_native_drag(new_page, wiki):
     # not natively draggable; a mouse press makes it draggable again.
     pg = new_page(**TOUCH_PHONE)
     ids = [pg.request.post("/api/tasks", data={"title": t}).json()["id"] for t in ("One", "Two")]
-    pg.request.post("/api/tasks/reorder", data={"order": ids})
+    rank(pg, ids)
     wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
     pg.goto("/page/tasks?view=open&group=none")
     open_tab(pg, "open")

@@ -12,7 +12,7 @@ const { st } = app;
 // ── Keyboard navigation ────────────────────────────────────────────────────
 function reorderSelected(direction) {
   if (!st.selectedIds.size) return;
-  if (app.activeSort()) showNotice(`Sorted ${app.SORT_TITLES[app.activeSort()]}: press o until Manual to reorder`);
+  if (app.activeSort()) showNotice(`Sorted ${app.SORT_TITLES[app.activeSort()]}: press o until ${app.sortSel?.options[0]?.text || 'Manual'} to reorder`);
   else if (app.ORDERED[st.activeView]) app.orderKeyMove(direction);
   else if (st.activeView === 'plan') planKeyMove(direction);
 }

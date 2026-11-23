@@ -390,16 +390,22 @@ def test_ranking_in_my_tasks_leaves_the_lists_order_alone(alice):
     titles = page.locator(".tasks-list > .task-item .task-title")
     page.goto("/tasks?mine=1&view=open&group=none")
     expect(titles).to_have_text(["Two", "One"])           # the list's order until ranked here
+    # The Order menu says whose order this is.
+    order = page.locator("select.tasks-sort")
+    expect(order.locator("option").first).to_have_text("My order")
+    expect(order).to_have_attribute("title", "Order (o). My order is yours alone: ranking here moves nothing in a list")
     one, two = task(page, "One")["id"], task(page, "Two")["id"]
     card(page, "One").locator(".task-title").click()
     with page.expect_request(lambda r: r.url.endswith("/api/tasks/reorder")) as sent:
         page.keyboard.press("Control+Shift+ArrowUp")
-    assert sent.value.post_data_json == {"mine": True, "order": [one, two]}
+    assert sent.value.post_data_json == {"mine": True, "moves": [{"id": one, "after": None, "before": two}]}
     wait_until(page, lambda: page.request.get("/api/tasks?with=order").json()["order"] == [one, two])
     # No task was written: the list's order is as it was.
     assert {t["title"]: t["sort_order"] for t in page.request.get("/api/tasks").json()} == {"One": 0, "Two": -1}
     page.goto("/tasks?list=team&view=open&group=none")
     expect(titles).to_have_text(["Two", "One"])
+    expect(order.locator("option").first).to_have_text("Manual")
+    expect(order).to_have_attribute("title", "Order (o)")
     # Back in My tasks, One is where it was put.
     page.goto("/tasks?mine=1&view=open&group=none")
     expect(titles).to_have_text(["One", "Two"])

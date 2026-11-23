@@ -302,6 +302,7 @@ A leftover `unplanned=` embed param is ignored.
 ### Sorting
 
 An **Order** dropdown in the toolbar (`select.tasks-sort`, shown on Open and Plan) picks **Manual**, **Due date** or **Created**; **o** cycles them.
+In My tasks the first entry reads **My order**: the manual order there is your own (My tasks' own order).
 Due sorts by deadline, nearest first (overdue on top), tasks without one last, each in Open's order within (`TasksCore.byDeadline`); Created newest first (`TasksCore.byCreated`).
 They answer "what is due soonest" and "what came in lately", which the manual order doesn't.
 
@@ -442,6 +443,11 @@ Closed's heading has a **year switcher** (`.closed-years`, years from `/api/task
 **Every open task has one place in one manual order** (`sort_order`), which Open's list, Today and every Plan section show (`ORDERED` in `js/taskorder.js`, `TasksCore.byOpenOrder`): **a new task goes on top** (`createTask` in `go/tasks.go` gives it the place above every task, `position: top`), so what was just captured is where you look, and it stays where you put it.
 There is no state of "not ranked yet" and no label in the list: a list reads top to bottom, and a task is moved where it belongs.
 
+**The order is one for every task of the wiki, and you see your part of it.**
+A list's view shows its tasks in it, All tasks every task you see, so two tasks stand the same way round in every view that shows both, for everyone who sees both.
+So a new task is above every task, those its maker doesn't see too (another user's private tasks, a group's they are not in), and a task dragged to the top or the bottom of what you see is first or last of all (`manualOrder.ends` in `go/tasks.go`, `OthersOrderEnds` in `go/internal/taskfiles`: only the two numbers leave the files you don't read).
+My tasks is the one view with an order of its own, yours (My tasks' own order): there the Order menu says **My order**.
+
 A task dropped on a task lands where the pointer is: above it on its upper half, below it on the lower half, a line on that edge showing it while dragging (`dropSide`, `.task-drop-before`/`-after`, mouse and touch; `orderDrop`).
 Ctrl+Shift+↑/↓ moves the selection one place (`orderKeyMove`).
 Only the moved tasks change place in the full order: each goes right after the visible task now above it (or right before the one below, when first), and every task the view or filter hides keeps its place (`placeShown`, `TasksCore.placeInOrder`).
@@ -452,9 +458,20 @@ A task without a place (`sort_order` null: a file edited by hand, an import, an 
 
 #### A move is saved as a move
 
-A list tells the server each moved task with the task now before it and the next one after it that didn't move (`TasksCore.orderMoves`, `saveOrder` in `js/taskorder.js`; `POST /api/tasks/reorder` with `moves: [{id, after, before}]`), and the server gives the task a number between those two's as it has them by then (`placeTasks`, `placeBetween` in `go/tasks.go`; `sort_order` is a number, not a count), writing no other task.
-So a list that is stale in someone's browser doesn't put its old order back over what a colleague ranked meanwhile; neighbours that are no longer in that order leave `after` to say where, and when the numbers between two tasks are used up the order is numbered anew as it stands.
-My tasks' order, which is one user's own, is sent whole (My tasks' own order).
+A list tells the server each moved task with the task now before it and the next one after it that didn't move (`TasksCore.orderMoves`, `placeShown` in `js/taskorder.js`; `POST /api/tasks/reorder` with `moves: [{id, after, before}]`), and the server gives the task a number between those two's as it has them by then (`placeTasks`, `placeBetween` in `go/tasks.go`; `sort_order` is a number, not a count), writing no other task.
+So a list that is stale in someone's browser doesn't put its old order back over what a colleague ranked meanwhile; neighbours that are no longer in that order leave `after` to say where.
+My tasks' order, which is one user's own, is changed by moves too, so that a phone doesn't put its old order back over what was ranked at the desk (My tasks' own order).
+
+**A move is the only way an order changes.**
+No route takes an order whole, and none a place as a number: a `sort_order` sent with a task (one read earlier and sent back) is left aside, a new task goes on top, and a place is given as a position (A position in the order) or a move.
+(A deleted task put back keeps the place it had: `POST /api/tasks/restore`.)
+
+#### Making room
+
+A task put between two gets the number halfway between theirs, so after some twenty tasks put into one spot the numbers there are used up.
+Room is then made around that spot only (`makeRoom` in `go/tasks.go`): the tasks crowded there, as few as give every two of them some distance again (twice as many at each try), get new numbers in the order they are in, and every task farther away keeps its own.
+So a team that ranks in one place writes the tasks there, not every task of the wiki.
+Tasks you don't see may stand in that spot, the order being one for all: their numbers change with their neighbours', nothing else of them is read, and their files are written in a commit of Zonewiki's own, "Make room in the tasks' order", which names no task and which your history doesn't show (`OthersOpenLocked`, `WriteOthersLocked` in `go/internal/taskfiles`).
 
 #### A position in the order
 
@@ -463,6 +480,7 @@ A task can also be given its place by naming it: `position` on `POST /api/tasks`
 Several tasks given one position (an assistant's `update_task` with `ids`) go there one after the other, in the order given, as a drop of several selected tasks.
 The task to put it by must be open, and one the user sees: one they don't is refused in the words for a task that isn't there.
 The order is one for all tasks, so the place holds in every view that shows both tasks; My tasks' own order is left as it is, as a drop in a list's view leaves it.
+An assistant's `update_task` with `mine: true` puts the task at that position in My tasks' own order instead ("put this first for me"; My tasks' own order).
 
 ### Long sections
 
@@ -1598,12 +1616,21 @@ Not shown when there is none.
 
 #### My tasks' own order
 
-My tasks' manual order is its own, and yours (`mineOrder`, `setMineOrder` in `go/tasklists.go`; `own`, `setOwnOrder` in `tasks.js`): a list's order (a task's `sort_order`) is the list's, for everyone who looks at it, a team's ranking of its backlog; what you rank in My tasks, across lists, is your sequence and moves nothing in any list.
-It is kept as task ids in your registry (`"order"`; without users the wiki's), written by `POST /api/tasks/reorder` with `mine: true` in a commit "Reorder My tasks": no task is written.
-The view lays it over its own copies of the tasks (a task's place in it stands for its `sort_order` there; a task not in it has none there, so it is on top, newest first), so the list, Today and the Plan board's sections work in My tasks as everywhere; it comes with the page's tasks (`"order"` in `tasksInitial`) and with `GET /api/tasks?with=order`.
-A task new to My tasks (one just given to you, a capture) is at the top until you place it.
-An assistant's position (A position in the order) is in the lists' order, not in this one.
-Until you rank something there it is the lists' order of your tasks, so nothing moves on the day; ids of tasks that are closed or gone drop out at the next move.
+My tasks' manual order is its own, and yours: the shared order (a task's `sort_order`) is for everyone who looks at a list, a team's ranking of its backlog; what you rank in My tasks, across lists, is your sequence and moves nothing in any list.
+It is the same in a wiki without users, where it is the wiki's.
+The screen says which order you are in: in My tasks the Order menu's first entry is **My order** (its tooltip: "My order is yours alone: ranking here moves nothing in a list"), everywhere else **Manual**.
+
+A task new to My tasks (one just given to you, a capture) is at the top, newest first, until you place it, whatever its place in its list; your next move places it there for good.
+Until you rank something in My tasks it is the shared order of your tasks, so nothing moves on the day.
+A task that is closed or gone is in no order.
+
+An assistant reads and writes it as you do: `search_tasks` with `order="manual"` and no list lists your tasks in it first, a new one on top as in the browser, and `update_task` with `mine: true` gives a task its position there (A position in the order; `positionMine`).
+Without `mine` an assistant's position is in the shared order, not in this one.
+
+How it works: the order is kept as task ids in your registry (`"order"`; without users the wiki's; `mineOrder`, `mineOrderOf`, `reorderMine` in `go/tasklists.go`), written by `POST /api/tasks/reorder` with `mine: true` and `moves` in a commit "Reorder My tasks": no task is written.
+The moves are a list's (`{id, after, before}`): each moved task goes right after the one named `after`, else right before `before`, else first, in the order the server has (`moveIDs`), so a view that is stale on one device doesn't put its old order back.
+The view lays the order over its own copies of the tasks (`own`, `setOwnOrder` in `tasks.js`: a task's place in it stands for its `sort_order` there; a task not in it has none there, so it is on top, newest first), so the list, Today and the Plan board's sections work in My tasks as everywhere; it comes with the page's tasks (`"order"` in `tasksInitial`) and with `GET /api/tasks?with=order`, as the view shows it.
+A connection that wasn't given your private tasks can't change it: it is kept with them.
 
 #### One rule in server and browser
 

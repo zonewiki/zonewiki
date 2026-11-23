@@ -101,6 +101,8 @@ The control next to the tabs (or **d**) picks how the tasks are grouped:
 
 On the Open tab the **Order** menu (or **o**) sorts by **Manual**, **Due date** or **Created**.
 Only Manual can be reordered by dragging; the others are for reading.
+The manual order is one for everyone: where you drag a task in a list, it is for all who see the list.
+In **My tasks** the menu says **My order** instead: that order is yours alone ([My tasks](#my-tasks)).
 
 ### Planning your week
 
@@ -219,7 +221,9 @@ It can't be renamed, deleted or shared.
 **My tasks** is your home view, where the Tasks link in the top bar goes and what its badge counts.
 It holds what is yours to do: the tasks in your own lists (your Inbox, your private lists) and the shared tasks assigned to you.
 An unassigned task in a shared list belongs to that list's backlog, not to everyone's My tasks; the list's heading shows "N unassigned".
-What you rank in My tasks is your own order and changes nothing in the lists.
+What you rank in My tasks is your own order, **My order** in the **Order** menu, and changes nothing in the lists.
+A task that is new to you (one just given to you, one you just made) is on top there until you drag it into place.
+An assistant asked to "put this first for me" ranks in the same order ([details](../spec/tasks.md#my-tasks)).
 "Given to others: N" links to the tasks you made that someone else has.
 
 ### Pins and list settings

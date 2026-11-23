@@ -320,6 +320,14 @@ def more_menu(page):
         page.locator("#task-more-btn").click()
 
 
+def rank(page, ids):
+    """Put the tasks ids in this manual order, below every other task: each
+    at the bottom, one after the other (a test's starting order; the order
+    itself is changed by moves, tests/test_task_order.py)."""
+    for task_id in ids:
+        assert page.request.put(f"/api/tasks/{task_id}", data={"position": "bottom"}).ok
+
+
 def wait_until(page, predicate, timeout_ms: int = WAIT_MS, settled: bool = True):
     """Wait until predicate() holds, looking every 100 ms; fails when it
     never does. For what expect() can't watch: the API's answer, a file on

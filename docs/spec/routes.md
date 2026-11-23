@@ -295,7 +295,8 @@ Comments, Keep tasks and Sections, which the rows and sections here name, are in
 - `completed: true` on a keep task does not archive it (see Keep tasks).
 - `completed`, `wont_do`, `skip` and `keep` are `true` or `false`, anything else is refused (400, "completed must be true or false").
 - A date is `YYYY-MM-DD`, `null` or `""` (none); a month or a day of one digit (`2026-1-5`, and the space before a day of one that strptime's `%Y-%m-%d` takes) is read too and kept padded (`2026-01-05`; `cleanDay`), since every date is compared as text; anything that is no day is refused (400, "Invalid date format, expected YYYY-MM-DD").
-- `position` gives the task its place in the manual order in the same commit: `"top"`, `"bottom"`, `{after: id}` or `{before: id}` (A position in the order in `docs/spec/tasks.md`); `POST /api/tasks` takes it too, and without it a new task is unranked.
+- `position` gives the task its place in the manual order in the same commit: `"top"`, `"bottom"`, `{after: id}` or `{before: id}` (A position in the order in `docs/spec/tasks.md`); `POST /api/tasks` takes it too, and without it a new task goes on top.
+  A `sort_order` sent with a task is left aside: a place is a position or a move (Reordering, below).
   Only an open task has one, and the task named must be open and ranked; anything else is refused (400) with nothing written.
 
 ### Several tasks at once
@@ -315,17 +316,17 @@ Snapshots keep their original id/created_at/completion state, as far as those ar
 
 ### Reordering
 
-`POST /api/tasks/reorder` takes one of these bodies:
+`POST /api/tasks/reorder` takes moves, one for each task moved, and answers 204:
 
 | Body | What it does |
 |------|--------------|
-| `{ mine: true, order: [ids] }` | Keeps the order as the user's own of My tasks and writes no task (204) |
 | `{ moves: [{id, after, before}] }` | Places each task between the two named, in the order the server has (what a list sends; The manual order in `docs/spec/tasks.md`) |
-| `{ order: [id1, id2, …] }` | Densely renumbers the given ids' `sort_order` to `0..n-1` |
-| `{ updates: [{ id, sort_order }, …] }` | Sets specific ids to specific (possibly fractional) values without touching any other task; a `null` value clears the field, leaving the task without a place (shown on top until a move places it) |
+| `{ mine: true, moves: [{id, after, before}] }` | The same in the user's own order of My tasks: each task right after `after`, else right before `before`, else first; no task is written (My tasks' own order in `docs/spec/tasks.md`) |
 
-The last two, as before, update `sort_order`, a list's manual order (Open's and Today's list), and both may be sent together; a task without a place is placed on top before `moves` are (`placeUnplaced`).
-Open, Today and the Plan board send `moves`; My tasks sends its whole order with `mine` (My tasks' own order in `docs/spec/tasks.md`).
+`after` is the task now before the moved one, `before` the next one after it that didn't move; either may be null.
+A task without a place is placed where it is shown, on top, before the moves are (`placeUnplaced`).
+A body without moves is refused (400).
+Nothing else changes an order here: an order sent whole (`order`) and a place as a number (`updates`, a task's `sort_order`) are left aside, since either would put what one browser had over what was ranked meanwhile.
 
 ### The due count
 

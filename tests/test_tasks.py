@@ -30,9 +30,6 @@ class TestCRUD:
         first = create_task(client, title="First").get_json()
         second = create_task(client, title="Second").get_json()
         assert second["sort_order"] < first["sort_order"]
-        # One the write gives a place keeps it.
-        placed = create_task(client, title="Placed", sort_order=5).get_json()
-        assert placed["sort_order"] == 5
 
     def test_read_tasks_empty(self, client):
         resp = client.get("/api/tasks")
@@ -652,115 +649,44 @@ class TestUndoRecurring:
 
 
 class TestReorder:
-    def test_reorder_updates_sort_order(self, client):
+    """POST /api/tasks/reorder takes moves and nothing else (the moves
+    themselves: tests/test_task_order.py)."""
+
+    def test_a_move_reorders(self, client):
         t1 = create_task(client, title="First").get_json()
         t2 = create_task(client, title="Second").get_json()
-        t3 = create_task(client, title="Third").get_json()
-
-        resp = client.post("/api/tasks/reorder", json={
-            "order": [t3["id"], t1["id"], t2["id"]]
-        })
+        t3 = create_task(client, title="Third").get_json()          # on top, as made: Third, Second, First
+        resp = client.post("/api/tasks/reorder", json={"moves": [{"id": t1["id"], "after": t3["id"], "before": t2["id"]}]})
         assert resp.status_code == 204
+        tasks = sorted(client.get("/api/tasks").get_json(), key=lambda t: t["sort_order"])
+        assert [t["title"] for t in tasks] == ["Third", "First", "Second"]
 
-        tasks = client.get("/api/tasks").get_json()
-        by_id = {t["id"]: t for t in tasks}
-        assert by_id[t3["id"]]["sort_order"] == 0
-        assert by_id[t1["id"]]["sort_order"] == 1
-        assert by_id[t2["id"]]["sort_order"] == 2
+    def test_reorder_without_moves(self, client):
+        for body in ({}, {"moves": []}, {"mine": True}, {"mine": True, "moves": []}):
+            assert client.post("/api/tasks/reorder", json=body).status_code == 400, body
 
-    def test_reorder_empty_order(self, client):
-        resp = client.post("/api/tasks/reorder", json={"order": []})
-        assert resp.status_code == 400
-
-    def test_reorder_missing_order(self, client):
-        resp = client.post("/api/tasks/reorder", json={})
-        assert resp.status_code == 400
-
-    def test_reorder_updates_sets_sparse_sort_order(self, client):
-        """`updates` sets sort_order on the given ids only, without touching
-        any other task's sort_order — used for reordering under a narrowed
-        (tag/search/page-filtered) view so hidden tasks aren't disturbed."""
+    def test_no_whole_order_and_no_number_is_written(self, client):
+        """An order sent whole, or a place as a number, would put what one
+        browser had over what was ranked meanwhile: neither is taken, at the
+        reorder route or with a task."""
         t1 = create_task(client, title="First").get_json()
         t2 = create_task(client, title="Second").get_json()
-        t3 = create_task(client, title="Third").get_json()
-        client.post("/api/tasks/reorder", json={
-            "order": [t1["id"], t2["id"], t3["id"]]
-        })
-
-        resp = client.post("/api/tasks/reorder", json={
-            "updates": [{"id": t3["id"], "sort_order": 0.5}]
-        })
-        assert resp.status_code == 204
-
-        tasks = client.get("/api/tasks").get_json()
-        by_id = {t["id"]: t for t in tasks}
-        assert by_id[t1["id"]]["sort_order"] == 0
-        assert by_id[t2["id"]]["sort_order"] == 1
-        assert by_id[t3["id"]]["sort_order"] == 0.5
-
-    def test_reorder_updates_ignores_unknown_id(self, client):
-        t1 = create_task(client, title="First").get_json()
-        resp = client.post("/api/tasks/reorder", json={
-            "updates": [{"id": "does-not-exist", "sort_order": 3}]
-        })
-        assert resp.status_code == 204
-        tasks = client.get("/api/tasks").get_json()
-        assert tasks[0]["id"] == t1["id"]
-
-    def test_reorder_updates_ignores_non_numeric_sort_order(self, client):
-        t1 = create_task(client, title="First").get_json()
-        resp = client.post("/api/tasks/reorder", json={
-            "updates": [{"id": t1["id"], "sort_order": "not-a-number"}]
-        })
-        assert resp.status_code == 204
-        tasks = client.get("/api/tasks").get_json()
-        assert tasks[0]["sort_order"] == t1["sort_order"]
-
-    def test_reorder_updates_can_clear_the_field(self, client):
-        """updates can clear a task's sort_order (null: no place, shown on
-        top), in the same request that renumbers the rest."""
-        t1 = create_task(client, title="First").get_json()
-        t2 = create_task(client, title="Second").get_json()
-        client.post("/api/tasks/reorder", json={"order": [t1["id"], t2["id"]]})
-        resp = client.post("/api/tasks/reorder", json={
-            "order": [t2["id"]], "updates": [{"id": t1["id"], "sort_order": None}]})
-        assert resp.status_code == 204
-        by_id = {t["id"]: t for t in client.get("/api/tasks").get_json()}
-        assert by_id[t1["id"]]["sort_order"] is None
-        assert by_id[t2["id"]]["sort_order"] == 0
-
-    def test_reorder_has_no_focus_order(self, client):
-        """Focus has no order of its own: the reorder API only knows sort_order."""
-        t1 = create_task(client, title="First").get_json()
-        resp = client.post("/api/tasks/reorder", json={"order": [t1["id"]], "field": "focus_order"})
-        assert resp.status_code == 204
-        task = client.get("/api/tasks").get_json()[0]
-        assert task["sort_order"] == 0 and "focus_order" not in task
-
-    def test_reorder_empty_updates_and_order(self, client):
-        resp = client.post("/api/tasks/reorder", json={"order": [], "updates": []})
-        assert resp.status_code == 400
-
-
-# ---------- sort_order on update ----------
-
-
-class TestSortOrderUpdate:
-    def test_update_sort_order_to_null(self, client):
-        task = create_task(client, title="Ordered").get_json()
-        # Give it a sort order via reorder
-        client.post("/api/tasks/reorder", json={"order": [task["id"]]})
-        tasks = client.get("/api/tasks").get_json()
-        assert tasks[0]["sort_order"] == 0
-
-        # Reset to inbox (null)
-        resp = client.put(f"/api/tasks/{task['id']}", json={"sort_order": None})
-        assert resp.get_json()["sort_order"] is None
-
-    def test_update_sort_order_to_value(self, client):
-        task = create_task(client, title="Manual").get_json()
-        resp = client.put(f"/api/tasks/{task['id']}", json={"sort_order": 5})
-        assert resp.get_json()["sort_order"] == 5
+        places = lambda: {t["title"]: t["sort_order"] for t in client.get("/api/tasks").get_json()}
+        before = places()
+        for body in ({"order": [t1["id"], t2["id"]]}, {"updates": [{"id": t1["id"], "sort_order": 0.5}]},
+                     {"updates": [{"id": t1["id"], "sort_order": None}]}, {"mine": True, "order": [t1["id"], t2["id"]]}):
+            assert client.post("/api/tasks/reorder", json=body).status_code == 400, body
+        assert places() == before
+        # With moves they are left aside.
+        resp = client.post("/api/tasks/reorder", json={"order": [t1["id"], t2["id"]], "updates": [{"id": t1["id"], "sort_order": 99}],
+                                                       "moves": [{"id": "no-such-task", "after": None, "before": None}]})
+        assert resp.status_code == 204 and places() == before
+        # A task sent back whole keeps its place; a new one goes on top.
+        resp = client.put(f"/api/tasks/{t1['id']}", json={"title": "First!", "sort_order": 99})
+        assert resp.status_code == 200 and resp.get_json()["sort_order"] == before["First"]
+        assert client.put(f"/api/tasks/{t1['id']}", json={"sort_order": None}).get_json()["sort_order"] == before["First"]
+        made = create_task(client, title="Third", sort_order=99).get_json()
+        assert made["sort_order"] < min(before.values())
 
 
 # ---------- focus_order (the old Lineup) is gone ----------
@@ -1578,15 +1504,18 @@ class TestRestore:
         assert resp.get_json() == []
 
     def test_restore_keeps_fractional_sort_order(self, client):
-        # Regression: a move between two tasks (reorder `updates`) can leave a
-        # fractional sort_order; undoing that task's delete dropped it, and the
-        # task fell back to Unsorted.
+        # Regression: a move between two tasks leaves a fractional
+        # sort_order; undoing that task's delete dropped it, and the task
+        # fell back to Unsorted.
+        below = create_task(client, title="Below").get_json()
+        above = create_task(client, title="Above").get_json()
         task = create_task(client, title="Between").get_json()
-        client.post("/api/tasks/reorder", json={"updates": [{"id": task["id"], "sort_order": 1.5}]})
-        snap = client.get("/api/tasks").get_json()[0]
+        client.post("/api/tasks/reorder", json={"moves": [{"id": task["id"], "after": above["id"], "before": below["id"]}]})
+        snap = next(t for t in client.get("/api/tasks").get_json() if t["id"] == task["id"])
+        assert snap["sort_order"] == -0.5
         client.delete(f"/api/tasks/{task['id']}")
         client.post("/api/tasks/restore", json={"tasks": [snap]})
-        assert client.get("/api/tasks").get_json()[0]["sort_order"] == 1.5
+        assert next(t for t in client.get("/api/tasks").get_json() if t["id"] == task["id"])["sort_order"] == -0.5
 
 # ── due-count ────────────────────────────────────────────────────────────────
 
@@ -3001,21 +2930,21 @@ class TestMyTasksOrder:
 
     def test_it_starts_from_the_lists_order_and_is_then_its_own(self, client):
         make_list(client, "work")
-        for title in ("A", "B", "C"):
-            create_task(client, title=title, list="work")
+        for title in ("C", "A", "B"):                     # the list's order: C, A, B
+            create_task(client, title=title, list="work", position="bottom")
         a, b, c = self._ids(client, "A", "B", "C")
-        # The list's order: C, A, B.
-        assert client.post("/api/tasks/reorder", json={"order": [c, a, b]}).status_code == 204
         got = client.get("/api/tasks?with=order").get_json()
         assert got["order"] == [c, a, b] and {t["title"] for t in got["tasks"]} == {"A", "B", "C"}
-        # Ranked in My tasks: its own order from then on …
-        assert client.post("/api/tasks/reorder", json={"mine": True, "order": [b, a, c]}).status_code == 204
+        # Ranked in My tasks (B first, then A before C): its own order from then on …
+        moves = [{"id": b, "after": None, "before": c}, {"id": a, "after": b, "before": c}]
+        assert client.post("/api/tasks/reorder", json={"mine": True, "moves": moves}).status_code == 204
         assert client.get("/api/tasks?with=order").get_json()["order"] == [b, a, c]
         # … and no task was written: the list's order is as it was.
         order = {t["title"]: t["sort_order"] for t in client.get("/api/tasks").get_json()}
         assert order == {"A": 1, "B": 2, "C": 0}
         # The list ranked again changes nothing of My tasks'.
-        assert client.post("/api/tasks/reorder", json={"order": [a, b, c]}).status_code == 204
+        assert client.post("/api/tasks/reorder", json={"moves": [{"id": c, "after": b, "before": None}]}).status_code == 204
+        assert [t["title"] for t in sorted(client.get("/api/tasks").get_json(), key=lambda t: t["sort_order"])] == ["A", "B", "C"]
         assert client.get("/api/tasks?with=order").get_json()["order"] == [b, a, c]
         # Without ?with=order the answer is the list of tasks, as always.
         assert isinstance(client.get("/api/tasks").get_json(), list)
@@ -3025,12 +2954,14 @@ class TestMyTasksOrder:
             create_task(client, title=title)
         a, b = self._ids(client, "A", "B")
         assert client.put(f"/api/tasks/{b}", json={"completed": True}).status_code == 200
-        assert client.post("/api/tasks/reorder", json={"mine": True, "order": [b, "no-such-task", a, a]}).status_code == 204
+        moves = [{"id": i, "after": None, "before": None} for i in (b, "no-such-task", a, a)]
+        assert client.post("/api/tasks/reorder", json={"mine": True, "moves": moves}).status_code == 204
         assert client.get("/api/tasks?with=order").get_json()["order"] == [a]
-        # Emptied: an order of its own still, not the lists' again.
-        assert client.post("/api/tasks/reorder", json={"order": [a]}).status_code == 204
-        assert client.post("/api/tasks/reorder", json={"mine": True, "order": ["x"]}).status_code == 204
+        assert client.put(f"/api/tasks/{a}", json={"completed": True}).status_code == 200
         assert client.get("/api/tasks?with=order").get_json()["order"] == []
+        # Reopened, it is new to My tasks' order again: on top.
+        assert client.put(f"/api/tasks/{b}", json={"completed": False}).status_code == 200
+        assert client.get("/api/tasks?with=order").get_json()["order"] == [b]
 
 
 # ---------- The counts are kept until the files change ----------

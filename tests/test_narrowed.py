@@ -149,6 +149,10 @@ def test_ordinary_work_on_what_is_shared_goes_on(client, private_wiki, without_p
     # Its tasks are found again, and changed; into the Inbox they don't go.
     found, _ = errors(client, a, "search_tasks", query="stamps")
     task = re.search(r"\bid: (\S+)", found)[1]
+    # Her own order of My tasks is kept with her private tasks: not this connection's to change.
+    text, refused = errors(client, a, "update_task", id=task, position="top", mine=True)
+    assert refused and "wasn't given your private tasks" in text, text
+    assert not errors(client, a, "search_tasks", order="manual")[1]
     assert not errors(client, a, "update_task", id=task, status="done")[1]
     text, refused = errors(client, a, "update_task", id=task, list="")
     assert refused, text

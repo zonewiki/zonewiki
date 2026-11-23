@@ -727,44 +727,28 @@ func apiReorder(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	order, ok1 := listField(data, "order")
-	rawUpdates, ok2 := listField(data, "updates")
-	updates := make([]jsonObj, len(rawUpdates))
-	for i, u := range rawUpdates {
-		var isObj bool
-		if updates[i], isObj = jsonobj.As[jsonObj](u); !isObj {
-			ok2 = false
-		}
+	// moves: [{id, after, before}], as a list sends them (js/taskorder.js
+	// placeShown): the one way an order is changed here, so no view puts a
+	// whole order, as it has it, over what was ranked meanwhile.
+	rawMoves, ok := listField(data, "moves")
+	placed := make([]taskMove, len(rawMoves))
+	for i, raw := range rawMoves {
+		m, isObj := jsonobj.As[jsonObj](raw)
+		ok = ok && isObj
+		placed[i].ID, _ = jsonobj.As[string](m["id"])
+		placed[i].After, _ = jsonobj.As[string](m["after"])
+		placed[i].Before, _ = jsonobj.As[string](m["before"])
 	}
-	if !ok1 || !ok2 {
-		return refuse("order must be a list of ids, updates a list of objects")
+	if !ok || len(placed) == 0 {
+		return refuse("moves must be a list of {id, after, before}, one for each task moved")
 	}
-	rawMoves, ok3 := listField(data, "moves")
-	moves := make([]jsonObj, len(rawMoves))
-	for i, m := range rawMoves {
-		var isObj bool
-		if moves[i], isObj = jsonobj.As[jsonObj](m); !isObj {
-			ok3 = false
-		}
-	}
-	if !ok3 {
-		return refuse("moves must be a list of objects")
-	}
-	if len(order) == 0 && len(updates) == 0 && len(moves) == 0 {
-		return refuse("Bad Request")
-	}
-	// mine: the order of My tasks, the user's own (setMineOrder): no task
+	// mine: the order of My tasks, the user's own (reorderMine): no task
 	// is written, and a list's order stays as it is.
 	if mine, err := boolField(data, "mine"); err != nil {
 		return err
 	} else if mine {
-		ids := make([]string, 0, len(order))
-		for _, id := range order {
-			if s, ok := jsonobj.As[string](id); ok {
-				ids = append(ids, s)
-			}
-		}
-		if err := setMineOrder(userOf(r), ids); err != nil {
+		err := reorderMine(userOf(r), "Reorder My tasks", func([]string) ([]taskMove, error) { return placed, nil })
+		if err != nil {
 			return err
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -776,37 +760,7 @@ func apiReorder(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	byID := map[string]*Task{}
-	for _, t := range active {
-		byID[t.ID] = t
-	}
-	for i, id := range order {
-		if s, ok := jsonobj.As[string](id); ok && byID[s] != nil {
-			f := float64(i)
-			byID[s].SortOrder = &f
-		}
-	}
-	for _, u := range updates {
-		id, _ := jsonobj.As[string](u["id"])
-		t := byID[id]
-		// null clears it: the task leaves the manual order.
-		if u.Null("sort_order") && t != nil {
-			t.SortOrder = nil
-			continue
-		}
-		if f, ok := jsonobj.As[float64](u["sort_order"]); ok && t != nil {
-			t.SortOrder = &f
-		}
-	}
-	// moves: [{id, after, before}], as a list sends them (js/taskorder.js
-	// saveOrder): placeTasks, which the tools' positions come to as well.
-	placed := make([]taskMove, len(moves))
-	for i, m := range moves {
-		placed[i].ID, _ = jsonobj.As[string](m["id"])
-		placed[i].After, _ = jsonobj.As[string](m["after"])
-		placed[i].Before, _ = jsonobj.As[string](m["before"])
-	}
-	placeTasks(active, placed)
+	placeTasks(userOf(r), active, placed)
 	if err := taskFiles.WriteOpenLocked(userOf(r), active, "Reorder tasks"); err != nil {
 		return err
 	}

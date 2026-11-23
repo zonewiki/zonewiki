@@ -369,8 +369,8 @@ def test_the_tasks_at_a_teams_size(team, client):
     def reorder():
         nonlocal writes
         writes += 1
-        rng_order = order[writes % 7:] + order[:writes % 7]
-        return client.post("/api/tasks/reorder", json={"mine": True, "order": rng_order}, headers=HOST)
+        moved = order[writes % len(order)]
+        return client.post("/api/tasks/reorder", json={"mine": True, "moves": [{"id": moved, "after": None, "before": None}]}, headers=HOST)
     got["My tasks reordered (ms)"], resp = timed(reorder, n=7)
     assert resp.status_code == 204
 

@@ -143,7 +143,7 @@ WRITES = [
     ("POST /api/tasks/batch-delete", "POST", "/api/tasks/batch-delete", {"json": {"ids": ["{task}", "{done}"]}}),
     ("POST /api/tasks/batch-tag", "POST", "/api/tasks/batch-tag", {"json": {"ids": ["{task}"], "add": ["c"]}}),
     ("POST /api/tasks/batch-update", "POST", "/api/tasks/batch-update", {"json": {"tasks": [{"id": "{task}", "title": "C"}]}}),
-    ("POST /api/tasks/reorder", "POST", "/api/tasks/reorder", {"json": {"order": ["{task}"], "updates": [{"id": "{task}", "sort_order": 9}]}}),
+    ("POST /api/tasks/reorder", "POST", "/api/tasks/reorder", {"json": {"mine": True, "moves": [{"id": "{task}", "after": "", "before": ""}]}}),
     ("POST /api/tasks/reorder", "POST", "/api/tasks/reorder", {"json": {"moves": [{"id": "{task}", "after": "", "before": ""}]}}),
     ("PUT /api/tasks/{id}", "PUT", "/api/tasks/{task}", {"json": {"position": "top"}}),
     ("POST /api/tasks/import", "POST", "/api/tasks/import", {"json": {"file": {"tasks": [{"title": "Imported"}]}}}),

@@ -238,7 +238,7 @@ Prefer an API test when the behaviour shows through a route, a Go test when it d
 | `tests/test_task_assignee.py` | tasks.md | A task's assignee through API and MCP, My tasks per user, a shared task kept in a list |
 | `tests/test_task_follow.py` | tasks.md | Following a task and what a follower is told |
 | `tests/test_task_notify.py` | tasks.md | The mail about a task given to someone, the news' `seen` |
-| `tests/test_task_order.py` | tasks.md | A list's order by moves |
+| `tests/test_task_order.py` | tasks.md | The manual order by moves: a list's and My tasks' own; one order for every owner's tasks (the top above all, room made among tasks of others) |
 | `tests/test_task_refs.py` | rendering.md, tasks.md | `[[task:…]]` references |
 | `tests/test_tasks.py` | tasks.md | The task API: fields, series, closed archives by month, batches, history, comments, `Zone-Tasks` |
 | `tests/test_tasks_embed.py` | tasks.md | The `[[tasks:]]` embed, the row of lists, the Inbox's pill, the tasks a page brings |

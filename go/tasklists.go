@@ -384,47 +384,97 @@ func setMineParams(user asker, was string, set map[string]string) error {
 	return commitLists(user, "Change the settings of My tasks", path)
 }
 
-// mineOrder: the manual order of user's My tasks, task ids first to last.
-// It is the view's own (their registry's "order"; without users the
-// wiki's): a list's order (Task.SortOrder) is the list's, for everyone who
-// looks at it, and what one ranks in My tasks, across lists, moves nothing
-// there. Until they rank something it is the lists' order of their tasks.
+// mineOrder: the manual order of user's My tasks as the view shows it, task
+// ids first to last. It is the view's own (their registry's "order";
+// without users the wiki's): a list's order (Task.SortOrder) is the list's,
+// for everyone who looks at it, and what one ranks in My tasks, across
+// lists, moves nothing there. Until they rank something it is the lists'
+// order of their tasks.
 func mineOrder(user asker) []string {
-	if reg := mineRegistry(user); reg.OrderSet {
-		return append([]string{}, reg.Order...)
-	}
-	in := mineFilter(user, taskLists(user))
-	var ranked []*Task
-	for _, t := range taskFiles.Open(user) {
-		if t.SortOrder != nil && in(t) {
-			ranked = append(ranked, t)
-		}
-	}
-	slices.SortStableFunc(ranked, func(a, b *Task) int { return cmp.Compare(*a.SortOrder, *b.SortOrder) })
-	ids := make([]string, len(ranked))
-	for i, t := range ranked {
-		ids[i] = t.ID
-	}
-	return ids
+	return mineOrderOf(mineRegistry(user), taskFiles.Open(user), mineFilter(user, taskLists(user)))
 }
 
-// setMineOrder keeps ids as the manual order of user's My tasks: those of
-// open tasks they see, each once (so what is closed or gone drops out), in
-// a commit by user.
-func setMineOrder(user asker, ids []string) error {
+// mineOrderOf: My tasks' order as reg keeps it, of the open tasks open,
+// those of them in My tasks (in) that have no place in it on top, newest
+// first: a task given to the user, a capture, until they place it
+// (TasksCore.byOpenOrder shows them so, and placeUnplaced places a list's).
+// What is closed or gone is not in it.
+func mineOrderOf(reg *taskfiles.Registry, open []*Task, in func(*Task) bool) []string {
+	var order []string
+	placed := map[string]bool{}
+	if reg.OrderSet {
+		isOpen := make(map[string]bool, len(open))
+		for _, t := range open {
+			isOpen[t.ID] = true
+		}
+		for _, id := range reg.Order {
+			if isOpen[id] && !placed[id] {
+				order, placed[id] = append(order, id), true
+			}
+		}
+	} else {
+		var ranked []*Task
+		for _, t := range open {
+			if t.SortOrder != nil && in(t) {
+				ranked = append(ranked, t)
+			}
+		}
+		slices.SortStableFunc(ranked, func(a, b *Task) int { return cmp.Compare(*a.SortOrder, *b.SortOrder) })
+		for _, t := range ranked {
+			order, placed[t.ID] = append(order, t.ID), true
+		}
+	}
+	var unplaced []*Task
+	for _, t := range open {
+		if in(t) && !placed[t.ID] {
+			unplaced = append(unplaced, t)
+		}
+	}
+	slices.Reverse(unplaced)
+	slices.SortStableFunc(unplaced, func(a, b *Task) int { return strings.Compare(b.CreatedAt, a.CreatedAt) })
+	ids := make([]string, 0, len(unplaced)+len(order))
+	for _, t := range unplaced {
+		ids = append(ids, t.ID)
+	}
+	return append(ids, order...)
+}
+
+// moveIDs: the order of ids order after moves, one after the other: each
+// moved id right after the id After names, else right before the one Before
+// names, else first. As a list's moves (placeTasks), it is the order the
+// server has that they are made in, so a view that is stale in one browser
+// doesn't put its old order back over what was ranked in another. An id
+// that isn't in order is not moved.
+func moveIDs(order []string, moves []taskMove) []string {
+	for _, m := range moves {
+		i := slices.Index(order, m.ID)
+		if i < 0 {
+			continue
+		}
+		order = slices.Delete(order, i, i+1)
+		at := 0
+		if j := slices.Index(order, m.After); m.After != "" && j >= 0 {
+			at = j + 1
+		} else if j := slices.Index(order, m.Before); m.Before != "" && j >= 0 {
+			at = j
+		}
+		order = slices.Insert(order, at, m.ID)
+	}
+	return order
+}
+
+// reorderMine changes the manual order of user's My tasks by the moves that
+// moves gives for the order as it is (mineOrderOf: a task not yet placed
+// there is placed where it is shown, first), in a commit by user: no task
+// is written, and no list's order changes.
+func reorderMine(user asker, message string, moves func(order []string) ([]taskMove, error)) error {
 	if err := mayWriteTasks(user); err != nil {
 		return err
 	}
-	open := map[string]bool{}
-	for _, t := range taskFiles.Open(user) {
-		open[t.ID] = true
+	if lacksPrivate(user) {
+		return refuse("This connection wasn't given your private tasks, and the order of My tasks is kept with them")
 	}
-	order := []string{}
-	for _, id := range ids {
-		if open[id] {
-			order, open[id] = append(order, id), false
-		}
-	}
+	open, in := taskFiles.Open(user), mineFilter(user, taskLists(user))
 	owner := mineOwner(user)
 	taskFiles.Lock()
 	defer taskFiles.Unlock()
@@ -432,12 +482,63 @@ func setMineOrder(user asker, ids []string) error {
 	if err != nil {
 		return err
 	}
-	reg.Order, reg.OrderSet = order, true
+	order := mineOrderOf(reg, open, in)
+	made, err := moves(order)
+	if err != nil {
+		return err
+	}
+	reg.Order, reg.OrderSet = moveIDs(order, made), true
 	path, err := taskFiles.WriteListsLocked(user, owner, reg)
 	if err != nil {
 		return err
 	}
-	return commitLists(user, "Reorder My tasks", path)
+	return commitLists(user, message, path)
+}
+
+// positionMine puts the tasks ids, in that order, at pos in the manual
+// order of user's My tasks (an assistant's update_task with mine): the
+// first at the top, at the bottom, or right after or before pos's task,
+// each next one after the one before it. Refused with nothing changed for
+// a task that isn't in My tasks.
+func positionMine(user asker, ids []string, pos orderPos, message string) error {
+	return reorderMine(user, message, func(order []string) ([]taskMove, error) {
+		for _, id := range append(slices.Clone(ids), pos.Task) {
+			if id != "" && !slices.Contains(order, id) {
+				return nil, refuse("Only an open task that is in My tasks has a place in its order")
+			}
+		}
+		if slices.Contains(ids, pos.Task) {
+			return nil, refuse("A task can't be put after or before itself")
+		}
+		var rest []string
+		for _, id := range order {
+			if !slices.Contains(ids, id) {
+				rest = append(rest, id)
+			}
+		}
+		var after, before string
+		switch pos.At {
+		case "top":
+		case "bottom":
+			if len(rest) > 0 {
+				after = rest[len(rest)-1]
+			}
+		case "after":
+			after = pos.Task
+		case "before":
+			before = pos.Task
+		default:
+			return nil, refuse("A position is top, bottom, after or before a task")
+		}
+		var moves []taskMove
+		for _, id := range ids {
+			if !slices.ContainsFunc(moves, func(m taskMove) bool { return m.ID == id }) {
+				moves = append(moves, taskMove{ID: id, After: after, Before: before})
+				after, before = id, ""
+			}
+		}
+		return moves, nil
+	})
 }
 
 // ---- operations ----

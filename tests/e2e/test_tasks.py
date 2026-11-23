@@ -8,7 +8,7 @@ from datetime import date, datetime, timedelta
 import pytest
 from playwright.sync_api import expect
 
-from conftest import box_of, list_page, make_list, more_menu, open_tab, pick_date, settle, still, wait_until
+from conftest import box_of, list_page, make_list, more_menu, open_tab, pick_date, rank, settle, still, wait_until
 from tests import settings
 
 
@@ -2109,7 +2109,7 @@ def test_focus_is_open_filtered(page, wiki):
     later = (date.today() + timedelta(days=3)).isoformat()
     ids = [page.request.post("/api/tasks", data={"title": t, "start_date": s}).json()["id"]
            for t, s in (("Alpha", today), ("Later", later), ("Bravo", today), ("Charlie", today))]
-    page.request.post("/api/tasks/reorder", data={"order": list(reversed(ids))})
+    rank(page, list(reversed(ids)))
     page.request.post("/api/tasks", data={"title": "Unordered", "start_date": today})
     page.goto("/tasks?view=today")
     # Open's order, without the task planned later; the new one on top.
@@ -2126,7 +2126,7 @@ def test_focus_drag_sorts_into_open_order(page, wiki):
     ids = [page.request.post("/api/tasks", data={"title": t, "start_date": s}).json()["id"]
            for t, s in (("Apples", today), ("Bread", None), ("Cheese", today),
                         ("Dates", None), ("Eggs", today))]
-    page.request.post("/api/tasks/reorder", data={"order": ids})
+    rank(page, ids)
     page.goto("/tasks?view=today")
     page.locator("#task-add-btn").click()
     page.locator("#task-edit-title").fill("Butter")
@@ -2170,7 +2170,7 @@ def test_board_reorders_a_day_in_open_order(page, wiki):
     today = date.today().isoformat()
     ids = [page.request.post("/api/tasks", data={"title": t, "start_date": s}).json()["id"]
            for t, s in (("Alpha", today), ("Elsewhere", tomorrow()), ("Bravo", today), ("Charlie", today))]
-    page.request.post("/api/tasks/reorder", data={"order": ids})
+    rank(page, ids)
     page.request.post("/api/tasks", data={"title": "Newbie", "start_date": today})
     page.goto("/tasks?view=open&group=day")
     expect(card(page, "Charlie")).to_be_visible()
@@ -2191,7 +2191,7 @@ def test_board_drop_on_a_card_of_another_day_starts_and_places_it(page, wiki):
     today = date.today().isoformat()
     ids = [page.request.post("/api/tasks", data={"title": t, "start_date": s}).json()["id"]
            for t, s in (("Alpha", today), ("Bravo", today), ("Mover", tomorrow()))]
-    page.request.post("/api/tasks/reorder", data={"order": ids})
+    rank(page, ids)
     page.goto("/tasks?view=open&group=day")
     _drop(card(page, "Mover"), card(page, "Bravo"), "before")
     wait_for_field(page, "Mover", "start_date", today)
@@ -2204,7 +2204,7 @@ def test_board_keyboard_reorders_within_a_day_only(page, wiki):
     today = date.today().isoformat()
     ids = [page.request.post("/api/tasks", data={"title": t, "start_date": s}).json()["id"]
            for t, s in (("Alpha", today), ("Bravo", today), ("Next", tomorrow()))]
-    page.request.post("/api/tasks/reorder", data={"order": ids})
+    rank(page, ids)
     page.goto("/tasks?view=open&group=day")
     card(page, "Bravo").click()
     page.keyboard.press("Control+Shift+ArrowUp")
@@ -2241,10 +2241,10 @@ def test_board_sections_are_their_share_of_the_order_without_labels(page, wiki):
     today = date.today().isoformat()
     tomorrow = (date.today() + timedelta(days=1)).isoformat()
     ranked = page.request.post("/api/tasks", data={"title": "Ranked", "start_date": today}).json()["id"]
-    page.request.post("/api/tasks/reorder", data={"order": [ranked]})
+    rank(page, [ranked])
     page.request.post("/api/tasks", data={"title": "Added today", "start_date": today})
     other = page.request.post("/api/tasks", data={"title": "Tomorrow ranked", "start_date": tomorrow}).json()["id"]
-    page.request.post("/api/tasks/reorder", data={"order": [ranked, other]})
+    rank(page, [ranked, other])
     page.set_viewport_size({"width": 1280, "height": 1400})
     page.goto("/tasks?view=open&group=day")
     expect(card(page, "Added today")).to_be_visible()
@@ -2264,7 +2264,7 @@ def test_board_sections_are_their_share_of_the_order_without_labels(page, wiki):
 def test_board_unplanned_reorders(page, wiki):
     page.set_viewport_size({"width": 1280, "height": 1400})
     ids = [page.request.post("/api/tasks", data={"title": t}).json()["id"] for t in ("Alpha", "Bravo")]
-    page.request.post("/api/tasks/reorder", data={"order": ids})
+    rank(page, ids)
     page.request.post("/api/tasks", data={"title": "Fresh"})
     page.goto("/tasks?view=open&group=day")
     expect(card(page, "Fresh")).to_be_visible()
@@ -2310,7 +2310,7 @@ def test_focus_follows_open_order(page, wiki):
     today = date.today().isoformat()
     ids = [page.request.post("/api/tasks", data={"title": t, "start_date": today}).json()["id"]
            for t in ("Alpha", "Bravo")]
-    page.request.post("/api/tasks/reorder", data={"order": ids})
+    rank(page, ids)
     page.goto("/tasks?view=today")
     expect(_focus_titles(page)).to_have_text(["Alpha", "Bravo"])
     open_tab(page, "open")
@@ -2323,7 +2323,7 @@ def test_focus_keyboard_moves_among_what_it_shows(page, wiki):
     today = date.today().isoformat()
     ids = [page.request.post("/api/tasks", data={"title": t, "due_date" if t == "Deadline" else "start_date": t2}).json()["id"]
            for t, t2 in (("Deadline", today), ("Bravo", today), ("Hidden", None), ("Alpha", today))]
-    page.request.post("/api/tasks/reorder", data={"order": ids})
+    rank(page, ids)
     page.goto("/tasks?view=today")
     expect(_focus_titles(page)).to_have_text(["Deadline", "Bravo", "Alpha"])
     # ↑ on the first does nothing; ↓ moves one place.
@@ -2369,7 +2369,7 @@ def test_task_added_on_focus_is_on_top(page, wiki):
     today = date.today().isoformat()
     ids = [page.request.post("/api/tasks", data={"title": t, "start_date": today}).json()["id"]
            for t in ("Alpha", "Bravo")]
-    page.request.post("/api/tasks/reorder", data={"order": ids})
+    rank(page, ids)
     page.goto("/tasks?view=today")
     page.locator("#task-add-btn").click()
     page.locator("#task-edit-title").fill("Added now")
@@ -2405,7 +2405,7 @@ def _open_titles(page):
 
 def test_open_is_one_list_with_new_tasks_on_top(page, wiki):
     ids = [page.request.post("/api/tasks", data={"title": t}).json()["id"] for t in ("Alpha", "Bravo")]
-    page.request.post("/api/tasks/reorder", data={"order": ids})
+    rank(page, ids)
     for t in ("Old new", "Fresh"):
         page.request.post("/api/tasks", data={"title": t})
     page.request.post("/api/tasks", data={"title": "Overdue", "due_date": "2020-01-01"})
@@ -2447,7 +2447,7 @@ def _drop(source, target, side):
 def test_open_drag_places_a_task_and_writes_no_other(page, wiki):
     page.set_viewport_size({"width": 1000, "height": 1200})
     ids = [page.request.post("/api/tasks", data={"title": t}).json()["id"] for t in ("Alpha", "Bravo")]
-    page.request.post("/api/tasks/reorder", data={"order": ids})
+    rank(page, ids)
     for t in ("One", "Two"):
         page.request.post("/api/tasks", data={"title": t})
     page.goto("/tasks?view=open&group=none")
@@ -2472,7 +2472,7 @@ def test_drop_lands_where_the_pointer_is_from_anywhere(page, wiki):
     # same from anywhere: upper half before, lower half after.
     page.set_viewport_size({"width": 1000, "height": 1200})
     ids = [page.request.post("/api/tasks", data={"title": t}).json()["id"] for t in ("Alpha", "Bravo", "Charlie")]
-    page.request.post("/api/tasks/reorder", data={"order": ids})
+    rank(page, ids)
     page.request.post("/api/tasks", data={"title": "New"})
     page.goto("/tasks?view=open&group=none")
     assert _open_titles(page) == ["New", "Alpha", "Bravo", "Charlie"]
@@ -2489,7 +2489,7 @@ def test_drop_lands_where_the_pointer_is_from_anywhere(page, wiki):
 
 def test_open_keyboard_moves_a_task_one_place(page, wiki):
     ids = [page.request.post("/api/tasks", data={"title": t}).json()["id"] for t in ("Alpha", "Bravo")]
-    page.request.post("/api/tasks/reorder", data={"order": ids})
+    rank(page, ids)
     for t in ("One", "Two"):
         page.request.post("/api/tasks", data={"title": t})
     page.goto("/tasks?view=open&group=none")
@@ -2508,7 +2508,7 @@ def test_open_keyboard_moves_a_task_one_place(page, wiki):
 def test_open_reorder_under_a_filter_keeps_hidden_tasks_in_place(page, wiki):
     ids = [page.request.post("/api/tasks", data={"title": t, "tags": tags}).json()["id"]
            for t, tags in (("A1", "a"), ("B1", "b"), ("A2", "a"), ("B2", "b"))]
-    page.request.post("/api/tasks/reorder", data={"order": ids})
+    rank(page, ids)
     page.goto("/tasks?view=open&group=none&tag=a")
     assert _open_titles(page) == ["A1", "A2"]
     _drop(card(page, "A2"), card(page, "A1"), "before")
@@ -3611,7 +3611,7 @@ def test_due_date_does_not_affect_order(page, wiki):
     for t, due in (("Ranked first", None), ("Ranked second, due", today)):
         page.request.post("/api/tasks", data={"title": t, "start_date": today, "due_date": due})
     ids = {t["title"]: t["id"] for t in page.request.get("/api/tasks").json()}
-    page.request.post("/api/tasks/reorder", data={"order": [ids[t] for t in ("New", "Old, due", "Ranked first", "Ranked second, due")]})
+    rank(page, [ids[t] for t in ("New", "Old, due", "Ranked first", "Ranked second, due")])
     page.goto("/tasks?view=open&group=none")
     assert _open_titles(page) == ["New", "Old, due", "Ranked first", "Ranked second, due"]
     open_tab(page, "focus")
@@ -5089,7 +5089,7 @@ def test_open_sorts_by_deadline_then_created_and_remembers_it(page, wiki):
     later = (date.today() + timedelta(days=9)).isoformat()
     ids = [page.request.post("/api/tasks", data={"title": t, "due_date": d}).json()["id"]
            for t, d in (("Plain", None), ("Later due", later), ("Soon due", soon))]
-    page.request.post("/api/tasks/reorder", data={"order": ids})
+    rank(page, ids)
     page.request.post("/api/tasks", data={"title": "Fresh"})
     page.goto("/tasks?view=open&group=none")
     sel = page.locator("select.tasks-sort")
@@ -5118,7 +5118,7 @@ def test_open_by_deadline_does_not_reorder(page, wiki):
     soon = (date.today() + timedelta(days=2)).isoformat()
     ids = [page.request.post("/api/tasks", data={"title": t, "due_date": soon}).json()["id"]
            for t in ("Alpha", "Bravo")]
-    page.request.post("/api/tasks/reorder", data={"order": ids})
+    rank(page, ids)
     page.goto("/tasks?view=open&group=none")
     page.locator("select.tasks-sort").select_option("due")
     card(page, "Bravo").click()
@@ -5136,7 +5136,7 @@ def test_plan_sorts_each_section_and_keeps_its_own_sort(page, wiki):
     later = (date.today() + timedelta(days=9)).isoformat()
     ids = [page.request.post("/api/tasks", data={"title": t, "start_date": today, "due_date": d}).json()["id"]
            for t, d in (("Old", later), ("Mid", None), ("New", soon))]
-    page.request.post("/api/tasks/reorder", data={"order": [ids[1], ids[0], ids[2]]})
+    rank(page, [ids[1], ids[0], ids[2]])
     page.goto("/tasks?view=open&group=day")
     expect(card(page, "New")).to_be_visible()
     sel = page.locator("select.tasks-sort")

@@ -268,13 +268,14 @@ func searchTasks(args jsonObj, base string, user asker) (string, error) {
 		}
 		or9 := func(s string) string { return firstNonEmpty(s, "9999") }
 		if order == "manual" {
-			// What the user ranked in My tasks is their own order, across
-			// lists (mineOrder): those first, as they stand there; then by
-			// the lists' order. One list's tasks are in its order, as its
-			// view shows them (and update_task's position moves them).
+			// My tasks has the user's own order, across lists (mineOrder):
+			// its tasks first, as that view shows them (one not yet placed
+			// there on top; update_task's position with mine moves them);
+			// then the rest by the lists' order. One list's tasks are in its
+			// order, as its view shows them (update_task's position).
 			own := map[string]int{}
-			if reg := mineRegistry(user); reg.OrderSet && scope == "" {
-				for i, id := range reg.Order {
+			if scope == "" {
+				for i, id := range mineOrder(user) {
 					own[id] = i + 1
 				}
 			}
@@ -698,6 +699,41 @@ func positionText(task *Task, user asker) string {
 	return text + "."
 }
 
+// mineArg: update_task's mine: its position is in the user's own order of
+// My tasks (positionMine), not in the lists'. It goes with a position only.
+func mineArg(args jsonObj, pos *orderPos) (bool, error) {
+	mine, err := boolArg(args, "mine")
+	if err == nil && mine && pos == nil {
+		err = toolErr("mine goes with a position (position, after or before): it puts the task there in the user's own order of My tasks")
+	}
+	return mine, err
+}
+
+// minePositionText: where task is now in the user's own order of My tasks.
+func minePositionText(task *Task, user asker) string {
+	order := mineOrder(user)
+	i := slices.Index(order, task.ID)
+	if i < 0 {
+		return ""
+	}
+	title := map[string]string{}
+	for _, t := range taskFiles.Open(user) {
+		title[t.ID] = t.Title
+	}
+	text := "In the user's own order of My tasks it comes "
+	switch {
+	case len(order) == 1:
+		return "It is the only task in My tasks."
+	case i == 0:
+		text += "first, before “" + title[order[1]] + "”"
+	case i == len(order)-1:
+		text += "last, after “" + title[order[i-1]] + "”"
+	default:
+		text += "after “" + title[order[i-1]] + "” and before “" + title[order[i+1]] + "”"
+	}
+	return text + "."
+}
+
 // taskStatusFields: a status as the tasks API's field and its value.
 var taskStatusFields = map[string]struct {
 	field string
@@ -725,7 +761,7 @@ func updateTaskTool(args jsonObj, base string, user asker) (string, error) {
 		if args.Has("id") {
 			return "", toolErr("Give id or ids, not both")
 		}
-		if other := otherArgs(args, "ids", "add_tags", "remove_tags", "position", "after", "before", "summary"); len(other) > 0 {
+		if other := otherArgs(args, "ids", "add_tags", "remove_tags", "position", "after", "before", "mine", "summary"); len(other) > 0 {
 			return "", toolErr("With ids only add_tags, remove_tags and a position (position, after, before) work, not " + strings.Join(other, ", ") +
 				"; change the rest one task (id) at a time")
 		}
@@ -763,6 +799,10 @@ func updateTaskTool(args jsonObj, base string, user asker) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	mine, err := mineArg(args, pos)
+	if err != nil {
+		return "", err
+	}
 	if len(data) == 0 && comment == nil && pos == nil {
 		return "", toolErr("Nothing to change: give the fields to set, a status, a comment or a position")
 	}
@@ -771,21 +811,27 @@ func updateTaskTool(args jsonObj, base string, user asker) (string, error) {
 		return "", err
 	}
 	// A position goes with the fields, in their commit; alone it is a move
-	// in the manual order, as a drop in a list's view is.
+	// in the manual order, as a drop in a list's view is. One in My tasks'
+	// order is the user's own, kept apart from the tasks: its own commit.
 	switch {
 	case len(data) > 0:
-		if pos != nil {
+		if pos != nil && !mine {
 			data.Set("position", pos.field())
 		}
 		if task, err = updateTask(user, task.ID, data, suffix); err != nil {
 			return "", err
 		}
-	case pos != nil:
+	case pos != nil && !mine:
 		moved, err := reorderTasks(user, []string{task.ID}, *pos, "Reorder tasks"+suffix)
 		if err != nil {
 			return "", err
 		}
 		task = moved[0]
+	}
+	if mine {
+		if err := positionMine(user, []string{task.ID}, *pos, "Reorder My tasks"+suffix); err != nil {
+			return "", err
+		}
 	}
 	if comment != nil {
 		if task, err = addComment(user, task.ID, *comment, "Comment on task"+suffix); err != nil {
@@ -804,7 +850,9 @@ func updateTaskTool(args jsonObj, base string, user asker) (string, error) {
 	}
 	head := strings.Join(did, ", ")
 	head = strings.ToUpper(head[:1]) + head[1:] + "."
-	if pos != nil {
+	if mine {
+		head += " " + minePositionText(task, user)
+	} else if pos != nil {
 		head += " " + positionText(task, user)
 	}
 	out := head + "\n\n" + mcpTaskText(task, base, user)
@@ -851,6 +899,10 @@ func tasksBatchTool(args jsonObj, user asker) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	mine, err := mineArg(args, pos)
+	if err != nil {
+		return "", err
+	}
 	if len(add) == 0 && len(remove) == 0 && pos == nil {
 		return "", toolErr("Give add_tags, remove_tags or a position (position, after or before)")
 	}
@@ -871,7 +923,24 @@ func tasksBatchTool(args jsonObj, user asker) (string, error) {
 		}
 	}
 	var out []string
-	if pos != nil {
+	if pos != nil && mine {
+		msg, err := commitMsg("Reorder My tasks", args)
+		if err != nil {
+			return "", err
+		}
+		if err := positionMine(user, found, *pos, msg); err != nil {
+			return "", err
+		}
+		title := map[string]string{}
+		for _, t := range taskFiles.Open(user) {
+			title[t.ID] = t.Title
+		}
+		lines := []string{fmt.Sprintf("Moved %d %s in the user's own order of My tasks, now in this order:", len(found), plural(len(found), "task"))}
+		for _, id := range found {
+			lines = append(lines, "- "+title[id]+" ("+shortID(id)+")")
+		}
+		out = append(out, strings.Join(lines, "\n"))
+	} else if pos != nil {
 		msg, err := commitMsg("Reorder tasks", args)
 		if err != nil {
 			return "", err

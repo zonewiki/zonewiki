@@ -1159,7 +1159,7 @@ WRITES = [
     ("POST /api/tasks/batch-delete", "POST", "/api/tasks/batch-delete", {"json": {"ids": [TASK_ID, DONE_ID, OLD_ID]}}),
     ("POST /api/tasks/batch-tag", "POST", "/api/tasks/batch-tag", {"json": {"ids": [TASK_ID], "add": ["bob"]}}),
     ("POST /api/tasks/batch-update", "POST", "/api/tasks/batch-update", {"json": {"tasks": [{"id": TASK_ID, "title": "Bob"}]}}),
-    ("POST /api/tasks/reorder", "POST", "/api/tasks/reorder", {"json": {"order": [TASK_ID], "updates": [{"id": TASK_ID, "sort_order": 1}]}}),
+    ("POST /api/tasks/reorder", "POST", "/api/tasks/reorder", {"json": {"mine": True, "moves": [{"id": TASK_ID, "after": INBOX_ID, "before": ""}]}}),
     ("POST /api/tasks/reorder", "POST", "/api/tasks/reorder", {"json": {"moves": [{"id": TASK_ID, "after": INBOX_ID, "before": ""}]}}),
     # A position in the manual order: hers, and his by hers.
     ("PUT /api/tasks/{id}", "PUT", f"/api/tasks/{TASK_ID}", {"json": {"position": "top"}}),

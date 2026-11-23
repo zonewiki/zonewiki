@@ -72,9 +72,9 @@ class TestToolDefinitions:
         # short descriptions; read_guides explains the gate once.
         tools = {t["name"]: t for t in self.tools(client)}
         # (29250 until rename_page got narrow, 29400 until undo_changes, 30200 until source,
-        # 30750 until a task's place, 31400 until history's assistant and outside;
-        # go/mcp_test.go caps the file.)
-        assert len(json.dumps(list(tools.values()))) < 31700
+        # 30750 until a task's place, 31400 until history's assistant and outside,
+        # 31700 until update_task's mine; go/mcp_test.go caps the file.)
+        assert len(json.dumps(list(tools.values()))) < 31950
         props = tools["write_page"]["inputSchema"]["properties"]
         assert len(props["summary"]["description"]) < 100 and len(props["guides"]["description"]) < 100
         assert "refused until its id" in tools["read_guides"]["description"]
@@ -456,23 +456,29 @@ class TestSearchTasks:
 
     def test_open_in_the_users_order(self, client, wiki_dir):
         """order=manual: the manual order top to bottom, deadlines aside; a new task on top."""
-        task(client, title="Unranked", tags=["leaf"], due_date="2026-09-01")
-        task(client, title="Second", tags=["leaf"], sort_order=2, due_date="2026-10-01")
-        task(client, title="First", tags=["leaf"], sort_order=1.5)
-        task(client, title="Third", tags=["leaf"], sort_order=7)
-        done = task(client, title="Done", tags=["leaf"], sort_order=0)
+        done = task(client, title="Done", tags=["leaf"])
         close(client, done["id"], completed=True)
+        task(client, title="First", tags=["leaf"], position="bottom")
+        task(client, title="Second", tags=["leaf"], position="bottom", due_date="2026-10-01")
+        task(client, title="Third", tags=["leaf"], position="bottom")
+        task(client, title="New", tags=["leaf"], due_date="2026-09-01")
         text, err = call(client, "search_tasks", tag="leaf", order="manual")
         assert not err
-        assert entries(text.split(":\n\n", 1)[1]) == ["Task: Unranked", "Task: First", "Task: Second", "Task: Third"]
-        assert entries(call(client, "search_tasks", tag="leaf")[0].split(":\n\n", 1)[1])[0] == "Task: Unranked"
+        assert entries(text.split(":\n\n", 1)[1]) == ["Task: New", "Task: First", "Task: Second", "Task: Third"]
+        assert entries(call(client, "search_tasks", tag="leaf")[0].split(":\n\n", 1)[1])[0] == "Task: New"
         text, err = call(client, "search_tasks", order="priority")
         assert err and "order must be deadline or manual" in text
-        # What was ranked in My tasks is the user's own order: those first, as they stand there.
+        # What was ranked in My tasks is the user's own order: as that view shows it.
         ids = {t["title"]: t["id"] for t in client.get("/api/tasks").get_json()}
-        assert client.post("/api/tasks/reorder", json={"mine": True, "order": [ids["Third"], ids["Unranked"]]}).status_code == 204
+        move = {"id": ids["Third"], "after": None, "before": ids["New"]}
+        assert client.post("/api/tasks/reorder", json={"mine": True, "moves": [move]}).status_code == 204
         text, _ = call(client, "search_tasks", tag="leaf", order="manual")
-        assert entries(text.split(":\n\n", 1)[1]) == ["Task: Third", "Task: Unranked", "Task: First", "Task: Second"]
+        assert entries(text.split(":\n\n", 1)[1]) == ["Task: Third", "Task: New", "Task: First", "Task: Second"]
+        # A task new to My tasks is on top there until it is placed, here as
+        # in the browser (it was listed after everything ranked).
+        task(client, title="Latest", tags=["leaf"], position="bottom")
+        text, _ = call(client, "search_tasks", tag="leaf", order="manual")
+        assert entries(text.split(":\n\n", 1)[1]) == ["Task: Latest", "Task: Third", "Task: New", "Task: First", "Task: Second"]
 
     def test_several_tags_must_all_match(self, client, wiki_dir):
         task(client, title="A", tags=["leaf", "bug"])
@@ -2048,12 +2054,10 @@ class TestTaskPosition:
         return {t["title"]: t for t in client.get("/api/tasks", headers=HOST).get_json()}
 
     def _ranked(self, client, *titles):
-        """Tasks in the Inbox, in this manual order (the browser's reorder)."""
+        """Tasks in the Inbox, in this manual order (each made at the bottom)."""
         for title in titles:
-            task(client, title=title)
-        ids = {t: v["id"] for t, v in self._tasks(client).items()}
-        assert client.post("/api/tasks/reorder", json={"order": [ids[t] for t in titles]}, headers=HOST).status_code == 204
-        return ids
+            task(client, title=title, position="bottom")
+        return {t: v["id"] for t, v in self._tasks(client).items()}
 
     def test_bottom_keeps_tasks_in_the_order_made(self, client, git_wiki_dir):
         """The assistant that made a list most important first: without a
@@ -2136,11 +2140,55 @@ class TestTaskPosition:
         view; what the user ranked in My tasks stays as it is, and
         search_tasks with the list reads back the list's order."""
         ids = self._ranked(client, "A", "B", "C", "D")
-        assert client.post("/api/tasks/reorder", json={"mine": True, "order": [ids["C"], ids["A"]]}, headers=HOST).status_code == 204
+        mine = lambda: [t for i in client.get("/api/tasks?with=order", headers=HOST).get_json()["order"] for t in ids if ids[t] == i]
+        move = {"id": ids["C"], "after": None, "before": ids["A"]}
+        assert client.post("/api/tasks/reorder", json={"mine": True, "moves": [move]}, headers=HOST).status_code == 204
         call(client, "update_task", id=ids["D"], position="top")
-        assert client.get("/api/tasks?with=order", headers=HOST).get_json()["order"] == [ids["C"], ids["A"]]
+        assert mine() == ["C", "A", "B", "D"]
         assert self._order(client, "inbox") == ["D", "A", "B", "C"]
-        assert self._order(client) == ["C", "A", "D", "B"]      # My tasks' own first, then the lists'
+        assert self._order(client) == ["C", "A", "B", "D"]      # without a list: My tasks' own order
+
+    def test_mine_puts_a_task_in_the_users_own_order(self, client, git_wiki_dir):
+        """update_task's mine: the position is in My tasks' own order, the
+        one the user ranks in the browser ("put this first for me"); no
+        list's order moves, and no task is written."""
+        ids = self._ranked(client, "A", "B", "C", "D")
+        mine = lambda: [t for i in client.get("/api/tasks?with=order", headers=HOST).get_json()["order"] for t in ids if ids[t] == i]
+        places = {t: v["sort_order"] for t, v in self._tasks(client).items()}
+        text, err = call(client, "update_task", id=ids["D"][:8], position="top", mine=True, summary="D first")
+        assert not err and text.startswith("Moved. In the user's own order of My tasks it comes first, before “A”.\n\nTask: D")
+        assert mine() == ["D", "A", "B", "C"] and self._order(client) == ["D", "A", "B", "C"]
+        assert self_log(git_wiki_dir)[0] == "Reorder My tasks: D first (MCP)"
+        text, err = call(client, "update_task", id=ids["A"], after=ids["C"], mine=True)
+        assert not err and "it comes last, after “C”." in text and mine() == ["D", "B", "C", "A"]
+        text, err = call(client, "update_task", id=ids["A"], before=ids["B"], mine=True)
+        assert not err and "it comes after “D” and before “B”." in text and mine() == ["D", "A", "B", "C"]
+        # Several, in the order given; with fields, the fields in their own commit.
+        text, err = call(client, "update_task", ids=[ids["C"], ids["B"]], position="top", mine=True)
+        assert not err and text == f"Moved 2 tasks in the user's own order of My tasks, now in this order:\n- C ({ids['C'][:8]})\n- B ({ids['B'][:8]})"
+        assert mine() == ["C", "B", "D", "A"]
+        text, err = call(client, "update_task", id=ids["A"], title="Ay", position="top", mine=True)
+        assert not err and text.startswith("Updated. In the user's own order of My tasks it comes first, before “C”.")
+        assert mine() == ["A", "C", "B", "D"]
+        assert self_log(git_wiki_dir)[:2] == ["Reorder My tasks (MCP)", "Update task (MCP)"]
+        # The lists' order is as it was.
+        assert {t: v["sort_order"] for t, v in self._tasks(client).items()} == {"Ay" if t == "A" else t: n for t, n in places.items()}
+        assert self._order(client, "inbox") == ["Ay", "B", "C", "D"]
+        # A task new to My tasks is on top there, for the assistant as in the browser.
+        task(client, title="New", position="bottom")
+        assert self._order(client) == ["New", "Ay", "C", "B", "D"]
+        # Refused: mine without a position, and a task that is not in My tasks' order.
+        done = task(client, title="Done")["id"]
+        close(client, done, completed=True)
+        n = len(self_log(git_wiki_dir))
+        for args, why in (({"id": ids["B"], "mine": True}, "mine goes with a position"),
+                          ({"id": ids["B"], "title": "Bee", "mine": True}, "mine goes with a position"),
+                          ({"ids": [ids["B"]], "add_tags": ["x"], "mine": True}, "mine goes with a position"),
+                          ({"id": ids["B"], "after": ids["B"], "mine": True}, "can't be put after or before itself"),
+                          ({"id": done, "position": "top", "mine": True}, "Only an open task that is in My tasks")):
+            text, err = call(client, "update_task", **args)
+            assert err and why in text, (args, text)
+        assert len(self_log(git_wiki_dir)) == n and mine() == ["A", "C", "B", "D"]
 
     def test_what_is_refused_changes_nothing(self, client, git_wiki_dir):
         ids = self._ranked(client, "A", "B")

@@ -220,7 +220,8 @@ With `status="updated"` a task's line of facts says what is new, "update: bob co
 With a query (at most 500 characters, as `search_wiki`'s), ranked by BM25 within the filter (fused with semantic hits: Retrieval).
 Without, open tasks by deadline, then start date, then title, done ones newest first.
 `order="manual"` lists the open ones in the manual order instead (`sort_order`, the Open view's list, top first: their priority; `manualBefore`), as the Open view shows it: a new task on top.
-What the user ranked in My tasks (My tasks' own order in `docs/spec/tasks.md`) comes first, as it stands there; with `list`, the list's order alone, as its view shows it, so what `update_task`'s `position` did reads back.
+Without `list`, the tasks of My tasks come first, in the user's own order as that view shows it (My tasks' own order in `docs/spec/tasks.md`; `mineOrder`): a task new to it on top, so "top first" is the same for the assistant and in the browser; then every other task in the shared order.
+With `list`, the shared order alone, as the list's view shows it, so what `update_task`'s `position` did reads back.
 The result starts with "Today is …" so the model can tell overdue from upcoming.
 
 #### `read_page`
@@ -493,7 +494,11 @@ The place is the `position` field of the write (`positionField`, `moveTo` in `go
 
 - `top` puts the task above the first task, `bottom` below the last, `after`/`before` right next to that task, between it and its neighbour (`movesTo`): a number between theirs (`sort_order`), so no other task is written.
 - The manual order is one for all tasks, so a place between two tasks is between them in every view that shows both: their list's, All tasks, `search_tasks` with `order="manual"`.
-  My tasks' own order, the user's alone once they rank there (My tasks' own order in `docs/spec/tasks.md`), is another one: a position leaves it as it is, as a drop in a list's view does.
+  My tasks' own order, the user's alone (My tasks' own order in `docs/spec/tasks.md`), is another one: a position leaves it as it is, as a drop in a list's view does.
+- `update_task` with `mine: true` puts the task at the position in that own order instead, for "put this first for me" (`mineArg`, `positionMine`): no task is written and no list's order moves, in a commit "Reorder My tasks".
+  It goes with a position (alone it is a tool error), works with `ids` as a position does, and with fields the fields are written first, in their own commit.
+  The task, and the one to put it by, must be open and in My tasks; the result says where it is there: "In the user's own order of My tasks it comes first, before “A”." (`minePositionText`).
+  A connection that wasn't given the user's private tasks is refused: the order is kept with them.
 - The task to put it by is one the user sees (`findTask`: a task they don't see is "No task with id …", word for word as one that isn't there), and open; a closed one and the task itself are tool errors, with nothing written.
   A task with no place yet (a file edited by hand, an import) is placed first where it is shown (`placeUnplaced`), as for a drop.
 - The result says where the task is now in its list's order: "In the manual order of #plan it comes after “A” and before “B”." (`positionText`).

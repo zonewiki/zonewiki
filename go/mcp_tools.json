@@ -72,7 +72,7 @@
     },
     "order": {
      "type": "string",
-     "description": "deadline, or manual: the user's own order (priority)"
+     "description": "deadline, or manual: as ranked by hand (priority); without a list the user's own order of My tasks first"
     },
     "limit": {
      "type": "integer",
@@ -1153,6 +1153,10 @@
     "before": {
      "type": "string",
      "description": "As create_task's."
+    },
+    "mine": {
+     "type": "boolean",
+     "description": "true: the position is in the user's own order of My tasks (\"first for me\"), not in the lists' order."
     },
     "follow": {
      "type": "boolean",

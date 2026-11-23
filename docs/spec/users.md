@@ -1319,6 +1319,10 @@ A task can be private: only its user sees it, on every task list, in search, on 
 **Where a task is kept is the one thing that decides who sees it; its tags never do**, and its list is what says where it is kept.
 Everything else (shared tasks) is everyone's to see and change, as shared pages are.
 
+**One thing of a private task is shared with every task: its place in the manual order**, a number (The manual order in `docs/spec/tasks.md`).
+The order is one for the whole wiki, so that whoever sees two tasks sees them the same way round; someone else's write therefore learns the lowest and the highest number there is, and, where the numbers around a spot are used up, gives the tasks standing there new ones, a private task among them.
+Nothing else of the task is read or shown for it, the task's file is written in a commit of Zonewiki's own that names no task, and only its user's history shows that commit.
+
 ### Making a private task
 
 You make a private list with **New list…** and its **Private** box, and a private task by making it: from anywhere (`c t`, New task: the Inbox), or in a private list, with the dialog's **List** field or in a view of the list.
