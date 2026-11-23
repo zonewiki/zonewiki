@@ -15,8 +15,14 @@ turned into outlines here, so the logo looks the same wherever it is shown
     pip install fonttools==4.55.3 brotli==1.1.0
     python3 docs/logo/make_logo.py
 
-social-preview.png (GitHub: Settings, Social preview) is a 1280x640
-screenshot of social-preview.svg, e.g. in the Playwright image (zonewiki-tools).
+With --png it also renders the PNGs from those SVGs, in a headless Chromium
+(Playwright, in the tools image zonewiki-tools):
+
+    python3 docs/logo/make_logo.py --png
+
+mark.png (1024x1024, transparent outside the rounded corners: an avatar, a
+slide), social-preview.png (GitHub: Settings, Social preview; 1280x640) and the
+home-screen icons public/icon-512.png, icon-192.png and apple-touch-icon.png.
 """
 import math
 import sys
@@ -133,8 +139,8 @@ PUBLIC = HERE.parent.parent / "public"
 
 # The home-screen icon, full-bleed: iOS rounds the corners itself and Android crops a
 # "maskable" icon to a circle, so the drawing is scaled into the central 80% (a circle
-# of radius 204.8 around the middle). The PNGs beside it are screenshots of this file
-# (docs/spec/deployment.md, Home-screen app).
+# of radius 204.8 around the middle). The PNGs beside it are rendered from this file
+# with --png, below (docs/spec/deployment.md, Home-screen app).
 K = 30
 (PUBLIC / "icon.svg").write_text(
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">\n'
@@ -152,3 +158,31 @@ for i, line in enumerate(lines):
     path = text_path(line, size, (W - text_width(line, size)) / 2, 196 + S + 84 + i * 46)
     body.append(f'<path d="{path}" fill="{MUTED}"/>')
 (HERE / "social-preview.svg").write_text(svg(W, H, "\n".join(body)))
+
+# The PNGs, with --png: each SVG drawn at the PNG's width in a headless Chromium,
+# its height from the viewBox, and nothing behind it (transparent where the SVG is).
+PNGS = [
+    ("docs/logo/mark.svg", "docs/logo/mark.png", 1024),
+    ("docs/logo/social-preview.svg", "docs/logo/social-preview.png", 1280),
+    ("public/icon.svg", "public/icon-512.png", 512),
+    ("public/icon.svg", "public/icon-192.png", 192),
+    ("public/icon.svg", "public/apple-touch-icon.png", 180),
+]
+if "--png" in sys.argv:
+    from playwright.sync_api import sync_playwright
+
+    ROOT = HERE.parent.parent
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        for src, out, width in PNGS:
+            text = (ROOT / src).read_text()
+            vb = [float(v) for v in text.split('viewBox="', 1)[1].split('"', 1)[0].split()]
+            height = round(width * vb[3] / vb[2])
+            page = browser.new_page(viewport={"width": width, "height": height})
+            page.set_content(
+                "<style>html, body { margin: 0; background: transparent }"
+                f" svg {{ display: block; width: {width}px; height: {height}px }}</style>" + text)
+            page.screenshot(path=str(ROOT / out), omit_background=True)
+            page.close()
+            print(f"{out}: {width}x{height}")
+        browser.close()

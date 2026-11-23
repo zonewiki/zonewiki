@@ -707,7 +707,7 @@ whoever runs a changed Zonewiki for others over a network has to offer them its 
 `public/manifest.json` plus `apple-touch-icon.png`, `icon-192.png` and `icon-512.png` (linked from every page's `<head>` by `templates/layout.html`) give "Add to home screen" a proper Zonewiki name and icon.
 Everything under `/public/` is reachable without login, which matters because browsers may fetch these without the session cookie.
 The PNGs are rendered once from `public/icon.svg` (full-bleed green square, the white open frame inside the central 80% "maskable" safe zone; written with the favicon and `docs/logo/` by `docs/logo/make_logo.py`) and committed, so there is still no build step.
-To change the icon, edit the SVG and re-render the PNGs, e.g. with a screenshot in the Playwright image (`zonewiki-tools`).
+To change the icon, change the drawing in `make_logo.py` and run it with `--png` in the Playwright image (`zonewiki-tools`), which renders the PNGs from the SVG.
 Caveat: Android only installs a standalone app over HTTPS; over plain `http://` on the LAN it adds a shortcut that opens in a browser tab.
 iOS Safari is more lenient.
 
