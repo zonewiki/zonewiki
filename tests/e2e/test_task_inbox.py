@@ -82,12 +82,12 @@ def test_filing_an_inbox_task_through_the_dialog_shares_it_assigned_to_you(alice
     chips = modal.locator(".task-field-assignee .tag-chip-label")
     expect(lists).to_have_value("")
     expect(note).to_have_text("Private: only you see this task.")
-    expect(modal.locator("[data-more=assignee]")).to_be_hidden()     # hers alone: no one to give it to
-    expect(modal.locator("#task-edit-assignee")).to_be_hidden()
+    expect(chips).to_have_text(["@alice"])                           # hers: the field says so, with no ×
+    expect(modal.locator(".task-field-assignee .tag-chip-x")).to_have_count(0)
     lists.select_option("team")
     expect(note).to_have_text(SHARES)
     expect(chips).to_have_text(["@alice"])
-    expect(modal.locator("[data-more=assignee]")).to_be_hidden()     # the field is there: nothing to add
+    expect(modal.locator(".task-field-assignee .tag-chip-x")).to_have_count(1)     # a name the task keeps now: it can go
     modal.get_by_role("button", name="Save").click()
     wait_for(alice, "Idea", private=False, list="team", assignee="alice")
     # It left the Inbox, and the notice says where it went; My tasks still has it.
@@ -102,6 +102,7 @@ def test_filing_an_inbox_task_through_the_dialog_shares_it_assigned_to_you(alice
     modal.locator(".task-field-assignee .tag-chip-x").click()
     expect(chips).to_have_count(0)
     lists.select_option("")                    # back and forth: the name isn't put back a second time
+    expect(chips).to_have_text(["@alice"])     # (in her Inbox it is hers, whatever she took off)
     lists.select_option("team")
     expect(chips).to_have_count(0)
     modal.get_by_role("button", name="Save").click()
@@ -112,7 +113,8 @@ def test_filing_an_inbox_task_through_the_dialog_shares_it_assigned_to_you(alice
     lists.select_option("team")
     lists.select_option("")
     expect(note).to_have_text("Private: only you see this task.")
-    expect(modal.locator("#task-edit-assignee")).to_be_hidden()
+    expect(chips).to_have_text(["@alice"])
+    expect(modal.locator(".task-field-assignee .tag-chip-x")).to_have_count(0)
     modal.locator("#task-edit-title").fill("Second thoughts, kept")
     modal.get_by_role("button", name="Save").click()
     wait_for(alice, "Second thoughts, kept", private=True, list=None, assignee=None)

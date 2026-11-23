@@ -193,7 +193,8 @@ Those left out keep the versions up to the move in the history, and links to it 
 A shared task can be assigned to one user, who does it.
 Assign it in the task's dialog (**Assignee**), or end a new task's title with `@name`, as in `Call the printer @ben #work`.
 Filter a list with `@anna`, `@me` or `@none`.
-Assigning never changes who sees a task, and a private task can't be assigned.
+Assigning never changes who sees a task.
+A private task is yours; to give it to someone else, name them and choose the shared list Zonewiki then asks for ([Giving away a task of your own](tasks.md#giving-away-a-task-of-your-own)).
 [Tasks](tasks.md) explains assigning, My tasks and the news on your tasks.
 
 ## Roles

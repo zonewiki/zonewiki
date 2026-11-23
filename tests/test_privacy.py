@@ -1599,8 +1599,8 @@ def test_an_assistants_task_for_someone_is_not_made_private(bob, wiki):
     they see: with an assignee that would be a task its assignee never
     hears of, so it is refused, and the answer names the shared lists (not
     a private one, the asker's own or anyone's)."""
-    for token in ("bob-token", "alice-token"):
-        text = mcp(bob, "create_task", title="Check the invoice", assignee="alice", token=token)
+    for token, other in (("bob-token", "alice"), ("alice-token", "bob")):
+        text = mcp(bob, "create_task", title="Check the invoice", assignee=other, token=token)
         assert "has to be in a shared list" in text and text.rstrip().endswith("Pass list: team"), text
         assert "secretlist" not in text
     assert '"id"' not in shared_tasks(wiki) and not (wiki / "private/bob/_tasks").exists()

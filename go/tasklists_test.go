@@ -920,11 +920,14 @@ func TestInbox(t *testing.T) {
 	if len(taskLists(asUser("alice"))) != 0 || len(pinnedLists(asUser("alice"), taskLists(asUser("alice")))) != 0 || fileText(t, taskFiles.ListsPath("alice")) != "" {
 		t.Errorf("her lists %v", sortedKeys(taskLists(asUser("alice"))))
 	}
-	// An Inbox task is nobody else's: no assignee, when made or later, not
-	// even oneself.
-	for _, who := range []string{"bob", "alice", "me"} {
-		if _, err := make("alice", "title", "For "+who, "assignee", who); !refusedWith(err, refusedInvalid) || !strings.Contains(err.Error(), "shared list") {
-			t.Errorf("an Inbox task for %s: %v", who, err)
+	// An Inbox task is nobody else's, when made or later; its user's own
+	// name is what it is already, and none is kept.
+	if _, err := make("alice", "title", "For bob", "assignee", "bob"); !refusedWith(err, refusedInvalid) || !strings.Contains(err.Error(), "shared list") {
+		t.Errorf("an Inbox task for bob: %v", err)
+	}
+	for _, who := range []string{"alice", "me"} {
+		if own, err := make("alice", "title", "For "+who, "assignee", who); err != nil || !own.Private() || own.Assignee != "" {
+			t.Errorf("an Inbox task for %s: %+v, %v", who, own, err)
 		}
 	}
 	capture, _ := make("alice", "title", "Mine")

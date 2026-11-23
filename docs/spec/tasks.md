@@ -393,7 +393,7 @@ On Today a section holds the tasks of the day: By person is who does what today,
 **Unassigned** (what no one has, a former assignee's included: `assigneeIs` `none`) and **You** (the tasks assigned to you, and your private ones) are always there, as where a task is let go and taken; then a section for each other user who has tasks in the view, `@name`.
 A card dropped on a section's header is that user's (`dropWrite` → `assignTasks`, the function the Assign… dialog uses: one `batch-update`, a toast "1 task assigned to bob" with an undo that leaves no trace; the mail goes as for any assignment); on Unassigned, no one's.
 Dropped on a card there, it is assigned and takes that place in the manual order, as a drop on another day's card starts the task there.
-A private task has no assignee: it stays under You, and another section doesn't take it ("A private task is yours alone: move it to a shared list to assign it").
+A private task is yours: it is under You, Unassigned doesn't take it ("A private task is yours: only a shared task can be no one's"), and dropped on someone else's section it asks for a shared list (the move dialog, "Give 1 task to bob: choose a shared list"), which shares it there and gives it to them (A private task is yours in `docs/spec/users.md`).
 A card there doesn't repeat who has it (a former assignee's name still shows, struck through).
 
 #### Sections by list
@@ -723,7 +723,7 @@ The fields are Title, Description, Tags, then one line of small boxes that wraps
 | Title | always | Quick-add's shorthand at its end, on a new task (Quick-add) |
 | Description | always | Markdown, with Edit and Preview (Description) |
 | Tags | always | Chips (Tag chips) |
-| Assignee | with users: always on a shared task, empty reading "No one"; on a new task still in the Inbox only when set as the dialog opens or asked for ("+ Assignee") | A field of its own after Tags (Assigning tasks in `docs/spec/users.md`). Not offered for a task in a private list (it has none) |
+| Assignee | with users: always; on a shared task who has it, empty reading "No one"; on a private task your name, with no × | A field of its own after Tags (Assigning tasks in `docs/spec/users.md`). On a private task another name asks for a shared list (A private task is yours, there) |
 | List | while the wiki has a list you see | One choice (The List field) |
 | Due, Start | always | (Dates) |
 | Importance | always | High, Normal, Low (Importance) |
@@ -732,7 +732,7 @@ The fields are Title, Description, Tags, then one line of small boxes that wraps
 | Repeat | when set as the dialog opens, or asked for ("+ Repeat"); not offered for a keep task | Last, on a line of its own (`.task-prop-group`), so the two fields a chosen repeat adds come beside it and Repeat stays where it was clicked. Without a date it shows, but off, and the line under the boxes says why ("To repeat, a task needs a due or start date.", `#task-edit-rec-note`) |
 | Every … ("Every 2 weeks"), From done | only once a repeat is chosen | (Repeating tasks) |
 
-Under the boxes a quiet line offers the ones not shown (`.task-add-fields`: "+ Assignee" with users, on a new task in the Inbox, "+ Repeat", "+ Days before due", "+ Keep after done"): a click shows the field and goes to it (`showField`), and ticks Keep, since asking for the box is asking for that.
+Under the boxes a quiet line offers the ones not shown (`.task-add-fields`: "+ Repeat", "+ Days before due", "+ Keep after done"): a click shows the field and goes to it (`showField`), and ticks Keep, since asking for the box is asking for that.
 A field stays for as long as the dialog is open, also emptied again; a line with nothing left to offer is gone.
 Under the dates a hint says when the start is after the deadline (A start after the deadline).
 Saving a task into another list removes it from a view of its old list, with a notice that says where it went (When a task leaves the view).
@@ -836,7 +836,7 @@ A popover with ↑/↓/Enter/Esc on desktop (tasks shortcuts suspended while ope
 | Skip this occurrence | an open recurring task | Won't do and Skip |
 | Importance… | an open task | High, Normal, Low in the menu's place, the task's own ticked (Importance) |
 | Move to list… | an open task | The move dialog |
-| Assign… | with users, an open shared task | Assigning tasks in `docs/spec/users.md` |
+| Assign… | with users, an open task | Assigning tasks in `docs/spec/users.md`; a private task is yours, and for someone else asks for a shared list |
 | Follow / Unfollow | with users, a shared task | Following a task |
 | Won't do | an open task | Won't do and Skip |
 | Reopen | a closed task | Opens it again |
@@ -1741,13 +1741,15 @@ The edit dialog of a new task says it under the title (`.task-edit-target`, `syn
 It follows the List field, and a `#word` in the title that names a list (Quick-add: `#shop` puts the task in the list shop, the first such word; the others are tags).
 Hidden when editing a task and for several titles at once.
 
-**A task for someone needs a shared list** (with users; `autoInbox`, `sharedChoices`): the Inbox is yours alone, so on a new task still in the Inbox that nobody chose a list for, naming an assignee (the Assignee field, the title's `@name`, a view's `assignee=`) turns the line into a question: "A task for someone else needs a shared list:" and the shared lists, each a button (`.task-edit-target-list`), the one this browser last made a task in first (`localStorage` `zone-tasks-shared-list`), then A–Z; past six it says "or another in List.".
+**A task for someone else needs a shared list** (with users; `askForList`, `sharedChoices`): a private task is yours alone, so on a new task in the Inbox or a private list, naming someone else (the Assignee field; the title's `@name` and a view's `assignee=` while the task is in the Inbox that nobody chose a list for, `autoInbox`) turns the line into a question: "A task for someone else needs a shared list:" and the shared lists that person sees, each a button (`.task-edit-target-list`), the one this browser last made a task in first (`localStorage` `zone-tasks-shared-list`), then A–Z; past six it says "or another in List.".
+A task being edited asks the same under its fields (A private task is yours in `docs/spec/users.md`).
 A click on one is choosing it in the List field.
 **Nothing is chosen for you**: a task goes where somebody looked.
 Taking the name away takes the question away.
 **Your own name asks nothing**: a task in your Inbox is yours as it is (a view's `assignee=me`, the title's `@me`), so it stays there, private, and is saved without an assignee.
 With no shared list the line reads "A task for someone else needs a shared list: choose one in List." (New list… in it makes one), and Save without one says so on the List field.
-An assistant's `create_task` with an assignee and no shared list is refused, naming the shared lists; `POST /api/tasks` likewise answers 400 ("A private task is yours alone. Put it in a shared list to assign it").
+An assistant's `create_task` for someone else with no shared list is refused, naming the shared lists; `POST /api/tasks` likewise answers 400 ("A private task is yours: to give it to bob, put it in a shared list in the same write (list, with share)").
+With the user's own name both make the task in the Inbox, theirs, with no name kept.
 
 ### Moving tasks between lists
 
@@ -1760,11 +1762,17 @@ A click on a row moves the tasks at once (↑/↓ go through the rows, Enter pic
 The move sets each task's list in one `batch-update`; its tags stay.
 The row of the list every selected task is in is ticked and has the focus; a list only some are in says how many ("1 of 3").
 
-A task is as private as its list (Private lists): the rows of your private lists, and with users the Inbox's, are off while a shared task is selected ("a shared task stays shared"), and a row that would take a private task to a shared list says so ("shares it with everyone", with users "shares it with everyone, assigned to you") and sends `share`; Zonewiki gives it to you: a task of yours that you file stays in your My tasks (assign it to no one, or someone, afterwards).
+A task is as private as its list (Private lists): the rows of your private lists, and with users the Inbox's, are off while a shared task is selected ("a shared task stays shared"), and a row that would take a private task to a shared list says so ("shares it with everyone", for a group's list "shares it with the group hiring"; with users "…, assigned to you") and sends `share`; Zonewiki gives it to you: a task of yours that you file stays in your My tasks (assign it to no one, or someone, afterwards).
 Rows for a list more or fewer people see say so too (Moving a task to fewer or more people).
 
 One undo puts every task back in its list ("3 tasks moved to list “work”", "3 tasks moved to the Inbox"), but those that were private and are shared now: that can't be taken back, so a move of only such tasks has a notice and no undo.
 The selection stays, as after Tag…; in a list's own view the moved tasks leave it.
+
+#### Giving private tasks to someone
+
+The same dialog is the second step of giving a private task to someone else (`openBulkListModal` with `giveTo`: after **Assign…**, or a drop on their section By person; A private task is yours in `docs/spec/users.md`).
+It reads "Give 1 task to bob: choose a shared list", says under it that the task is private, that whoever sees the list will see and change it and that it can't be made private again, and lists only the shared lists bob sees and **New list…** (no Inbox, no private list, and the new list is a shared one).
+A click shares the tasks there and makes them bob's in one write (`giveTasks`); there is no undo for it, as for any move that shares.
 
 #### A new list for the tasks
 

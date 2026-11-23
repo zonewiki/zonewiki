@@ -460,7 +460,9 @@ func sharedBy(t *Task, user string, takes bool) {
 // applyAssignee: a write's assignee: a user who can be assigned
 // (assignable), "me" for whoever writes, or none ("", null, "none"). Only a
 // change is checked, so a task keeps a name that no longer can be assigned
-// through every other edit; a private task has none. A name the task had
+// through every other edit. A private task is its user's own and keeps no
+// name: theirs is taken as what it is, anyone else's needs a shared list
+// in the same write (applyList runs first). A name the task had
 // before (its history says so) is taken back as it is, so an undo of the
 // change that replaced a former assignee goes through.
 func applyAssignee(user asker, t *Task, data jsonObj) error {
@@ -489,8 +491,10 @@ func applyAssignee(user asker, t *Task, data jsonObj) error {
 	case name == "":
 	case s.Users == nil:
 		return refuse("This wiki has no users to assign a task to")
+	case privateOwner(t.Owner) && name == user.Name:
+		return nil // its user's own already: a private task is theirs, and no name is written
 	case privateOwner(t.Owner):
-		return refuse("A private task is yours alone. Put it in a shared list to assign it (list)")
+		return refuse("A private task is yours: to give it to " + name + ", put it in a shared list in the same write (list, with share)")
 	case !s.assignable(name) && !hadAssignee(t, name):
 		return refuse(s.notAssignable(name))
 	case !ownerPlace(t.Owner).sees(asUser(name)) && !hadAssignee(t, name):

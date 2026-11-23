@@ -167,9 +167,6 @@
     <p class="field-hint task-props-note task-private-note" id="task-edit-list-note{{.Sfx}}" hidden></p>
     {{- /* The fields not shown above: a click shows one (and ticks a box). */}}
     <div class="task-add-fields" id="task-edit-more{{.Sfx}}" role="group" aria-label="More fields">
-      {{- if .CanAssign}}
-      <button type="button" class="task-add-field" id="task-edit-more-assignee{{.Sfx}}" data-more="assignee" title="Who does it: one of the wiki's users">Assignee</button>
-      {{- end}}
       <button type="button" class="task-add-field" id="task-edit-more-repeat{{.Sfx}}" data-more="repeat" title="Make the task come back: daily, weekly, monthly or yearly">Repeat</button>
       <button type="button" class="task-add-field" id="task-edit-more-lead{{.Sfx}}" data-more="lead" title="Start this many days before the due date">Days before due</button>
       <button type="button" class="task-add-field" id="task-edit-more-keep{{.Sfx}}" data-more="keep" title="Ticking it off sends it back to Open instead of archiving it, e.g. a staple on a shopping list">Keep after done</button>

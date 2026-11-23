@@ -1011,7 +1011,7 @@
     },
     "list": {
      "type": "string",
-     "description": "The list it goes in (list_tags shows them). Default: the user's Inbox, which only they see. With an assignee: a shared list."
+     "description": "The list it goes in (list_tags shows them). Default: the user's Inbox, which only they see. Assigned to someone else: a shared list."
     },
     "position": {
      "type": "string",

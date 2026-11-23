@@ -146,10 +146,16 @@ function openBulkTagModal(ids, removing = false) {
 // The last row, New list…, asks for a name in the dialog's place and makes
 // the list (POST /api/tasks/lists), then moves the tasks into it: so the
 // dialog opens with no list too.
-function openBulkListModal(ids) {
+// With giveTo it is the second step of giving private tasks to that user
+// (the assign dialog, a drop on their section By person): only the shared
+// lists they see and New list…, and a choice shares the tasks there and
+// makes them theirs in one write (giveTasks), with the shared tasks `also`.
+function openBulkListModal(ids, { giveTo = '', also = [] } = {}) {
   const idSet = new Set(ids);
-  const chosen = st.tasks.filter(t => idSet.has(t.id));
-  const lists = [...app.listSet].sort((a, b) => app.listName(a).localeCompare(app.listName(b)) || a.localeCompare(b));
+  const chosen = st.tasks.filter(t => idSet.has(t.id) && (!giveTo || t.private));
+  // To give private tasks to someone: the shared lists that person sees.
+  const lists = [...app.listSet].sort((a, b) => app.listName(a).localeCompare(app.listName(b)) || a.localeCompare(b))
+    .filter(ref => !giveTo || (!app.isPrivateList(ref) && app.assignableIn(ref).has(giveTo)));
   if (!chosen.length) return;
   const count = chosen.length;
   const tasksWord = `${count} task${count > 1 ? 's' : ''}`;
@@ -159,7 +165,9 @@ function openBulkListModal(ids) {
     const all = n === count;
     const isPrivate = app.isPrivateList(ref);
     const off = isPrivate && anyShared;
-    const note = off ? 'a shared task stays shared' : anyPrivate && !isPrivate && !all ? (people.users?.has(people.me) ? 'shares it with everyone, assigned to you' : 'shares it with everyone')
+    const withWhom = app.listGroup(ref) ? `the group ${app.listGroup(ref)}` : 'everyone';
+    const note = off ? 'a shared task stays shared'
+      : anyPrivate && !isPrivate && !all ? `shares it with ${withWhom}` + (giveTo ? '' : people.users?.has(people.me) ? ', assigned to you' : '')
       : chosen.some(t => app.widens(t, ref)) ? 'everyone will see it'
       : chosen.some(t => app.narrows(t, ref)) ? 'fewer people will see it' : '';
     const part = note ? `<span class="bulk-tag-count">${note}</span>`
@@ -170,13 +178,16 @@ function openBulkListModal(ids) {
       `<span class="${ref ? 'task-tag task-tag-list' : 'bulk-list-none'}"${tip}>${label}</span>${part}</button></li>`;
   };
   const label = ref => (app.privateLists.has(ref) ? '🔒 ' : '') + esc(app.listName(ref)) + (ref.startsWith('shared/') ? ' (shared)' : '');
-  // Private lists are a user's (with users); a shared task stays shared.
-  const canPrivate = !!app.appEl?.dataset.privateFolder;
+  // Private lists are a user's (with users); a shared task stays shared,
+  // and so does one given to someone.
+  const canPrivate = !!app.appEl?.dataset.privateFolder && !giveTo;
+  const heading = giveTo ? `Give ${tasksWord} to ${giveTo}: choose a shared list` : `Move ${tasksWord} to a list`;
   const dlg = document.createElement('dialog');
   dlg.className = 'modal bulk-tag-modal bulk-list-modal';
   dlg.innerHTML = `
-    <p class="modal-label">Move ${tasksWord} to a list</p>
-    <ul class="bulk-tag-list">${row('', (app.inboxPrivate ? '🔒 ' : '') + 'Inbox', inList(''))}${lists.map(ref => row(ref, label(ref), inList(ref))).join('')}` +
+    <p class="modal-label">${esc(heading)}</p>
+    ${giveTo ? `<p class="bulk-list-note bulk-give-note">${count > 1 ? 'These tasks are' : 'This task is'} private, yours alone. Whoever sees the list will see and change ${count > 1 ? 'them' : 'it'}, and ${count > 1 ? 'they' : 'it'} can’t be made private again.</p>` : ''}
+    <ul class="bulk-tag-list">${giveTo ? '' : row('', (app.inboxPrivate ? '🔒 ' : '') + 'Inbox', inList(''))}${lists.map(ref => row(ref, label(ref), inList(ref))).join('')}` +
       `<li><button type="button" class="bulk-tag-row bulk-list-row bulk-list-new" aria-current="false">` +
       `<span class="bulk-list-mark" aria-hidden="true">+</span><span class="bulk-list-none">New list…</span></button></li></ul>
     <form class="bulk-list-form" hidden>
@@ -205,6 +216,7 @@ function openBulkListModal(ids) {
   const form = dlg.querySelector('.bulk-list-form'), actions = dlg.querySelector('.bulk-list-actions');
   const nameInput = form.querySelector('#bulk-list-name'), privateBox = form.querySelector('#bulk-list-private');
   const note = form.querySelector('.bulk-list-note'), error = form.querySelector('.rename-error');
+  const giveNote = dlg.querySelector('.bulk-give-note');
   const rows = [...dlg.querySelectorAll('.bulk-list-row:not([disabled])')];
   dlg.addEventListener('keydown', ev => {
     if (!form.hidden || (ev.key !== 'ArrowDown' && ev.key !== 'ArrowUp')) return;
@@ -213,7 +225,8 @@ function openBulkListModal(ids) {
     rows[(i + (ev.key === 'ArrowDown' ? 1 : -1) + rows.length) % rows.length].focus();
   });
 
-  const move = (target, targetPrivate, made) => moveTasks(chosen, target, targetPrivate, made);
+  const move = (target, targetPrivate, made) => giveTo ? giveTasks(chosen, also, giveTo, target, made)
+    : moveTasks(chosen, target, targetPrivate, made);
   listEl.addEventListener('click', ev => {
     const btn = ev.target.closest('.bulk-list-row');
     if (!btn || btn.disabled) return;
@@ -235,7 +248,8 @@ function openBulkListModal(ids) {
       : `Everyone who uses the wiki will see and change the ${n > 1 ? n + ' private tasks' : 'private task'} among them. ${n > 1 ? 'They' : 'It'} can’t be made private again.`;
   };
   function showForm(on) {
-    title.textContent = on ? `Move ${tasksWord} to a new list` : `Move ${tasksWord} to a list`;
+    title.textContent = !on ? heading : giveTo ? `Give ${tasksWord} to ${giveTo}: a new shared list` : `Move ${tasksWord} to a new list`;
+    if (giveNote) giveNote.hidden = on;   // the form says it itself
     listEl.hidden = actions.hidden = on;
     form.hidden = !on;
     error.hidden = true;
@@ -297,6 +311,25 @@ async function moveTasks(chosen, target, targetPrivate, made) {
   return true;
 }
 
+// The private tasks `own` to the user `name`: into the shared list `target`
+// (everyone who sees it sees them from now on) and theirs, in one write,
+// together with the shared tasks `also`, which only change hands (the
+// assign dialog's second step, a drop on a person's section By person).
+// The undo gives the shared ones back; what was private stays shared.
+async function giveTasks(own, also, name, target, made) {
+  const changing = also.filter(t => (t.assignee || '') !== name);
+  app.dismissUndo();
+  if (!(await batchUpdate([...own.map(t => ({ id: t.id, list: target, share: true, assignee: name })),
+    ...changing.map(t => ({ id: t.id, assignee: name }))]))) return false;
+  const n = own.length + changing.length;
+  const where = `${made ? 'the new list' : 'list'} “${app.listName(target)}”`;
+  const msg = changing.length ? `${n} tasks assigned to ${name}, ${own.length} of them shared in ${where}`
+    : `${n} task${n > 1 ? 's' : ''} shared in ${where} and assigned to ${name}`;
+  if (changing.length) app.showUndo(msg, () => batchUpdate(changing.map(t => ({ id: t.id, assignee: t.assignee || null, history: t.history || [] }))));
+  else showNotice(msg);
+  return true;
+}
+
 // The shared tasks `chosen` to the user `name` ('' no one), with one undo
 // (the assign dialog's rows, a drop on a person's section By person). True
 // when they are that user's now.
@@ -316,19 +349,22 @@ async function assignTasks(chosen, name) {
 // the a key; with users): every user who can be assigned, yourself first,
 // each a row, then No one; a click assigns the selected tasks at once
 // (batch-update), with one undo. The row of who has them all already is
-// ticked; one who has only some says how many. Private tasks have no
-// assignee and are left alone.
+// ticked; one who has only some says how many. A private task is its
+// user's own: it counts as yours, it can't be no one's (No one is for the
+// shared ones), and someone else's name asks for a shared list next (the
+// move dialog, giveTo), since a task for someone else is shared work.
 function openBulkAssignModal(ids) {
   if (!people.users) return;
   const idSet = new Set(ids);
-  const chosen = st.tasks.filter(t => idSet.has(t.id) && !t.private);
-  if (!chosen.length) { if (ids.length) showNotice('A private task has no assignee'); return; }
-  const count = chosen.length;
+  const picked = st.tasks.filter(t => idSet.has(t.id));
+  if (!picked.length) return;
+  const chosen = picked.filter(t => !t.private), own = picked.filter(t => t.private);
+  const count = picked.length;
   // Who every chosen task can be given to: in a group's list its members
   // (the server refuses anyone else), yourself first.
   const allowed = name => chosen.every(t => app.assignableIn(app.taskList(t) || '').has(name));
   const names = [...people.users].filter(allowed).sort((a, b) => (b === people.me) - (a === people.me) || a.localeCompare(b));
-  const has = name => chosen.filter(t => (t.assignee || '') === name).length;
+  const has = name => chosen.filter(t => (t.assignee || '') === name).length + (name === people.me ? own.length : 0);
   const row = (name, label, n) => {
     const all = n === count;
     const part = n && !all ? `<span class="bulk-tag-count">${n} of ${count}</span>` : '';
@@ -342,7 +378,9 @@ function openBulkAssignModal(ids) {
     <p class="modal-label">Assign ${count} task${count > 1 ? 's' : ''}</p>
     ${names.length > MANY_PEOPLE ? `<div class="task-field"><input type="search" id="bulk-assign-find" autocomplete="off" spellcheck="false"
       aria-label="Find a person" placeholder="Find a person…"></div>` : ''}
-    <ul class="bulk-tag-list">${names.map(name => row(name, '@' + esc(name), has(name))).join('')}${row('', 'No one', has(''))}</ul>
+    ${own.length ? `<p class="bulk-list-note">${own.length === count ? (count > 1 ? 'These tasks are' : 'This task is') + ' private, yours alone'
+      : (own.length > 1 ? `${own.length} of them are` : 'One of them is') + ' private, yours alone'}: for someone else, you choose a shared list next.</p>` : ''}
+    <ul class="bulk-tag-list">${names.map(name => row(name, '@' + esc(name), has(name))).join('')}${chosen.length ? row('', 'No one', has('')) : ''}</ul>
     <div class="modal-actions">
       <button type="button" class="btn" id="bulk-assign-cancel">Cancel</button>
     </div>`;
@@ -379,7 +417,10 @@ function openBulkAssignModal(ids) {
     const btn = ev.target.closest('.bulk-list-row');
     if (!btn) return;
     close();
-    assignTasks(chosen, btn.dataset.assignee);
+    const name = btn.dataset.assignee;
+    // Yours stay yours; for someone else they need a shared list first.
+    if (own.length && name && name !== people.me) openBulkListModal(own.map(t => t.id), { giveTo: name, also: chosen });
+    else assignTasks(chosen, name);
   });
   dlg.showModal();
   if (find && st.lastPointerType !== 'touch') find.focus();

@@ -587,13 +587,14 @@ func createTaskTool(args jsonObj, base string, user asker) (string, error) {
 		return "", err
 	}
 	// As c t in the browser: without a list, into the user's Inbox, which
-	// with users is theirs alone. A task for someone needs a shared list:
-	// say which there are rather than refuse with the write's own words.
+	// with users is theirs alone. A task for someone else needs a shared
+	// list (their own is theirs as it is): say which there are rather than
+	// refuse with the write's own words.
 	if data.Has("assignee") && !data.Null("assignee") && inboxOwner(user) != "" {
 		s, _ := asStr(data["assignee"], "assignee")
 		ref, _ := asStr(data["list"], "list")
 		lists := taskLists(user)
-		if name := taskmodel.CleanAssignee(s); name != "" && name != "none" && (!data.Has("list") || data.Null("list") || cleanList(ref) == "" || isInbox(ref, lists)) {
+		if name := taskmodel.CleanAssignee(s); name != "" && name != "none" && name != "me" && name != user.Name && (!data.Has("list") || data.Null("list") || cleanList(ref) == "" || isInbox(ref, lists)) {
 			var shared []string
 			for _, r := range sortedKeys(lists) {
 				if !lists[r].Private() {
@@ -601,9 +602,9 @@ func createTaskTool(args jsonObj, base string, user asker) (string, error) {
 				}
 			}
 			if len(shared) == 0 {
-				return "", toolErr("A task assigned to someone has to be in a shared list, and this wiki has none: make one with create_task_list, then pass it as list")
+				return "", toolErr("A task assigned to someone else has to be in a shared list, and this wiki has none: make one with create_task_list, then pass it as list")
 			}
-			return "", toolErr("A task assigned to someone has to be in a shared list (without one it is in the user's Inbox, which only they see). Pass list: " + strings.Join(shared, ", "))
+			return "", toolErr("A task assigned to someone else has to be in a shared list (without one it is in the user's Inbox, which only they see). Pass list: " + strings.Join(shared, ", "))
 		}
 	}
 	// A position in the manual order, in the same commit; without, on top,

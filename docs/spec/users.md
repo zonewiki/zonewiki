@@ -1379,6 +1379,7 @@ A private list's own commits name it ("Create list #gifts", in your files): they
 A shared task can be assigned to one user: who does it.
 One, not several, so that "who has this?" has one answer; someone helping goes in a comment or a tag.
 It is information: it never changes who sees a task or who may change it, and anyone who may change tasks may assign any task to anyone, themselves included, or to no one.
+A private task is its user's: its assignee is you, and for someone else it goes to a shared list (A private task is yours, below).
 
 You assign a task in its dialog or by ending a new task's title with `@name`, see who has it on its card, and filter a list by it (`@anna`, `@me`, `@none`).
 A page can show each user their own tasks with `[[tasks: assignee=me]]`, several selected tasks are assigned at once, and an assistant assigns and asks for "my tasks" through the MCP tools.
@@ -1394,23 +1395,49 @@ Not there: a group as an assignee, and rules that go by the assignee (who may cl
 | A page | `[[tasks: assignee=me]]` |
 | By person | a section per assignee, on the Open tab |
 | Several at once | **Assign…**, or **a** on the selected tasks |
+| A private task, to someone else | any of these, and then a shared list (A private task is yours) |
 | An assistant | `assignee` in `create_task`, `update_task` and `search_tasks` |
+
+### A private task is yours
+
+A task in your Inbox or in a private list of yours is yours, and the screen says so wherever it says who has a task:
+the dialog's **Assignee** field holds your name, **Assign…** has your name ticked, By person has it under **You**, `@me` finds it, and it is in My tasks.
+It is never no one's: the name has no ×, **No one** isn't offered for it, and a drop on Unassigned isn't taken.
+
+**To give it to someone else, name them, and then choose a shared list.**
+A task for someone else is shared work, and they have to see it: so the name alone changes nothing, and the list is asked for next, by each door in its own place.
+
+| Door | It asks for the list |
+|------|----------------------|
+| The dialog's **Assignee** field | in a line under the fields (under the title of a new task): "A task for someone else needs a shared list:" and the lists as buttons; Save waits for one |
+| **Assign…**, **a**, a drop on someone's section By person | in the move dialog, opened next: "Give 1 task to bob: choose a shared list" |
+| An assistant, the API | `list` with `share` in the same write as `assignee`; the name alone is refused, saying so |
+
+Only the shared lists that person sees are offered (a group's list for its members), and **New list…**.
+Choosing one shares the task there and gives it to them in one write: everyone who sees the list sees the task from then on, and it can't be made private again, which the dialog says before the choice.
+Nothing is chosen for you, and Cancel leaves the task yours.
+
+**No name is kept with a private task**: whose it is is where it is kept (its place, `Task.Owner`), so its file and the API's answers have no `assignee`, and nothing can disagree.
+Your own name in a write (`assignee: "me"`) is what the task is already: it is taken, and nothing is written.
+Shared by you, a task gets your name unless the write names someone (Sharing a task, above), so what the screen said before is what the file says after.
 
 ### In the dialog
 
-`js/taskmodal.js`: the **Assignee** field, after Tags.
-It always shows on a shared task (empty: "No one"); on a new task still in your Inbox, **Assignee** in the line under the fields ("+ Assignee") shows it and goes to it, as the dialog's other rarely set fields are asked for (Interaction in `docs/spec/tasks.md`).
+`js/taskmodal.js`: the **Assignee** field, after Tags, on every task.
+On a shared task it holds who has it (empty: "No one"); on a private one your name, as a chip without × (`drawYours`, `.tag-chip-yours`; its tooltip: "A private task is yours. Name someone else to give it away: it then goes to a shared list").
 Type `@` (everyone, yourself first) or the start of a name; Tab or Enter completes it to a chip, and another name replaces it; the chip's × or Backspace takes it off.
 `me` is yourself.
 A name that is no user who can be assigned is not saved: the dialog stays open and the field says so.
-A private task has no field and no "+ Assignee": choosing a private list, or the Inbox, hides both.
+On a private task another name asks for a shared list (`askForList`): the line under the fields turns into the question, with the shared lists that person sees as buttons (`#task-edit-list-note`, `.task-edit-target-warn`; under the title of a new task, Where a new task goes in `docs/spec/tasks.md`), and Save without one says so on the List field.
+With the list chosen the line says who will see the task and that it can't be made private again ("Everyone who uses the wiki will see and change this task. …", for a group's list "The members of the group hiring will see and change this task. …"), and Save sends the list, `share` and the name together.
+The name taken off, or your own typed, the task is yours again and nothing is asked; a task taken back to a private list before Save loses your name as one it keeps.
 A new task starts with the one user the filter names (`@anna` or `@me`; `filterDefaultAssignee`), as it starts with the filter's tags.
 
 ### In a new task's title
 
 `TasksCore.parseQuickAdd`: `@name` at the end, among the other shorthand ("Call Sam @bob #work tomorrow"), with completion as you type it.
 Only the name of a user who can be assigned, or `@me`; anything else stays in the title (`bob@example.org`, `@home`), as does a second name.
-Not on a private task.
+Not in a private list you chose for the task, nor in the Inbox once you chose it yourself: there `@name` is text (a title may end in a name), and the Assignee field is where someone is named.
 
 ### On the card
 
@@ -1421,7 +1448,7 @@ Not where the view says it: in My tasks your own name (every shared task there i
 ### In the filter
 
 `TasksCore.parseFilter`/`matchesFilter`, given `people`: `@anna`, `@anna|bob` (either), `-@anna` (not hers), `@me` (yours), `@none` (no one's, a former assignee's included).
-A private task has no assignee and is its user's own: it is `@me` to them, and not `@none`.
+A private task is its user's own: it is `@me` to them, and not `@none`.
 A completed word becomes a chip, as a tag does; the suggestions are `me`, `none` and the users who have tasks among those the other words leave visible.
 `@` on the list focuses the field and starts a name.
 
@@ -1447,9 +1474,13 @@ The Open tab's control, on a shared list and All tasks (Views in `docs/spec/task
 
 `openBulkAssignModal` in `js/taskselect.js`: **Assign…** in the selection bar and in the menu of a selected card, or **a** on the selected tasks (one is enough).
 The dialog lists the users who can be assigned in every selected task's list (a group's list narrows it to its members), yourself first, then **No one**, with a field to find a person when there are many; the row of who has them all is ticked, one who has some says "1 of 4".
-A selection of private tasks alone says "A private task has no assignee".
 A click (or ↑/↓ and Enter) assigns them in one `batch-update`, and the toast ("3 tasks assigned to bob") has one Undo for all, which leaves no trace in their histories.
-Private tasks among the selection are left alone.
+
+**Private tasks among them are yours** (A private task is yours): they count for your row, a line says so ("This task is private, yours alone: for someone else, you choose a shared list next.", "One of them is private, …"), and **No one** is for the shared ones (not offered when every task is private).
+Your own name leaves them as they are.
+Someone else's opens the move dialog for them (`openBulkListModal` with `giveTo`; The move dialog in `docs/spec/tasks.md`): "Give 1 task to bob: choose a shared list", the line that they will be seen there and can't be made private again, the shared lists bob sees and **New list…** (a shared one: no Private box).
+A choice writes everything at once (`giveTasks`: the private ones `list`, `share` and `assignee`, the shared ones `assignee`), and the toast says it: "1 task shared in list “team” and assigned to bob", or "3 tasks assigned to bob, 1 of them shared in list “team”" with an Undo for the shared ones' assignee (what was private stays shared).
+Cancel there changes nothing, the shared tasks neither.
 
 ### Handing on someone's tasks
 
@@ -1466,9 +1497,10 @@ Any other name is refused with a 400 that says why (`notAssignable`: "… is not
 **`me` and `none` are reserved names**, since they are the words for whoever is signed in and for no one (and `anonymous` too: User names, above).
 No user has one: `zonewiki user add`, an invite, sign-up and the first-run page refuse it ("… can't be a user name"), and a settings file that has a `[user me]`, `[user none]` or `[user anonymous]` (written by hand) is refused like any other mistake in it: Zonewiki doesn't start with it, and a running Zonewiki keeps the settings it had.
 
-**A private task has no assignee**: it is its owner's, and nobody else sees it.
-`assignee` on a private task is a 400 ("A private task is yours alone. Put it in a shared list to assign it"); a write that shares a task (`list` with `share`) can assign it at once.
-So a task for someone is made in a shared list: the dialog moves a new task there when you name someone (Where a new task goes in `docs/spec/tasks.md`).
+**A private task is its user's, and nobody else's** (A private task is yours): nobody else sees it, and it keeps no name.
+`assignee` with someone else's name on a private task is a 400 ("A private task is yours: to give it to bob, put it in a shared list in the same write (list, with share)"); with the user's own name, `me` or none it changes nothing and is taken.
+A write that shares a task (`list` with `share`) assigns it at once (`applyList` runs before `applyAssignee`).
+So a task for someone else is made in a shared list: the dialog asks for one when you name someone (Where a new task goes in `docs/spec/tasks.md`).
 
 **Only a change is checked.** A write that names the assignee the task already has changes nothing and is never refused.
 So a task keeps the name of a user who was disabled, removed or made a viewer since, through every other edit: the name stays in the file and in the API's answer, and can be taken off or replaced.

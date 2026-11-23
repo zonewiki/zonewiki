@@ -158,8 +158,14 @@ class TestWhoCanBeAssigned:
         resp = alice.post("/api/tasks", json={"title": "Mine", "list": "own", "assignee": "bob"}, headers=HOST)
         assert resp.status_code == 400 and "private task" in resp.get_json()["error"]
         mine = new(alice, list="own")
-        assert put(alice, mine, assignee="alice").status_code == 400
-        assert put(alice, mine, assignee="").status_code == 200       # none is what it has
+        # It is hers: her own name is what it is, and nothing is written.
+        for who in ("alice", "me", ""):
+            same = put(alice, mine, assignee=who)
+            assert same.status_code == 200, who
+            assert "assignee" not in same.get_json() and [e["event"] for e in same.get_json()["history"]] == ["created"]
+        resp = put(alice, mine, assignee="bob")
+        assert resp.status_code == 400
+        assert "A private task is yours: to give it to bob, put it in a shared list in the same write" in resp.get_json()["error"]
         # Out of its private list it is in her Inbox, private still: no assignee there.
         resp = put(alice, mine, list="", share=True, assignee="bob")
         assert resp.status_code == 400 and "private task" in resp.get_json()["error"]
@@ -169,14 +175,18 @@ class TestWhoCanBeAssigned:
 
     @pytest.mark.parametrize("list_", [None, "", "inbox", "none"])
     def test_an_inbox_task_has_none(self, alice, wiki_dir, list_):
-        """A task without a list is in its maker's Inbox, theirs alone: it
-        can't be given to anyone, not even to themselves, when made or later."""
+        """A task without a list is in its maker's Inbox, theirs: it can't
+        be given to anyone else, when made or later, and their own name is
+        what it is already (no name is kept)."""
         named = {} if list_ is None else {"list": list_}
-        for who in ("bob", "alice", "me"):
-            resp = alice.post("/api/tasks", json={"title": "No", "assignee": who, **named}, headers=HOST)
-            assert resp.status_code == 400, who
-            assert "A private task is yours alone. Put it in a shared list to assign it" in resp.get_json()["error"]
+        resp = alice.post("/api/tasks", json={"title": "No", "assignee": "bob", **named}, headers=HOST)
+        assert resp.status_code == 400
+        assert "A private task is yours: to give it to bob, put it in a shared list" in resp.get_json()["error"]
         assert alice.get("/api/tasks", headers=HOST).get_json() == []
+        for who in ("alice", "me"):
+            own = alice.post("/api/tasks", json={"title": "Own", "assignee": who, **named}, headers=HOST)
+            assert own.status_code == 201, who
+            assert own.get_json()["private"] is True and "assignee" not in own.get_json()
         mine = new(alice, list=list_)
         assert mine["private"] is True and "list" not in mine and "assignee" not in mine
         resp = put(alice, mine, assignee="bob")
@@ -822,15 +832,19 @@ class TestAssistant:
     @pytest.mark.parametrize("named", [{}, {"list": ""}, {"list": "inbox"}, {"list": "none"}])
     def test_a_task_for_someone_needs_a_shared_list(self, mcp, named):
         """Without a list a new task is in the user's Inbox, which only they
-        see: with an assignee that is a tool error naming the shared lists,
-        the user's own name too."""
+        see: for someone else that is a tool error naming the shared lists.
+        The user's own name is what an Inbox task is already: it is made
+        there, and no name is kept."""
         mcp("create_task_list", name="own", private=True)
         mcp("create_task_list", name="side")
-        for who in ("bob", "me", "@Alice"):
-            text = mcp("create_task", title="For someone", assignee=who, **named)
-            assert "A task assigned to someone has to be in a shared list" in text, who
-            assert text.rstrip().endswith("Pass list: side, team"), text
+        text = mcp("create_task", title="For someone", assignee="bob", **named)
+        assert "A task assigned to someone else has to be in a shared list" in text
+        assert text.rstrip().endswith("Pass list: side, team"), text
         assert "Task: For someone" not in mcp("search_tasks")
+        for who in ("me", "@Alice"):
+            text = mcp("create_task", title="For myself", assignee=who, **named)
+            assert "has to be in a shared list" not in text and "assigned to" not in text, who
+        assert mcp("search_tasks", list="inbox").count("Task: For myself") == 2
         # No assignee, or none: the Inbox takes it.
         assert "assigned to" not in mcp("create_task", title="Nobody's", assignee="none", **named)
         assert "Task: Nobody's" in mcp("search_tasks", list="inbox")

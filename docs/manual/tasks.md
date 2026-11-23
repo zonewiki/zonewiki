@@ -129,7 +129,7 @@ Double-click a task, or press **Enter**, to open its dialog.
 On a touch screen, tap once to select and tap again to open.
 
 The dialog shows Title, Description, Tags, List, Due, Start and Importance.
-Rarer fields are offered in a line underneath: **+ Assignee**, **+ Repeat**, **+ Days before due** (another way to set the start date) and **+ Keep after done**.
+Rarer fields are offered in a line underneath: **+ Repeat**, **+ Days before due** (another way to set the start date) and **+ Keep after done**.
 The description has the editor's formatting bar and **Edit** | **Preview** (**F2**).
 **Save** (or **Ctrl+Enter**) saves; if two people edit the same task, only the fields you changed are saved.
 
@@ -259,9 +259,15 @@ Assigning never changes who sees or may change the task.
 - On selected tasks, **Assign…** (or **a**) assigns them all at once, or to **No one**.
 - On the board **By person**, drag a card onto someone's section.
 
-A private task has no assignee.
-A task for someone else needs a shared list: when you name someone on a new task in your Inbox, the dialog asks which shared list it goes to.
 When you share one of your own tasks, Zonewiki assigns it to you, so it stays in your My tasks.
+
+### Giving away a task of your own
+
+A private task (in your Inbox or a private list) is yours: **Assignee** shows your name, and it can't be no one's.
+To give it to someone else, name them as you would on any task: in **Assignee**, with **Assign…**, or by dragging the card onto their section.
+Zonewiki then asks which shared list the task goes to, offering the lists that person sees.
+Choose one, and the task is shared there and theirs.
+Everyone who sees that list sees the task from then on, and it can't be made private again; **Cancel** leaves it yours.
 A task whose assignee has left (or lost access to the list) shows the name struck through and counts as no one's.
 The full rules are in [Assigning tasks](../spec/users.md#assigning-tasks).
 

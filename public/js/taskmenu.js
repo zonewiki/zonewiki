@@ -69,8 +69,9 @@ function openTaskMenu(id, anchor, at) {
     task.recurrence && ['skip', 'Skip this occurrence'],
     ['importance', 'Importance…'],
     ['list', 'Move to list…'],
-    // With users, a shared task: who has it (a private one is its user's).
-    document.body.dataset.users === '1' && !task.private && ['assign', 'Assign…'],
+    // With users: who has it (a private one is its user's, and goes to
+    // someone else with a shared list).
+    document.body.dataset.users === '1' && ['assign', 'Assign…'],
     follow,
     ['wontdo', "Won't do"],
     ['copylink', 'Copy link'],

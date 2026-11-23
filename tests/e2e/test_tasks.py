@@ -2827,8 +2827,8 @@ def test_a_name_on_a_new_inbox_task_asks_for_a_shared_list(page, wiki, monkeypat
     title.fill("Ask about the loan")                      # the name gone: her Inbox will do
     expect(target).to_have_text("Adds to your Inbox: only you see it.")
     expect(target).not_to_have_class(warn)
-    # The same for a name in the Assignee field.
-    modal.locator("[data-more=assignee]").click()
+    # The same for a name in the Assignee field, which is there with her own.
+    expect(modal.locator(".task-field-assignee .tag-chip-label")).to_have_text(["@alice"])
     modal.locator("input[name=assignee]").fill("bob")
     expect(target).to_have_text("A task for someone else needs a shared list: choose one in List.")
     modal.locator("input[name=assignee]").fill("")

@@ -224,12 +224,10 @@ listEl.addEventListener('drop', e => {
 const dropPerson = div => div.dataset.dropPerson;
 const dropList = div => div.dataset.dropList;
 // Why the section doesn't take the task, '' when it does: a private task
-// has no assignee, and a shared task stays shared.
+// is its user's (never no one's), and a shared task stays shared.
 function refusesDrop(task, div) {
   if (!task) return '';
-  if (dropPerson(div) !== undefined && task.private && dropPerson(div) !== people.me) {
-    return 'A private task is yours alone: move it to a shared list to assign it';
-  }
+  if (dropPerson(div) === '' && task.private) return 'A private task is yours: only a shared task can be no one’s';
   if (dropList(div) !== undefined && !task.private && isPrivateList(dropList(div))) return 'A shared task stays shared';
   return '';
 }
@@ -243,7 +241,11 @@ async function dropWrite(id, div) {
   const why = refusesDrop(task, div);
   if (why) { showNotice(why); return false; }
   if (dropPerson(div) !== undefined) {
-    return task.private ? true : app.assignTasks([task], dropPerson(div));
+    if (!task.private) return app.assignTasks([task], dropPerson(div));
+    // A private task is its user's: for someone else it needs a shared
+    // list, which the move dialog asks for (and then writes both).
+    if (dropPerson(div) !== people.me) app.openBulkListModal([id], { giveTo: dropPerson(div) });
+    return dropPerson(div) === people.me;
   }
   if (dropList(div) !== undefined) {
     const ref = dropList(div), toPrivate = isPrivateList(ref);

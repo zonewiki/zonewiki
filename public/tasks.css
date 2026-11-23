@@ -314,7 +314,7 @@ div.chip-input:has(> .tag-chip:not(.tag-chip-locked)) > .chip-input-clear { disp
 .task-edit-target[hidden] { display: none; }
 /* A task for someone, with no shared list to go to: in the colour of the
    dialog's other warning (the dialog is outside .tasks-app and its tokens). */
-.task-field > p.task-edit-target-warn { color: #b45309; font-weight: 600; }
+.task-field > p.task-edit-target-warn, p.task-props-note.task-edit-target-warn { color: #b45309; font-weight: 600; }
 /* The shared lists it offers then (syncTarget in js/taskmodal.js): each a
    button, finger-sized on touch. */
 .task-edit-target-list {

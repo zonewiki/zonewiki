@@ -134,7 +134,7 @@ def test_a_new_task_s_title_assigns(alice):
     """@name in a new task's title: the task is for that user, and the
     Assignee field shows it. A new task starts in the Inbox, which is alice's
     alone, so the dialog asks for a shared list and offers them; in a list of
-    her own a task has no assignee."""
+    her own the task is hers, the field says so, and @name is text."""
     make_list(alice, "own", private=True)
     alice.goto("/tasks?view=open&group=none")
     alice.locator("#task-add-btn").click()
@@ -155,19 +155,19 @@ def test_a_new_task_s_title_assigns(alice):
     expect(target).to_have_text("Adds to the list team: everyone sees it.")
     expect(note).to_be_hidden()                  # a new task: the line under the title says who sees it
     expect(modal.locator("#task-edit-assignee")).to_be_visible()   # in a shared list: who has it shows
-    # A task in a private list has no assignee: it isn't offered, and @bob is text.
+    # A task in a private list she chose is hers: the field says so, and @bob is text.
     lists.select_option("own")
     expect(target).to_have_text("Adds to the list own: only you see it.")
     expect(note).to_be_hidden()
-    expect(modal.locator("[data-more=assignee]")).to_be_hidden()
-    expect(modal.locator(".task-field-assignee")).to_be_hidden()
+    expect(modal.locator(".task-field-assignee .tag-chip-label")).to_have_text(["@alice"])
+    expect(modal.locator(".task-field-assignee .tag-chip-x")).to_have_count(0)     # hers: not to be taken off
     expect(title).to_have_value("Call Sam @bob ")  # text now, and still there
     expect(modal.locator("#task-edit-quick")).to_be_hidden()
     # The same in the Inbox, once she chose it herself.
     lists.select_option("")
     expect(lists).to_have_value("")
     expect(target).to_have_text("Adds to your Inbox: only you see it.")
-    expect(modal.locator("[data-more=assignee]")).to_be_hidden()
+    expect(modal.locator(".task-field-assignee .tag-chip-label")).to_have_text(["@alice"])
     expect(modal.locator("#task-edit-quick")).to_be_hidden()
     lists.select_option("team")
     expect(target).to_have_text("Adds to the list team: everyone sees it.")
@@ -860,21 +860,183 @@ def test_the_closed_view_shows_a_page_and_asks_for_more(alice):
 
 
 def test_a_cards_menu_assigns(alice):
-    """Assign… is in a shared task's own menu too, not only on a selection;
-    a private task, which is its user's, has none."""
+    """Assign… is in a task's own menu too, not only on a selection."""
     new(alice, "Shared work")
-    new(alice, "My own", list=None)
     alice.goto("/tasks?view=open&group=none")
-    card(alice, "My own").locator(".task-title").click(button="right")
-    expect(alice.get_by_role("menuitem", name="Move to list…")).to_be_visible()
-    expect(alice.get_by_role("menuitem", name="Assign…")).to_have_count(0)
-    alice.keyboard.press("Escape")
     card(alice, "Shared work").locator(".task-title").click(button="right")
     alice.get_by_role("menuitem", name="Assign…").click()
     dialog = alice.locator(".bulk-assign-modal")
     expect(dialog).to_be_visible()
+    expect(dialog.locator(".bulk-list-note")).to_have_count(0)      # a shared task: nothing to say of a list
     dialog.locator(".bulk-list-row", has_text="@bob").click()
     wait_for_assignee(alice, "Shared work", "bob")
+
+
+def test_a_private_task_is_yours_and_assign_gives_it_away_with_a_shared_list(alice):
+    """A private task is its user's (docs/spec/users.md, A private task is
+    yours): Assign… has their name ticked and no No one, and someone else's
+    name asks for a shared list next, which shares the task and gives it to
+    them in one write."""
+    make_list(alice, "own", private=True)
+    new(alice, "My own", list=None)
+    new(alice, "Kept", list="own")
+    alice.goto("/tasks?mine=1&view=open&group=none")
+    card(alice, "My own").locator(".task-title").click(button="right")
+    alice.get_by_role("menuitem", name="Assign…").click()
+    dialog = alice.locator(".bulk-assign-modal")
+    expect(dialog.locator(".modal-label")).to_have_text("Assign 1 task")
+    expect(dialog.locator(".bulk-list-note")).to_have_text("This task is private, yours alone: for someone else, you choose a shared list next.")
+    expect(dialog.locator(".bulk-list-row")).to_have_text([re.compile("@alice"), "@bob"])      # no No one: it is hers
+    expect(dialog.locator(".bulk-list-row[aria-current=true]")).to_have_text(re.compile("@alice"))
+    # Her own name: it is hers already, and nothing is written.
+    dialog.locator(".bulk-list-row", has_text="@alice").click()
+    expect(dialog).to_have_count(0)
+    assert task(alice, "My own")["private"] is True and [e["event"] for e in task(alice, "My own")["history"]] == ["created"]
+    # Bob: which shared list? Only those, and a new one; Cancel leaves it hers.
+    card(alice, "My own").locator(".task-title").click()
+    alice.keyboard.press("a")
+    dialog.locator(".bulk-list-row", has_text="@bob").click()
+    lists = alice.locator(".bulk-list-modal:not(.bulk-assign-modal)")
+    expect(lists.locator(".modal-label")).to_have_text("Give 1 task to bob: choose a shared list")
+    expect(lists.locator(".bulk-give-note")).to_have_text(
+        "This task is private, yours alone. Whoever sees the list will see and change it, and it can’t be made private again.")
+    expect(lists.locator(".bulk-list-row")).to_have_text([re.compile(r"team\s*shares it with everyone$"), "+New list…"])
+    lists.get_by_role("button", name="Cancel").click()
+    assert task(alice, "My own")["private"] is True
+    alice.keyboard.press("a")
+    dialog.locator(".bulk-list-row", has_text="@bob").click()
+    lists.locator(".bulk-list-row", has_text="team").click()
+    wait_for_assignee(alice, "My own", "bob")
+    given = task(alice, "My own")
+    assert given["private"] is False and given["list"] == "team"
+    assert [e["event"] for e in given["history"]] == ["created", "shared", "assigned"]      # to bob at once, never to her
+    expect(alice.get_by_text("1 task shared in list “team” and assigned to bob")).to_be_visible()
+    expect(alice.get_by_role("button", name="Undo")).to_have_count(0)       # shared is shared
+    expect(card(alice, "My own")).to_have_count(0)          # bob's: no longer in her My tasks
+
+    # Several, a shared one of hers among them: one write gives them all, and
+    # the undo takes back what can be (who has the shared one).
+    new(alice, "Shared, mine", assignee="alice")
+    alice.goto("/tasks?mine=1&view=open&group=none")
+    card(alice, "Kept").locator(".task-title").click()
+    card(alice, "Shared, mine").locator(".task-title").click(modifiers=["ControlOrMeta"])
+    alice.locator("#task-selbar [data-sel=assign]").click()
+    expect(dialog.locator(".modal-label")).to_have_text("Assign 2 tasks")
+    expect(dialog.locator(".bulk-list-note")).to_have_text("One of them is private, yours alone: for someone else, you choose a shared list next.")
+    expect(dialog.locator(".bulk-list-row")).to_have_text([re.compile("@alice"), "@bob", re.compile("No one")])
+    dialog.locator(".bulk-list-row", has_text="@bob").click()
+    expect(lists.locator(".modal-label")).to_have_text("Give 1 task to bob: choose a shared list")
+    # A new list for it: shared, with no box to make it private.
+    lists.locator(".bulk-list-new").click()
+    expect(lists.locator(".modal-label")).to_have_text("Give 1 task to bob: a new shared list")
+    expect(lists.locator("#bulk-list-private")).to_have_count(0)
+    lists.locator("#bulk-list-name").fill("handover")
+    lists.get_by_role("button", name="Create and move").click()
+    wait_for_assignee(alice, "Kept", "bob")
+    wait_for_assignee(alice, "Shared, mine", "bob")
+    assert task(alice, "Kept")["list"] == "handover" and task(alice, "Kept")["private"] is False
+    expect(alice.get_by_text("2 tasks assigned to bob, 1 of them shared in the new list “handover”")).to_be_visible()
+    alice.get_by_role("button", name="Undo").click()
+    wait_for_assignee(alice, "Shared, mine", "alice")
+    assert task(alice, "Kept")["assignee"] == "bob" and task(alice, "Kept")["private"] is False
+
+
+def test_the_dialog_of_a_private_task_names_you_and_another_name_asks_for_a_shared_list(page, wiki, monkeypatch):
+    """The Assignee field of a private task holds its user's name, with no ×;
+    someone else's asks for a shared list under the fields, offering those
+    that person sees (not a group's they are none of), and Save waits for
+    one."""
+    monkeypatch.setattr(settings, "USERS", {name: ("pw", "") for name in ("alice", "bob", "carol")})
+    monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"role": "admin", "groups": "hiring"}, "carol": {"groups": "hiring"}})
+    page.request.post("/login", form={"username": "alice", "password": "pw"})
+    make_list(page, "team")
+    assert page.request.post("/tasks/new-list", form={"name": "hiring", "for": "group:hiring", "pin": "0"}, max_redirects=0).status == 302
+    new(page, "Ask Sam", list=None)
+    new(page, "Ask Zed", list=None)
+    page.goto("/tasks?mine=1&view=open&group=none")
+    modal = open_edit(page, "Ask Sam")
+    field, lists, note = modal.locator("#task-edit-assignee"), modal.locator("#task-edit-list"), modal.locator("#task-edit-list-note")
+    chips = modal.locator(".task-field-assignee .tag-chip-label")
+    warn = re.compile(r"\btask-edit-target-warn\b")
+    expect(chips).to_have_text(["@alice"])
+    expect(modal.locator(".task-field-assignee .tag-chip-x")).to_have_count(0)
+    expect(modal.locator(".task-field-assignee .tag-chip")).to_have_attribute(
+        "title", "A private task is yours. Name someone else to give it away: it then goes to a shared list")
+    expect(field).to_have_attribute("placeholder", "")
+    expect(note).to_have_text("Private: only you see this task.")
+    # Her own name is what it is; Backspace takes nothing off.
+    field.fill("me")
+    page.keyboard.press("Enter")
+    expect(chips).to_have_text(["@alice"])
+    expect(modal.locator(".task-field-assignee .tag-chip-x")).to_have_count(0)
+    field.press("Backspace")
+    expect(chips).to_have_text(["@alice"])
+    expect(note).to_have_text("Private: only you see this task.")
+    # Bob: the lists he sees are offered, and Save waits for one.
+    field.fill("bob")
+    page.keyboard.press("Enter")
+    expect(chips).to_have_text(["@bob"])
+    expect(note).to_have_text("A task for someone else needs a shared list: team")
+    expect(note).to_have_class(warn)
+    modal.get_by_role("button", name="Save").click()
+    expect(modal).to_be_visible()
+    assert lists.evaluate("el => el.validationMessage") == "A task for someone else needs a shared list"
+    assert task(page, "Ask Sam")["private"] is True
+    # Carol is in the group: its list is offered for her too.
+    field.fill("carol")
+    page.keyboard.press("Enter")
+    expect(note.locator(".task-edit-target-list")).to_have_text(["hiring", "team"])
+    # The name taken off: hers again, and nothing to ask.
+    modal.locator(".task-field-assignee .tag-chip-x").click()
+    expect(chips).to_have_text(["@alice"])
+    expect(note).to_have_text("Private: only you see this task.")
+    expect(note).not_to_have_class(warn)
+    # Bob again, and the list: it is shared there and his.
+    field.fill("bob")
+    page.keyboard.press("Enter")
+    note.locator(".task-edit-target-list", has_text="team").click()
+    expect(lists).to_have_value("team")
+    expect(chips).to_have_text(["@bob"])                    # her name isn't put over his
+    expect(note).to_have_text("Everyone who uses the wiki will see and change this task. It can’t be made private again.")
+    modal.get_by_role("button", name="Save").click()
+    wait_for_assignee(page, "Ask Sam", "bob")
+    given = task(page, "Ask Sam")
+    assert given["private"] is False and given["list"] == "team"
+    assert [e["event"] for e in given["history"]] == ["created", "shared", "assigned"]
+
+    # Into a group's list, the note names the group, not everyone.
+    modal = open_edit(page, "Ask Zed")
+    lists.select_option("hiring")
+    expect(note).to_have_text("The members of the group hiring will see and change this task. It can’t be made private again.")
+    expect(chips).to_have_text(["@alice"])                  # shared by her: hers, a name now, to be taken off
+    expect(modal.locator(".task-field-assignee .tag-chip-x")).to_have_count(1)
+    page.keyboard.press("Escape")
+    # And the move dialog's row says whom it shares it with.
+    card(page, "Ask Zed").locator(".task-title").click()
+    page.keyboard.press("m")
+    rows = page.locator(".bulk-list-modal .bulk-list-row")
+    expect(rows.filter(has_text="hiring")).to_have_text(re.compile(r"shares it with the group hiring, assigned to you$"))
+    expect(rows.filter(has_text="team")).to_have_text(re.compile(r"shares it with everyone, assigned to you$"))
+
+
+def test_a_private_task_dropped_on_someone_asks_for_a_shared_list(alice):
+    """By person, a private task dropped on someone else's section goes to
+    them with a shared list, as Assign… does it; on Unassigned it stays: a
+    private task is never no one's."""
+    new(alice, "Bob's", assignee="bob")
+    new(alice, "My own", list=None)
+    alice.goto("/tasks?view=open&group=person")
+    expect(alice.locator(".board-day-label")).to_have_text(["Unassigned", "You", "@bob"])
+    card(alice, "My own").drag_to(section(alice, "p:"))         # not taken: the section doesn't light up for it
+    expect(section(alice, "p:").locator(".board-day-count")).to_have_text("0")
+    assert task(alice, "My own")["private"] is True
+    card(alice, "My own").drag_to(section(alice, "p:bob"))
+    lists = alice.locator(".bulk-list-modal")
+    expect(lists.locator(".modal-label")).to_have_text("Give 1 task to bob: choose a shared list")
+    lists.locator(".bulk-list-row", has_text="team").click()
+    wait_for_assignee(alice, "My own", "bob")
+    assert task(alice, "My own")["list"] == "team" and task(alice, "My own")["private"] is False
+    expect(section(alice, "p:bob").locator(".board-day-count")).to_have_text("2")
 
 
 def test_closed_hides_the_lines_about_open_tasks(alice):

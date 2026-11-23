@@ -482,7 +482,9 @@ A task through `createTask`, the same code as `POST /api/tasks`.
 A name that can't be assigned is a tool error saying why.
 
 **Lists**: without `list` a new task goes into the user's Inbox, as `c t` does (with users theirs alone; The Inbox in `docs/spec/tasks.md`), and with no assignee unless one is given.
-A call that names an assignee (with users) needs a shared list: without one it is a tool error that names the shared lists there are, since the Inbox is the user's alone.
+A call that names someone else as assignee (with users) needs a shared list: without one it is a tool error that names the shared lists there are, since the Inbox is the user's alone.
+The user's own name (`me`) needs none: a task in their Inbox is theirs, and no name is kept with it (A private task is yours in `docs/spec/users.md`).
+`update_task` gives a private task to someone else only with `list` and `share` in the same call; the name alone is a tool error that says so, and nothing is shared without being asked.
 A task in the user's Inbox or one of their private lists is theirs alone (Private tasks in `docs/spec/users.md`), one in a shared list shared, and with users a shared task is always in a list (`update_task` with `list: ""` on one is a tool error): a tag never decides, and a list's name given as a tag is a tag.
 A name no list has is a tool error.
 `update_task` moves a task with `list`: never a shared task into a private list, and a private one to a shared place only with `share: true`.
