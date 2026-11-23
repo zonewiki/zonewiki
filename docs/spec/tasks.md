@@ -249,7 +249,7 @@ The names of before 2026-11 (`view=focus`, `view=plan`, `plan=on|off`) are no vi
 | Closed | The closed tasks, a page at a time; a link under the list, no tab | Closed |
 
 Today is Open with a filter (`st.today`, set in `tasks.js` and `js/tasktabs.js`): the Today tab shows the Open tab's tasks that are to do now, and draws them as the Open tab draws its own (`st.activeView`: `open` one list, `plan` the board by what `st.cut` says, `closed`), so the grouping below works on both tabs, each keeping its own choice.
-What is Today's alone is a rule on the filter, not a view of its own: a new task there starts today, the limit's warning, the empty state, no Order (Today is in the manual order), which way a swipe goes.
+What is Today's alone is a rule on the filter, not a view of its own: a new task there starts today, the limit's warning, the empty state, which way a swipe goes.
 A tab is asked for and remembered by a word (`focus` Today, `open` or `plan` the Open tab drawn that way, `closed`); `namedView` turns the names of links and embeds into that where a page opens.
 
 ### The tabs and the Open tab's control
@@ -301,17 +301,18 @@ A leftover `unplanned=` embed param is ignored.
 
 ### Sorting
 
-An **Order** dropdown in the toolbar (`select.tasks-sort`, shown on Open and Plan) picks **Manual**, **Due date** or **Created**; **o** cycles them.
+An **Order** dropdown in the toolbar (`select.tasks-sort`, on the Today and Open tabs, however they are drawn) picks **Manual**, **Due date** or **Created**; **o** cycles them.
 In My tasks the first entry reads **My order**: the manual order there is your own (My tasks' own order).
+So the tab you land on says which order you drag in.
 Due sorts by deadline, nearest first (overdue on top), tasks without one last, each in Open's order within (`TasksCore.byDeadline`); Created newest first (`TasksCore.byCreated`).
 They answer "what is due soonest" and "what came in lately", which the manual order doesn't.
 
-On Open a sorted list is flat: Due under **By deadline** and **No deadline**, Created under **Newest first**.
+A sorted list (Today's or Open's) is flat: Due under **By deadline** and **No deadline**, Created under **Newest first**.
 On Plan the sections stay (the board still places tasks by start date) and each is sorted inside; Unplanned's overdue and Today's carried-over lists stay by deadline and by start.
-Nothing reorders in a sort, since the manual order is only edited where it is shown: Open doesn't drag, on Plan no section is `ordered`, so a card dropped on another card is a drop on its section (dragging between days still plans), and Ctrl+Shift+↑/↓ only says to press `o` until Manual.
+Nothing reorders in a sort, since the manual order is only edited where it is shown: a list doesn't drag, on Plan no section is `ordered`, so a card dropped on another card is a drop on its section (dragging between days still plans), and Ctrl+Shift+↑/↓ only says to press `o` until Manual.
 
-Each tab's sort is remembered per task list in this browser (`localStorage` `zone-tasks-sort:<path>|<list>|<tag>|<instance>`, JSON `{"open": "due", "plan": "created"}`; missing means manual).
-Today has none: it is the day's manual order, worked top to bottom.
+Each tab's sort is remembered per task list in this browser (`localStorage` `zone-tasks-sort:<path>|<list>|<tag>|<instance>`, JSON `{"focus": "due", "open": "due", "plan": "created"}`; missing means manual).
+Today's is its own (`focus`, however Today is drawn; `sortTab` in `js/taskview.js`): Open sorted by deadline leaves Today, which is worked top to bottom, in the manual order.
 
 ### The Plan board
 
@@ -1890,7 +1891,7 @@ Under `(pointer: coarse)` cards have `touch-action: pan-y`; `.tasks-list` has `o
 | **Shift+F10** / menu key | The selected task's ⋯ menu (on several selected tasks, the selection's) |
 | **Ctrl+Shift+↑/↓** (or **Ctrl+Shift+J/K**) | Move the selected tasks within the manual order (in a sort, a notice says to press **o** until Manual; Sections) |
 | **Ctrl+Z** | Undo what was just done to a task, while its notice shows (not in the edit modal, the deadline dialog, a text area or a text field such as the filter, where Ctrl+Z undoes the typing) |
-| **o** | On the Open tab: the order, manual, by deadline, newest first (Sorting) |
+| **o** | On the Today and Open tabs: the order, manual, by deadline, newest first (Sorting) |
 | **d** | On the Open tab and on Today: how it shows its tasks, in turn: one list, Plan, by person, by list, as far as the view offers them (The tabs and the Open tab's control) |
 | **Tab** / **Shift+Tab** | The next / previous tab (on the Tasks page, or on another page while a task is selected or the focus is in the list; Closed is not in the cycle) |
 | **/** | The filter field (Esc leaves it) |

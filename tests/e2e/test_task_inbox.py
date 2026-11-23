@@ -388,6 +388,10 @@ def test_ranking_in_my_tasks_leaves_the_lists_order_alone(alice):
     for title in ("One", "Two"):
         new(page, title, list="team", assignee="alice")
     titles = page.locator(".tasks-list > .task-item .task-title")
+    # On Today, where My tasks opens, the menu is there and says so too.
+    page.goto("/tasks?mine=1&view=focus")
+    expect(page.locator("select.tasks-sort")).to_be_visible()
+    expect(page.locator("select.tasks-sort option").first).to_have_text("My order")
     page.goto("/tasks?mine=1&view=open&group=none")
     expect(titles).to_have_text(["Two", "One"])           # the list's order until ranked here
     # The Order menu says whose order this is.

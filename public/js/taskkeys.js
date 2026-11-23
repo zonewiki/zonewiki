@@ -104,8 +104,8 @@ document.addEventListener('keydown', async e => {
     return;
   }
 
-  // 'o' cycles the Open tab's order: manual, by deadline, newest first
-  if (e.key === 'o' && !e.ctrlKey && !e.metaKey && !e.altKey && !st.today && (st.activeView === 'open' || st.activeView === 'plan')) {
+  // 'o' cycles the shown tab's order (Today's, Open's): manual, by deadline, newest first
+  if (e.key === 'o' && !e.ctrlKey && !e.metaKey && !e.altKey && (st.activeView === 'open' || st.activeView === 'plan')) {
     e.preventDefault();
     app.cycleSort();
     return;

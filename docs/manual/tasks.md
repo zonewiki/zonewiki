@@ -99,7 +99,7 @@ The control next to the tabs (or **d**) picks how the tasks are grouped:
 | **By person** | A section per assignee: Unassigned, You, then everyone else (with several users) | assigns it |
 | **By list** | A section per list, the Inbox first (where a view holds several lists) | moves it to that list |
 
-On the Open tab the **Order** menu (or **o**) sorts by **Manual**, **Due date** or **Created**.
+On the Today and Open tabs the **Order** menu (or **o**) sorts by **Manual**, **Due date** or **Created**.
 Only Manual can be reordered by dragging; the others are for reading.
 The manual order is one for everyone: where you drag a task in a list, it is for all who see the list.
 In **My tasks** the menu says **My order** instead: that order is yours alone ([My tasks](#my-tasks)).

@@ -53,21 +53,25 @@ function unfoldFor(id) {
   return true;
 }
 
-// Open and Plan sorted by deadline or by creation (the Order dropdown; o
-// cycles it) instead of the manual order (TasksCore.SORTS). Nothing reorders
-// in them: ordering is done back in the manual order. Each tab's sort is
-// remembered per task list in this browser.
+// Open and Today sorted by deadline or by creation (the Order dropdown; o
+// cycles it) instead of the manual order (TasksCore.SORTS), as a list or
+// grouped. Nothing reorders in them: ordering is done back in the manual
+// order. Each tab's sort is remembered per task list in this browser, and
+// the dropdown's first entry says which manual order the tab shows (My
+// order in My tasks), on the tab one lands on too.
 const SORT_MODES = ['manual', 'due', 'created'];
 const SORT_TITLES = { manual: 'the manual order', due: 'by deadline', created: 'newest first' };
 const sortKey = () => 'zone-tasks-sort:' + [location.pathname, app.appEl?.dataset.initList || '',
   app.appEl?.dataset.initTag || '', app.instanceId].join('|');
-let sortModes = {};   // view → 'due' | 'created'; missing: manual
+let sortModes = {};   // sortTab() → 'due' | 'created'; missing: manual
 try { sortModes = JSON.parse(localStorage.getItem(sortKey())) || {}; } catch (_) {}
-// The shown tab's sort, when not the manual order.
-// (Today has none: it is the day's manual order, worked top to bottom.)
-const sorts = () => !st.today && (st.activeView === 'open' || st.activeView === 'plan');
-const activeSort = () => sorts() && SORTS[sortModes[st.activeView]]
-  ? sortModes[st.activeView] : null;
+// The shown tab's sort, when not the manual order. Today's is its own
+// ('focus'), however it is drawn: Open sorted by deadline leaves Today, which
+// is worked top to bottom, in its order.
+const sorts = () => st.activeView === 'open' || st.activeView === 'plan';
+const sortTab = () => st.today ? 'focus' : st.activeView;
+const activeSort = () => sorts() && SORTS[sortModes[sortTab()]]
+  ? sortModes[sortTab()] : null;
 function applySort() {
   if (!app.sortSel) return;
   app.sortSel.hidden = !sorts();
@@ -75,7 +79,7 @@ function applySort() {
 }
 function setSort(mode) {
   if (!sorts()) return;
-  if (SORTS[mode]) sortModes[st.activeView] = mode; else delete sortModes[st.activeView];
+  if (SORTS[mode]) sortModes[sortTab()] = mode; else delete sortModes[sortTab()];
   try { localStorage.setItem(sortKey(), JSON.stringify(sortModes)); } catch (_) {}
   applySort();
   app.render();

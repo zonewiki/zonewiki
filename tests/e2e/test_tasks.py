@@ -5101,17 +5101,53 @@ def test_open_sorts_by_deadline_then_created_and_remembers_it(page, wiki):
     expect(page.locator(".task-item[data-drag]")).to_have_count(0)
     sel.select_option("created")
     assert _list_rows(page) == ["# Newest first", "Fresh", "Soon due", "Later due", "Plain"]
-    # Remembered on reload; Focus has no sort.
+    # Remembered on reload; Today keeps its own order.
     page.reload()
     expect(card(page, "Fresh")).to_be_visible()
     assert _list_rows(page)[0] == "# Newest first"
     open_tab(page, "focus")
-    expect(sel).to_be_hidden()
+    expect(sel).to_be_visible()
+    expect(sel).to_have_value("manual")
     open_tab(page, "open")
+    expect(sel).to_have_value("created")
     # o goes on to the manual order.
     page.keyboard.press("o")
     expect(sel).to_have_value("manual")
     assert _list_rows(page) == ["Fresh", "Plain", "Later due", "Soon due"]   # one list, a new task on top
+
+
+def test_today_sorts_as_open_does_and_keeps_its_own_sort(page, wiki):
+    """Today has the Order menu too: the manual order by default, which is
+    dragged in; by deadline or newest first for reading. Its sort is its
+    own, remembered apart from Open's."""
+    today = date.today().isoformat()
+    soon = (date.today() + timedelta(days=2)).isoformat()
+    ids = [page.request.post("/api/tasks", data={"title": t, "start_date": today, "due_date": d}).json()["id"]
+           for t, d in (("Plain", None), ("Soon due", soon), ("Due today", today))]
+    rank(page, ids)
+    page.goto("/tasks?view=focus&group=none")
+    sel = page.locator("select.tasks-sort")
+    expect(sel).to_be_visible()
+    expect(sel).to_have_value("manual")
+    assert _list_rows(page) == ["Plain", "Soon due", "Due today"]
+    expect(page.locator(".task-item[data-drag]")).to_have_count(3)
+    page.keyboard.press("o")
+    expect(sel).to_have_value("due")
+    assert _list_rows(page) == ["# By deadline", "Due today", "Soon due", "# No deadline", "Plain"]
+    # Nothing drags in a sort, and the keys say how to get back.
+    expect(page.locator(".task-item[data-drag]")).to_have_count(0)
+    card(page, "Plain").click()
+    page.keyboard.press("Control+Shift+ArrowUp")
+    expect(page.get_by_text("press o until Manual")).to_be_visible()
+    # Open keeps its own; Today's is remembered.
+    open_tab(page, "open")
+    expect(sel).to_have_value("manual")
+    page.reload()
+    open_tab(page, "focus")
+    expect(sel).to_have_value("due")
+    assert _list_rows(page)[0] == "# By deadline"
+    sel.select_option("manual")
+    assert _list_rows(page) == ["Plain", "Soon due", "Due today"]
 
 
 def test_open_by_deadline_does_not_reorder(page, wiki):
