@@ -242,8 +242,9 @@ def test_list_switcher_goes_between_the_lists_and_keeps_its_counts(page, wiki):
     assert all(abs(b["y"] - boxes[0]["y"]) < 1 for b in boxes)
     assert boxes[0]["y"] + boxes[0]["height"] <= box_of(page.locator("h1"))["y"]
     card(page, "Milk").locator("input[type=checkbox]").check()
-    # After the checkbox's ~5 s grace period.
-    expect(card(page, "Milk")).to_have_count(0, timeout=10000)
+    # Done at once; its card stays, ticked, until the view is another one.
+    expect(card(page, "Milk")).to_have_class(re.compile(r"\btask-completing\b"))
+    wait_until(page, lambda: all(t["title"] != "Milk" for t in page.request.get("/api/tasks").json()))
     page.locator(".tasks-place[data-place='list:task']").click()
     page.wait_for_url(re.compile(r"/tasks\?list=task$"))
     expect(page.locator(".tasks-place[aria-current]")).to_have_attribute("data-place", "list:task")
@@ -1192,8 +1193,7 @@ def test_completed_count_follows_completion(page, wiki):
     page.goto("/page/tasks?view=open&group=none")
     expect(page.locator("#task-closed-link")).to_have_text("Closed (0) →")
     card(page, "Finish me").locator("input[type=checkbox]").check()
-    # After the checkbox's ~5 s grace period.
-    expect(page.locator("#task-closed-link")).to_have_text("Closed (1) →", timeout=10000)
+    expect(page.locator("#task-closed-link")).to_have_text("Closed (1) →")
 
 
 def test_embed_filter_completed_still_opens_completed(page, wiki):
@@ -1888,9 +1888,12 @@ def test_selection_bar_done_and_toast_above_it(page, wiki):
     page.locator("#task-selbar [data-sel='done']").click()
     toast = page.locator(".task-undo-toast")
     expect(toast).to_contain_text("2 tasks completed")
-    expect(card(page, "Saw")).to_have_count(0)
+    # They stay, ticked, and are no longer selected.
+    expect(page.locator(".task-item.task-completing .task-title")).to_have_text(["Saw", "Nuts"])
     expect(page.locator("#task-selbar")).to_be_hidden()
+    assert selected_titles(page) == []
     toast.locator(".task-undo-btn").click()
+    expect(page.locator(".task-item.task-completing")).to_have_count(0)
     expect(card(page, "Saw")).to_be_visible()
     expect(card(page, "Nuts")).to_be_visible()
 
@@ -2544,28 +2547,216 @@ def test_closed_tasks_survive_the_load_race(page, wiki):
     expect(card(page, "Something else")).to_have_count(0)
 
 
-def test_ticked_tasks_stay_ticked_when_the_first_one_goes(page, wiki):
-    # Regression: ticking several tasks in a row, the first one's completion
-    # re-rendered the list and the others lost their tick (yet still completed).
+def shown_titles(page):
+    return page.locator(".task-item .task-title").all_text_contents()
+
+
+def open_titles(page):
+    return sorted(t["title"] for t in page.request.get("/api/tasks").json())
+
+
+def ticked(page, title):
+    """The card of a task ticked off here: still shown, ticked and struck."""
+    c = card(page, title)
+    expect(c).to_have_class(re.compile(r"\btask-completing\b"))
+    expect(c.locator(".task-checkbox input")).to_be_checked()
+    return c
+
+
+def test_a_ticked_task_is_done_at_once_and_stays_where_it_was(page, wiki):
+    # A tick is saved at once (it used to wait 5 s, and was lost when the
+    # page was left meanwhile), and the card stays in its place, struck, so
+    # the list doesn't move under the next tick.
+    for title in ("Gamma", "Beta", "Alpha"):
+        page.request.post("/api/tasks", data={"title": title})
+    page.goto("/tasks?view=open&group=none")
+    assert shown_titles(page) == ["Alpha", "Beta", "Gamma"]
+    card(page, "Beta").locator("input[type=checkbox]").check()
+    wait_until(page, lambda: open_titles(page) == ["Alpha", "Gamma"])
+    ticked(page, "Beta")
+    expect(page.locator("#task-closed-link")).to_have_text("Closed (1) →")
+    card(page, "Alpha").locator("input[type=checkbox]").check()
+    wait_until(page, lambda: open_titles(page) == ["Gamma"])
+    for title in ("Alpha", "Beta"):
+        ticked(page, title)
+    assert shown_titles(page) == ["Alpha", "Beta", "Gamma"]
+    # A reload of the list (the tab shown again) keeps them.
+    page.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
+    page.wait_for_timeout(300)
+    assert shown_titles(page) == ["Alpha", "Beta", "Gamma"]
+    ticked(page, "Beta")
+    # Its menu is a closed task's.
+    card(page, "Beta").locator(".task-menu-btn").click()
+    expect(page.locator(".task-menu").get_by_role("menuitem", name="Reopen")).to_be_visible()
+    page.keyboard.press("Escape")
+
+    # Unticked: open again in its place, and nothing of it in its history.
+    card(page, "Beta").locator("input[type=checkbox]").uncheck()
+    wait_until(page, lambda: sorted(open_titles(page)) == ["Beta", "Gamma"])
+    expect(card(page, "Beta")).not_to_have_class(re.compile(r"\btask-completing\b"))
+    expect(card(page, "Beta").locator(".task-checkbox input")).not_to_be_checked()
+    assert shown_titles(page) == ["Alpha", "Beta", "Gamma"]
+    assert [e["event"] for e in task_by_title(page, "Beta").get("history") or []
+            if e["event"] in ("done", "reopened")] == []
+    # Space unticks too, and ticks.
+    card(page, "Alpha").locator(".task-title").click()
+    page.keyboard.press("Space")
+    wait_until(page, lambda: sorted(open_titles(page)) == ["Alpha", "Beta", "Gamma"])
+    expect(card(page, "Alpha")).not_to_have_class(re.compile(r"\btask-completing\b"))
+    page.keyboard.press("Space")
+    wait_until(page, lambda: sorted(open_titles(page)) == ["Beta", "Gamma"])
+    ticked(page, "Alpha")
+
+    # Loaded again, the page shows what is open.
+    page.reload()
+    expect(card(page, "Gamma")).to_be_visible()
+    expect(card(page, "Alpha")).to_have_count(0)
+
+
+def test_ticked_tasks_go_when_the_view_shows_something_else(page, wiki):
+    today = date.today().isoformat()
+    for title in ("Alpha", "Beta", "Gamma"):
+        page.request.post("/api/tasks", data={"title": title, "start_date": today})
+    page.goto("/tasks?view=open&group=none")
+    # Another tab.
+    card(page, "Alpha").locator("input[type=checkbox]").check()
+    ticked(page, "Alpha")
+    wait_until(page, lambda: "Alpha" not in open_titles(page))
+    open_tab(page, "focus")
+    expect(card(page, "Beta")).to_be_visible()
+    expect(card(page, "Alpha")).to_have_count(0)
+    # The filter.
+    card(page, "Beta").locator("input[type=checkbox]").check()
+    ticked(page, "Beta")
+    wait_until(page, lambda: open_titles(page) == ["Gamma"])
+    page.locator("#task-filter-search").fill("a")
+    expect(card(page, "Gamma")).to_be_visible()
+    expect(card(page, "Beta")).to_have_count(0)
+    # They are under Closed.
+    page.locator("#task-filter-search").fill("")
+    open_tab(page, "closed")
+    expect(card(page, "Alpha")).to_be_visible()
+    expect(card(page, "Beta")).to_be_visible()
+
+
+def test_ticked_tasks_go_ten_minutes_after_the_last_tick(page, wiki):
     for title in ("Alpha", "Beta", "Gamma"):
         page.request.post("/api/tasks", data={"title": title})
     page.clock.install()
     page.goto("/tasks?view=open&group=none")
     card(page, "Alpha").locator("input[type=checkbox]").check()
-    page.clock.run_for(2000)
+    ticked(page, "Alpha")
+    page.clock.run_for(9 * 60 * 1000)
+    ticked(page, "Alpha")
+    # Another tick: both stay ten minutes from now.
     card(page, "Beta").locator("input[type=checkbox]").check()
-    card(page, "Gamma").locator("input[type=checkbox]").check()
-    page.clock.run_for(3500)   # Alpha's grace period + fade-out
+    ticked(page, "Beta")
+    page.clock.run_for(9 * 60 * 1000)
+    for title in ("Alpha", "Beta"):
+        ticked(page, title)
+    # Not while a menu is open: they go once it is closed.
+    card(page, "Gamma").locator(".task-menu-btn").click()
+    expect(page.locator(".task-menu")).to_be_visible()
+    page.clock.run_for(2 * 60 * 1000)
+    ticked(page, "Alpha")
+    page.keyboard.press("Escape")
+    expect(page.locator(".task-menu")).to_have_count(0)
+    page.clock.run_for(6000)
     expect(card(page, "Alpha")).to_have_count(0)
-    for title in ("Beta", "Gamma"):
-        expect(card(page, title).locator("input[type=checkbox]")).to_be_checked()
-        expect(card(page, title)).to_have_class(re.compile(r"\btask-completing\b"))
-    # Unticking one still cancels it; the other goes as planned.
-    card(page, "Gamma").locator("input[type=checkbox]").uncheck()
-    page.clock.run_for(3000)
     expect(card(page, "Beta")).to_have_count(0)
     expect(card(page, "Gamma")).to_be_visible()
-    wait_until(page, lambda: [t["title"] for t in page.request.get("/api/tasks").json()] == ["Gamma"])
+    wait_until(page, lambda: open_titles(page) == ["Gamma"])
+
+
+def test_a_ticked_task_is_not_counted_and_not_dragged(page, wiki):
+    # On the board a ticked task stays in its day, which counts what is
+    # still to do.
+    today = date.today().isoformat()
+    for title in ("Gamma", "Beta", "Alpha"):
+        page.request.post("/api/tasks", data={"title": title, "start_date": today, "due_date": today})
+    page.goto("/tasks?view=open&group=day")
+    head = page.locator(f".board-day-divider[data-drop-day='{today}']")
+    expect(head.locator(".board-day-count")).to_have_text("3")
+    expect(head.locator(".board-day-due")).to_have_text("3 due")
+    expect(card(page, "Beta")).to_have_attribute("draggable", "true")
+    card(page, "Beta").locator("input[type=checkbox]").check()
+    ticked(page, "Beta")
+    expect(head.locator(".board-day-count")).to_have_text("2")
+    expect(head.locator(".board-day-due")).to_have_text("2 due")
+    expect(card(page, "Beta")).not_to_have_attribute("draggable", "true")
+    assert shown_titles(page) == ["Alpha", "Beta", "Gamma"]
+
+
+def test_moving_a_task_past_a_ticked_one(page, wiki):
+    for title in ("Gamma", "Beta", "Alpha"):
+        page.request.post("/api/tasks", data={"title": title})
+    page.goto("/tasks?view=open&group=none")
+    card(page, "Beta").locator("input[type=checkbox]").check()
+    ticked(page, "Beta")
+    wait_until(page, lambda: open_titles(page) == ["Alpha", "Gamma"])
+    card(page, "Alpha").locator(".task-title").click()
+    page.keyboard.press("Control+Shift+ArrowDown")
+    assert shown_titles(page) == ["Beta", "Alpha", "Gamma"]
+    page.keyboard.press("Control+Shift+ArrowDown")
+    assert shown_titles(page) == ["Beta", "Gamma", "Alpha"]
+    ticked(page, "Beta")
+    # The ticked one isn't moved.
+    card(page, "Beta").locator(".task-title").click()
+    page.keyboard.press("Control+Shift+ArrowDown")
+    assert shown_titles(page) == ["Beta", "Gamma", "Alpha"]
+    # The server has the open tasks' order.
+    page.reload()
+    expect(card(page, "Gamma")).to_be_visible()
+    assert shown_titles(page) == ["Gamma", "Alpha"]
+
+
+def test_several_done_at_once_stay_ticked_with_an_undo(page, wiki):
+    for title in ("Gamma", "Beta", "Alpha"):
+        page.request.post("/api/tasks", data={"title": title})
+    page.goto("/tasks?view=open&group=none")
+    card(page, "Alpha").locator(".task-title").click()
+    card(page, "Beta").locator(".task-title").click(modifiers=["Shift"])
+    page.keyboard.press("Space")
+    wait_until(page, lambda: open_titles(page) == ["Gamma"])
+    for title in ("Alpha", "Beta"):
+        ticked(page, title)
+    assert shown_titles(page) == ["Alpha", "Beta", "Gamma"]
+    expect(page.locator(".task-undo-toast")).to_contain_text("2 tasks completed")
+    # One of them unticked, as one ticked alone is.
+    card(page, "Beta").locator("input[type=checkbox]").uncheck()
+    wait_until(page, lambda: open_titles(page) == ["Beta", "Gamma"])
+    expect(card(page, "Beta")).not_to_have_class(re.compile(r"\btask-completing\b"))
+    ticked(page, "Alpha")
+    card(page, "Alpha").locator(".task-title").click()
+    page.keyboard.press("Space")
+    wait_until(page, lambda: open_titles(page) == ["Alpha", "Beta", "Gamma"])
+    assert shown_titles(page) == ["Alpha", "Beta", "Gamma"]
+    # And the toast's Undo takes them all back.
+    card(page, "Alpha").locator(".task-title").click()
+    card(page, "Beta").locator(".task-title").click(modifiers=["Shift"])
+    page.keyboard.press("Space")
+    wait_until(page, lambda: open_titles(page) == ["Gamma"])
+    page.locator(".task-undo-btn").click()
+    wait_until(page, lambda: sorted(open_titles(page)) == ["Alpha", "Beta", "Gamma"])
+    for title in ("Alpha", "Beta"):
+        expect(card(page, title)).not_to_have_class(re.compile(r"\btask-completing\b"))
+
+
+def test_unticking_a_repeating_task_takes_its_next_one_back(page, wiki):
+    today = date.today().isoformat()
+    page.request.post("/api/tasks", data={"title": "Water plants", "due_date": today, "rec_type": "daily"})
+    page.goto("/tasks?view=open&group=none")
+    card(page, "Water plants").locator("input[type=checkbox]").check()
+    # The done one stays ticked beside the next one.
+    expect(page.locator(".task-item")).to_have_count(2)
+    expect(page.locator(".task-item.task-completing")).to_have_count(1)
+    wait_until(page, lambda: open_titles(page) == ["Water plants"])
+    assert task_by_title(page, "Water plants")["due_date"] > today
+    page.locator(".task-item.task-completing input[type=checkbox]").uncheck()
+    expect(page.locator(".task-item")).to_have_count(1)
+    expect(page.locator(".task-item.task-completing")).to_have_count(0)
+    wait_until(page, lambda: open_titles(page) == ["Water plants"])
+    assert task_by_title(page, "Water plants")["due_date"] == today
 
 
 def test_copy_link_to_a_task(page, wiki):
@@ -2606,32 +2797,36 @@ def test_click_on_checkbox_label_ticks_without_selecting(page, wiki):
     expect(c).not_to_contain_class("task-selected")
 
 
-def test_keep_task_goes_back_to_open_with_undo(page, wiki):
-    # Ticking off a keep task (a staple on a shopping list) takes it off
-    # Focus and back to Open, shows when it was last done, and can be undone.
+def test_keep_task_goes_back_to_open_and_unticks(page, wiki):
+    # Ticking off a keep task (a staple on a shopping list) takes it back to
+    # Open with the day it was last done; its card stays ticked on Today
+    # meanwhile, and unticking it gives its dates back.
     today = date.today().isoformat()
     page.request.post("/api/tasks", data={"title": "Milk", "keep": True, "start_date": today})
-    page.clock.install()
+    page.request.post("/api/tasks", data={"title": "Bread", "keep": True, "start_date": today})
     page.goto("/tasks?view=today")
     expect(card(page, "Milk").locator(".task-keep")).to_be_visible()
     card(page, "Milk").locator("input[type=checkbox]").check()
-    page.clock.run_for(5500)   # completion grace period + fade-out
-    expect(card(page, "Milk")).to_have_count(0)
     wait_for_field(page, "Milk", "start_date", None)
     assert task_by_title(page, "Milk")["closed_at"] is None
-    expect(page.locator(".task-undo-toast")).to_contain_text("“Milk” done")
+    assert task_by_title(page, "Milk")["last_done"] == today
+    ticked(page, "Milk")
+    assert shown_titles(page) == ["Bread", "Milk"]
 
-    page.locator(".task-undo-btn").click()
+    card(page, "Milk").locator("input[type=checkbox]").uncheck()
     wait_for_field(page, "Milk", "start_date", today)
-    expect(card(page, "Milk")).to_be_visible()
+    expect(card(page, "Milk")).not_to_have_class(re.compile(r"\btask-completing\b"))
     assert task_by_title(page, "Milk")["last_done"] is None
 
     # Done again, it waits on Open with the day it was last done.
     card(page, "Milk").locator("input[type=checkbox]").check()
-    page.clock.run_for(5500)
     wait_for_field(page, "Milk", "last_done", today)
     open_tab(page, "open")
     expect(card(page, "Milk").locator(".task-last-done")).to_be_visible()
+    expect(card(page, "Milk")).not_to_have_class(re.compile(r"\btask-completing\b"))
+    open_tab(page, "focus")
+    expect(card(page, "Bread")).to_be_visible()
+    expect(card(page, "Milk")).to_have_count(0)
 
 
 def test_keep_checkbox_in_modal(page, wiki):
@@ -3170,7 +3365,7 @@ def test_subtasks_show_their_count_and_ask_before_done(page, wiki):
     expect(dialog).to_be_hidden()
     expect(box).not_to_be_checked()
     expect(card(page, "Plan trip")).not_to_have_class(re.compile("task-completing"))
-    # Complete anyway: it completes as ever (its grace period, here cut short).
+    # Complete anyway: it completes as ever, and stays ticked.
     box.click()
     dialog.get_by_role("button", name="Complete anyway").click()
     expect(card(page, "Plan trip")).to_have_class(re.compile("task-completing"))
@@ -3202,8 +3397,8 @@ def test_space_and_bulk_done_ask_about_open_subtasks(page, wiki):
     assert len(page.request.get("/api/tasks").json()) == 2
     page.keyboard.press("Space")
     dialog.get_by_role("button", name="Complete anyway").click()
-    expect(card(page, "Plan trip")).to_have_count(0)
-    expect(card(page, "Water plants")).to_have_count(0)
+    expect(page.locator(".task-item.task-completing")).to_have_count(2)
+    wait_until(page, lambda: page.request.get("/api/tasks").json() == [])
 
 
 def test_checkboxes_in_task_notes(page, wiki):

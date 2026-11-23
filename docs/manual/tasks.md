@@ -136,7 +136,9 @@ The description has the editor's formatting bar and **Edit** | **Preview** (**F2
 ### Completing
 
 Tick the checkbox to complete a task.
-It is struck through for a moment, so you can still change your mind, then it moves to Closed.
+It is done at once, and stays where it was, ticked and struck through, so the list doesn't move while you tick the next one.
+Untick it to take it back.
+The ticked tasks leave together when you look at something else (another tab, grouping, sort or filter, or the page again) or ten minutes after your last tick; from then on they are under **Closed**.
 If its description still has open checkboxes, Zonewiki asks first (**Complete anyway**).
 
 A task you won't do is closed with **Won't do** (⋯ menu, the dialog, or the **Delete** key): it goes to Closed marked "✗ won't do" and can be reopened from there.

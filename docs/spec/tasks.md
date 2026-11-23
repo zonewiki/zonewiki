@@ -818,7 +818,7 @@ A toast shown while a modal dialog is open goes into the dialog (`placeToast`), 
 
 **One undo at a time** (`showUndo`): only the latest action's undo is live,
 from its toast's Undo or Ctrl+Z.
-An action that saves first and arms its undo when the server answers (bulk start with **0**–**7**, Done/Reopen on a selection, bulk tags, Won't do on a selection, Move deadline, completing a keep task, deleting a comment, importance) drops the previous undo as it starts saving (`dismissUndo`),
+An action that saves first and arms its undo when the server answers (bulk start with **0**–**7**, Done/Reopen on a selection, bulk tags, Won't do on a selection, Move deadline, deleting a comment, importance) drops the previous undo as it starts saving (`dismissUndo`),
 so a quick Ctrl+Z in between does nothing instead of undoing the action before.
 An undo leaves no trace in the task's history (History).
 
@@ -848,8 +848,29 @@ On a card in a selection of several the menu offers the selection's actions inst
 
 ### Completing a task
 
-The checkbox completes after a cancellable grace period (struck through meanwhile; several ticked in a row each keep their tick and strike while an earlier one leaves the list); Space does the same for the selected tasks.
+The checkbox completes the task at once, and so does **Space** for the selected task and Space or **Done** for several.
 A recurring task makes its next occurrence (Repeating tasks), a keep task goes back to the pool (Keep tasks).
+
+**A ticked task stays where it was**, ticked and struck through, so the list doesn't move under the next tick and what was done shows.
+Unticking it (its box, Space) takes the tick back: the task is open again as it was, with no trace in its history, a keep task with its dates, and a repeating task's next occurrence goes.
+Several completed at once also have their toast's Undo.
+
+The ticked tasks leave together, and are under Closed from then on:
+
+- when the view shows something else: another tab, grouping, sort or filter (typing in the filter counts), and when the page is loaded again;
+- ten minutes after the last tick or untick, once nothing is in the user's hands (a drag, a menu, a dialog).
+
+While it stays, a ticked task is no task to do: a section's count, the Today limit and a header's due, overdue and carried-over lists leave it out, it isn't dragged, swiped or moved in the order, and its ⋯ menu is a closed task's (Reopen).
+A repeating task's next occurrence shows beside it where the view holds it.
+Updates keeps a closed task's card anyway, so a task ticked there is its closed card at once.
+Won't do and Skip close at once, with their undo toast (Won't do and Skip).
+
+**How it works.**
+`tickTask` (`js/taskdata.js`) saves the completion (`PUT`) and keeps the task as it was before in `st.ticked` (id → task); `completeMany` does the same around its `batch-complete`, and asks for the closed tasks it made (`holdClosed`, the latest of `GET /api/tasks/closed`).
+The views draw `shownTasks()`, the tasks held with a ticked one as it was, so it keeps its section, its place in the order and its filter match; everything that acts on a task reads the task as the server has it (`st.tasks`).
+`untickTask` reopens it (`completed: false` with the old `history`; a keep task's `keepSnapshot`).
+`render()` drops the ticked tasks when what the view shows is another thing (`tickedHere`), the timer when its ten minutes are over (`letTickedGo`, which waits while `app.busy()`).
+A reload of the list (another embed's write, the tab shown again) keeps them and the closed tasks held for them, but one that is open again on the server (reopened somewhere else).
 
 ### Checklists and subtasks
 
@@ -1371,7 +1392,7 @@ Cards mark keep tasks with ⟲ (`.task-keep`).
 A list's setting Keep tasks (`keep`, List settings…) makes new tasks there keep tasks.
 
 Completing a keep task (`keepDone`, in `PUT` and in `batch-complete`) clears its start date and its deadline, and sets `last_done` to today; it stays in the open tasks' file with the same id, tags, description and place in Open's order, and Closed stays empty.
-Since Closed can't reopen it, the card shows an undo toast that restores the old fields (`keepSnapshot`).
+Closed can't reopen it: unticking its card, while it still shows ticked (Completing a task), restores the old fields (`keepSnapshot`), and so does the Undo of several completed at once.
 **Won't do** retires a staple.
 Keep and Repeat both say what happens after done, so they exclude each other: `keep` clears `recurrence`, and the edit modal doesn't offer Repeat while "Keep after done" is checked (a Repeat that shows is off, and the line under the fields says "A keep task does not repeat.").
 
@@ -1900,7 +1921,7 @@ Under `(pointer: coarse)` cards have `touch-action: pan-y`; `.tasks-list` has `o
 | **Ctrl/Cmd+A** | With a task selected: every task shown (Selecting several tasks) |
 | **Esc** | Collapse the expanded task first, then clear the selection (in selection mode: end it, Touch) |
 | **Enter** | Edit the selected task |
-| **Space** | Complete it, or reopen a closed one (on several selected, all of them) |
+| **Space** | Complete it, untick one just ticked, or reopen a closed one (on several selected, all of them) |
 | **Delete** | Close the selected open tasks as won't do (a task is never deleted); with Ctrl/⌘ it is the page's Delete page, and the tasks stay as they are |
 | **→** / **l**, **←** / **h** | With one task selected that has a description or comments: open / close them; open, they stay open as j/k move on (Expanding a task) |
 | **f** / **F** | Start the selected tasks today / tomorrow, on every tab |
@@ -1969,7 +1990,8 @@ Every later load asks the server for the list's scope (`GET /api/tasks?list=`, `
 
 Several embeds per page work: each instance keeps its own task array, and a write in one refreshes the others (`refreshOtherInstances`).
 Every instance also reloads on `visibilitychange` and bfcache `pageshow`, so a tab left open for days shows current tasks and today's day sections.
-`refreshIfIdle` skips the reload while a drag, swipe, completion grace period, ⋯ menu or edit modal is in progress.
+`refreshIfIdle` skips the reload while a drag, swipe, ⋯ menu or edit modal is in progress.
+A reload whose answer a write of a task overtook (`updateTask` answered while the tasks were on their way) is from before the write, and asks again (`wrote` in `fetchTasks`), so it never puts a task back as it was.
 
 **What someone else changed shows within a minute**, without fetching tasks to find out: the server has a word for the tasks a page holds (`tasksWord`, `Store.Word`: the start's time and a count of the writes to those lists' files and to the registries the user reads; not a file changed by hand), which `GET /api/tasks` and `GET /api/tasks/due-count` answer in the `Zone-Tasks` header and a page's own tasks bring along (`"word"` in `tasksInitial`).
 It says nothing of what changed in those lists.

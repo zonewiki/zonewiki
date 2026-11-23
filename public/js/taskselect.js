@@ -668,17 +668,25 @@ function mayComplete(ids) {
 
 // Complete the tasks `ids`, or reopen them if every one is completed, with
 // an undo. Keep tasks stay open when completed; undo restores their fields
-// instead of reopening them from Closed.
+// instead of reopening them from Closed. The completed ones stay where they
+// were, ticked, as one ticked alone does (st.ticked in js/taskdata.js).
 async function completeMany(ids) {
-  const completing = ids.some(id => { const t = st.tasks.find(tk => tk.id === id); return t && !t.closed_at; });
-  const kept = completing
-    ? ids.map(id => st.tasks.find(t => t.id === id)).filter(t => t?.keep && !t.closed_at)
-         .map(t => [t.id, app.keepSnapshot(t)])
-    : [];
+  const open = ids.map(id => st.tasks.find(t => t.id === id)).filter(t => t && !t.closed_at && !st.ticked.has(t.id));
+  const completing = open.length > 0;
+  const kept = open.filter(t => t.keep).map(t => [t.id, app.keepSnapshot(t)]);
   app.dismissUndo();
-  await app.completeTasks(ids, completing);
+  const stay = app.initUpdates ? [] : open;
+  for (const t of stay) st.ticked.set(t.id, { ...t });
+  const unstay = () => { for (const t of stay) st.ticked.delete(t.id); app.holdTicked(); };
+  if (!completing) for (const id of ids) st.ticked.delete(id);   // ticked here, reopened: as any open task
+  app.holdTicked();
+  if (!await app.completeTasks(ids, completing)) { unstay(); app.render(); return; }
+  // They stay, ticked, but are done with: no longer the selection.
+  if (stay.some(t => st.selectedIds.has(t.id))) { clearSelection(); syncSelBar(); }
+  await app.holdClosed(stay.filter(t => !t.keep).map(t => t.id));
   const label = completing ? `${ids.length} tasks completed` : `${ids.length} tasks reopened`;
   app.showUndo(label, async () => {
+    unstay();
     const keptIds = new Set(kept.map(([id]) => id));
     const others = ids.filter(id => !keptIds.has(id));
     if (kept.length) await Promise.all(kept.map(([id, before]) => putTask(id, before)));

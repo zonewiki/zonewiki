@@ -76,9 +76,10 @@ function renderEmpty() {
 // A task's card. draggable: it can be picked up (the tabs in the manual
 // order); extraClass: more classes for its <li>.
 function taskHTML(task, draggable = !!app.ORDERED[st.activeView], extraClass = '') {
-  // A task ticked but not yet done stays ticked when another completion
-  // re-renders the list.
-  const pending = app.pendingCompletions.has(task.id);
+  // A task ticked off here shows as it was, struck through (st.ticked), and
+  // isn't picked up.
+  const pending = st.ticked.has(task.id);
+  if (pending) draggable = false;
   const checked = task.closed_at || pending ? 'checked' : '';
   const closedClass = (task.closed_at ? 'task-closed' : '') + (task.wont_do ? ' task-wont-do' : '') +
     (pending ? ' task-completing' : '');
@@ -253,10 +254,11 @@ function planHTML(filtered) {
     const fid = app.foldId(s.key, today);
     const foldable = s.tasks.length && !filtering;
     const isFolded = foldable && st.folded.has(fid);
-    const over = app.LIMIT && s.date && s.tasks.length >= app.LIMIT;
+    const count = live(s.tasks).length;
+    const over = app.LIMIT && s.date && count >= app.LIMIT;
     const overCls = over ? ' board-day--over' : '';
     const overIcon = over
-      ? `<span class="board-day-over-icon" title="Over the limit (${s.tasks.length}/${app.LIMIT})">⚠</span>`
+      ? `<span class="board-day-over-icon" title="Over the limit (${count}/${app.LIMIT})">⚠</span>`
       : '';
     const dropAttr = (s.droppable ? ` data-drop-bucket="${esc(s.key)}" data-drop-day="${s.date || ''}"` +
       (s.person !== undefined ? ` data-drop-person="${esc(s.person)}"` : '') +
@@ -282,7 +284,7 @@ function planHTML(filtered) {
         ? `<button type="button" class="board-day-fold" data-fold="${esc(fid)}" aria-expanded="${!isFolded}"` +
           ` title="${isFolded ? 'Show' : 'Hide'} these tasks">${esc(s.label)}</button>`
         : esc(s.label)) + `${dueBtn}</span>` +
-      `${overIcon}<span class="board-day-count">${s.tasks.length}</span></li>`;
+      `${overIcon}<span class="board-day-count">${count}</span></li>`;
     // An empty section is just its header row, which is itself the drop
     // target (styled tall enough to hit). Nothing grows when a drag
     // starts, so the section you aim at never moves under the pointer.
@@ -302,7 +304,7 @@ function listHTML(orderedTasks) {
   let html = '';
   let truncated = false;
   if (st.today && st.activeView === 'open') {
-    const inFocus = orderedTasks.length;
+    const inFocus = live(orderedTasks).length;
     if (app.LIMIT && inFocus >= app.LIMIT) {
       html += `<li class="today-limit-bar today-over-limit">` +
         `<span>⚠ ${inFocus} tasks in ${esc(app.tabLabel('focus'))} (limit: ${app.LIMIT})</span></li>`;
@@ -328,11 +330,11 @@ function listHTML(orderedTasks) {
   // under a heading; newest first under one. Not drop targets: nothing
   // drags here.
   if (st.activeView === 'open' && app.activeSort()) {
-    const heading = (label, n) => n ? `<li class="plan-subdivider sort-heading">` +
-      `<span>${label}</span><span class="board-day-count">${n}</span></li>` : '';
+    const heading = (label, tasks) => tasks.length ? `<li class="plan-subdivider sort-heading">` +
+      `<span>${label}</span><span class="board-day-count">${live(tasks).length}</span></li>` : '';
     const group = (label, tasks) => {
       const [shown, more] = windowed('sort:' + label, tasks);
-      return heading(label, tasks.length) + shown.map(t => taskHTML(t, false)).join('') + more;
+      return heading(label, tasks) + shown.map(t => taskHTML(t, false)).join('') + more;
     };
     html += app.activeSort() === 'due'
       ? group('By deadline', displayTasks.filter(t => t.due_date)) + group('No deadline', displayTasks.filter(t => !t.due_date))
@@ -409,7 +411,9 @@ function wireListHandlers() {
       const task = st.tasks.find(t => t.id === id);
       if (completed) {
         app.tickTask(id).then(ticked => { if (!ticked) e.target.checked = false; });
-      } else if (!app.cancelPendingComplete(id)) {
+      } else if (st.ticked.has(id)) {
+        app.untickTask(id);
+      } else {
         app.updateTask(id, { completed: false });
         if (task) app.showUndo('Task reopened', () => app.completeTasks([id], true));
       }
@@ -495,7 +499,12 @@ function wireListHandlers() {
   });
 }
 
+// The tasks still to do among `tasks`: what a section or a limit counts
+// (not one ticked off that still shows).
+const live = tasks => st.ticked.size ? tasks.filter(t => !st.ticked.has(t.id)) : tasks;
+
 function render() {
+  app.tickedHere();   // another tab, grouping, sort or filter: the ticked tasks go
   app.closedStale();   // the Closed view: another filter by now, asked for again
   app.applyGroup();   // who can be assigned may have arrived since
   app.syncClosedLink();

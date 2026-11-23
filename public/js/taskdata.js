@@ -98,6 +98,7 @@ function triggerUndo() {
 const LAZY_FROM = 150;
 const lazyTexts = list => list.length > LAZY_FROM ? Promise.resolve(false) : renderTexts(textsOf(list));
 let tasksGen = 0;
+let wrote = 0;   // the answers to this list's writes of one task so far
 let started = false;
 async function fetchTasks() {
   // The first time, the tasks the page came with. With users, who can be
@@ -121,21 +122,38 @@ async function fetchTasks() {
     return data.tasks;
   });
   if (initial && app.ownsOrder) app.setOwnOrder(initialOrder || []);
-  const [all] = await Promise.all([initial || load(), loadPeople()]);
-  let fetched;
-  if (app.initUpdates) {
-    // Updates: the tasks with news, open or closed, each with the news it
-    // came with (st.news); and those shown before that have none anymore
-    // (read since: the server no longer answers them), as they are held, so
-    // a card stays until the page is left.
-    fetched = all.filter(t => TasksCore.newsFor(t, people.me));
-    for (const t of fetched) st.news.set(t.id, app.newsOf(t));
-    const have = new Set(fetched.map(t => t.id));
-    fetched.push(...st.tasks.filter(t => st.news.has(t.id) && !have.has(t.id)));
-  } else {
-    fetched = all.filter(t => app.inScope(t) && !t.closed_at).map(app.own);
+  // An answer that a write of this list overtook (updateTask's, answered
+  // while the tasks were on their way: `wrote`) is from before it, and
+  // would put the task back as it was: asked again.
+  let fetched, at, first = true;
+  do {
+    at = wrote;
+    const [all] = await Promise.all([(first && initial) || load(), loadPeople()]);
+    first = false;
+    if (app.initUpdates) {
+      // Updates: the tasks with news, open or closed, each with the news it
+      // came with (st.news); and those shown before that have none anymore
+      // (read since: the server no longer answers them), as they are held, so
+      // a card stays until the page is left.
+      fetched = all.filter(t => TasksCore.newsFor(t, people.me));
+      for (const t of fetched) st.news.set(t.id, app.newsOf(t));
+      const have = new Set(fetched.map(t => t.id));
+      fetched.push(...st.tasks.filter(t => st.news.has(t.id) && !have.has(t.id)));
+    } else {
+      fetched = all.filter(t => app.inScope(t) && !t.closed_at).map(app.own);
+    }
+    await lazyTexts(fetched);
+  } while (at !== wrote);
+  // A ticked task that is open again (reopened somewhere else) is as the
+  // server says. (A keep task stays open when ticked.)
+  for (const [id, was] of st.ticked) {
+    if (!was.keep && !tickSaves.has(id) && fetched.some(t => t.id === id)) st.ticked.delete(id);
   }
-  await lazyTexts(fetched);
+  // The ticked tasks are closed, which the server didn't answer: they stay
+  // held as they are, for what acts on their cards (the menu, Space, the
+  // dialog).
+  const have = new Set(fetched.map(t => t.id));
+  fetched.push(...st.tasks.filter(t => t.closed_at && st.ticked.has(t.id) && !have.has(t.id)));
   st.tasks = fetched;
   st.loadedAt = Date.now();
   tasksGen++;
@@ -314,6 +332,7 @@ async function updateTask(id, data) {
   if (res.ok) {
     const updated = await res.json();
     await renderTexts(textsOf([updated]));
+    wrote++;
     const idx = st.tasks.findIndex(t => t.id === id);
     if (idx !== -1) {
       const before = st.tasks[idx];
@@ -408,47 +427,108 @@ function offerUndoLeave(msg, restores) {
   });
 }
 
-// The task's box ticked (a click, Space): it completes after its grace
-// period, once the user has said so if subtasks are still open. False when
-// they cancelled.
+// ── Ticked tasks ──────────────────────────────────────────────────────────
+
+// A task ticked off (its box, Space, Done on a selection) is done at once on
+// the server, and its card stays where it was, ticked and struck through
+// (st.ticked: id → the task as it was before), so the list doesn't move
+// under the next tick and unticking takes it back. The cards go together:
+// when the view shows something else (another tab, grouping, sort or
+// filter: tickedHere, from render()), or TICKED_FOR after the last tick or
+// untick, once nothing is in the user's hands (app.busy). The views draw
+// shownTasks(): the tasks held, a ticked one as it was.
+const TICKED_FOR = 10 * 60 * 1000;
+let tickedTimer = null;
+let tickedIn = '';
+const tickSaves = new Map();   // id → the tick's write, while it is on its way
+
+function shownTasks() {
+  if (!st.ticked.size) return st.tasks;
+  const held = new Set(st.tasks.map(t => t.id));
+  return [...st.tasks.map(t => st.ticked.get(t.id) || t),
+          ...[...st.ticked.values()].filter(t => !held.has(t.id))];
+}
+// The ticked tasks stay TICKED_FOR from now.
+function holdTicked() {
+  clearTimeout(tickedTimer);
+  tickedTimer = st.ticked.size ? setTimeout(letTickedGo, TICKED_FOR) : null;
+}
+function letTickedGo() {
+  if (app.busy()) { tickedTimer = setTimeout(letTickedGo, 5000); return; }
+  app.listEl.querySelectorAll('.task-item.task-completing').forEach(li => li.classList.add('task-completing-out'));
+  tickedTimer = setTimeout(() => { dropTicked(); app.render(); }, 400);
+}
+function dropTicked() {
+  clearTimeout(tickedTimer);
+  tickedTimer = null;
+  st.ticked.clear();
+}
+function tickedHere() {
+  const key = [st.activeView, st.today, st.cut, app.activeSort(), app.filterQuery()].join('\n');
+  if (key === tickedIn) return;
+  tickedIn = key;
+  if (st.ticked.size) dropTicked();
+}
+
+// Several completed at once (completeMany): the closed tasks, as the server
+// has them, are held beside the open ones, as one ticked alone is (its PUT
+// answers it). They are the latest closed; one that isn't among them (others
+// closed more meanwhile) doesn't stay.
+async function holdClosed(ids) {
+  ids = ids.filter(id => st.ticked.has(id) && !st.tasks.some(t => t.id === id));
+  if (!ids.length) return;
+  const q = new URLSearchParams(app.scopeQuery().slice(1));
+  q.set('limit', ids.length + 50);
+  let closed = [];
+  try {
+    const res = await fetch('/api/tasks/closed?' + q);
+    if (res.ok) closed = (await res.json()).tasks || [];
+  } catch (_) {}
+  const byId = new Map(closed.map(t => [t.id, t]));
+  for (const id of ids) {
+    if (!st.ticked.has(id) || st.tasks.some(t => t.id === id)) continue;
+    if (byId.has(id)) st.tasks.push(app.own(byId.get(id)));
+    else st.ticked.delete(id);
+  }
+  app.render();
+}
+
+// The task's box ticked (a click, Space), once the user has said so if
+// subtasks are still open. False when they cancelled, or it wasn't saved.
+// Updates holds closed tasks as they are, so there the card is the closed
+// task's at once.
 async function tickTask(id) {
   const task = st.tasks.find(t => t.id === id);
-  if (task && !(await app.confirmOpenSubtasks([task]))) return false;
-  beginComplete(id, app.listEl.querySelector(`.task-item[data-id="${CSS.escape(id)}"]`));
-  return true;
+  if (!task || st.ticked.has(id)) return !!task;
+  if (!(await app.confirmOpenSubtasks([task]))) return false;
+  if (!app.initUpdates) {
+    st.ticked.set(id, { ...task });
+    holdTicked();
+    const li = app.listEl.querySelector(`.task-item[data-id="${CSS.escape(id)}"]`);
+    const cb = li?.querySelector('.task-checkbox input');
+    if (cb) cb.checked = true;
+    if (li) li.classList.add('task-completing');
+  }
+  const save = updateTask(id, { completed: true });
+  tickSaves.set(id, save);
+  const done = await save;
+  tickSaves.delete(id);
+  if (!done && st.ticked.delete(id)) { holdTicked(); app.render(); }
+  return !!done;
 }
 
-function beginComplete(id, li) {
-  const cb = li?.querySelector('.task-checkbox input');
-  if (cb) cb.checked = true;
-  if (li) li.classList.add('task-completing');
-  if (app.pendingCompletions.has(id)) clearTimeout(app.pendingCompletions.get(id));
-  const tid = setTimeout(() => {
-    app.pendingCompletions.delete(id);
-    // A re-render since the tick replaced the card: fade out the current one.
-    li = app.listEl.querySelector(`.task-item[data-id="${CSS.escape(id)}"]`);
-    if (li) li.classList.add('task-completing-out');
-    setTimeout(async () => {
-      const task = st.tasks.find(t => t.id === id);
-      const before = task?.keep && keepSnapshot(task);
-      if (before) dismissUndo();
-      const done = await updateTask(id, { completed: true });
-      // A keep task is not archived, so Closed can't reopen it: offer undo.
-      if (done && before) showUndo(`“${plainTitle(task.title)}” done`, () => updateTask(id, before));
-    }, 400);
-  }, 4600);
-  app.pendingCompletions.set(id, tid);
-}
-
-function cancelPendingComplete(id) {
-  if (!app.pendingCompletions.has(id)) return false;
-  clearTimeout(app.pendingCompletions.get(id));
-  app.pendingCompletions.delete(id);
-  const li = app.listEl.querySelector(`.task-item[data-id="${CSS.escape(id)}"]`);
-  if (li) li.classList.remove('task-completing', 'task-completing-out');
-  const cb = li?.querySelector('.task-checkbox input');
-  if (cb) cb.checked = false;
-  return true;
+// A ticked task unticked: open again as it was, with no trace in its
+// history (a keep task gets its dates back; a repeating one's next
+// occurrence goes, which the list is asked again for).
+async function untickTask(id) {
+  const before = st.ticked.get(id);
+  if (!before) return;
+  st.ticked.delete(id);
+  holdTicked();
+  await tickSaves.get(id);
+  const fields = before.keep ? keepSnapshot(before) : { completed: false, history: before.history || [] };
+  if (!await updateTask(id, fields)) { st.ticked.set(id, before); holdTicked(); app.render(); }
+  else if (before.recurrence) await fetchTasks();
 }
 
 // What completing a keep task changes (mirrors keepDone in go/taskstore.go), so
@@ -471,6 +551,7 @@ async function completeTasks(ids, completed, wontDo = false) {
     refreshDueBadge(); refreshClosedCount();
     app.refreshOtherInstances(app.instanceId);
   }
+  return res.ok;
 }
 
 
@@ -527,5 +608,5 @@ async function wontDoMany(ids) {
   showUndo(`${open.length} tasks marked won't do`, () => completeTasks(open, false));
 }
 
-return { dismissUndo, showUndo, triggerUndo, fetchTasks, refresh, fetchClosed, setClosedYear, createTask, updateTask, setFollow, markSeen, updatesNow, markAllSeen, closedStale, leftViewMessage, tickTask, cancelPendingComplete, keepSnapshot, completeTasks, afterBatchWrite, oldHistory, markWontDo, wontDoMany, skipOccurrence, setStart };
+return { dismissUndo, showUndo, triggerUndo, fetchTasks, refresh, fetchClosed, setClosedYear, createTask, updateTask, setFollow, markSeen, updatesNow, markAllSeen, closedStale, leftViewMessage, tickTask, untickTask, shownTasks, tickedHere, holdTicked, holdClosed, keepSnapshot, completeTasks, afterBatchWrite, oldHistory, markWontDo, wontDoMany, skipOccurrence, setStart };
 }

@@ -194,13 +194,10 @@ document.addEventListener('keydown', async e => {
     } else {
       const task = st.tasks.find(t => t.id === st.selectedId);
       if (!task) return;
-      const completing = !task.closed_at;
-      if (completing) {
-        if (app.pendingCompletions.has(task.id)) {
-          app.cancelPendingComplete(task.id);
-        } else {
-          app.tickTask(task.id);
-        }
+      if (st.ticked.has(task.id)) {
+        app.untickTask(task.id);
+      } else if (!task.closed_at) {
+        app.tickTask(task.id);
       } else {
         app.updateTask(task.id, { completed: false });
         app.showUndo('Task reopened', () => app.completeTasks([task.id], true));

@@ -32,7 +32,7 @@ st.touchDrag = null;  // { item, x, y, x0, y0, timer, active, held, moved, swipi
 // What a swipe does on this task in the current view: { right, left },
 // each 'start' (start today), 'unplan' (clear the start date) or null.
 function swipeActions(task) {
-  if (!task || task.closed_at) return { right: null, left: null };
+  if (!task || task.closed_at || st.ticked.has(task.id)) return { right: null, left: null };
   const today = todayStr();
   // Already in Focus: nothing to start. Due now: clearing the start date
   // would leave it in Focus (the deadline keeps it there).

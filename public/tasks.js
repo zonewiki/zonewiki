@@ -159,7 +159,6 @@ const app = {
   get listChoices() { return listChoices; },
   get titleInput() { return titleInput; },
   get descTextarea() { return descTextarea; },
-  get pendingCompletions() { return pendingCompletions; },
   get LIMIT() { return LIMIT; },
   get tabLabel() { return tabLabel; },
   get thisYear() { return thisYear; },
@@ -189,7 +188,11 @@ st.closedLimit = 50;
 st.drawAll = new Set();    // the long sections shown whole (taskrender.js windowed)
 st.mustDraw = new Set();   // tasks that have to be drawn: a link's, a new one
 st.pendingUndo = null;   // what Undo (the toast's button, Ctrl+Z) would run
-const pendingCompletions = new Map(); // taskId → timeoutId
+// The tasks ticked off in this view, each as it was (id → the task before
+// the tick): done at once on the server, and shown struck through in their
+// place until the view shows something else or a while has passed
+// (js/taskdata.js Ticked tasks).
+st.ticked = new Map();
 
 // Plan day board: dragging a task onto a day section sets its start_date;
 // dropping on "Unplanned" clears it. These list-level
@@ -589,7 +592,7 @@ const { headerTasksMenu, confirmDeadlineMove } = app;
 // field minus the word being typed.
 function filterTasks(query = filterQuery()) {
   // Today is Open with a filter (tasktabs.js): 'focus' is the word for it.
-  return tasksInView(st.tasks, parseFilter(query, people), app.shown(), todayStr());
+  return tasksInView(app.shownTasks(), parseFilter(query, people), app.shown(), todayStr());
 }
 
 Object.assign(app, initTaskOrder(app));
@@ -601,7 +604,15 @@ const { toggleSelection, syncSelBar, setSelected } = app;
 // Day-board grouping lives in TasksCore; bind it to the current date here.
 // What the board's sections stand for is st.cut (js/taskview.js): days,
 // people or lists.
+// A header's lists (due, carried over, overdue) name what is still to do:
+// not a task ticked off that still shows (st.ticked).
 function boardBuckets(list) {
+  const sections = cutBuckets(list);
+  if (!st.ticked.size) return sections;
+  const live = l => l && l.filter(t => !st.ticked.has(t.id));
+  return sections.map(s => ({ ...s, due: live(s.due), carried: live(s.carried), overdue: live(s.overdue) }));
+}
+function cutBuckets(list) {
   if (st.cut === 'person') return TasksCore.personBuckets(list, todayStr(), activeSort(), people);
   if (st.cut === 'list') {
     // The user's own lists before the shared ones, each A–Z.
@@ -646,11 +657,12 @@ initTaskKeys(app);
 
 // Register this instance so writes in sibling embeds can refresh it.
 // Background refresh re-renders the list, so it waits while the user is in
-// the middle of something the re-render would destroy: a drag or swipe, a
-// completion's grace period, the ⋯ menu or the editor.
+// the middle of something the re-render would destroy: a drag or swipe,
+// the ⋯ menu or the editor.
+const busy = () => !!(st.draggedId || st.touchDrag || st.taskMenu || modal.open || deadlineModal.open);
+app.busy = busy;
 function refreshIfIdle() {
-  const busy = st.draggedId || st.touchDrag || pendingCompletions.size || st.taskMenu || modal.open || deadlineModal.open;
-  if (!busy) refresh();
+  if (!busy()) refresh();
 }
 // holdsEvery: the list holds every task the user sees (no list's, not My
 // tasks), and they are many (what a long list is: LAZY_FROM in

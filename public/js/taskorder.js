@@ -26,8 +26,10 @@ const ORDERED = { open: true, focus: true };
 // Every open task in the manual order, the ones the view or filter hides
 // too: byOpenOrder, a task not yet placed (no sort_order) on top, newest
 // first.
+// A task ticked off that still shows (st.ticked) is in it at its place, so
+// the tasks around it keep theirs.
 function manualOrderIds() {
-  return [...st.tasks].filter(t => !t.closed_at).reverse().sort(byOpenOrder).map(t => t.id);
+  return [...app.shownTasks()].filter(t => !t.closed_at).reverse().sort(byOpenOrder).map(t => t.id);
 }
 // The tasks the list shows, top to bottom.
 function shownIds() {
@@ -44,9 +46,13 @@ function placeShown(shown, moved) {
   const old = manualOrderIds();
   const order = placeInOrder(old, shown, moved);
   if (order.join() === old.join()) return;
-  const byId = new Map(st.tasks.map(t => [t.id, t]));
-  order.forEach((id, i) => { byId.get(id).sort_order = i; });
-  app.postReorder({ order, moves: TasksCore.orderMoves(order, moved) });
+  const at = new Map(order.map((id, i) => [id, i]));
+  for (const t of [...st.tasks, ...st.ticked.values()]) if (at.has(t.id)) t.sort_order = at.get(t.id);
+  // The server hears of the open tasks: not of one ticked off and closed,
+  // which is in no order of its.
+  const open = new Set(st.tasks.filter(t => !t.closed_at).map(t => t.id));
+  const live = order.filter(id => open.has(id));
+  app.postReorder({ order: live, moves: TasksCore.orderMoves(live, moved) });
   app.render();
 }
 
@@ -72,7 +78,7 @@ function orderDrop(key, side) {
 // shows, or a Plan section's tasks).
 function orderKeyMove(direction, list = shownIds()) {
   const idxs = list.map((id, i) => st.selectedIds.has(id) ? i : -1).filter(i => i >= 0);
-  if (!idxs.length) return;
+  if (!idxs.length || idxs.some(i => st.ticked.has(list[i]))) return;   // a ticked task isn't moved
   const group = idxs.map(i => list[i]);
   const rest = list.filter(id => !st.selectedIds.has(id));
   if (direction === 'up') {

@@ -253,7 +253,8 @@ def test_select_mode_done_ends_it(selecting):
     expect(pg.locator(".tasks-app")).not_to_contain_class("tasks-selecting")
     expect(pg.locator("#task-selbar")).to_be_hidden()
     expect(pg.locator(".action-buttons")).to_be_visible()
-    expect(pg.locator(".task-item .task-title")).to_have_text(["Nuts", "Bolts"])
+    expect(pg.locator(".task-item:not(.task-completing) .task-title")).to_have_text(["Nuts", "Bolts"])
+    expect(pg.locator(".task-item.task-completing")).to_have_count(2)
     # Taps are taps again: the first selects, the second opens the editor.
     card(pg, "Nuts").locator(".task-title").tap()
     card(pg, "Nuts").locator(".task-title").tap()

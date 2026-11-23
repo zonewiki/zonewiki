@@ -1109,6 +1109,9 @@ body:has(.tasks-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
   opacity: .45;
 }
 .task-item.task-completing .task-title { text-decoration: line-through; color: var(--muted); }
+/* Ticked off and still shown: its dates and Skip are the open task's, which it no longer is. */
+.task-item.task-completing .task-clickable-date { pointer-events: none; }
+.task-item.task-completing .task-skip-btn { display: none; }
 .task-item.task-completing-out {
   animation: task-complete-out .4s ease forwards;
 }
