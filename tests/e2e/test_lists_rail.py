@@ -1,14 +1,15 @@
-"""The task lists in the left column on big screens (docs/spec/tasks.md,
+"""The task lists in the left column from 1024px wide (docs/spec/tasks.md,
 The lists in the left column): every list a line, the row of pills hidden
 there; their counts, the pins dragged up and down, the find field and the
-lists new to this browser. The row itself is in test_tasks.py."""
+lists new to this browser; and below it the row as one line that scrolls
+and fades. What the row does otherwise is in test_tasks.py."""
 
 import re
 from datetime import date
 
 from playwright.sync_api import expect
 
-from conftest import DESKTOP, SCREENSHOT_DIR, box_of, make_list
+from conftest import SCREENSHOT_DIR, TABLET, box_of, list_page, make_list
 
 BIG = {"width": 1600, "height": 900}
 
@@ -80,9 +81,95 @@ def test_the_lists_are_the_left_column_on_a_big_screen(new_page, wiki):
     page.wait_for_url(re.compile(r"/tasks$"))
     expect(page.locator(".lists-rail-all")).to_have_attribute("aria-current", "page")
     # Narrower: the row of pills again, no column.
-    page.set_viewport_size(DESKTOP)
+    page.set_viewport_size(TABLET)
     expect(rail).to_be_hidden()
     expect(page.locator(".tasks-places")).to_be_visible()
+
+
+def test_the_column_comes_at_1024px_before_the_pages_side_columns(new_page, wiki):
+    # The Tasks page needs only its left column, so it has it from 1024px:
+    # the lists and the sheet, no right column (a list's Backlinks at the
+    # end and in the breadcrumb's chip), the row of pills hidden; just
+    # below, the row and no column.
+    page = new_page(viewport={"width": 1024, "height": 800})
+    # A wiki with no list has no column: the sheet as wide as before.
+    page.goto("/tasks")
+    expect(page.locator(".page-grid")).not_to_have_class(re.compile(r"\blists-grid\b"))
+    expect(page.locator(".rail-lists")).to_be_hidden()
+    list_page(page, wiki, "shop", "# Shop\n\n[[tasks: list=shop pin=1]]\n")
+    make_list(page, "work")
+    page.goto("/tasks?list=shop")
+    rail, sheet = page.locator(".lists-rail"), page.locator(".sheet")
+    expect(rail).to_be_visible()
+    expect(page.locator(".tasks-places")).to_be_hidden()
+    expect(page.locator(".rail-context")).to_be_hidden()
+    expect(page.locator(".page-foot #backlinks a")).to_have_text(["Shop"])
+    expect(page.locator(".breadcrumb-right")).to_be_visible()
+    r, s = box_of(rail), box_of(sheet)
+    assert r["x"] + r["width"] < s["x"], (r, s)
+    assert s["width"] >= 700, s
+    assert s["x"] + s["width"] <= 1024 - 16, s                        # no sideways scrolling
+    assert page.evaluate("document.documentElement.scrollWidth") <= 1024
+    page.screenshot(path=str(SCREENSHOT_DIR / "lists-rail-1024.png"))
+    # Wider, up to the pages' side columns: the sheet grows to a page's
+    # width, no more, and the two stay together in the middle.
+    page.set_viewport_size({"width": 1300, "height": 800})
+    s = box_of(sheet)
+    assert 800 <= s["width"] <= 820, s
+    r = box_of(rail)
+    left, right = r["x"], 1300 - (s["x"] + s["width"])
+    assert abs(left - right) < 2, (left, right)
+    page.screenshot(path=str(SCREENSHOT_DIR / "lists-rail-1300.png"))
+    # Just below 1024px: the row, no column.
+    page.set_viewport_size({"width": 1023, "height": 800})
+    expect(rail).to_be_hidden()
+    expect(page.locator(".tasks-places")).to_be_visible()
+
+
+def test_the_row_is_one_line_that_fades_where_it_goes_on(new_page, wiki):
+    # Below the column the row never wraps: it scrolls sideways, an end with
+    # pills out of sight fades, and More's panel hangs under More, inside
+    # the row, even with More scrolled out of sight.
+    page = new_page(viewport=TABLET)
+    make_list(page, "shop", pin=True)
+    page.goto("/tasks?list=shop")
+    nav, group = page.locator(".tasks-places"), page.locator(".tasks-places-group")
+    expect(nav).to_be_visible()
+    assert nav.evaluate("el => [el.classList.contains('more-before'), el.classList.contains('more-after')]") == [False, False]
+    for i in range(12):
+        make_list(page, f"a-long-list-name-{i}", pin=True)
+    page.goto("/tasks?list=shop")
+    pills = [box_of(p) for p in page.locator(".tasks-places .tasks-place").all()]
+    assert len({round(b["y"]) for b in pills}) == 1, pills              # one line
+    g = box_of(group)
+    assert g["height"] < 2 * pills[0]["height"], g
+    expect(nav).to_have_class(re.compile(r"\bmore-after\b"))
+    expect(nav).not_to_have_class(re.compile(r"\bmore-before\b"))
+    fade = nav.evaluate("el => { const s = getComputedStyle(el, '::after'); return [s.content, s.backgroundImage]; }")
+    assert fade[0] == '""' and "gradient" in fade[1], fade
+    page.screenshot(path=str(SCREENSHOT_DIR / "lists-row-fade.png"))
+    group.evaluate("el => { el.scrollLeft = el.scrollWidth / 2; }")
+    expect(nav).to_have_class(re.compile(r"\bmore-before\b"))
+    expect(nav).to_have_class(re.compile(r"\bmore-after\b"))
+    group.evaluate("el => { el.scrollLeft = el.scrollWidth; }")
+    expect(nav).to_have_class(re.compile(r"\bmore-before\b"))
+    expect(nav).not_to_have_class(re.compile(r"\bmore-after\b"))
+    # More's panel, opened with More out of sight to the right: More comes
+    # into view, the panel under it, within the row, and not clipped.
+    group.evaluate("el => { el.scrollLeft = 0; }")
+    more = page.locator(".lists-more summary")
+    more.focus()
+    page.keyboard.press("Enter")
+    panel = page.locator(".lists-more-panel")
+    expect(panel).to_be_visible()
+    n, p, m = box_of(nav), box_of(panel), box_of(more)
+    assert n["x"] - 1 <= p["x"] and p["x"] + p["width"] <= n["x"] + n["width"] + 1, (n, p)
+    assert m["x"] + m["width"] <= n["x"] + n["width"] + 1, (m, n)       # More is in view
+    assert p["y"] > m["y"] + m["height"], (p, m)
+    hit = page.evaluate("([x, y]) => document.elementFromPoint(x, y)?.closest('.lists-more-panel') !== null",
+                        [p["x"] + p["width"] / 2, p["y"] + p["height"] / 2])
+    assert hit, "the panel is covered or clipped"
+    page.screenshot(path=str(SCREENSHOT_DIR / "lists-row-more.png"))
 
 
 def test_your_lists_and_other_lists(new_page, wiki, monkeypatch):

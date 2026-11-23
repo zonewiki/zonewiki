@@ -23,8 +23,8 @@ document.addEventListener('click', e => {
   if (more?.open && !more.contains(e.target)) more.open = false;
 });
 
-// The column is showing (a big screen): the side columns are display: none
-// below 1320px.
+// The column is showing (from 1024px wide; style.css): below, it is
+// display: none and the row shows.
 const railShown = rail => !!rail && getComputedStyle(rail.closest('.rail') || rail).display !== 'none';
 
 // A find field over a set of list links (with many lists): the lists whose
@@ -100,11 +100,27 @@ function wireDrag(nav, group, sel, vertical) {
   group.addEventListener('drop', e => { if (dragged) { e.preventDefault(); dropped = true; } });
 }
 
+// The row is one line that scrolls sideways when its pills don't fit: an
+// end with pills out of sight that way fades (.more-before, .more-after).
+function fadeEnds() {
+  const nav = document.querySelector('.tasks-places');
+  const group = nav?.querySelector('.tasks-places-group');
+  if (!group) return;
+  const room = group.scrollWidth - group.clientWidth;
+  nav.classList.toggle('more-before', group.scrollLeft > 1);
+  nav.classList.toggle('more-after', group.scrollLeft < room - 1);
+}
+window.addEventListener('resize', fadeEnds);
+document.fonts?.ready.then(fadeEnds);
+
 function initRow() {
 const nav = document.querySelector('.tasks-places');
+const group = nav?.querySelector('.tasks-places-group');
 const rail = document.querySelector('.lists-rail');
-// On a phone the row scrolls sideways: the current pill is in view.
-if (!railShown(rail)) nav?.querySelector('.tasks-places-group [aria-current]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+// The row scrolls sideways: the current pill is in view.
+if (!railShown(rail)) group?.querySelector('[aria-current]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+group?.addEventListener('scroll', fadeEnds, { passive: true });
+fadeEnds();
 const more = nav?.querySelector('.lists-more');
 const items = more ? [...more.querySelectorAll('.lists-more-item[data-list]')] : [];
 const railItems = rail ? [...rail.querySelectorAll('.lists-rail-item[data-list]')] : [];
@@ -112,6 +128,21 @@ const railItems = rail ? [...rail.querySelectorAll('.lists-rail-item[data-list]'
 if (more) {
   const button = more.querySelector('summary');
   const filter = more.querySelector('.lists-more-filter');
+  const panel = more.querySelector('.lists-more-panel');
+
+  // The panel hangs under More, kept inside the row (on a phone it is the
+  // row's width: tasks.css). The row places it, since the pills' line
+  // scrolls; More is brought into view first.
+  const phone = matchMedia('(max-width: 640px)');
+  more.addEventListener('toggle', () => {
+    if (!more.open || !panel) return;
+    button.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    panel.style.left = '';
+    if (phone.matches) return;
+    const row = nav.getBoundingClientRect();
+    const x = button.getBoundingClientRect().left - row.left;
+    panel.style.left = Math.max(0, Math.min(x, row.width - panel.offsetWidth)) + 'px';
+  });
 
   // Escape closes it.
   more.addEventListener('keydown', e => {
@@ -205,6 +236,7 @@ document.addEventListener('zone:list-made', async e => {
     };
     swap('.tasks-places', '.sheet');
     swap('.lists-rail', '.rail-lists');
+    document.querySelector('.page-grid')?.classList.toggle('lists-grid', !!doc.querySelector('.page-grid.lists-grid'));
     initRow();
   } catch (_) {}
 });

@@ -8,7 +8,7 @@ from datetime import date
 import pytest
 from playwright.sync_api import expect
 
-from conftest import TOUCH_PHONE, box_of, list_page, make_list, open_tab, still, wait_until
+from conftest import TABLET, TOUCH_PHONE, box_of, list_page, make_list, open_tab, still, wait_until
 from test_touch import touch_drag
 from tests import settings
 
@@ -620,6 +620,7 @@ def test_my_tasks_is_the_tasks_module(page, wiki):
 def test_tasks_comes_back_to_the_list_chosen(page, wiki):
     # Tasks, a list from the switcher, the wiki, Tasks again: the list, not
     # My tasks; on the phone's tab bar and with g t as well.
+    page.set_viewport_size(TABLET)   # the row of pills: narrower than the lists' column
     make_list(page, "shop", pin=True)
     make_list(page, "work")
     wiki.write("garden", "# Garden\n")

@@ -8,7 +8,7 @@ from datetime import date, datetime, timedelta
 import pytest
 from playwright.sync_api import expect
 
-from conftest import box_of, list_page, make_list, more_menu, open_tab, pick_date, rank, settle, still, wait_until
+from conftest import TABLET, box_of, list_page, make_list, more_menu, open_tab, pick_date, rank, settle, still, wait_until
 from tests import settings
 
 
@@ -203,6 +203,7 @@ def test_list_switcher_looks_as_the_module_switcher_does(page, wiki):
     # One capsule with a border holding pills without one, the current pill
     # shaded: what the module switcher at the top of the page is. More, the
     # last pill, is one of them.
+    page.set_viewport_size(TABLET)   # the row of pills: narrower than the lists' column
     make_list(page, "shop", pin=True)
     make_list(page, "work")
     page.goto("/tasks?list=shop")
@@ -225,6 +226,7 @@ def test_list_switcher_goes_between_the_lists_and_keeps_its_counts(page, wiki):
     # /tasks opens with the switcher above the heading: the lists by name
     # pinned lists as pills, then More with the others and All tasks; its
     # counts follow the task app's writes.
+    page.set_viewport_size(TABLET)   # the row of pills: narrower than the lists' column
     list_page(page, wiki, "tasks", "# My tasks\n\n[[tasks: list=task view=today pin=1]]\n")
     list_page(page, wiki, "shop", "# Shop\n\n[[tasks: list=shop view=today pin=1]]\n")
     make_list(page, "garden")
@@ -1346,6 +1348,7 @@ def test_the_inbox_has_a_pill_and_a_view_of_its_own(page, wiki):
     # /tasks?list=inbox: the tasks in no list, the second pill of the
     # switcher (they are in My tasks too, which counts them). A task added
     # there is in no list, and one filed into a list leaves.
+    page.set_viewport_size(TABLET)   # the row of pills: narrower than the lists' column
     make_list(page, "groceries", pin=True)
     page.request.post("/api/tasks", data={"title": "Loose end", "due_date": date.today().isoformat()})
     page.request.post("/api/tasks", data={"title": "Oat milk", "list": "groceries"})
@@ -1774,6 +1777,9 @@ def test_the_move_dialog_makes_a_new_list(page, wiki):
     expect(page.locator("a.tasks-place[data-place='list:shop'] .tasks-place-pin")).to_have_count(1)
     expect(page.locator(".lists-more-item[data-place='list:shop']")).to_have_count(0)
     expect(page.locator(".lists-more-item .lists-more-new")).to_have_count(0)
+    # At this width (1280px) the lists are the left column, there now too.
+    expect(page.locator(".lists-rail [data-place='list:shop']")).to_be_visible()
+    expect(page.locator(".tasks-places")).to_be_hidden()
     # It is a row now, ticked; a second list of that name is refused.
     page.keyboard.press("m")
     expect(dlg.locator(".bulk-list-row")).to_have_text(["Inbox", "✓shop", "+New list…"])
@@ -2931,6 +2937,7 @@ def test_c_t_makes_a_private_task_in_the_users_inbox(page, wiki, monkeypatch):
     # With users, c t starts in the user's Inbox, whatever she pinned: a task
     # nobody chose a place for is not everyone's, and the dialog says who
     # sees it. It is in her My tasks and on her Inbox's pill; bob sees nothing of it.
+    page.set_viewport_size(TABLET)   # the row of pills: narrower than the lists' column
     monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "token"), "bob": ("pw", "t2")})
     page.request.post("/login", form={"username": "alice", "password": "pw"})
     make_list(page, "team", pin=True)
@@ -5544,6 +5551,7 @@ def test_dragging_a_pill_reorders_the_pinned_lists(page, wiki):
     """A pinned list's pill dragged to another place in the row: the pins in
     that order, kept without the page loading again (the order is all a pin
     has)."""
+    page.set_viewport_size(TABLET)   # the row of pills: narrower than the lists' column
     for name in ("a", "b", "c"):
         make_list(page, name, pin=True)
     make_list(page, "quiet")
@@ -5578,6 +5586,7 @@ def test_dragging_a_pill_reorders_the_pinned_lists(page, wiki):
 def test_more_finds_a_list_by_name_and_marks_new_ones(page, wiki):
     """With many lists More has a field that filters them by name; a list
     this browser hasn't shown before is marked new until More is opened."""
+    page.set_viewport_size(TABLET)   # the row of pills: narrower than the lists' column
     for i in range(8):
         make_list(page, f"list{i}")
     make_list(page, "garden")

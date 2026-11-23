@@ -40,19 +40,36 @@
 /* The task list switcher (tasks_page.html .tasks-places): on /tasks, on the sheet above
    the heading, a row of pills, one per list (My tasks, the Inbox and the pinned lists
    first, then More: the others A–Z and All tasks, in a panel), the current one shaded as in the module switcher;
-   pinned lists with a pin, private ones with a lock. Wraps on a narrow screen. */
+   pinned lists with a pin, private ones with a lock. Shown below 1024px
+   (style.css: from there the lists are the left column). */
 /* It looks as the module switcher at the top of the page does (style.css,
    .module-group): one white capsule with a border holding the pills, which
    have no border of their own, in its type (.8125rem) and height (1.5rem);
-   the current one shaded. With more lists than fit a line the capsule wraps,
-   so its corners are a line's half height, not a full round. */
-.tasks-places { display: flex; margin: 0 0 1.1rem; }
+   the current one shaded. It is one line: with more lists than fit, it
+   scrolls sideways (js/listsrow.js brings the current pill into view), and
+   the pills fade out at an end with more that way, inside the capsule
+   (.more-before/-after on the row, set by js/listsrow.js; overlays, not a
+   mask, which would hide More's panel too). */
+.tasks-places { --places-radius: calc(.75rem + 3px); display: flex; margin: 0 0 1.1rem; }
 .tasks-places-group {
-  display: inline-flex; flex-wrap: wrap; align-items: center; row-gap: 2px; min-width: 0; padding: 2px;
-  border: 1px solid var(--border); border-radius: calc(.75rem + 3px); background: var(--surface);
+  display: inline-flex; align-items: center; min-width: 0; max-width: 100%; padding: 2px;
+  overflow-x: auto; scrollbar-width: none;
+  border: 1px solid var(--border); border-radius: var(--places-radius); background: var(--surface);
+}
+.tasks-places-group::-webkit-scrollbar { display: none; }
+.tasks-places.more-before::before, .tasks-places.more-after::after {
+  content: ""; position: absolute; z-index: 1; top: 1px; bottom: 1px; width: 2.5rem; pointer-events: none;
+}
+.tasks-places.more-before::before {
+  left: 1px; border-radius: var(--places-radius) 0 0 var(--places-radius);
+  background: linear-gradient(to left, transparent, var(--surface) 80%);
+}
+.tasks-places.more-after::after {
+  right: 1px; border-radius: 0 var(--places-radius) var(--places-radius) 0;
+  background: linear-gradient(to right, transparent, var(--surface) 80%);
 }
 .tasks-places .tasks-place {
-  display: inline-flex; align-items: center; gap: .4rem;
+  flex: none; display: inline-flex; align-items: center; gap: .4rem;
   height: 1.5rem; padding: 0 .65rem; border-radius: 999px;
   color: var(--muted); text-decoration: none; font-size: .8125rem; white-space: nowrap;
   transition: background .15s, color .15s;
@@ -69,9 +86,11 @@
 .tasks-place-lock, .tasks-place-pin { display: inline-flex; }
 /* More: a details whose summary is the row's last pill and whose panel hangs
    under it: links, a line each; a filter field over them when there are many
-   (js/listsrow.js). On a narrow screen the panel is as wide as the row. */
+   (js/listsrow.js). The row, not More, places the panel (the pills' line
+   scrolls and would clip it): js/listsrow.js sets its left under More, kept
+   inside the row. On a phone the panel is as wide as the row. */
 .tasks-places { position: relative; }
-.lists-more { position: relative; display: inline-flex; }
+.lists-more { display: inline-flex; flex: none; }
 .lists-more > summary { list-style: none; cursor: pointer; user-select: none; }
 .lists-more > summary::-webkit-details-marker { display: none; }
 .lists-more-caret { font-size: .7em; margin-left: -.15rem; }
@@ -106,25 +125,18 @@
 /* A pinned pill being dragged to another place in the row. */
 .tasks-places[data-reorder] .tasks-place[draggable="true"] { cursor: grab; }
 .tasks-places .tasks-place.is-dragging { opacity: .45; }
+/* A phone: More's panel is the full width; and the line under the heading
+   that only says what the view is isn't shown (one with a link in it
+   stays), so the tasks start on the first screen. */
 @media (max-width: 640px) {
-  .lists-more { position: static; }
   .lists-more-panel { right: 0; max-width: none; }
-}
-/* A phone: the row is one line that scrolls sideways (js/listsrow.js brings
-   the current pill into view), so the tasks start on the first screen; and
-   the line under the heading that only says what the view is isn't shown
-   (one with a link in it stays). */
-@media (max-width: 640px) {
-  .tasks-places-group { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; max-width: 100%; }
-  .tasks-places-group::-webkit-scrollbar { display: none; }
-  .tasks-places .tasks-place { flex: none; }
   .tasks-list-home:not(:has(a)) { display: none; }
 }
 /* A finger: taller pills, the capsule's corners with them. */
 @media (pointer: coarse) {
   .tasks-places .tasks-place { height: 2.25rem; padding: 0 .8rem; }
   .lists-more-item { padding: .6rem .7rem; }
-  .tasks-places-group { border-radius: calc(1.125rem + 3px); }
+  .tasks-places { --places-radius: calc(1.125rem + 3px); }
 }
 
 /* The lists in the left column (tasks_page.html .lists-rail; the side

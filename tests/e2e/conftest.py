@@ -32,6 +32,9 @@ SCREENSHOT_DIR = Path(__file__).parent / "_screenshots"
 
 PHONE = {"width": 390, "height": 844}
 DESKTOP = {"width": 1280, "height": 800}
+# A window too narrow for the Tasks page's lists column (from 1024px): the
+# row of pills shows (docs/spec/tasks.md, The list switcher).
+TABLET = {"width": 900, "height": 800}
 # A real phone: touch input, no hover, coarse pointer.
 TOUCH_PHONE = {"viewport": PHONE, "has_touch": True, "is_mobile": True}
 

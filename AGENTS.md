@@ -166,6 +166,7 @@ Flags are written with two dashes everywhere (`--addr :8080`, `user add NAME --m
 - Light/dark mode via `prefers-color-scheme` media query.
 - No nav bar (keyboard shortcuts): the module switcher in the breadcrumb, Sharing mode and Search at the top right on desktop (new notes and tasks from the keyboard, `c n` / `c t`), a bottom tab bar on phones (see Modules in `docs/spec/navigation.md`).
 - Big screens (≥1320px): page views get side columns, TOC left and links right (see Side columns in `docs/spec/routes.md`); the text keeps its width.
+  The Tasks page has its lists' column already from 1024px (The lists in the left column in `docs/spec/tasks.md`).
 - No external CSS frameworks — keep `style.css` and `tasks.css` (the task app's) self-contained.
 - Mobile breakpoint at `640px`: page content readable, tables/pre scroll horizontally, larger touch targets.
   The editor is fully usable on phones (Mobile editor in `docs/spec/editor.md`).

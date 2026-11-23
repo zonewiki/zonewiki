@@ -185,6 +185,8 @@ A task is in one list and can have any number of tags.
 
 The Tasks page has a row of pills at the top: **My tasks**, in a wiki with users **Updates** ([News about your tasks](#news-about-your-tasks)), **Inbox**, your pinned lists, and **More ▾** with every other list and **All tasks**.
 Each pill counts what is due today or overdue there.
+When the pills don't fit on the line, swipe or scroll the row sideways; a faded end shows there are more that way.
+On a wider screen (from about 1024 pixels) the lists are a column on the left instead, every list a line, with your pinned lists under **Pinned** ([The list switcher](../spec/tasks.md#the-list-switcher)).
 The pill you pick is remembered: go to the wiki and click Tasks again, and you are back on it.
 
 ### Making a list

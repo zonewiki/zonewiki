@@ -11,11 +11,12 @@
     with a form (js/pagemenu.js opens the one a menu item names with
     data-dialog; a refusal comes back with data-open). A list's Backlinks
     (the pages that embed it; My tasks: its lists') as on a page view: at the
-    end, on big screens in the right column. On big screens the left column
-    holds the lists (lists_rail) and the row of pills hides. */ -}}
+    end, on big screens in the right column. From 1024px wide the left
+    column holds the lists (lists_rail, .lists-grid when there are any) and
+    the row of pills hides; the right column comes from 1320px. */ -}}
 {{define "body"}}
 {{.BreadcrumbHTML}}
-<div class="page-grid">
+<div class="page-grid{{if .More}} lists-grid{{end}}">
 <aside class="rail rail-left rail-lists">{{template "lists_rail" .}}<a class="rail-top" href="#" hidden>↑ Back to top</a></aside>
 <div class="page-col">
 {{template "tasks_main" .}}

@@ -225,7 +225,7 @@ Every link to "the tasks" goes here (the Tasks module links without a task list 
 - `?view=`, `?task=`, `?tag=`, `?search=`, `?new=1` work as for any embed.
 
 The list switcher sits above the heading: My tasks, with users Updates, the Inbox and the pinned lists as pills, the others and All tasks under More; this view's is the current one.
-On a big screen (from 1320px) it is the page's left column instead, every list a line (The lists in the left column in `docs/spec/tasks.md`).
+From 1024px wide it is the page's left column instead, every list a line (The lists in the left column in `docs/spec/tasks.md`).
 The heading reads "All tasks", "My tasks" or "List: <name>".
 
 #### The list forms
@@ -395,7 +395,8 @@ A page view (`viewPage`, `shell{wide: true}` → `main.wide`) has three columns 
 The page's sheet is as wide as other views' unless the page has a table, code block or image wider than the text;
 then it takes the whole middle column (`.sheet-wide`, `js/chrome.js`, measured after load and whenever the content's size changes).
 So the text sits in the middle of the window, where the other views have theirs.
-The Tasks page (`/tasks`) has the three columns too, its task lists on the left (The lists in the left column in `docs/spec/tasks.md`), a list's Backlinks on the right, its sheet as wide as a page's.
+The Tasks page (`/tasks`) has the three columns too, its task lists on the left (The lists in the left column in `docs/spec/tasks.md`), a list's Backlinks on the right, its sheet as wide as a page's;
+it has its left column already from 1024px, the sheet beside it, since it needs no other.
 Every other view (notes, search) gets the same top row width at that size, its content centred at the text width (46rem), so the breadcrumb and top actions stay put when switching modules.
 
 ### Left: On this page
@@ -429,4 +430,4 @@ Text itself is never widened: longer lines read worse.
 
 The sections at the page's end (`.page-foot`) and the breadcrumb's backlinks chip are hidden there.
 `main.wide` has wider side padding (3.5rem), so the badges fixed at the top left don't touch the breadcrumb on a window just over 1320px.
-Below 1320px the page is the single 800px column as before.
+Below 1320px the page is the single 800px column as before (the Tasks page with its lists' column from 1024px).

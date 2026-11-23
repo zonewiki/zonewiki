@@ -1671,7 +1671,7 @@ The page gets the lists left out and whether assignment counts (`data-init-out`,
 
 ### The list switcher
 
-`/tasks` opens with a row of pills above its heading (on a big screen the left column instead: The lists in the left column, below) (`.tasks-places` in `templates/tasks_page.html`, `taskPlaces` and `taskMore` in `go/tasksembed.go`, `js/listsrow.js`),
+`/tasks` opens with a row of pills above its heading (from 1024px wide the left column instead: The lists in the left column, below) (`.tasks-places` in `templates/tasks_page.html`, `taskPlaces` and `taskMore` in `go/tasksembed.go`, `js/listsrow.js`),
 on the page's white sheet with it, looking as the module switcher at the top of the page does (`.tasks-places-group`: one white capsule with a border, the pills inside it without one, in its type and height, the current one shaded).
 **My tasks is the first pill, with users Updates the second, then the Inbox; a pinned list is a pill; a list that isn't pinned is under More.**
 In order: **My tasks** (above), whenever there is a row;
@@ -1689,7 +1689,10 @@ and as its **Backlinks** every page that embeds it (`listPages`: any `[[tasks: l
 With no list there is no switcher.
 Another user's private list is not in it; in sharing mode a list that hides when sharing (`noshare`) is left out of the pills and of More (on its own URL More then reads "More"), and the counts are hidden as on the module links.
 
-The pills wrap onto more lines on a narrow window and are finger-sized under `(pointer: coarse)`; **on a phone (≤640px) the row is one line that scrolls sideways**, the current pill brought into view (`js/listsrow.js`), and the line under the heading that only says what the view is isn't shown (one with a link in it, N unassigned or the lists left out, stays: `.tasks-list-home:not(:has(a))`), so the first tasks are on the first screen.
+**The row is one line**: with more pills than fit, it scrolls sideways, the current pill brought into view (`js/listsrow.js`),
+and an end with pills out of sight that way fades into the capsule (`.more-before`, `.more-after` on `.tasks-places`, set by `fadeEnds`; overlays, since a mask on the scrolling line would hide More's panel too), so the row says it goes on.
+The pills are finger-sized under `(pointer: coarse)`.
+On a phone (≤640px) the line under the heading that only says what the view is isn't shown (one with a link in it, N unassigned or the lists left out, stays: `.tasks-list-home:not(:has(a))`), so the first tasks are on the first screen.
 
 #### The counts on the pills
 
@@ -1707,7 +1710,8 @@ No counts on the lists in it, and **no number on the pill**: what is yours to do
 Escape and a click elsewhere close it.
 It names the view the page shows when that is one of its own: on an unpinned list the pill reads that list's name, on `/tasks` (and a tag's view, which is All tasks with a filter) "All tasks", and it is the shaded one; else it reads "More".
 It is there for a viewer and in sharing mode too (the page's ⋯ menu isn't), so it is no menu of the page's but links.
-On a narrow screen the panel is as wide as the row.
+The panel hangs under More, kept inside the row; More is scrolled into view as it opens (the row, not More, places the panel, since the pills' line scrolls and would clip it).
+On a phone the panel is as wide as the row.
 
 With 8 lists or more under More (`moreFilterFrom`) a field at the panel's top finds a list (`.lists-more-filter`), focused when it opens; what is typed leaves the lists whose name has it (All tasks stays), and Enter opens the first.
 
@@ -1726,7 +1730,10 @@ With a finger there is no dragging (it scrolls and taps): **Unpin** and **Pin** 
 
 #### The lists in the left column
 
-**On a big screen (from 1320px wide, where pages get their side columns) the lists are the left column of `/tasks`, and the row of pills isn't shown**: the same entries, a line each, where there is room for all of them (`lists_rail` in `templates/tasks_page.html`, `.lists-rail`; the row stays for every narrower screen).
+**From 1024px wide the lists are the left column of `/tasks`, and the row of pills isn't shown**: the same entries, a line each, where there is room for all of them (`lists_rail` in `templates/tasks_page.html`, `.lists-rail`; the row stays for every narrower screen).
+That is before pages get their side columns (1320px): a page needs two, the Tasks page only this one, since a list's Backlinks, its right column, are also the breadcrumb's `← N` chip and the page's end.
+So between 1024 and 1319px the page is two columns, the lists and the sheet (`.lists-grid` on the page's grid, for a page with lists; `style.css`), the sheet as wide as the room left (at least about 700px: task cards, not lines of text), the Backlinks at the end and in the chip as on a narrower screen;
+from 1320px the right column joins it as on a page.
 In three groups, from the top:
 **the views**, My tasks, Updates, the Inbox and All tasks (no list of their own);
 **Pinned**, the pinned lists in their order;
@@ -1741,8 +1748,8 @@ My tasks, Updates, the Inbox and the pins carry the pills' counts, kept current 
 The pins can be dragged up and down with the mouse, for who may pin, as the pills can (Dragging the pills).
 A list new to this browser has "new" beside its name there as under More, and counts as seen once the column has shown it (More then gets no dot).
 The column starts level with the sheet's title and scrolls on its own when it is taller than the window; the sheet keeps a page's width, centred, so the heading is where a page's is.
-A list's Backlinks are the right column, as before.
-Below 1320px the column isn't there and the row of pills is, as above.
+A list's Backlinks are the right column from 1320px, as on a page.
+Below 1024px the column isn't there and the row of pills is, as above.
 
 ### Pins
 
