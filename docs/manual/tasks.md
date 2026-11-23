@@ -101,6 +101,7 @@ The control next to the tabs (or **d**) picks how the tasks are grouped:
 
 On the Today and Open tabs the **Order** menu (or **o**) sorts by **Manual**, **Due date** or **Created**.
 Only Manual can be reordered by dragging; the others are for reading.
+A sort lasts while the browser tab is open; a new one starts in Manual again.
 The manual order is one for everyone: where you drag a task in a list, it is for all who see the list.
 In **My tasks** the menu says **My order** instead: that order is yours alone ([My tasks](#my-tasks)).
 

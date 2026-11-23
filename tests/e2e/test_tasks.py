@@ -5146,6 +5146,12 @@ def test_today_sorts_as_open_does_and_keeps_its_own_sort(page, wiki):
     open_tab(page, "focus")
     expect(sel).to_have_value("due")
     assert _list_rows(page)[0] == "# By deadline"
+    # For this browser tab only: another tab starts in the manual order, which drags.
+    other = page.context.new_page()
+    other.goto("/tasks?view=focus&group=none")
+    expect(other.locator("select.tasks-sort")).to_have_value("manual")
+    expect(other.locator(".task-item[data-drag]")).to_have_count(3)
+    other.close()
     sel.select_option("manual")
     assert _list_rows(page) == ["Plain", "Soon due", "Due today"]
 

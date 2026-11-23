@@ -311,7 +311,9 @@ A sorted list (Today's or Open's) is flat: Due under **By deadline** and **No de
 On Plan the sections stay (the board still places tasks by start date) and each is sorted inside; Unplanned's overdue and Today's carried-over lists stay by deadline and by start.
 Nothing reorders in a sort, since the manual order is only edited where it is shown: a list doesn't drag, on Plan no section is `ordered`, so a card dropped on another card is a drop on its section (dragging between days still plans), and Ctrl+Shift+↑/↓ only says to press `o` until Manual.
 
-Each tab's sort is remembered per task list in this browser (`localStorage` `zone-tasks-sort:<path>|<list>|<tag>|<instance>`, JSON `{"focus": "due", "open": "due", "plan": "created"}`; missing means manual).
+Each tab's sort is remembered per task list for this browser tab only, as the grouping and the active tab are: it survives a reload and a visit to another page, and a new browser tab starts in the manual order again.
+A sort answers a passing question, and the manual order is the one you drag in, so a sort picked last week doesn't decide what you see today.
+(`sessionStorage` `zone-tasks-sort:<path>|<list>|<tag>|<instance>`, JSON `{"focus": "due", "open": "due", "plan": "created"}`; missing means manual.)
 Today's is its own (`focus`, however Today is drawn; `sortTab` in `js/taskview.js`): Open sorted by deadline leaves Today, which is worked top to bottom, in the manual order.
 
 ### The Plan board
