@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -248,8 +249,23 @@ func TestReadSaysWhatIsNoArchive(t *testing.T) {
 	if _, err := Read(strings.NewReader("# Home\n"), t.TempDir(), 0); err == nil || !strings.Contains(err.Error(), "gzipped tar") {
 		t.Errorf("err = %v", err)
 	}
-	whole := archive(t, repo()...)
-	if _, err := Read(bytes.NewReader(whole[:len(whole)/2]), t.TempDir(), 0); err == nil {
-		t.Error("half an archive was read")
+	// Some other file, gzipped, is no export either: not "cut off or
+	// damaged".
+	var notes bytes.Buffer
+	zw := gzip.NewWriter(&notes)
+	zw.Write([]byte("# Home\n\nJust some notes.\n"))
+	zw.Close()
+	if _, err := Read(&notes, t.TempDir(), 0); err == nil || !strings.Contains(err.Error(), "not a Zonewiki export") || !strings.Contains(err.Error(), "no tar") {
+		t.Errorf("gzipped notes: err = %v", err)
+	}
+	// An export cut off after its first entries is one, damaged.
+	var objects []entry
+	for i := range 40 {
+		objects = append(objects, entry{name: fmt.Sprintf("wiki/.git/objects/%02d/%038d", i, i), body: strings.Repeat(fmt.Sprint(i), 700)})
+	}
+	whole := archive(t, append(repo(), objects...)...)
+	_, err := Read(bytes.NewReader(whole[:len(whole)*3/4]), t.TempDir(), 0)
+	if err == nil || strings.Contains(err.Error(), "not a Zonewiki export") {
+		t.Errorf("most of an archive: err = %v", err)
 	}
 }

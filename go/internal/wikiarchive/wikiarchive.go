@@ -107,10 +107,15 @@ func Read(r io.Reader, dir string, max int64) (Found, error) {
 	}
 	tr := tar.NewReader(zr)
 	var head, objects bool
-	for {
+	for entries := 0; ; entries++ {
 		h, err := tr.Next()
 		if errors.Is(err, io.EOF) {
 			break
+		}
+		if err != nil && entries == 0 {
+			// Some other file, gzipped: "cut off or damaged" would say to
+			// send the same one again.
+			return found, fmt.Errorf("not a Zonewiki export (a gzipped tar): what is gzipped is no tar (%v)", err)
 		}
 		if err != nil {
 			return found, fmt.Errorf("the archive is cut off or damaged: %v", err)
