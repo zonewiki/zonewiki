@@ -44,7 +44,7 @@ func TestRegistryRoundTrips(t *testing.T) {
 
 // A registry has no version: .zone-format says the format of the wiki's
 // files. One written before 2026-11-20 says one, which is dropped, not
-// kept as a key Zone doesn't know. home, a list's being left out of My
+// kept as a key Zonewiki doesn't know. home, a list's being left out of My
 // tasks, is a setting like the others.
 func TestRegistryHasNoVersion(t *testing.T) {
 	if got := (&Registry{}).Encode(); strings.Contains(got, "version") {
@@ -62,7 +62,7 @@ func TestRegistryHasNoVersion(t *testing.T) {
 // A file edited by hand still reads: values of another kind as text, a
 // list without a name left out, a name twice once, unknown keys kept. Of
 // what Zones before 2026-11 wrote, "default" (the list new tasks went to)
-// is a key Zone doesn't know, and "mine": true no settings of My tasks.
+// is a key Zonewiki doesn't know, and "mine": true no settings of My tasks.
 func TestRegistryReadLeniently(t *testing.T) {
 	r, ok := ParseRegistry([]byte(`{"lists": [
 		{"name": " Shop ", "limit": 8, "keep": true, "colour": "red", "view": ["x"]},

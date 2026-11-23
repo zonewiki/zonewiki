@@ -1,6 +1,6 @@
 # Tasks
 
-Part of Zone's spec (see `AGENTS.md` for the index).
+Part of Zonewiki's spec (see `AGENTS.md` for the index).
 Each feature says first how it is used, then how it works.
 What the task app is built on (its code, how a page brings its tasks and keeps them current, its files, what a start does over them) is under How it works, at the end.
 
@@ -126,7 +126,7 @@ It doesn't block saving.
 
 ### Locale
 
-`locale` in the settings file (a BCP 47 tag like `de-AT` or `en-GB`) says how dates read and the day weeks start on, in the browser's `Intl` (no locale data in Zone).
+`locale` in the settings file (a BCP 47 tag like `de-AT` or `en-GB`) says how dates read and the day weeks start on, in the browser's `Intl` (no locale data in Zonewiki).
 Unset: US-English dates and weeks from Monday (an explicit `en-US` starts them on Sunday).
 Only dates: Today, Tomorrow, Tmrw, the shortcuts' labels and the rest of the UI stay English.
 
@@ -422,7 +422,7 @@ In Closed, the link reads `← Back to <tab>`, naming the tab it returns to.
 
 It holds the tasks that are closed: done, and closed undone (won't do), which is why it isn't called Completed.
 That is its name everywhere: where people read it (the link, the view's heading, the settings dialog), in the params (`view=closed`), the routes (`/api/tasks/closed`), the files (`closed.json`), a task's `closed_at` and the code.
-Nothing is kept of the older name: `completed.json` and `completed_at` are no task file and no field of Zone's, and a page's `view=completed`, a link with it and a client asking the old routes get what an unknown view or route gets.
+Nothing is kept of the older name: `completed.json` and `completed_at` are no task file and no field of Zonewiki's, and a page's `view=completed`, a link with it and a client asking the old routes get what an unknown view or route gets.
 
 While the filter has any word (`TasksCore.filterActive`: text, a tag, a name, `list:`, `from:`, `!`, `is:updated`, `is:following`) or the embed a tag, the link has no number (`Closed →`): the total would read as what the filter leaves, and counting the matches would take every closed task of the year to the browser for a number.
 The view's own list, the locked `list:` chip of a list's view, of a page's embed of it or of the Inbox, is no such word: the count is of that list already (`scopeQuery`), so the link has its number (`scopeWord` in `js/tasktabs.js`).
@@ -447,7 +447,7 @@ Ctrl+Shift+↑/↓ moves the selection one place (`orderKeyMove`).
 Only the moved tasks change place in the full order: each goes right after the visible task now above it (or right before the one below, when first), and every task the view or filter hides keeps its place (`placeShown`, `TasksCore.placeInOrder`).
 So on Today, sorting in one item never shuffles the catalogue around it.
 
-A task without a place (`sort_order` null: a file edited by hand, an import, an older Zone) shows on top, newest first, and the next move places it there for good (`placeUnplaced` in `go/tasks.go`), before the move itself, so nothing jumps.
+A task without a place (`sort_order` null: a file edited by hand, an import, an older Zonewiki) shows on top, newest first, and the next move places it there for good (`placeUnplaced` in `go/tasks.go`), before the move itself, so nothing jumps.
 `search_tasks` with `order="manual"` reads the order the same way (`manualBefore`).
 
 #### A move is saved as a move
@@ -532,7 +532,7 @@ Of those, a viewer's list on `/tasks` or on a page view keeps its ⋯ menu, with
 
 ### Where settings are kept
 
-The app says where its settings go in `data-settings-*` on `.tasks-app`, from `buildTasksEmbed`: `-page`, `-index`, `-raw` and `-embed` for an embed's `[[tasks: …]]` on a page, as written there; `-list` and `-list-set` for the list shown: its ref and its own settings as JSON; `-mine` for My tasks, `-home` where Leave out of My tasks is offered, `-mail` where Zone could mail you.
+The app says where its settings go in `data-settings-*` on `.tasks-app`, from `buildTasksEmbed`: `-page`, `-index`, `-raw` and `-embed` for an embed's `[[tasks: …]]` on a page, as written there; `-list` and `-list-set` for the list shown: its ref and its own settings as JSON; `-mine` for My tasks, `-home` where Leave out of My tasks is offered, `-mail` where Zonewiki could mail you.
 
 | What | Kept in | Example |
 |------|---------|---------|
@@ -543,7 +543,7 @@ The app says where its settings go in `data-settings-*` on `.tasks-app`, from `b
 
 My tasks' dialog says "For My tasks: yours alone." (without users "For My tasks.")
 Unset, it opens on Today, with Plan on the Open tab and no limit.
-`"mail"` in `mine` names the kinds of mail you turned on (**Mail me when**: a task is given to me, someone mentions me, someone comments on a task I have, gave or follow; three boxes, none ticked until you tick it, shown where Zone could mail you: `data-settings-mail`; Mail, under News on your tasks).
+`"mail"` in `mine` names the kinds of mail you turned on (**Mail me when**: a task is given to me, someone mentions me, someone comments on a task I have, gave or follow; three boxes, none ticked until you tick it, shown where Zonewiki could mail you: `data-settings-mail`; Mail, under News on your tasks).
 
 ### Saving settings
 
@@ -616,7 +616,7 @@ With users, a task assigned to someone who can't be given tasks here comes in as
 #### A task keeps its id
 
 One whose id is in the wiki already is skipped: importing the same file twice adds nothing, and a file exported here brings back only what was deleted since (an id that isn't a UUID is replaced).
-It keeps the occurrence before it (`spawned_from`) only when it comes back as Zone had it (a task deleted since; an admin's import keeps the file's), else a `[[task:…]]` of a closed task would stand for it (Names in comments and history).
+It keeps the occurrence before it (`spawned_from`) only when it comes back as Zonewiki had it (a task deleted since; an admin's import keeps the file's), else a `[[task:…]]` of a closed task would stand for it (Names in comments and history).
 So a list can't be duplicated within one wiki this way.
 
 #### A tag of your own
@@ -625,7 +625,7 @@ The dialog's field (optional; `also`) gives the imported tasks a tag too, on top
 
 #### Names in comments and history
 
-With users (`checkArrived` in `go/taskby.go`) a non-admin's import keeps their own name on a comment or a history entry and blanks everyone else's (by no one), as the file could say anything, unless Zone has seen that comment, with that text, or that entry under that name on that task since it started, and the task comes back as Zone had it (a task deleted and imported back, its title and description as they were); an admin's keeps the file's names (a wiki moved, a backup put back; Who made a change in `docs/spec/users.md`).
+With users (`checkArrived` in `go/taskby.go`) a non-admin's import keeps their own name on a comment or a history entry and blanks everyone else's (by no one), as the file could say anything, unless Zonewiki has seen that comment, with that text, or that entry under that name on that task since it started, and the task comes back as Zonewiki had it (a task deleted and imported back, its title and description as they were); an admin's keeps the file's names (a wiki moved, a backup put back; Who made a change in `docs/spec/users.md`).
 
 ## Interaction
 
@@ -864,7 +864,7 @@ It asks first, has no undo, and takes the task out of its file in a commit ("Del
 
 Who may (`mayDeleteTask` in `go/tasks.go`; `DELETE /api/tasks/<id>` and `batch-delete` answer 403 "Only who made a task, or an admin, deletes it" otherwise): without users anyone; with users who made the task (`created_by`), an admin, its user for a private one, and anyone for a task nobody is known to have made (no `created_by`: one made without users, or written by hand).
 Others have seen a shared task, so anyone else closes it.
-The same routes take back what was just made: the tasks the page editor created (their maker's), and an import's (what a user imported is theirs to delete while Zone runs: `noteBrought`).
+The same routes take back what was just made: the tasks the page editor created (their maker's), and an import's (what a user imported is theirs to delete while Zonewiki runs: `noteBrought`).
 An assistant (MCP) deletes no task, but for one a change of its user's made, by undoing that change (`undo_changes`), which is itself undone as easily.
 
 ### Setting dates quickly
@@ -1031,7 +1031,7 @@ Every card of a list looks alike: a new one is told by its place, on top, not by
 
 Dates as text take readable shades (`--amber-text` for a start today and the carried-over badge and count: `#d97706`, the Today limit warning's amber, in both modes;
 bold, since in light mode it is about 3:1;
-`--blue-text` for a later start, a slate blue in Zone's palette (the note callout's), `--green-text` for a deadline today): the bright colours of the cards' left edges are only about 2:1 on a card;
+`--blue-text` for a later start, a slate blue in Zonewiki's palette (the note callout's), `--green-text` for a deadline today): the bright colours of the cards' left edges are only about 2:1 on a card;
 the blue and green are at least 4.5:1, a darker shade in light mode and a brighter one in dark.
 Each with a dark-mode value.
 
@@ -1270,7 +1270,7 @@ What a task had when it came is kept while the page is open (`st.news`, `app.new
 
 On its card a task with news says what it is (before your name), in every view: **new** for a task just given to you (`.task-new`; its tooltip says who gave it and when), and in words for anything else, **bob commented**, **bob mentioned you**, **anna closed it**, **anna reopened it**, **anna gave it on** (`.task-update-mark`).
 
-Opening the task takes it away (`markSeen` in `js/taskdata.js`; `seen` in `PUT /api/tasks/<id>`, `updateTaskLocked`): when you open its dialog or its details, the browser says so and Zone notes your look.
+Opening the task takes it away (`markSeen` in `js/taskdata.js`; `seen` in `PUT /api/tasks/<id>`, `updateTaskLocked`): when you open its dialog or its details, the browser says so and Zonewiki notes your look.
 So the mark goes when you have looked, and whoever gave you the task reads in its History that it arrived ("Seen · anna").
 For a task that has no news for whoever opens it, `seen` notes nothing.
 **Mark read** and **Mark all read** in Updates see a task without opening it (Updates).
@@ -1288,7 +1288,7 @@ Not built: the name as a chip in the text, and completing it while typing.
 
 ### Mail
 
-Mail goes where you asked for it (`mails`, `mailKinds`): three kinds, each a box in My tasks' settings dialog (there where Zone could mail you: the deployment's mail server, `ZONE_SMTP_*`, Mail in `docs/spec/deployment.md`, and your `email` in `.zone/config`, which sign-up or an admin's `zonewiki user email NAME ADDRESS` sets), **none ticked until you tick it**:
+Mail goes where you asked for it (`mails`, `mailKinds`): three kinds, each a box in My tasks' settings dialog (there where Zonewiki could mail you: the deployment's mail server, `ZONE_SMTP_*`, Mail in `docs/spec/deployment.md`, and your `email` in `.zone/config`, which sign-up or an admin's `zonewiki user email NAME ADDRESS` sets), **none ticked until you tick it**:
 
 | Box | Mail | |
 |-----|------|---|
@@ -1296,17 +1296,17 @@ Mail goes where you asked for it (`mails`, `mailKinds`): three kinds, each a box
 | someone mentions me (@name) | `tellMentioned`: "bob mentioned you: <title>" | with the text |
 | someone comments on a task I have, gave or follow | `tellComment`: "bob commented: <title>" | with the comment; not to who it mentions, who gets that mail |
 
-Each comes with the task's link where Zone knows its address (`base-url`), sent in the background (a write doesn't wait for the mail server; a failure is in Zone's log), never for what you did yourself.
+Each comes with the task's link where Zonewiki knows its address (`base-url`), sent in the background (a write doesn't wait for the mail server; a failure is in Zonewiki's log), never for what you did yourself.
 The kinds are kept as `"mail": "assigned,comments"` in your registry's `mine` (the kinds turned on, in that order).
 There is no digest and no mail about watched pages.
 
 ### What you have seen
 
-What you have seen is yours, not the task's (`go/taskseen.go`): a look is kept in Zone's folder, `.zone/seen/<user>.json` (`{"<task id>": {"at": "2026-11-15T09:30", "after": "…", "comment": "…"}}`: when, which entry of the task's history was its last then, since a history's times are to the minute and what happens after a look within its minute is news, and the last comment it saw), out of git, one look a user and task.
+What you have seen is yours, not the task's (`go/taskseen.go`): a look is kept in Zonewiki's folder, `.zone/seen/<user>.json` (`{"<task id>": {"at": "2026-11-15T09:30", "after": "…", "comment": "…"}}`: when, which entry of the task's history was its last then, since a history's times are to the minute and what happens after a look within its minute is news, and the last comment it saw), out of git, one look a user and task.
 It writes no task file, makes no commit and changes no list's word: nobody's list loads again because someone looked, and no reader is a commit's author.
 The news' rule reads the looks with the task's history (`historyWithSeen`), and the API answers them there as `seen` entries, so the browser's rule and the History are as they were; a history a client sends back (an undo) is kept without them (`sentHistory`).
 A file names at most 300 tasks before those that can have no news anymore go (gone, or closed for two months: `canHaveNews`).
-Lost with Zone's folder, tasks show their news again and nothing else happens.
+Lost with Zonewiki's folder, tasks show their news again and nothing else happens.
 A `seen` entry in a task's own file (written by hand) is none: looks are only those in `.zone/seen/`.
 
 ## Importance
@@ -1548,7 +1548,7 @@ With users it is yours alone (the task is kept in your files, `private/<user>/_t
 Without users it is the wiki's: the tasks in no list, in the shared files.
 
 **Filing** is moving a task to a list: the List field, **Move to list…**, `m`.
-Into a shared list that shares it (`share`), and Zone then **assigns it to you** unless the write says who has it (`sharedBy`, whatever door shares it: Private tasks in `docs/spec/users.md`; the dialog shows the name, to be taken off; the move dialog sends it), so what was yours stays in your My tasks unless you say otherwise.
+Into a shared list that shares it (`share`), and Zonewiki then **assigns it to you** unless the write says who has it (`sharedBy`, whatever door shares it: Private tasks in `docs/spec/users.md`; the dialog shows the name, to be taken off; the move dialog sends it), so what was yours stays in your My tasks unless you say otherwise.
 
 Its view is `/tasks?list=inbox`, headed **Inbox** (with 🔒 with users), the second pill of the list switcher; a line under the heading says what it is for ("New tasks land here, and only you see them. Move one to a list to file it; in a shared list everyone sees it.", without users "New tasks land here, in no list. Move one to a list to file it.").
 It is All tasks narrowed: All tasks' settings (the tab, Plan, the limit), no settings dialog of its own, a locked chip **Inbox** in the filter field (the filter word `list:inbox`), and a new task made there is in the Inbox.
@@ -1582,7 +1582,7 @@ On a page, `[[tasks: mine=1]]` shows it to whoever looks.
 It is one task app: the cards' list chips say where each task is (a task in the Inbox has none), and a new task there goes into the Inbox.
 A task that leaves by a change of its assignee or its list gets the notice a list's view gives ("Saved; it no longer shows here.").
 Its settings are its own, and yours (Where settings are kept): the tab, Plan, the limit, the tabs' names, the mail.
-Zone assigns nothing by itself, but a task of your own that you share: it is yours to do unless you say otherwise.
+Zonewiki assigns nothing by itself, but a task of your own that you share: it is yours to do unless you say otherwise.
 
 #### Leave out of My tasks
 
@@ -1691,7 +1691,7 @@ You pin and unpin in a list's ⋯ menu on `/tasks?list=`: **Pin** puts it last, 
 **Pins are the user's own**: in their registry (`pinned`, in order); without users the wiki's, in the shared registry.
 With users nobody pins for anyone else: a user who has pinned nothing has no pins, and finds their lists under More (Your lists first) or in the left column.
 A connection not given its user's private place pins nothing (its user's pins are kept with their own lists).
-Pins in the shared registry from before the wiki had users (or from an older Zone's "Pin for everyone") are no one's: no user reads them.
+Pins in the shared registry from before the wiki had users (or from an older Zonewiki's "Pin for everyone") are no one's: no user reads them.
 
 ### Where a new task goes
 
@@ -1718,7 +1718,7 @@ A click on a row moves the tasks at once (↑/↓ go through the rows, Enter pic
 The move sets each task's list in one `batch-update`; its tags stay.
 The row of the list every selected task is in is ticked and has the focus; a list only some are in says how many ("1 of 3").
 
-A task is as private as its list (Private lists): the rows of your private lists, and with users the Inbox's, are off while a shared task is selected ("a shared task stays shared"), and a row that would take a private task to a shared list says so ("shares it with everyone", with users "shares it with everyone, assigned to you") and sends `share`; Zone gives it to you: a task of yours that you file stays in your My tasks (assign it to no one, or someone, afterwards).
+A task is as private as its list (Private lists): the rows of your private lists, and with users the Inbox's, are off while a shared task is selected ("a shared task stays shared"), and a row that would take a private task to a shared list says so ("shares it with everyone", with users "shares it with everyone, assigned to you") and sends `share`; Zonewiki gives it to you: a task of yours that you file stays in your My tasks (assign it to no one, or someone, afterwards).
 Rows for a list more or fewer people see say so too (Moving a task to fewer or more people).
 
 One undo puts every task back in its list ("3 tasks moved to list “work”", "3 tasks moved to the Inbox"), but those that were private and are shared now: that can't be taken back, so a move of only such tasks has a notice and no undo.
@@ -1977,11 +1977,11 @@ So a list can be added or changed by hand in one line, and a commit shows the li
 | `order` | The manual order of My tasks, as task ids (the same owner as `mine`) |
 
 A setting in `mine` or `all` whose value is none of its values (`"view": "focus"`, a name from before, written by hand) is left out and logged, the settings beside it stay (`validSettings`: My tasks keeps its limit and its mail with a wrong tab); the next save of those settings writes them without it.
-It is read leniently (a value of another kind as text, a list without a name left out, a name twice once, unknown keys kept and written back A–Z: `"mine": true` is no settings, a `default` of before 2026-11 is a key Zone doesn't know) and written in one format; a file that is there but unreadable refuses every write (`ReadListsStrict`: never an empty registry, which would drop every list).
+It is read leniently (a value of another kind as text, a list without a name left out, a name twice once, unknown keys kept and written back A–Z: `"mine": true` is no settings, a `default` of before 2026-11 is a key Zonewiki doesn't know) and written in one format; a file that is there but unreadable refuses every write (`ReadListsStrict`: never an empty registry, which would drop every list).
 
 ### Storage
 
-The tasks are plain JSON files in the wiki, committed to git; this is where they are and how Zone reads and writes them.
+The tasks are plain JSON files in the wiki, committed to git; this is where they are and how Zonewiki reads and writes them.
 
 #### The task files
 
@@ -2021,26 +2021,26 @@ What needs every task reads everything still: an import and the undo of a delete
 **A write writes only its user's places** (`byOwner` in `go/internal/taskfiles`): a write hands over every open task its user sees, each with its owner, and one of an owner that isn't the user's (`Store.Owners`: the shared files, their own, their groups') is refused: no question per list.
 
 **A commit names the tasks it changed** (`Store.Touched`, handed to `Commit` with the files): as a write replaces or removes a file, the store keeps what the file held (as it knows it, no read: `note`) and what it writes, and at the commit the tasks whose two differ (`Task.Same`), or that are in only one, are the write's: a task made, deleted, changed or moved to another list or owner; not one that only went into its month's archive.
-Zone writes them into the commit's trailers, `Task: <id>` (The tasks a commit changed in `docs/spec/rendering.md`), so Changes names them without reading a task file, and Undo knows which tasks a later commit changed.
+Zonewiki writes them into the commit's trailers, `Task: <id>` (The tasks a commit changed in `docs/spec/rendering.md`), so Changes names them without reading a task file, and Undo knows which tasks a later commit changed.
 A write that writes task files itself (a tag's rename, a list's, a page's rename followed in the tasks) names none.
 
 **A file whose tasks a write didn't touch costs a comparison** (`holds` in `go/internal/taskfiles`): the store knows each file's tasks as it parsed or wrote them (`writeTasks`), and a write compares what it would write with that (`Task.Same`) before it reads or encodes anything.
 Changing an open task doesn't read or encode the closed files.
 
-**A file is parsed once** (`readFile` in `go/internal/taskfiles`): every page view reads the open tasks (the Tasks links' count) and a write reads every file it needs, so a file's tasks are kept as parsed and handed out as copies (`Task.Clone`: a reader may change its own) until the file is another one (its time, size or inode: Zone's own writes, which also forget it, `writeText`; a hand edit).
+**A file is parsed once** (`readFile` in `go/internal/taskfiles`): every page view reads the open tasks (the Tasks links' count) and a write reads every file it needs, so a file's tasks are kept as parsed and handed out as copies (`Task.Clone`: a reader may change its own) until the file is another one (its time, size or inode: Zonewiki's own writes, which also forget it, `writeText`; a hand edit).
 Write paths use a strict reader that fails with `taskfiles.ErrCorrupt` (503) on an unreadable file instead of treating it as empty and wiping every task.
 
 **An archive nobody read for ten minutes is no longer kept parsed** (`archiveKept`, `forgetOldArchives`); the open tasks and this month's closed ones stay.
 The Closed link's number is counted by looking at what is parsed, without a copy of the year's tasks (`CountClosedInYear`, `lookAt`), and so are the closed tasks with news for a page's user (`RecentClosed`).
 
 **The counts are kept per user until the files change** (`keptCounts` in `go/tasksembed.go`, `Store.Stamp`): the Tasks links' counts, which every page view shows and every open page asks for once a minute, and the list switcher's, by place.
-They are counted anew when a task file or registry the user reads is another one (its time and size, so a change by hand counts, and Zone's own writes by their number, so two within one tick of the clock are two), when the day is another one, or the settings are.
+They are counted anew when a task file or registry the user reads is another one (its time and size, so a change by hand counts, and Zonewiki's own writes by their number, so two within one tick of the clock are two), when the day is another one, or the settings are.
 A look at each file (`Stamp`), not a read.
 
 #### What a start reads
 
-A start reads every task file when it has to (`setUpTasks`, `tasksChecked` in `go/tasksetup.go`): filing closed tasks by month and tasks by list, writing a hand-edited file in Zone's format and giving a shared task its list all read and encode every task of the wiki's years, and a hosted wiki starts whenever someone comes back to it.
-So a start leaves a mark in Zone's folder (`.zone/tasks-checked`: the layout, whether the wiki has users, and the commit the task files were last Zone's at, which follows Zone's own commits of them: `noteTaskCommit`), and the next start does none of that while git says that nothing else wrote a task file since: none differs from what is committed, and no commit after the mark's touches one.
+A start reads every task file when it has to (`setUpTasks`, `tasksChecked` in `go/tasksetup.go`): filing closed tasks by month and tasks by list, writing a hand-edited file in Zonewiki's format and giving a shared task its list all read and encode every task of the wiki's years, and a hosted wiki starts whenever someone comes back to it.
+So a start leaves a mark in Zonewiki's folder (`.zone/tasks-checked`: the layout, whether the wiki has users, and the commit the task files were last Zonewiki's at, which follows Zonewiki's own commits of them: `noteTaskCommit`), and the next start does none of that while git says that nothing else wrote a task file since: none differs from what is committed, and no commit after the mark's touches one.
 A file edited by hand, a commit by hand or pulled from elsewhere, users turned on or off, no git or no mark: it reads them all.
 What a month's end leaves to file is seen without that (`Unfiled`: the files' names and a look at this month's closed files) and done.
 
@@ -2054,10 +2054,10 @@ A write that puts a task in a list sets where it is kept (`applyList` in `go/tas
 Ids are random UUIDs, unique across all files; restoring a deleted task (undo) never takes an id another file has (`taskFiles.IDsLocked`) and puts it back where it was (`placeSnapshot`, Private tasks in `docs/spec/users.md`).
 
 Every reader takes the user and reads the shared files and theirs (`go/internal/taskfiles`, the store `taskFiles` in `go/tasklogic.go`; `Owners(user)`: `Open`, `All`, `ReadForWriteLocked`, `ClosedInYear`, `ClosedYears`, and on top of them `findTasks`, `resolveTaskRefs`, `findTaskBacklinks`);
-Zone itself (`""`) reads only the shared ones.
+Zonewiki itself (`""`) reads only the shared ones.
 A write splits the tasks by owner (`byOwner`) and writes the files that changed, all in one commit; a task can only be written by its own user, since another user's is never read for them.
 One lock (`taskFiles.Lock`) for all files' writes, and a second one that readers share and a write holds while it replaces its files (`Open` for `GET /api/tasks`, `All`; Reading and writing, above): a task that is shared moves between two files, and a read between their writes would miss it.
-What Zone does over every task list covers every user's files (`EveryOwner`): the closed tasks' filing by month at start (`ArchiveOldClosed`), a rename's links in tasks (`renamePageRefs`), a shared list's rename, the search index (`Every`, filtered per user by `canSeeTask`, `hiddenDoc`).
+What Zonewiki does over every task list covers every user's files (`EveryOwner`): the closed tasks' filing by month at start (`ArchiveOldClosed`), a rename's links in tasks (`renamePageRefs`), a shared list's rename, the search index (`Every`, filtered per user by `canSeeTask`, `hiddenDoc`).
 
 #### The files' format
 
@@ -2067,12 +2067,12 @@ text as written (no `\u` escapes but those JSON needs),
 each task's fields in one order (`id`, `title`, `description`, `tags`, `list` (only when it is in one), `assignee` (only when it has one), `created_by` (only when it says), `followers` (only when it has some), `start_date`, `due_date`, `created_at`, `closed_at`, `wont_do`, `keep`, `importance` (only when it isn't normal), `last_done`, `sort_order`, `recurrence`, `spawned_from`, `history`, `comments`),
 every field written,
 also when empty (`null`, `[]`, `false`),
-then any keys Zone doesn't know (from an older version or a hand edit),
+then any keys Zonewiki doesn't know (from an older version or a hand edit),
 A–Z,
 their values kept as they were.
 A file is read leniently: a value of the wrong kind is its field's default (a number or a bool where text belongs is its JSON text, so an `id` of `7` is `"7"`; only `true` is true), so an odd file still reads and a write never refuses it for that.
 A write changes only the files whose tasks changed, so commits show only what changed.
-Files in another format (hand-edited: keys in another order, unknown keys not A–Z) are rewritten once when Zone starts, in a commit of their own ("Write the task files in Zone's format"); the tasks' values stay as they were (`1.0` reads `1`).
+Files in another format (hand-edited: keys in another order, unknown keys not A–Z) are rewritten once when Zonewiki starts, in a commit of their own ("Write the task files in Zonewiki's format"); the tasks' values stay as they were (`1.0` reads `1`).
 
 Request bodies are validated (`jsonObject`, `asStr`, `asInt`, `asStrList`, `idList`): bad input is a 400 with JSON `{ error }`, never a 500.
 Numeric strings are accepted for integers; `tags` may be a comma-separated string.
@@ -2080,22 +2080,22 @@ Reads clean the tags (`jsonobj.TextList`, `taskmodel.CleanTags`), since a file e
 
 ### What a start does
 
-When the task files may have changed (What a start reads), a start sets them up as Zone keeps them (`setUpTasks` in `go/tasksetup.go`); a second start changes nothing.
+When the task files may have changed (What a start reads), a start sets them up as Zonewiki keeps them (`setUpTasks` in `go/tasksetup.go`); a second start changes nothing.
 
 | Step | Does | Commit |
 |------|------|--------|
 | Closed tasks by month | Files the closed tasks of a month that has ended into its archive (Closed tasks by month) | "Archive closed tasks" |
-| Tasks by list | Files a task found in another folder than its list's (a file moved by hand) in its list's | "Write the task files in Zone's format" |
-| Zone's format | Writes a file in another format (edited by hand) as Zone writes it (The files' format) | "Write the task files in Zone's format" |
+| Tasks by list | Files a task found in another folder than its list's (a file moved by hand) in its list's | "Write the task files in Zonewiki's format" |
+| Zonewiki's format | Writes a file in another format (edited by hand) as Zonewiki writes it (The files' format) | "Write the task files in Zonewiki's format" |
 | `general` | With users, puts a shared task in no list into the shared list `general`, made for it and pinned for the wiki, and files it in its folder | "Put the shared tasks without a list in #general" |
 
 The first three are one commit over every owner's files (`ArchiveOldClosed`), named "Archive closed tasks" when a month was archived.
 **With users a shared task is always in a list** (`fileInGeneral`): a wiki whose users were turned on later, or a file edited by hand, can have one in none; `general` takes it, as it takes a deleted list's tasks when no other list is named.
-A task file that can't be read stops it before anything is written: Zone runs, its log says so, and the start leaves no mark, so the next one tries again.
+A task file that can't be read stops it before anything is written: Zonewiki runs, its log says so, and the start leaves no mark, so the next one tries again.
 
 #### Older data
 
-Zone takes nothing over from what an older Zone wrote: no task file, registry or page is renamed or rewritten at start for it.
+Zonewiki takes nothing over from what an older Zonewiki wrote: no task file, registry or page is renamed or rewritten at start for it.
 Until 2026-11-20 starts did: closed tasks' `completed.json`, `completed-YYYY.json` and `completed_at`; a year's archive, `closed-YYYY.json`; lists declared by pages (`[[tasks: list=…]]`) and pinned by `pin=`, and All tasks' `_tasks/settings.json`; the Inbox (a list `private` that took new tasks, one called `inbox`); the views' names of before 2026-11; a registry's `version`; lists for some (`"for": […]` in a list's `list.json`).
-Such files are no longer read as they were (a `closed-YYYY.json` is no archive, a `completed_at` no field of Zone's, a registry's `version` is dropped).
-A wiki last run by a Zone of then is started once with Zone 1caf0d78 or older (its git history) first.
+Such files are no longer read as they were (a `closed-YYYY.json` is no archive, a `completed_at` no field of Zonewiki's, a registry's `version` is dropped).
+A wiki last run by a Zonewiki of then is started once with Zonewiki 1caf0d78 or older (its git history) first.

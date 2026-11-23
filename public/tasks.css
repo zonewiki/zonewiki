@@ -19,7 +19,7 @@
   /* Date colours as text, readable on a card (the bright edge colours are
      only ~2:1 on one): amber for a start today or carried over (the amber
      of the Focus limit warning, bold), slate blue for a later start (the
-     note callout's: a calm blue in Zone's palette), green for a deadline
+     note callout's: a calm blue in Zonewiki's palette), green for a deadline
      today. */
   --amber-text: #d97706;
   --blue-text: #3d6a8e;

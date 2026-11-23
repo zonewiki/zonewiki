@@ -589,7 +589,7 @@ class TestMyTasks:
         assert 'data-init-view=""' in self.page(team, "/tasks?mine=1")
 
     def test_the_assistants_new_task_is_in_the_inbox(self, team, wiki_dir, monkeypatch):
-        # Without a list: the user's Inbox, as c t; Zone assigns it to no
+        # Without a list: the user's Inbox, as c t; Zonewiki assigns it to no
         # one, and whatever is pinned first takes nothing.
         monkeypatch.setattr(settings, "USERS", {**USERS, "alice": ("alice-pw", "alice-token")})
 
@@ -624,7 +624,7 @@ class TestASharedTaskIsInAList:
     """With users a shared task is always in a list (docs/spec/tasks.md,
     Lists): it never loses its list for none, and where one would (its list
     deleted, a restore or an import whose list is gone, a task left without
-    one by an older Zone) it goes to the shared list general, made when it
+    one by an older Zonewiki) it goes to the shared list general, made when it
     isn't there. A private task without a list is in its user's Inbox."""
 
     @staticmethod

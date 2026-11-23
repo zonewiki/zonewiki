@@ -68,7 +68,7 @@ def test_a_change_to_the_file_shows_from_the_next_request(client, wiki_dir, monk
     assert banner(client, "/page/index")[1] == NOTICE
     path = wiki_dir / ".zone" / "config"
     path.write_text(path.read_text().replace(NOTICE, "Down for maintenance at 18:00"))
-    for _ in range(40):   # Zone looks at the file at most once a second
+    for _ in range(40):   # Zonewiki looks at the file at most once a second
         if banner(client, "/page/index")[1] == "Down for maintenance at 18:00":
             break
         import time

@@ -13,7 +13,7 @@ import (
 func Write(path, text string) error { return write(path, text, 0) }
 
 // WriteOwnerOnly: Write for a file only its owner reads, whatever mode it
-// had (0600): Zone's own state that holds users' words (what they searched,
+// had (0600): Zonewiki's own state that holds users' words (what they searched,
 // what they saw, their tasks' records), which other accounts on the host
 // have no business reading, as they have none reading the settings file.
 func WriteOwnerOnly(path, text string) error { return write(path, text, 0o600) }

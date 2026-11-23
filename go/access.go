@@ -33,7 +33,7 @@ import (
 // the name, asker.Name.
 type asker = askerpkg.Asker
 
-// asUser: the user name themselves, with all they may: what Zone asks
+// asUser: the user name themselves, with all they may: what Zonewiki asks
 // about a user it knows by name (whom a task is given to, who gets a mail),
 // never about a request, whose asker is userOf(r).
 func asUser(name string) asker { return askerpkg.User(name) }
@@ -105,7 +105,7 @@ const (
 // private task shared) and nothing has to move with it.
 const taskFilesDir = taskfiles.DirName + "/files"
 
-// taskFolderRE: a task's id as a folder's name: a uuid as Zone makes them, or
+// taskFolderRE: a task's id as a folder's name: a uuid as Zonewiki makes them, or
 // what an import brought, as long as it is one plain word.
 var taskFolderRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`)
 
@@ -554,7 +554,7 @@ func mayWriteTasks(user asker) error {
 func ownPrivate(user asker, slug string) bool { return placeOf(slug).own(user) }
 
 // inQuicknote: slug is a note in user's Notes: any note without
-// users or for Zone itself (user ""), with users only one in their own folder
+// users or for Zonewiki itself (user ""), with users only one in their own folder
 // (a note from before users, at the top level, is a page like any other).
 func inQuicknote(user asker, slug string) bool {
 	if !isQuicknote(slug) {
@@ -564,7 +564,7 @@ func inQuicknote(user asker, slug string) bool {
 }
 
 // privateFolder: user's private folder ("private/alice"), "" without
-// users (or for Zone itself, which has no user).
+// users (or for Zonewiki itself, which has no user).
 func privateFolder(user asker) string {
 	if settings().Users == nil || user.Name == "" || user.Name == visitor {
 		return ""
@@ -587,7 +587,7 @@ const noPrivateMsg = "This connection wasn't given your private pages, notes and
 // separated), as git names it in the history: a page by its slug, anything
 // else in private/ (a user's uploads and tasks in private/<user>/_assets/
 // and _tasks/ too) like a page there. What lies in a hidden folder no one
-// sees in Zone: its own files in .zone/ (the settings file, with its
+// sees in Zonewiki: its own files in .zone/ (the settings file, with its
 // password hashes), and whatever else the history holds in one. Nor does
 // anyone see what isn't a clean path (cleanPath): a slip in reading git's
 // output hides a file rather than showing it.
@@ -736,7 +736,7 @@ func visibleSlugs(user asker) map[string]bool {
 // everyone's), each folder at the top that is everyone's, and in private/
 // and groups/ the folders of the places user sees (placeOf, which judges
 // in lower case: a hand-made Private/Alice/ is alice's, and only alice's).
-// Slash-separated, relative to the wiki, as they are on disk. Zone's own
+// Slash-separated, relative to the wiki, as they are on disk. Zonewiki's own
 // folders (_…, .…) are none of them, and the caller leaves them out below
 // these too. Listed from what is there: a folder made since isn't searched,
 // rather than searched unasked.
@@ -780,7 +780,7 @@ const nameClass = `\p{L}\p{N}\p{M}_`
 // nameGoesOn: after a path privateNameRE found in a commit message, at a
 // space, the name goes on: an upload's name may hold spaces ("Upload
 // private/alice/_assets/Arztbrief März.pdf"), so the words after it are
-// its until one that goes on with Zone's message (" to ", " (MCP)" …).
+// its until one that goes on with Zonewiki's message (" to ", " (MCP)" …).
 func nameGoesOn(rest string) bool {
 	if !strings.HasPrefix(rest, " ") || len(rest) < 2 {
 		return false

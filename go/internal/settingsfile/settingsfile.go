@@ -1,8 +1,8 @@
-// Package settingsfile is the format of Zone's settings file (.zone/config):
+// Package settingsfile is the format of Zonewiki's settings file (.zone/config):
 // a small INI of "key = value" lines, [user NAME] and [group NAME] sections, read
 // strictly (an unknown key, a key given twice: an error naming its line) and
 // edited a line at a time, keeping the comments and the order of the lines
-// an edit doesn't change. What the keys mean is Zone's (configfile.go).
+// an edit doesn't change. What the keys mean is Zonewiki's (configfile.go).
 package settingsfile
 
 import (
@@ -92,7 +92,7 @@ func isComment(line string) bool {
 
 // Parse reads text, the file called name (as its errors name it); an
 // unknown key, a section that is neither a user's nor a group's, a key given twice: an error
-// naming its line, as a typo shouldn't leave Zone on a default.
+// naming its line, as a typo shouldn't leave Zonewiki on a default.
 func Parse(name, text string, keys Keys) (*File, error) {
 	read := text
 	text = strings.TrimPrefix(strings.ReplaceAll(text, "\r\n", "\n"), "\ufeff")
@@ -131,7 +131,7 @@ func Parse(name, text string, keys Keys) (*File, error) {
 				f.Groups = append(f.Groups, User{Name: name, Line: n, Values: map[string]Value{}})
 				values, known = f.Groups[len(f.Groups)-1].Values, keys.Group
 			default:
-				return nil, lineError(n, "[%s] isn't a section Zone knows. Users are [user NAME], groups [group NAME].", section)
+				return nil, lineError(n, "[%s] isn't a section Zonewiki knows. Users are [user NAME], groups [group NAME].", section)
 			}
 			in = kind
 			continue
@@ -150,7 +150,7 @@ func Parse(name, text string, keys Keys) (*File, error) {
 				return nil, lineError(n, "%q isn't a group's setting. A group has %s; the wiki's settings "+
 					"go before the first section.", key, strings.Join(keys.Group, ", "))
 			}
-			return nil, lineError(n, "%q isn't a setting Zone knows.", key)
+			return nil, lineError(n, "%q isn't a setting Zonewiki knows.", key)
 		}
 		if v, twice := values[key]; twice {
 			return nil, lineError(n, "%s is set twice (line %d).", key, v.Line)

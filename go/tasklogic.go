@@ -1,4 +1,4 @@
-// What Zone does with tasks beyond keeping them: a series' next occurrence,
+// What Zonewiki does with tasks beyond keeping them: a series' next occurrence,
 // completing and reopening, history and comments, a rename followed in the
 // tasks' links, and what pages need from tasks (links to pages, [[task:…]]
 // references). A task is a *Task (package taskmodel); its files, their lock
@@ -22,7 +22,7 @@ import (
 
 // taskFiles: the wiki's task files (package taskfiles): where they are,
 // reading them, and writing them under their lock. What the store needs of
-// Zone it is handed here: the wiki's folder, its users, who may write, the
+// Zonewiki it is handed here: the wiki's folder, its users, who may write, the
 // clock, and how a write is committed.
 var taskFiles *taskfiles.Store
 
@@ -49,7 +49,7 @@ func commitTasks(user, message string, tasks []string, paths ...string) error {
 
 // taskGroups: the groups whose lists and tasks user reads and writes (the
 // task store's Groups): those whose places are theirs (groupsFor), every
-// group for Zone itself (taskfiles.Everyone); none without users.
+// group for Zonewiki itself (taskfiles.Everyone); none without users.
 func taskGroups(user asker) []string {
 	if settings().Users == nil {
 		return nil
@@ -526,7 +526,7 @@ var historyEvents = map[string]bool{"created": true, "start": true, "due": true,
 
 const historyLimit = 30
 
-// logEvent adds an event to a task's history, by user ("" no one: Zone, or
+// logEvent adds an event to a task's history, by user ("" no one: Zonewiki, or
 // no users); from and to are the days a dated event moved between, or the
 // users an assignment went from and to ("" none).
 func logEvent(t *Task, user, event, from, to string) {
@@ -931,7 +931,7 @@ func lastActivity(t *Task) string {
 
 var ymdPrefixRE = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}`)
 
-// What a snapshot's ids and times may be (sanitizeSnapshot): an id as Zone
+// What a snapshot's ids and times may be (sanitizeSnapshot): an id as Zonewiki
 // makes them (a UUID) or as a file written by hand may have it (letters,
 // digits, - and _), a time as timestamp() writes it, or its day alone.
 var (
@@ -974,7 +974,7 @@ func sanitizeSnapshot(snap jsonObj) *Task {
 			}
 		}
 	}
-	// Ids and times only as Zone writes them: the browser builds the cards
+	// Ids and times only as Zonewiki writes them: the browser builds the cards
 	// from them, and a snapshot is whatever its sender made it. An id of
 	// another shape gets a new one (newTask's), a time that is none is now.
 	for f, field := range map[string]*string{"id": &t.ID, "spawned_from": &t.SpawnedFrom} {

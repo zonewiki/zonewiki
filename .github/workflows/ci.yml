@@ -113,7 +113,7 @@ jobs:
             ZONE_SEMANTIC_SEARCH=off
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.description=Zone: wiki, notes and tasks for you, your team, and your AI agents (plain Markdown files, self-hosted)
+            org.opencontainers.image.description=Zonewiki: wiki, notes and tasks for you, your team, and your AI agents (plain Markdown files, self-hosted)
             org.opencontainers.image.licenses=AGPL-3.0-or-later
           outputs: type=image,name=${{ steps.meta.outputs.image }},push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha,scope=${{ matrix.arch }}
@@ -193,5 +193,5 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           gh release view "$TAG" >/dev/null 2>&1 ||
-            gh release create "$TAG" --verify-tag --title "Zone ${TAG#v}" --generate-notes
+            gh release create "$TAG" --verify-tag --title "Zonewiki ${TAG#v}" --generate-notes
           gh release upload "$TAG" dist/* --clobber

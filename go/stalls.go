@@ -1,5 +1,5 @@
 // A client that stops sending or reading doesn't hold its connection
-// (docs/spec/security.md, Slow clients): Zone serves at most 100 at a
+// (docs/spec/security.md, Slow clients): Zonewiki serves at most 100 at a
 // time, so a hundred that sent half a request and then nothing would be
 // all of them.
 package main

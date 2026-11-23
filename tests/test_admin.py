@@ -362,7 +362,7 @@ class TestLinks:
         assert post(admin, "/admin/users/dave/revoke").status_code == 404
 
     def test_the_page_says_a_reset_is_a_way_into_the_account(self, admin, client, git_wiki_dir):
-        # Zone sends no mail: the admin holds the link, and it sets the
+        # Zonewiki sends no mail: the admin holds the link, and it sets the
         # password for whoever opens it. The page doesn't claim otherwise.
         help_text = admin.get("/admin/users", headers=HOST).data.decode()
         assert "whoever opens that link signs in as them" in help_text

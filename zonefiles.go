@@ -1,6 +1,6 @@
-// Package zonefiles is Zone's own files, built into the zonewiki binary so
-// that the binary is all a machine needs to run Zone: the browser code
-// (public/), the docs Zone shows as Help and serves to assistants
+// Package zonefiles is Zonewiki's own files, built into the zonewiki binary so
+// that the binary is all a machine needs to run Zonewiki: the browser code
+// (public/), the docs Zonewiki shows as Help and serves to assistants
 // (README.md, docs/manual/, docs/spec/ and the screenshots they show), and
 // the licenses (LICENSE, THIRD_PARTY_LICENSES; the vendored libraries' are
 // in public/vendor/).

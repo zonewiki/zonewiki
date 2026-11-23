@@ -1,7 +1,7 @@
 // OAuth for /mcp (docs/spec/mcp.md, Connecting with OAuth): an MCP client
-// is given only the address of /mcp; its user signs in to Zone in a
+// is given only the address of /mcp; its user signs in to Zonewiki in a
 // browser and allows it, and the client gets tokens of its own (a
-// connection, grants.go). Zone is its own authorization server, as the MCP
+// connection, grants.go). Zonewiki is its own authorization server, as the MCP
 // authorization spec (2025-11-25) has it: the metadata under /.well-known/
 // (RFC 9728, RFC 8414), client registration that keeps nothing (RFC 7591),
 // the authorization code with PKCE (S256), refresh tokens replaced at
@@ -60,7 +60,7 @@ func oauthOff(w http.ResponseWriter, r *http.Request) bool {
 }
 
 // mcpResource: /mcp's address as a client names it (the resource of RFC
-// 8707), and the issuer: Zone's own address.
+// 8707), and the issuer: Zonewiki's own address.
 func mcpResource(s *Settings, r *http.Request) string { return siteURL(s.BaseURL, r, "/mcp") }
 func oauthIssuer(s *Settings, r *http.Request) string { return siteURL(s.BaseURL, r, "") }
 
@@ -114,7 +114,7 @@ func oauthError(w http.ResponseWriter, status int, code, description string) {
 // ── Clients ──────────────────────────────────────────────────────────────────
 
 // oauthClient: what a client registered: its name and where its answers
-// may go. Zone keeps none of it: the client id is this, signed with Zone's
+// may go. Zonewiki keeps none of it: the client id is this, signed with Zonewiki's
 // key (sign), so a stranger's registrations leave nothing behind.
 type oauthClient struct {
 	Name      string   `json:"n"`
@@ -129,7 +129,7 @@ func (c oauthClient) id() string {
 	return clientIDPrefix + payload + "." + sign("oauth-client:"+payload)
 }
 
-// clientOf: the client a client id names, if Zone signed it.
+// clientOf: the client a client id names, if Zonewiki signed it.
 func clientOf(id string) (c oauthClient, ok bool) {
 	rest, found := strings.CutPrefix(id, clientIDPrefix)
 	payload, sig, cut := strings.Cut(rest, ".")
@@ -182,7 +182,7 @@ func (c oauthClient) allows(uri string) bool {
 	return false
 }
 
-// clientName: the name a client gave, as Zone shows it: one line, short.
+// clientName: the name a client gave, as Zonewiki shows it: one line, short.
 // None, or what an MCP token's commits name (tokenVia), is noClientName:
 // a client can't make its changes read as a token's.
 func clientName(name string) string {
@@ -345,7 +345,7 @@ func chooseReach(s *Settings, user asker, had less, form url.Values) (reach, les
 
 // oauthAuthorize: GET /oauth/authorize asks whoever is signed in (the
 // checks send anyone else to the login first) whether the client may act
-// as them; POST is their answer. A client or redirect URI Zone doesn't
+// as them; POST is their answer. A client or redirect URI Zonewiki doesn't
 // know gets a page, never a redirect: the answer goes only where a
 // registration said.
 func oauthAuthorize(w http.ResponseWriter, r *http.Request) {
@@ -448,7 +448,7 @@ func oauthAuthorize(w http.ResponseWriter, r *http.Request) {
 	}
 	code := newCode(authCode{user: user.Name, client: q.client.Name, clientHash: hashToken(q.ClientID),
 		redirectURI: q.RedirectURI, redirectHost: to.Host, challenge: q.Challenge, less: given})
-	// Not a redirect: the page policy lets a form lead only to Zone itself
+	// Not a redirect: the page policy lets a form lead only to Zonewiki itself
 	// (form-action 'self', which browsers hold a form's redirects to), so
 	// the answer is a page that sends the browser on, and shows the way as
 	// a link.

@@ -1,4 +1,4 @@
-"""Write Zone's mark and logos from one drawing: public/favicon.svg, public/icon.svg
+"""Write Zonewiki's mark and logos from one drawing: public/favicon.svg, public/icon.svg
 (the home-screen icon) and docs/logo/*.svg, with the headings' serif.
 
 The mark: a green rounded square, and in it a white square frame drawn in one
@@ -6,9 +6,9 @@ line, its top-right corner left open with a small square in it (an area of one's
 own, open to whom one lets in). It replaced a white Z in November 2026:
 a lone bold Z on a square looks like the symbol of Russia's war against Ukraine.
 The page bar's copy (icon_zone in go/templates/partials/icons.html) and the
-website's and Zone CP's are the same drawing: `python3 docs/logo/make_logo.py --inner`
+website's and Zonewiki CP's are the same drawing: `python3 docs/logo/make_logo.py --inner`
 prints its lines on the 16-unit grid, to paste there.
-"Zone" is Source Serif 4 (public/vendor/source-serif) at weight 600,
+"Zonewiki" is Source Serif 4 (public/vendor/source-serif) at weight 600,
 turned into outlines here, so the logo looks the same wherever it is shown
 (GitHub's README, a browser without the font) and loads nothing.
 
@@ -100,17 +100,17 @@ if "--inner" in sys.argv:
 
 
 def lockup(x, y, s):
-    """The mark at x, y, s px, and "Zone" beside it, its capitals 62% of the mark; returns (svg, width)."""
+    """The mark at x, y, s px, and "Zonewiki" beside it, its capitals 62% of the mark; returns (svg, width)."""
     size = s * 0.62 * upm / cap
     gap = s * 0.28
     baseline = y + s / 2 + s * 0.31
-    return mark(x, y, s), text_path("Zone", size, x + s + gap, baseline), s + gap + text_width("Zone", size)
+    return mark(x, y, s), text_path("Zonewiki", size, x + s + gap, baseline), s + gap + text_width("Zonewiki", size)
 
 
 def svg(w, h, body):
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w:g} {h:g}" width="{w:g}" height="{h:g}" '
-        f'role="img" aria-label="Zone">\n<title>Zone</title>\n{body}\n</svg>\n'
+        f'role="img" aria-label="Zonewiki">\n<title>Zonewiki</title>\n{body}\n</svg>\n'
     )
 
 
@@ -118,7 +118,7 @@ def r(v):
     return round(v, 2)
 
 
-# The logo: the mark and "Zone", for a light and a dark page.
+# The logo: the mark and "Zonewiki", for a light and a dark page.
 m, word, w = lockup(0, 0, 96)
 for name, ink in (("logo.svg", INK), ("logo-dark.svg", INK_DARK)):
     (HERE / name).write_text(svg(r(w), 96, f'{m}\n<path d="{word}" fill="{ink}"/>'))

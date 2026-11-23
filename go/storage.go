@@ -22,7 +22,7 @@ const defaultUploadMax = 100 << 20
 var sizeRE = regexp.MustCompile(`(?i)^([0-9]+(?:\.[0-9]+)?) *(|b|bytes?|kb|mb|gb|tb)$`)
 
 // parseSize: a size as the settings file writes it: bytes, or a number with
-// KB, MB, GB or TB (1024 apart, as Zone's caps have always counted: 100 MB is
+// KB, MB, GB or TB (1024 apart, as Zonewiki's caps have always counted: 100 MB is
 // 100 × 1024 × 1024 bytes); "1.5GB" too. At least 1 byte.
 func parseSize(s string) (int64, error) {
 	m := sizeRE.FindStringSubmatch(strings.TrimSpace(s))
@@ -69,7 +69,7 @@ func (s *Settings) uploadMax() int64 {
 }
 
 // used: what the wiki holds, in bytes, as storage-max counts it: every
-// file in the data directory but .git/ and Zone's own folder (.zone/: the
+// file in the data directory but .git/ and Zonewiki's own folder (.zone/: the
 // settings, the session key, the search's cache), which the user doesn't
 // control. Walked only when a write asks (checkRoom), and then at most
 // once a minute (a walk takes milliseconds: 20,000 files in 10 ms); a write
@@ -142,7 +142,7 @@ func walkUsage() int64 {
 // What adds nothing (an upload replacing a bigger file) always fits. A
 // figure that says full is walked again first (at most every usageRecheck),
 // so a file deleted on disk counts within seconds; one deleted through
-// Zone at once (forgetUsage).
+// Zonewiki at once (forgetUsage).
 func checkRoom(n int64) error {
 	max := settings().StorageMax
 	if max == 0 || n <= 0 {

@@ -35,7 +35,7 @@ def test_the_semantic_layer_takes_nothing_from_the_repo():
 
 
 def test_base_images_and_ci_actions_are_pinned_by_hash():
-    # A tag can be moved to other content: what builds and publishes Zone
+    # A tag can be moved to other content: what builds and publishes Zonewiki
     # names the exact image (its digest) and the exact commit of an action.
     bases = dict(re.findall(r"^ARG (UBUNTU)=(\S+)", CONTAINERFILE, re.M))
     froms = re.findall(r"^FROM (\S+)", CONTAINERFILE + TOOLS, re.M)
@@ -57,7 +57,7 @@ def test_base_images_and_ci_actions_are_pinned_by_hash():
 
 
 def test_codeql_is_told_of_checks_that_exist():
-    """The functions .github/codeql/extensions/ calls Zone's checks are in
+    """The functions .github/codeql/extensions/ calls Zonewiki's checks are in
     the code under those names: CodeQL says nothing of a row that matches
     no function, it only reports again what the check had settled. And the
     workflow reads the config that leaves the tests out."""
@@ -104,7 +104,7 @@ def test_the_binary_is_built_with_zones_own_files():
 
 
 def test_the_root_module_is_there_for_go_mod_download():
-    # go/go.mod takes the module of Zone's own files from ../ (replace): both
+    # go/go.mod takes the module of Zonewiki's own files from ../ (replace): both
     # images fetch the modules with the root's go.mod beside go/.
     assert "require zonefiles v0.0.0\n\nreplace zonefiles => ../\n" in (REPO / "go" / "go.mod").read_text(encoding="utf-8")
     assert re.search(r"^module zonefiles$", (REPO / "go.mod").read_text(encoding="utf-8"), re.M)
@@ -150,7 +150,7 @@ def test_mermaids_notices_are_for_the_vendored_bundle():
     notices = (folder / "THIRD_PARTY_LICENSES").read_text(encoding="utf-8")
     assert hashlib.sha256((folder / "mermaid.min.js").read_bytes()).hexdigest() in notices
     # elkjs is the one copyleft package in the bundle: its GPL option is what lets
-    # Zone ship it under the AGPL, and both licenses ask for a way to get the source.
+    # Zonewiki ship it under the AGPL, and both licenses ask for a way to get the source.
     assert "License: EPL-2.0 OR GPL-3.0-or-later" in notices
     assert "https://github.com/kieler/elkjs" in notices
     assert "GNU GENERAL PUBLIC LICENSE" in (folder / "COPYING.GPL-3.0").read_text(encoding="utf-8")
@@ -169,7 +169,7 @@ def test_the_binary_is_zonewiki():
 def test_the_prebuilt_image_stays_on_localhost_until_opened():
     # compose.yaml is the manual's first way into a container, on a
     # laptop too: its port is loopback's, as compose.build.yaml's, until .env says
-    # ZONE_BIND=0.0.0.0, and Zone is told the same address (First run asks
+    # ZONE_BIND=0.0.0.0, and Zonewiki is told the same address (First run asks
     # for a login once it is on the network). It pulls, never builds.
     compose = (REPO / "compose.yaml").read_text(encoding="utf-8")
     body = "\n".join(l for l in compose.splitlines() if not l.lstrip().startswith("#"))

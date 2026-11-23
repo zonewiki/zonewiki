@@ -110,7 +110,7 @@ func TestIndexCacheFollowsTheUsers(t *testing.T) {
 // Edits, deletions and new pages and tasks, round after round: every
 // viewer's index answers as one built afresh over what they may see, in the
 // same order, whether the cache kept its base and corrected it or built it
-// again. With the base in a file, Zone starts again now and then, and finds
+// again. With the base in a file, Zonewiki starts again now and then, and finds
 // it there.
 func TestIndexCacheStaysAsIfBuiltAfresh(t *testing.T) {
 	for _, file := range []string{"", "test.idx"} {
@@ -166,7 +166,7 @@ func indexCacheStaysAsIfBuiltAfresh(t *testing.T, file string) {
 	rebuilds, corrected, starts := 0, 0, 0
 	var lastBase *docIndex
 	for round := 0; round < 60; round++ {
-		if file != "" && round%7 == 3 { // Zone starts again
+		if file != "" && round%7 == 3 { // Zonewiki starts again
 			c, lastBase = &indexCache{file: file}, nil
 			starts++
 		}
@@ -285,7 +285,7 @@ func TestStartFindsTheIndexFile(t *testing.T) {
 	}
 	docs = inOrder
 
-	docs[5] = doc("p5", "apple", "w3", "w3") // changed while Zone was down
+	docs[5] = doc("p5", "apple", "w3", "w3") // changed while Zonewiki was down
 	asked = 0
 	c := &indexCache{file: "pages.idx"}
 	got = search(c)
@@ -536,7 +536,7 @@ func restartSearch() {
 // A start makes the docs from the index files' metas, not from the pages:
 // its first search reads no page that hasn't changed since (a page with
 // [[task:…]] is read, its doc depends on the tasks), and answers as an index
-// built anew. A page changed while Zone was down is read, and only it.
+// built anew. A page changed while Zonewiki was down is read, and only it.
 func TestStartReadsNoPages(t *testing.T) {
 	pages := map[string]string{
 		"tasky": "# Tasky\n\nSee [[task:a1b2c3]] about apples.\n",
@@ -728,9 +728,9 @@ func TestAGroupsPagesAreInItsMembersIndexAlone(t *testing.T) {
 	if hits := alice.search("ocelotharp", 10); len(hits) != 3 {
 		t.Errorf("alice's search for the group's word: %d hits, want her groups' three", len(hits))
 	}
-	// Zone itself has every doc.
+	// Zonewiki itself has every doc.
 	if all := c.get(nil, docs); all.count() != len(docs) {
-		t.Errorf("Zone's own index has %d docs", all.count())
+		t.Errorf("Zonewiki's own index has %d docs", all.count())
 	}
 }
 

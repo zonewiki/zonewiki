@@ -31,7 +31,7 @@ def test_print_opens_the_print_dialog_named_after_the_page(page, wiki):
     page.locator(".page-menu-btn").click()
     page.get_by_role("menuitem", name="Print…").click()
     page.wait_for_function("window.printedAs !== undefined")
-    assert page.evaluate("window.printedAs") == "Garden plan"     # the file's name, without "— Zone"
+    assert page.evaluate("window.printedAs") == "Garden plan"     # the file's name, without "— Zonewiki"
     page.evaluate("window.dispatchEvent(new Event('afterprint'))")
     assert page.title().startswith("Garden plan — ")
 

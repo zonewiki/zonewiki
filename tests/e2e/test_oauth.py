@@ -1,5 +1,5 @@
 """An assistant connects through OAuth, in a browser (docs/spec/mcp.md,
-Connecting with OAuth): the page policy lets a form lead only to Zone
+Connecting with OAuth): the page policy lets a form lead only to Zonewiki
 itself, so Allow answers with a page that sends the browser on to the
 client. These tests hold that it gets there in Chromium."""
 

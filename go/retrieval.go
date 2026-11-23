@@ -97,7 +97,7 @@ func same(text string) string {
 }
 
 // taskRecord: a task as a search doc keeps it: all of it but what is long
-// (its description, comments, history, and keys Zone doesn't know), owner's.
+// (its description, comments, history, and keys Zonewiki doesn't know), owner's.
 // t is only read (it may be the store's own: taskfiles.Look).
 func taskRecord(t *Task, owner string) *Task {
 	r := *t
@@ -532,7 +532,7 @@ func tasksMtimes() string {
 			fmt.Fprintf(&b, "%s\x00-\x00", p)
 		}
 	}
-	// Zone's own writes by their count too: two within one tick of the file
+	// Zonewiki's own writes by their count too: two within one tick of the file
 	// system's clock are two.
 	var every []taskfiles.Place
 	for _, o := range taskFiles.EveryOwner() {
@@ -560,7 +560,7 @@ type taskDocFile struct {
 // owner's (searches keep those their user sees: canSeeTask). Kept file by
 // file: when a task file changes, that file's docs are made anew (from what
 // the store has parsed, without a copy of the tasks: taskfiles.Look), and
-// every other file's stay, unread. An archive's docs are also kept in Zone's
+// every other file's stay, unread. An archive's docs are also kept in Zonewiki's
 // folder (archiveDocs), so a start doesn't read the wiki's closed tasks of
 // years to know them.
 func taskSearchDocs() []*SearchDoc {
@@ -667,7 +667,7 @@ func newTaskDoc(rec *Task, info *taskDocInfo, key textsearch.DocKey) *SearchDoc 
 	return &SearchDoc{Slug: taskfiles.DirName, Title: "[Task] " + title, Task: rec, tk: info, Tags: lowTags, key: key}
 }
 
-// An archive's docs in Zone's folder (.zone/index/tasks/<hash>.gob): the
+// An archive's docs in Zonewiki's folder (.zone/index/tasks/<hash>.gob): the
 // records of its tasks with their keys, as they were made from the file
 // with that stamp. An archive rarely changes and a wiki has years of them:
 // with these a start, and a change elsewhere, don't read them. Whose the
@@ -991,7 +991,7 @@ func usersKey() string {
 	return "users:" + strings.Join(sortedKeys(users), ",")
 }
 
-// get: the index rq searches (nil: Zone itself, over everything): the base,
+// get: the index rq searches (nil: Zonewiki itself, over everything): the base,
 // and when docs changed since it was built or the viewer sees places that
 // aren't everyone's, a view of it with those. Nothing is kept of a view.
 func (c *indexCache) get(rq *Req, docs []*SearchDoc) *docIndex {
@@ -1297,7 +1297,7 @@ var (
 	chunkIndexCache  = indexCache{file: "sections.idx"}
 )
 
-// searchIndex: the index rq searches (nil: Zone itself, over everything).
+// searchIndex: the index rq searches (nil: Zonewiki itself, over everything).
 func searchIndex(rq *Req) *docIndex {
 	return searchIndexCache.get(rq, append(pageSearchDocs(rq), taskSearchDocs()...))
 }
@@ -1591,7 +1591,7 @@ func bestSections(rq *Req, q *textsearch.Query, slugs map[string]bool) map[strin
 	return best
 }
 
-// hiddenDoc: a search result to leave out for rq (nil: Zone, which sees
+// hiddenDoc: a search result to leave out for rq (nil: Zonewiki, which sees
 // all): another user's private task (canSeeTask), a page hiddenPage hides.
 func hiddenDoc(rq *Req, d *SearchDoc) bool {
 	if d.isTask() {
@@ -1880,7 +1880,7 @@ func inFolder(slug, folder string) bool {
 // retrieve: the sections and tasks most relevant to the query, best first.
 // The query syntax applies. With under, only sections of pages in that
 // folder, with quicknote only of notes; either way no tasks. Only
-// pages rq may see (nil: Zone itself, which sees all).
+// pages rq may see (nil: Zonewiki itself, which sees all).
 func retrieve(rq *Req, raw string, limit int, under string, quicknote bool) []*SearchDoc {
 	q := textsearch.ParseQuery(raw)
 	if strings.TrimSpace(q.RankingText()) == "" {

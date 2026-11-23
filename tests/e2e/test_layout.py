@@ -121,7 +121,7 @@ def test_version_bottom_left_only_beside_the_column(new_page, wiki):
     wide.goto("/page/index")
     build = wide.locator(".zone-build")
     expect(build).to_be_visible()
-    expect(build).to_have_text(re.compile(r"^Zone \d+\.\d+\.\d+"))
+    expect(build).to_have_text(re.compile(r"^Zonewiki \d+\.\d+\.\d+"))
     box, col = box_of(build), box_of(wide.locator("main"))
     assert box["x"] < 20 and box["y"] + box["height"] > DESKTOP["height"] - 20, "bottom left"
     assert box["x"] + box["width"] < col["x"] + 40, "left of the text column"

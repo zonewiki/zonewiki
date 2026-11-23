@@ -5,21 +5,21 @@ What each file and folder of the repository is for.
 
 ```
 /
-├── AGENTS.md               # How to work on Zone; the index of the spec
-├── README.md               # For people who find the repo: what Zone is, features, quick start
+├── AGENTS.md               # How to work on Zonewiki; the index of the spec
+├── README.md               # For people who find the repo: what Zonewiki is, features, quick start
 ├── CONTRIBUTING.md         # Bug reports, feature requests, how a change gets in (points to AGENTS.md)
 ├── SECURITY.md             # How to report a vulnerability (privately, GitHub's advisories), what counts
 ├── LICENSE                 # AGPL-3.0-or-later
 ├── THIRD_PARTY_LICENSES    # Licenses of Go, the Go modules and the embedding model (the vendored libraries' are next to them)
-├── zonefiles.go            # Package zonefiles: Zone's own files built into the binary (go:embed): public/, README.md, the manual, the spec, the screenshots, the licenses
+├── zonefiles.go            # Package zonefiles: Zonewiki's own files built into the binary (go:embed): public/, README.md, the manual, the spec, the screenshots, the licenses
 ├── go.mod                  # Module zonefiles, the root's: go:embed reaches only below its package's folder, so go/go.mod takes it from ../ (replace)
 ├── docs/manual/            # The manual, for users (see Manual in AGENTS.md); /help shows it
 ├── docs/spec/              # The feature spec, one file per area (see Spec in AGENTS.md)
 ├── docs/structure.md       # This file
 ├── docs/licenses/mermaid_notices.py  # Writes public/vendor/mermaid/THIRD_PARTY_LICENSES from the bundle's source map
 ├── docs/screenshots/       # The README's and the manual's screenshots + make_screenshots.py (./run.sh screenshots)
-├── docs/logo/              # Zone's logo: the mark (public/favicon.svg's) with "Zone" outlined in Source Serif 4, light and dark, the mark alone, GitHub's social preview (1280x640); make_logo.py writes the SVGs
-├── Containerfile           # The image: a Go build stage (Zone's own files built in), onnxruntime + the model (opt-in), an Ubuntu 26.04 LTS runtime with the binary and the licenses
+├── docs/logo/              # Zonewiki's logo: the mark (public/favicon.svg's) with "Zonewiki" outlined in Source Serif 4, light and dark, the mark alone, GitHub's social preview (1280x640); make_logo.py writes the SVGs
+├── Containerfile           # The image: a Go build stage (Zonewiki's own files built in), onnxruntime + the model (opt-in), an Ubuntu 26.04 LTS runtime with the binary and the licenses
 ├── compose.yaml            # Runs the prebuilt ghcr.io image, no checkout or build; run.sh drives it beside it alone (see docs/spec/deployment.md)
 ├── compose.build.yaml      # Builds the image from the checkout and runs it (run.sh drives it in a checkout)
 ├── compose.podman.yaml     # Rootless podman only: userns keep-id (run.sh adds it to either)
@@ -35,15 +35,15 @@ What each file and folder of the repository is for.
 ├── .forgejo/workflows/ci.yml  # Forgejo Actions: checks (run.sh test, e2e, leaks), the bench (run.sh bench), search's floor (run.sh retrieval), build + push the image
 ├── .github/workflows/ci.yml   # GitHub Actions: the same checks, the image for amd64 + arm64 to ghcr.io, a v* tag's release binaries
 ├── .github/workflows/codeql.yml  # GitHub's code scanning (CodeQL): Go, the browser code, scripts and workflows
-├── .github/codeql/            # What CodeQL scans (codeql-config.yml: not tests/) and Zone's own checks told to it (extensions/zone-go/models.yml)
+├── .github/codeql/            # What CodeQL scans (codeql-config.yml: not tests/) and Zonewiki's own checks told to it (extensions/zone-go/models.yml)
 ├── .forgejo/issue_template/   # Issue templates: bug.md, feature.md
 ├── .github/ISSUE_TEMPLATE/    # The same two for GitHub, and config.yml (a security problem goes to a private report)
-├── go/                     # The server: package main, a file per area; pure code without Zone's state in go/internal/
+├── go/                     # The server: package main, a file per area; pure code without Zonewiki's state in go/internal/
 │   ├── go.mod, go.sum      # Go modules, exact versions (goldmark, x/text, onnxruntime_go), and zonefiles from ../
 │   ├── server.go           # main: flags, start-up, the routes' mux, the request checks around them; zonewiki eval, zonewiki health, zonewiki manual, zonewiki licenses, zonewiki user, zonewiki group, zonewiki config
 │   ├── login.go            # The login gate's routes: /login, /logout
 │   ├── static.go           # public/ served as it is (gzipped, kept by the browser), from the folder or the binary's copy; a file sent with its type
-│   ├── files.go            # Zone's own files: public/ and the docs from a folder on disk (--public, --docs, found from the binary when it is the user's own: ownfolder_*.go) or the binary's copies (zonefiles); zonewiki licenses
+│   ├── files.go            # Zonewiki's own files: public/ and the docs from a folder on disk (--public, --docs, found from the binary when it is the user's own: ownfolder_*.go) or the binary's copies (zonefiles); zonewiki licenses
 │   ├── uploads.go          # Uploads: _assets/ served (a private page's and a group's from their folders, a task's from _tasks/files/<id>/), POST /api/upload
 │   ├── config.go           # What is fixed for the process, from the environment (read once into cfg)
 │   ├── configfile.go       # The settings file .zone/config: its keys, Settings (settings(), reloaded when the file changes), the line edits
@@ -71,7 +71,7 @@ What each file and folder of the repository is for.
 │   ├── refusal.go          # What an operation refuses with (refusalError: a kind and a message), for pages and tasks alike; each door answers it its way
 │   ├── views.go            # The page shell, breadcrumb, modules, menus, side columns; templates/ (embedded)
 │   ├── pages.go            # The wiki's files: slugs, listing, sharing mode, link graph, renames, the pages that embed a list
-│   ├── markdown.go         # Markdown → HTML on goldmark, with Zone's rules (checkboxes, callouts, heading ids …)
+│   ├── markdown.go         # Markdown → HTML on goldmark, with Zonewiki's rules (checkboxes, callouts, heading ids …)
 │   ├── math.go             # $…$ and $$…$$ math kept as TeX for KaTeX (a goldmark extension)
 │   ├── sections.go         # Headings and sections as the parser finds them, for the ✎s, the editor, the MCP tools and search (pageHeadings, pageSections, findSection)
 │   ├── checkboxes.go       # Checkboxes as the parser finds them, so a tick goes to the box the page shows (taskItems, taskLineKeys, toggleNthCheckbox)
@@ -84,11 +84,11 @@ What each file and folder of the repository is for.
 │   ├── merge.go            # Several editors on one page: drafts' authors, the bases, the three-way merge, texts left in conflict
 │   ├── tasks.go            # Task writes (create, change, comment, tag, move in the manual order, delete; the tasks an undo from Changes puts back), as functions the routes and the MCP tools share
 │   ├── tasklists.go        # Task lists: the lists a user sees (taskLists, refs), their pins, My tasks (the home view's rule, mineFilter, and its settings), and the list operations (make, rename, delete, share, pin, settings)
-│   ├── tasksetup.go        # What a start does over the task files (filed by month and list, Zone's format, a shared task in no list into #general), and the mark that lets later starts skip it
+│   ├── tasksetup.go        # What a start does over the task files (filed by month and list, Zonewiki's format, a shared task in no list into #general), and the mark that lets later starts skip it
 │   ├── wikiformat.go       # The format of the wiki's files, .zone-format at its root (in git): read at start, a newer one refused, written into a new wiki
 │   ├── tasksapi.go         # The /api/tasks routes
 │   ├── tasksembed.go       # The [[tasks:]] embed: its HTML, its settings dialog, the counts the Tasks links show
-│   ├── tasklogic.go        # What Zone does with tasks beyond keeping them: a series' next occurrence, completing, history, comments, backlinks, [[task:…]] references; taskFiles, the store, wired to the wiki here
+│   ├── tasklogic.go        # What Zonewiki does with tasks beyond keeping them: a series' next occurrence, completing, history, comments, backlinks, [[task:…]] references; taskFiles, the store, wired to the wiki here
 │   ├── internal/taskfiles/ # Package taskfiles, no globals: the tasks on disk: _tasks/ files (users' private ones in private/<user>/_tasks/, a group's in groups/<group>/_tasks/: owner @<group>) read and written under one lock, filed by owner and month (parsed once, and a file a write didn't touch skipped), each user reading and writing the owners they see (`Owners`), and the lists' registries beside them (lists.json: lists.go); a Store is handed the wiki's folder, its users, the clock, who may write and how a write is committed
 │   ├── internal/asker/     # Package asker: who is asking (Asker): a user, or an assistant's connection given less; what every permission question is asked for (`asker` in package main)
 │   ├── internal/atomicfile/ # Package atomicfile: a file written so that no reader sees half of it (pages, task files)
@@ -97,7 +97,7 @@ What each file and folder of the repository is for.
 │   ├── tasksyntax.go       # The page syntax of tasks: [[tasks: …]] params, [[task:…]], tag rules, date words
 │   ├── internal/taskmodel/ # Package taskmodel, no globals: a task (Task): its fields, read leniently from a file, written in a fixed key order; tags as the filter matches them; a series' dates (recurrence.go). The API's form of a task (with "private") is the server's (apiTask)
 │   ├── internal/jsonobj/   # Package jsonobj: JSON objects read a member at a time (jsonObj in main): task requests, MCP messages and arguments, task files
-│   ├── internal/gitrepo/   # Package gitrepo: git run in a repository, a process a call, under a time limit and a context, pathspecs literal, no detached maintenance and none inside a commit (Zone packs in the background: `go/gitstore.go`)
+│   ├── internal/gitrepo/   # Package gitrepo: git run in a repository, a process a call, under a time limit and a context, pathspecs literal, no detached maintenance and none inside a commit (Zonewiki packs in the background: `go/gitstore.go`)
 │   ├── internal/textsearch/  # Package textsearch, no globals: BM25 ranking (stemming, fuzzy, excerpts), the query syntax, rank fusion, difflib's ratio (search.go, difflib.go); the index in a file, mapped (indexfile.go, mmap_unix.go, mmap_other.go)
 │   ├── internal/mdtext/    # Package mdtext, no globals: markdown source text (frontmatter, fences, code and math masking, headings and anchors, wikilink syntax, the splice of a section's text, checkboxes, slugs)
 │   ├── internal/settingsfile/  # Package settingsfile: the settings file's format ([user …] and [group …] sections; the strict parser, line edits keeping comments, the owner-only write); what its keys mean stays in configfile.go
@@ -108,7 +108,7 @@ What each file and folder of the repository is for.
 │   ├── mcp.go              # MCP protocol (JSON-RPC) for /mcp; mcp_tools.json the tool definitions
 │   ├── mcpfiles.go         # Uploads for assistants: read_file, upload_file, and the file routes taking the MCP token
 │   ├── mcptools.go         # The MCP tools that read, and the table of all tools with their dispatch (mcpToolTable); mcpwrite.go and mcpreplace.go those that write pages, mcptasks.go the task tools, mcpguides.go the guides, mcpargs.go what they share
-│   ├── manual.go           # Zone's own docs (the manual, README, docs/spec) searched by section, for the MCP tool zone_help
+│   ├── manual.go           # Zonewiki's own docs (the manual, README, docs/spec) searched by section, for the MCP tool zone_help
 │   ├── help.go             # Help: the manual and the spec in the browser (/help), and zonewiki manual DIR (them as HTML for a website)
 │   ├── eval.go             # zonewiki eval: measures search_wiki's retrieval on your wiki against your questions (./run.sh eval)
 │   ├── embedtest.go        # The tests' fake embedder (--semantic-test)
@@ -118,7 +118,7 @@ What each file and folder of the repository is for.
     ├── style.css           # The styling: the look's tokens (:root), pages, the editor, search, dialogs, phones
     ├── tasks.css           # The task app's styling, loaded after style.css
     ├── zonewiki.js             # The entry ES module every page loads; imports the modules below
-    ├── js/                 # ES modules: forms (a submit only from a form where Zone puts one), chrome, git, util, completion, search, actions, pagemenu, listsrow,
+    ├── js/                 # ES modules: forms (a submit only from a form where Zonewiki puts one), chrome, git, util, completion, search, actions, pagemenu, listsrow,
     │                       #   shortcuts, mdedit, mdtext (the text functions shared with the server), editor, tasklist (its Task list button), page, figures, fold, present, copyline (Copy buttons), assistant (a connection's Change… dialog), namepick (users and groups as pills); the task app's parts
     │                       #   taskdata, taskview, taskorder, tasktabs, taskchips, taskrender, taskmodal, taskselect, taskmenu, taskkeys, taskdnd, tasktouch, tasksettings; tasktexts, taskutil, datepicker (see Client code in `docs/spec/rendering.md`)
     ├── tasks-core.js       # Pure task logic (no DOM), an ES module — shared by tasks.js, the editor and Node-run tests
@@ -129,5 +129,5 @@ What each file and folder of the repository is for.
     ├── vendor/highlight/   # highlight.js 11.9.0 + github/github-dark themes (vendored, no CDN)
     ├── vendor/gemoji/      # GitHub's emoji names (gemoji 4.1.0, MIT) for `:name` completion
     ├── vendor/katex/       # KaTeX 0.19.0 (MIT): katex.min.js, katex.min.css, fonts/*.woff2
-    └── vendor/mermaid/     # Mermaid 12.3.0 (MIT): mermaid.min.js, THIRD_PARTY_LICENSES (what it bundles), COPYING.GPL-3.0 (elkjs's license as Zone takes it)
+    └── vendor/mermaid/     # Mermaid 12.3.0 (MIT): mermaid.min.js, THIRD_PARTY_LICENSES (what it bundles), COPYING.GPL-3.0 (elkjs's license as Zonewiki takes it)
 ```

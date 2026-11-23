@@ -1,7 +1,7 @@
 """Tests for the MCP server: the /mcp endpoint with its auth, the tool
 definitions, and the tools (search_wiki, search_tasks, read_page,
 list_pages, grep_wiki, check_links, the writing tools). The protocol's
-handling and the limits Zone cuts long answers at have Go tests
+handling and the limits Zonewiki cuts long answers at have Go tests
 (go/mcp_test.go).
 """
 
@@ -547,7 +547,7 @@ class TestBaseUrl:
             resp.get_json()["result"]["content"][0]["text"]
 
     def test_links_are_https_behind_a_proxy_that_says_so(self, client, pages, monkeypatch):
-        # A hosted wiki: Caddy ends TLS and reaches Zone over a socket, saying
+        # A hosted wiki: Caddy ends TLS and reaches Zonewiki over a socket, saying
         # X-Forwarded-Proto: https. The links were http:// there until 2026-11.
         monkeypatch.setattr(settings, "BASE_URL", "")
         monkeypatch.setattr(settings, "HOSTS", frozenset({"wiki.example.org"}))
@@ -670,7 +670,7 @@ class TestGuide:
 
     def test_without_a_guide_a_nudge_to_start_one(self, client, wiki_dir):
         text = self.instructions(client)
-        assert text.startswith("Zone is the user's personal wiki")
+        assert text.startswith("Zonewiki is the user's personal wiki")
         assert text.endswith("it is shown to you at the start of every session.")
         assert "This wiki has no guide yet" in text
 
@@ -1826,7 +1826,7 @@ class TestCreateTask:
         assert "keep task" in text and "repeats" not in text
 
     def test_date_words_use_zones_today(self, client, wiki_dir):
-        # "tomorrow" is resolved by Zone, so a client without the date (or
+        # "tomorrow" is resolved by Zonewiki, so a client without the date (or
         # with a wrong one) still gets it right.
         today = date.today()
         text, err = call(client, "create_task", title="Call Bob", due="tomorrow", start="today")
@@ -2206,7 +2206,7 @@ class TestCommentAndDeleteTask:
             assert "Unknown tool" in json.dumps(r)
 
 
-# ── Zone's documentation ─────────────────────────────────────────────────────
+# ── Zonewiki's documentation ─────────────────────────────────────────────────────
 
 class TestZoneHelp:
     @pytest.fixture
@@ -2214,7 +2214,7 @@ class TestZoneHelp:
         """A docs root like the checkout's: README.md and docs/spec/."""
         spec = tmp_path / "docs" / "spec"
         spec.mkdir(parents=True)
-        (tmp_path / "README.md").write_text("# Zone\n\nA wiki.\n\n## Quick start\n\nRun ./run.sh.\n")
+        (tmp_path / "README.md").write_text("# Zonewiki\n\nA wiki.\n\n## Quick start\n\nRun ./run.sh.\n")
         (spec / "tasks.md").write_text(
             "# Tasks\n\n## Views\n\nOpen, Plan and Focus.\n\n### Labels\n\n"
             "`labels=Catalogue,Plan,Shopping` gives the tabs other names.\n\n"
@@ -2231,7 +2231,7 @@ class TestZoneHelp:
         text, err = call(client, "zone_help", query="tab labels")
         assert not err
         assert text.startswith("[1] Tasks › Labels\ntopic: tasks\nheading: Labels\n\n`labels=Catalogue")
-        assert "Testing" not in text  # how Zone is tested is left out
+        assert "Testing" not in text  # how Zonewiki is tested is left out
         assert "zone_help with its topic and heading" in text
 
     def test_query_limit(self, client, docs):
@@ -2240,7 +2240,7 @@ class TestZoneHelp:
 
     def test_nothing_matches(self, client, docs):
         text, err = call(client, "zone_help", query="xylophone")
-        assert not err and text.startswith("Nothing in Zone's documentation matches")
+        assert not err and text.startswith("Nothing in Zonewiki's documentation matches")
 
     def test_topic_and_section(self, client, docs):
         text, err = call(client, "zone_help", topic="tasks")
@@ -2262,7 +2262,7 @@ class TestZoneHelp:
     def test_list_of_topics(self, client, docs):
         text, err = call(client, "zone_help")
         assert not err
-        assert "\nreadme: Zone\n  Quick start\n" in text
+        assert "\nreadme: Zonewiki\n  Quick start\n" in text
         assert "\ntasks: Tasks\n  Views\n    Labels\n  Dates" in text
 
     def test_without_docs(self, client, monkeypatch):

@@ -1,4 +1,4 @@
-// Zone's manual (docs/manual/) in the browser: /help, a page of it at
+// Zonewiki's manual (docs/manual/) in the browser: /help, a page of it at
 // /help/<name>, the spec beside it at /help/spec/<name> (the manual links
 // there for the full rules), and the screenshots both show. The same
 // rendering writes them out as static HTML for a website (zonewiki manual
@@ -112,7 +112,7 @@ func helpText(d helpDoc) (string, error) {
 		return readDoc(d.path)
 	}
 	var b strings.Builder
-	b.WriteString("# Zone's spec\n\nHow each feature of Zone behaves, in detail, written for whoever builds Zone.\n" +
+	b.WriteString("# Zonewiki's spec\n\nHow each feature of Zonewiki behaves, in detail, written for whoever builds Zonewiki.\n" +
 		"The [manual](../manual/README.md) says how to use it.\n\n")
 	for _, s := range specDocs() {
 		text, err := readDoc(s.path)
@@ -196,7 +196,7 @@ type helpView struct {
 	BreadcrumbHTML template.HTML
 	RailTocHTML    template.HTML
 	ArticleHTML    template.HTML
-	Missing        bool   // Zone's docs aren't installed with this server
+	Missing        bool   // Zonewiki's docs aren't installed with this server
 	Prev, Next     *crumb // the manual's pages before and after, in reading order
 }
 
@@ -277,7 +277,7 @@ func manualNeighbours(name string, href func(string) string) (prev, next *crumb)
 // for a website to put in its own page around it.
 const manualUsage = `Usage: zonewiki manual [--docs FOLDER] DIR
 
-Writes Zone's manual and spec to DIR as HTML fragments, for a website:
+Writes Zonewiki's manual and spec to DIR as HTML fragments, for a website:
 DIR/index.html (the manual's contents), DIR/<page>.html, DIR/spec/index.html,
 DIR/spec/<name>.html, the screenshots in DIR/screenshots/, and DIR/pages.json,
 which lists every fragment with its title, the manual's pages in reading

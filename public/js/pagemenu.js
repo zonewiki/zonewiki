@@ -12,7 +12,7 @@ closeOnBackdropClick(document.getElementById('page-delete-dialog'));
 // Print… (the page's ⋯ menu): the browser's print dialog, which prints the
 // page, or with "Save as PDF" makes a file of it, as the print styles lay it
 // out (style.css, Print). The
-// file is named after the page (the tab's title has "— Zone" after it), and
+// file is named after the page (the tab's title has "— Zonewiki" after it), and
 // on a dark screen the diagrams are drawn again for paper first.
 async function printPage() {
   const tabTitle = document.title;

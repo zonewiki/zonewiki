@@ -1,8 +1,8 @@
-"""The settings the tests give Zone (tests/goserver.py): the deployment's
+"""The settings the tests give Zonewiki (tests/goserver.py): the deployment's
 as the server's environment and flags, the wiki's in its settings file
 (.zone/config). A test patches them here (monkeypatch.setattr(settings,
 "PASSWORD", "pw")); the server restarts with them before its next
-request. A few values are typed as Zone parses them (HOSTS a set of names,
+request. A few values are typed as Zonewiki parses them (HOSTS a set of names,
 noshare as NOSHARE_TAGS and NOSHARE_FOLDERS); passwords and tokens plain,
 goserver.py writes their hashes."""
 
@@ -35,7 +35,7 @@ GIT_REMOTE = ""
 ZONE_ALLOW_REMOTE = True
 # No login on purpose (no-login = yes in the settings file), as the tests
 # reach the server like another device would (ZONE_ALLOW_REMOTE): without
-# it, and without a password or users, Zone shows its first-run page.
+# it, and without a password or users, Zonewiki shows its first-run page.
 NO_LOGIN = True
 HOSTS: frozenset[str] = frozenset()
 NOSHARE_TAGS: frozenset[str] = frozenset({"noshare"})
@@ -44,14 +44,14 @@ LOCALE = ""
 DATE_FORMAT = ""
 # Whether the server finds git on its PATH.
 GIT_ENABLED = shutil.which("git") is not None
-# Zone's docs (README.md, docs/spec/) for zone_help; None: none there.
+# Zonewiki's docs (README.md, docs/spec/) for zone_help; None: none there.
 DOCS: Path | None = REPO
 # The semantic index, a tests.semantic.FakeIndex; None: semantic search off.
 SEMANTIC = None
 # Extra environment (ZONE_SEMANTIC_SEARCH …).
 ENV: dict[str, str] = {}
 
-# The environment of the tests' own git calls: as Zone's, no detached
+# The environment of the tests' own git calls: as Zonewiki's, no detached
 # maintenance (it would linger as a zombie).
 GIT_ENV = {
     **os.environ,

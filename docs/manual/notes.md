@@ -60,15 +60,15 @@ The dialog asks:
 | **Folder** | Where the page goes. It suggests the folders there are; empty means the top level. With users, your private folder and your groups' folders are offered first. |
 | **Name** | The page's name, filled in with the note's title. |
 | **Keep the date** | Tick it to keep the note's date in front of the name, such as `2026-11-03_kickoff`. Handy for meeting notes. |
-| **Link from** | The page that should link to the new one. Zone fills in the folder's index page, or the home page; empty means no link. |
+| **Link from** | The page that should link to the new one. Zonewiki fills in the folder's index page, or the home page; empty means no link. |
 
-Under the name Zone shows the address the page will have.
+Under the name Zonewiki shows the address the page will have.
 Click **Move**.
 
-If you named a page in **Link from**, that page opens in the editor, and Zone has copied a link to the new page.
+If you named a page in **Link from**, that page opens in the editor, and Zonewiki has copied a link to the new page.
 A hint says "Link copied. Paste it where it belongs on this page."
 Put the cursor where the link should go and paste.
-Zone doesn't change that page by itself: you decide where the link goes.
+Zonewiki doesn't change that page by itself: you decide where the link goes.
 
 Links that pointed to the note now point to the new page.
 The page's history shows the move as "Moved from Notes".
@@ -102,5 +102,5 @@ A heading the page already has is refused: pick another one.
 
 ## Notes and your assistant
 
-An AI assistant connected to Zone can make notes, find them and file them too, the same way.
+An AI assistant connected to Zonewiki can make notes, find them and file them too, the same way.
 See [AI assistants](assistants.md).

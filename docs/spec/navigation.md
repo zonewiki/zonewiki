@@ -1,8 +1,8 @@
 # Navigation, modules and notes
 
-Part of Zone's spec (see `AGENTS.md` for the index).
+Part of Zonewiki's spec (see `AGENTS.md` for the index).
 
-How you get around Zone: the search modal and its page list, Deleted Pages, the modules and the top of every page (the module switcher, the top actions, the phones' tab bar, the Tasks counts, the status badges), sharing mode, notes, keyboard shortcuts and presentation mode.
+How you get around Zonewiki: the search modal and its page list, Deleted Pages, the modules and the top of every page (the module switcher, the top actions, the phones' tab bar, the Tasks counts, the status badges), sharing mode, notes, keyboard shortcuts and presentation mode.
 
 ## Page List
 
@@ -97,13 +97,13 @@ Only available when `cfg.GitEnabled`.
 Navigating to a deleted page's URL directly also shows a restore prompt instead of redirecting to the editor.
 It is in the search modal as "Deleted Pages" (Built-in pages, above).
 
-The list is read from the whole history once after Zone starts (every commit, which takes seconds in a long one), and after that only from what was committed since (`listDeletedPages`; a history rewritten is read anew); the titles, from each page's last version, are asked of git in one call and kept.
+The list is read from the whole history once after Zonewiki starts (every commit, which takes seconds in a long one), and after that only from what was committed since (`listDeletedPages`; a history rewritten is read anew); the titles, from each page's last version, are asked of git in one call and kept.
 
 ---
 
 ## Modules
 
-Zone's modules sit where the eye already goes; there is still no nav bar.
+Zonewiki's modules sit where the eye already goes; there is still no nav bar.
 They are, in this order (`modules` in `go/views.go`):
 
 | Module | Home | Who has it |
@@ -475,7 +475,7 @@ The current one is the last heading scrolled past, as the side TOC marks it; `[`
 
 ### The shortcuts dialog
 
-A `<dialog id="shortcuts-modal">` (`templates/partials/shortcuts.html`), opened with `?` (or **Ctrl/⌘+/**), is a cheat sheet of every key Zone answers:
+A `<dialog id="shortcuts-modal">` (`templates/partials/shortcuts.html`), opened with `?` (or **Ctrl/⌘+/**), is a cheat sheet of every key Zonewiki answers:
 the table above, the presentation's keys, the editor's (Formatting bar and Smart helpers in `docs/spec/editor.md`), the snippets, the task app's and its dialog's (Keyboard shortcuts in `docs/spec/tasks.md`) and the search syntax.
 It lists nothing the code doesn't answer, and leaves out what a wiki doesn't have: without users **g p**, **g g**, the tasks' **a** and **@**; for a viewer the Create group.
 `tests/e2e/test_shortcuts.py` checks that every key the keydown handlers compare with is on a key cap in it.
@@ -483,7 +483,7 @@ It lists nothing the code doesn't answer, and leaves out what a wiki doesn't hav
 Its groups (Anywhere, Go to, Create, Page, Editor, Snippets, Presentation, Tasks: select, Tasks: act, Tasks: view, Tasks: plan, A task's dialog, Search) are short: key caps on the left, a few words on the right.
 They flow into as many columns of 15rem as the screen is wide (CSS `columns`, a group never split), up to 1480px, so on a desktop (1280×720 and up) the whole dialog fits on screen without scrolling.
 Where it doesn't fit (a phone, at most 640px wide: one column), the dialog stays inside the screen and scrolls within itself, its title and **×** staying at the top; Esc and a click on the backdrop close it too.
-At the bottom are Zone's version and build, and the links to Help (the manual), Connect an AI assistant, Change password or Set a login, and Groups:
+At the bottom are Zonewiki's version and build, and the links to Help (the manual), Connect an AI assistant, Change password or Set a login, and Groups:
 these are the menu's pages (The user menu, above).
 
 ---

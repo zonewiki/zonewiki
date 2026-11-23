@@ -1,4 +1,4 @@
-"""How Zone's tasks hold at a team's size (docs/spec/testing.md, The bench):
+"""How Zonewiki's tasks hold at a team's size (docs/spec/testing.md, The bench):
 a generated wiki of 100 users, 40 shared lists, 5,000 open tasks and 25,000
 closed ones, in git, and what a page view, a list, a write and a search cost
 on it, how the repository grows, and what a write waits beside a join of
@@ -239,7 +239,7 @@ def test_reads_beside_writes(team, client):
 def age(root, users, lists, commits):
     """Gives the wiki's repository a history of `commits` changes to 40 files
     of tasks (which its last commit removes: the wiki is as it was), in one
-    pack, and 55 small packs after it: more than Zone leaves beside each
+    pack, and 55 small packs after it: more than Zonewiki leaves beside each
     other (packsMost in package gitrepo), so its next pack is followed by a
     join, which reads all of that history."""
     rng = random.Random(11)
@@ -280,12 +280,12 @@ def age(root, users, lists, commits):
 
 
 def test_a_write_beside_a_join(team, client):
-    """What a write waits while Zone joins the packs of a repository with a
+    """What a write waits while Zonewiki joins the packs of a repository with a
     history (AGED commits; Packing the repository in
     docs/spec/deployment.md): the join reads all of it, for seconds here and
     for minutes after a team's year, and until 2026-11-16 every save of the
     wiki waited for it. One user changes a task again and again; the fiftieth
-    commit starts Zone's pack, the join follows, and each write beside it is
+    commit starts Zonewiki's pack, the join follows, and each write beside it is
     timed."""
     root, users, lists = team
     age(root, users, lists, AGED)
@@ -303,7 +303,7 @@ def test_a_write_beside_a_join(team, client):
         assert resp.status_code == 200
         n = packs()
         if began is None and n > before:
-            began = time.monotonic()         # Zone's pack is there: the join is next
+            began = time.monotonic()         # Zonewiki's pack is there: the join is next
         elif began is not None:
             beside.append(ms)
             if n < before:                   # the packs it stands for are gone
@@ -380,10 +380,10 @@ def test_the_tasks_at_a_teams_size(team, client):
     got["a search after a write (ms)"], resp = timed(search, n=3)
     assert resp.status_code == 200
     got["the repository per 100 writes (MB)"] = (repo_mb(root) - before) / writes * 100
-    # Packed, as Zone packs every 50 commits (Repo.Pack): the versions of a file as differences.
+    # Packed, as Zonewiki packs every 50 commits (Repo.Pack): the versions of a file as differences.
     subprocess.run(["git", "-C", str(root), "repack", "-d", "-l", "-q"], check=True, capture_output=True)
     got["the same, packed (MB)"] = (repo_mb(root) - before) / writes * 100
-    # Joined, as Zone joins its packs after a few of them: the differences computed anew.
+    # Joined, as Zonewiki joins its packs after a few of them: the differences computed anew.
     start = time.perf_counter()
     subprocess.run(join, check=True, capture_output=True)
     got["joining the packs (ms)"] = (time.perf_counter() - start) * 1000
@@ -401,7 +401,7 @@ def test_the_tasks_at_a_teams_size(team, client):
     got["ten tasks tagged at once (ms)"], resp = timed(tag, n=7)
     assert resp.status_code == 200 and len(resp.get_json()) == 10
 
-    # What the Zone process holds after all of that (its resident memory):
+    # What the Zonewiki process holds after all of that (its resident memory):
     # the tasks it keeps parsed and the search index's, not every closed
     # task of the wiki's years.
     status = Path(f"/proc/{client.live.ensure().proc.pid}/status").read_text()
@@ -619,7 +619,7 @@ def long_history(git_wiki_dir):
     def commit(msg, *changes, first=False):
         nonlocal when
         when += 600
-        imp.stdin.write(b"commit %s\nauthor bench <bench@example.org> %d +0000\ncommitter Zone <zone@localhost> %d +0000\n"
+        imp.stdin.write(b"commit %s\nauthor bench <bench@example.org> %d +0000\ncommitter Zonewiki <zonewiki@localhost> %d +0000\n"
                         b"data %d\n%s\n" % (ref, when, when, len(msg), msg.encode()))
         if first:
             imp.stdin.write(b"from %s^0\n" % ref)
@@ -665,8 +665,8 @@ def long_history(git_wiki_dir):
 def test_a_long_history(long_history, client):
     """What a page's history costs after a team's years (HISTORY commits;
     Packing the repository in docs/spec/deployment.md): a page edited
-    throughout, one renamed twice, a link to a page that never was (Zone
-    asks whether it was deleted), the deleted pages; and how long Zone's
+    throughout, one renamed twice, a link to a page that never was (Zonewiki
+    asks whether it was deleted), the deleted pages; and how long Zonewiki's
     start takes to write the commit-graph these ask, in the background."""
     root = long_history
     graph = root / ".git/objects/info/commit-graphs/commit-graph-chain"

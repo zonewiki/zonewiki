@@ -204,7 +204,7 @@ func TestGuessesInADay(t *testing.T) {
 	}
 }
 
-// A redirect goes only to a path of Zone's own (the login's next,
+// A redirect goes only to a path of Zonewiki's own (the login's next,
 // Delete's): not to one a browser reads as another site's, after it drops
 // tabs and line breaks from the address and reads a backslash as a slash.
 func TestIsLocalPath(t *testing.T) {

@@ -1,5 +1,5 @@
 """Shared setup: a fresh temporary wiki for each test (wiki_dir,
-git_wiki_dir) and Zone's server on it (client: tests/goserver.py). The
+git_wiki_dir) and Zonewiki's server on it (client: tests/goserver.py). The
 browser tests (tests/e2e) build on git_wiki_dir too."""
 
 import hashlib
@@ -35,7 +35,7 @@ def wiki_dir(tmp_path, monkeypatch):
 
 @pytest.fixture()
 def git_wiki_dir(wiki_dir, monkeypatch, tmp_path_factory):
-    """wiki_dir as a git repository, as Zone sets one up when it starts."""
+    """wiki_dir as a git repository, as Zonewiki sets one up when it starts."""
     monkeypatch.setattr(settings, "GIT_REMOTE", "")
     monkeypatch.setattr(settings, "GIT_ENABLED", True)
     git_setup(tmp_path_factory)
@@ -43,7 +43,7 @@ def git_wiki_dir(wiki_dir, monkeypatch, tmp_path_factory):
 
 
 def git_setup(tmp_path_factory) -> None:
-    """What Zone does to the wiki when it starts (git init, the first
+    """What Zonewiki does to the wiki when it starts (git init, the first
     commit, the task files): a server started and stopped."""
     from tests.goserver import _flags, _settings
     GoServer(_settings(), tmp_path_factory.mktemp("go") / "setup.log", flags=_flags()).stop()
@@ -86,7 +86,7 @@ def list_page(client, wiki_dir: Path, slug: str, content: str, **kwargs) -> Path
     (view, keep, limit, plan, labels, new) when it was made here, and pinned
     as a pin= in the embed says (pin=1; pin=default: pinned first). A list is no longer
     declared by a page nor pinned by one: pin= in the text means nothing to
-    Zone, it tells this helper what the test wants. Code is skipped."""
+    Zonewiki, it tells this helper what the test wants. Code is skipped."""
     path = write_page(wiki_dir, slug, content)
     kwargs.setdefault("headers", HOST)
     text = re.sub(r"```.*?```|`[^`\n]*`", "", content, flags=re.S)
@@ -130,7 +130,7 @@ def rendered(client, wiki_dir: Path, content: str, slug: str = "render-test") ->
 
 
 def preview(client, text: str) -> str:
-    """Markdown as Zone renders it (the editor's preview: no page around it)."""
+    """Markdown as Zonewiki renders it (the editor's preview: no page around it)."""
     return client.post("/api/preview", data=text.encode("utf-8"), headers=HOST).get_data(as_text=True)
 
 

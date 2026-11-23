@@ -303,7 +303,7 @@ func isTaskFile(fp string) bool {
 	return strings.HasPrefix(fp, taskfiles.DirName+"/") || strings.Contains(fp, "/"+taskfiles.DirName+"/")
 }
 
-func noGit() error { return toolErr("There is no history: git isn't installed where Zone runs.") }
+func noGit() error { return toolErr("There is no history: git isn't installed where Zonewiki runs.") }
 
 func history(args jsonObj, base string, user asker) (string, error) {
 	if !cfg.GitEnabled {
@@ -386,7 +386,7 @@ func history(args jsonObj, base string, user asker) (string, error) {
 // Claude)" for what an assistant wrote through a connection (" (by alice
 // through an assistant)" for one that names none, commitMark.through),
 // "; from https://…" added where the write said where its text is from;
-// nothing for Zone's own.
+// nothing for Zonewiki's own.
 func byAuthor(author string, m commitMark) string {
 	who := strings.TrimSpace(m.through())
 	if author != "" {
@@ -557,7 +557,7 @@ func mcpListsText(user asker) string {
 	return "\n\nTask lists (a task is in one list, its list, not a tag; " + inbox + "):\n" + strings.Join(lines, "\n")
 }
 
-// zoneHelp: Zone's documentation (manual.go), passages for a query, a doc
+// zoneHelp: Zonewiki's documentation (manual.go), passages for a query, a doc
 // or one of its sections, or the list of docs with their headings.
 func zoneHelp(args jsonObj, base string, user asker) (string, error) {
 	var query, topic, heading string
@@ -574,7 +574,7 @@ func zoneHelp(args jsonObj, base string, user asker) (string, error) {
 	topic = strings.TrimSuffix(strings.ToLower(topic), ".md")
 	docs := manualTopics()
 	if len(docs) == 0 {
-		return "", toolErr("Zone's documentation isn't installed with this server.")
+		return "", toolErr("Zonewiki's documentation isn't installed with this server.")
 	}
 	var names []string
 	paths := map[string]string{}
@@ -611,7 +611,7 @@ func zoneHelp(args jsonObj, base string, user asker) (string, error) {
 		}
 		hits := manualFind(query, limit)
 		if len(hits) == 0 {
-			return "Nothing in Zone's documentation matches. Try other words, or leave out query for the list of topics.", nil
+			return "Nothing in Zonewiki's documentation matches. Try other words, or leave out query for the list of topics.", nil
 		}
 		var out []string
 		for i, d := range hits {
@@ -623,7 +623,7 @@ func zoneHelp(args jsonObj, base string, user asker) (string, error) {
 		}
 		return strings.Join(out, "\n\n---\n\n") + "\n\nThe whole section: zone_help with its topic and heading.", nil
 	}
-	out := []string{"Zone's documentation: the README (what Zone is, its features, setup) and the spec, " +
+	out := []string{"Zonewiki's documentation: the README (what Zonewiki is, its features, setup) and the spec, " +
 		"one doc per area. Read one with topic, a section with topic and heading."}
 	for _, d := range docs {
 		text, _ := readDoc(d.path)
@@ -759,8 +759,8 @@ var mcpToolTable = map[string]mcpTool{
 func writeTool(name string) bool { return mcpToolTable[name].writes != toolWritesNothing }
 
 // callMCPTool runs a tool for the request r, as its token's user: links in
-// its answer use base-url (the settings file), else the address the client reached Zone at,
-// https behind a proxy that says so (siteURL, as every other address Zone hands out).
+// its answer use base-url (the settings file), else the address the client reached Zonewiki at,
+// https behind a proxy that says so (siteURL, as every other address Zonewiki hands out).
 func callMCPTool(r *http.Request, name string, args jsonObj) ([]toolContent, error) {
 	base := siteURL(settings().BaseURL, r, "")
 	tool, ok := mcpToolTable[name]

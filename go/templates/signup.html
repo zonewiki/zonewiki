@@ -1,4 +1,4 @@
-{{- /* /signup: ask for an account with a mail address (signup.go). Zone
+{{- /* /signup: ask for an account with a mail address (signup.go). Zonewiki
     mails a link; the account is made on its page (welcome.html). */ -}}
 {{define "body"}}
 <div class="login-wrap">
@@ -10,7 +10,7 @@
   {{- else}}
   <form class="login-form" method="post" action="/signup">
     <h2>Sign up to {{.Shell.AppName}}</h2>
-    <p class="welcome-note">Zone mails you a link: with it you choose your user name and password.{{with .Domains}} Addresses at {{range $i, $d := .}}{{if $i}}, {{end}}{{$d}}{{end}} only.{{end}}</p>
+    <p class="welcome-note">Zonewiki mails you a link: with it you choose your user name and password.{{with .Domains}} Addresses at {{range $i, $d := .}}{{if $i}}, {{end}}{{$d}}{{end}} only.{{end}}</p>
     <input type="email" name="email" placeholder="Mail address" value="{{.Email}}" autocapitalize="none" autocorrect="off" spellcheck="false" autocomplete="email" autofocus required>
     {{- with .Error}}
     <p class="login-error">{{.}}</p>

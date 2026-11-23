@@ -73,7 +73,7 @@ func NextOccurrence(rec *Recurrence, base time.Time, anchored bool, today time.T
 }
 
 // CleanRecurrence: a recurrence from a request or a snapshot; nil when it
-// has no type Zone knows.
+// has no type Zonewiki knows.
 func CleanRecurrence(raw json.RawMessage) *Recurrence {
 	rec, ok := jsonobj.As[jsonobj.Obj](raw)
 	if !ok {

@@ -1,11 +1,11 @@
-# GitHub's code scanning (CodeQL) of Zone's Go, its browser code, its
+# GitHub's code scanning (CodeQL) of Zonewiki's Go, its browser code, its
 # scripts and these workflows: on every push to main and pull request, and
 # once a week for what CodeQL has learned since.
 #
 # A workflow of its own instead of GitHub's default setup, which takes no
 # configuration from the repository: .github/codeql/codeql-config.yml
 # leaves the tests out, and .github/codeql/extensions/ tells CodeQL which
-# of Zone's functions check a path, a redirect or HTML (Code scanning in
+# of Zonewiki's functions check a path, a redirect or HTML (Code scanning in
 # docs/spec/security.md). Default setup must be off in the repository's
 # settings, or GitHub refuses this workflow's results.
 name: CodeQL

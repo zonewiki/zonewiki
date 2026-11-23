@@ -1,4 +1,4 @@
-// Package taskmodel is a task as Zone knows it: its fields, how a task list
+// Package taskmodel is a task as Zonewiki knows it: its fields, how a task list
 // file is read (leniently) and written (in a fixed key order), and a
 // series' dates. Nothing here knows the wiki, its users or the clock: the
 // files and their lock are package taskfiles', the commits the server's.
@@ -52,7 +52,7 @@ type Task struct {
 	SpawnedFrom string // the occurrence this one follows
 	History     []HistoryEntry
 	Comments    []Comment
-	Extra       map[string]json.RawMessage // keys Zone doesn't know, as the file had them
+	Extra       map[string]json.RawMessage // keys Zonewiki doesn't know, as the file had them
 	// Owner: the user whose private task it is, "" a shared one. Not in
 	// the file: it is whose files the task was read from (tasksDir), and a
 	// write files it there; the API shows it as "private".
@@ -269,7 +269,7 @@ type fileTask struct{ *Task }
 
 func (f fileTask) MarshalJSON() ([]byte, error) { return f.JSON(false) }
 
-// JSON writes the task's fields in the order the files keep, the keys Zone
+// JSON writes the task's fields in the order the files keep, the keys Zonewiki
 // doesn't know last, A–Z. private: as the API and the browser get it with
 // users, "private" (whether it is its user's own) after the fields.
 func (t *Task) JSON(private bool) ([]byte, error) {

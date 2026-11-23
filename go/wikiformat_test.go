@@ -17,7 +17,7 @@ func writeFormatFile(t *testing.T, text string) {
 }
 
 // What .zone-format says: a number, or nothing (a new wiki). A
-// file that says anything else, or a format a newer Zone wrote, is refused.
+// file that says anything else, or a format a newer Zonewiki wrote, is refused.
 func TestWikiFormatRead(t *testing.T) {
 	testWiki(t, nil)
 	if n, err := checkWikiFormat(); n != 0 || err != nil {
@@ -37,7 +37,7 @@ func TestWikiFormatRead(t *testing.T) {
 	}
 	writeFormatFile(t, strconv.Itoa(wikiFormat+1)+"\n")
 	_, err := checkWikiFormat()
-	if err == nil || !strings.Contains(err.Error(), fmt.Sprintf("format %d (.zone-format), which a newer Zone wrote", wikiFormat+1)) {
+	if err == nil || !strings.Contains(err.Error(), fmt.Sprintf("format %d (.zone-format), which a newer Zonewiki wrote", wikiFormat+1)) {
 		t.Errorf("a newer format: %v", err)
 	}
 }

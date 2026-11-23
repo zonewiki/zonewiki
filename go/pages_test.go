@@ -309,7 +309,7 @@ func TestRenamedTags(t *testing.T) {
 }
 
 // A page that is gone doesn't stay in the per-page cache: the next look at
-// the wiki's pages drops it (it used to stay for as long as Zone ran).
+// the wiki's pages drops it (it used to stay for as long as Zonewiki ran).
 func TestPageMetaForgetsPagesThatAreGone(t *testing.T) {
 	testWiki(t, map[string]string{"a": "# A\n\n[[b]]\n", "b": "# B\n", "c": "# C\n\n[[b]]\n"})
 	at := clock(t, time.Date(2026, 5, 1, 12, 0, 0, 0, time.Local))

@@ -253,13 +253,13 @@ def test_each_command_says_what_it_does(sandbox, tmp_path):
     (repo / ".env").write_text(f"ZONE_DATA={wiki}\n")
     for args, said in ((["up"], "the binary is compiled inside it, not into this folder"),
                        (["build"], "./run.sh binaries builds binaries into dist/"),
-                       (["down"], "Stopping Zone"),
+                       (["down"], "Stopping Zonewiki"),
                        (["test"], "gofmt, go vet, go test -race, then pytest"),
                        (["e2e"], "browser and tasks-core tests"),
                        (["bench"], "tests/bench_tasks.py"),
                        (["retrieval"], "Measuring search on tests/retrieval/"),
                        (["screenshots"], "docs/screenshots/"),
-                       (["config", "check"], "Building Zone's image")):
+                       (["config", "check"], "Building Zonewiki's image")):
         r = subprocess.run(["./run.sh", *args], cwd=repo, env=env, capture_output=True, text=True,
                            stdin=subprocess.DEVNULL)
         assert r.returncode == 0, r.stderr
@@ -430,7 +430,7 @@ def test_the_default_wiki_is_zonewiki_in_the_home_folder(sandbox, tmp_path):
     (tmp_path / "home" / "zonewiki").mkdir(parents=True)
     (repo / ".env").write_text("TZ=UTC\n")
     r = subprocess.run(["./run.sh", "up"], cwd=repo, env=env, capture_output=True, text=True)
-    assert r.returncode == 0 and f"Zone data: {tmp_path / 'home' / 'zonewiki'}" in r.stdout, r.stderr
+    assert r.returncode == 0 and f"Zonewiki data: {tmp_path / 'home' / 'zonewiki'}" in r.stdout, r.stderr
 
 
 def test_pre_push_runs_the_clones_own_hook(worktree):
@@ -527,7 +527,7 @@ def test_beside_compose_yaml_the_checkouts_commands_say_they_need_one(beside_com
     folder, env, log = beside_compose
     for cmd in ("build", "test", "e2e", "flaky", "bench", "retrieval", "binaries", "leaks", "screenshots", "eval"):
         r = subprocess.run(["./run.sh", cmd], cwd=folder, env=env, capture_output=True, text=True)
-        assert r.returncode == 1 and "needs a checkout of Zone" in r.stderr, (cmd, r.stderr)
+        assert r.returncode == 1 and "needs a checkout of Zonewiki" in r.stderr, (cmd, r.stderr)
     assert not log.exists() or not [l for l in log.read_text().splitlines()
                                     if not l.startswith(("compose version", "info ", "env "))]
 
@@ -571,7 +571,7 @@ def test_env_names_the_address_and_the_user_unless_remote_is_allowed(beside_comp
     r = subprocess.run(["./run.sh", "up"], cwd=folder, env=env, capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
     assert "ZONE_BIND=0.0.0.0 ZONE_UID=1026 ZONE_GID=100 " in log.read_text()
-    assert "Zone running at http://localhost:5080" in r.stdout
+    assert "Zonewiki running at http://localhost:5080" in r.stdout
     log.unlink()
     (folder / ".env").write_text(f"ZONE_DATA={wiki}\n")
     r = subprocess.run(["./run.sh", "up"], cwd=folder, env=env, capture_output=True, text=True)

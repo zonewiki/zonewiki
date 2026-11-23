@@ -318,7 +318,7 @@ export function dateOffset(days) {
 // ── Links in a task's title ────────────────────────────────────────────────
 
 // A link to another site opens in a new tab (as go/markdown.go's
-// external marks them in pages); a full URL to Zone itself stays.
+// external marks them in pages); a full URL to Zonewiki itself stays.
 const extAttrs = href => {
   try {
     const u = new URL(href, location.href);

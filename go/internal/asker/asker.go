@@ -15,7 +15,7 @@ import (
 )
 
 // Asker is whoever asks. Name is the user ("" in a wiki without users, and
-// for Zone itself). The rest is what it was given less than its user has,
+// for Zonewiki itself). The rest is what it was given less than its user has,
 // each only ever taking away; all zero: the user themselves, with all they
 // may.
 type Asker struct {
@@ -55,7 +55,7 @@ func (a Asker) WithGroups(groups []string) Asker {
 }
 
 // User: the user name themselves, with all they may: a person in the
-// browser, and what Zone asks about a user it knows by name (whom a task is
+// browser, and what Zonewiki asks about a user it knows by name (whom a task is
 // given to, who gets a mail).
 func User(name string) Asker { return Asker{Name: name} }
 

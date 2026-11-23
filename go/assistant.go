@@ -2,7 +2,7 @@
 // in makes their MCP token in the browser, as zonewiki user token (with
 // users: their own) or zonewiki config token (without: the wiki's) does on
 // the host, and revokes it. The token is shown once, with what to give an
-// MCP client; Zone keeps its hash. Making one asks for the password again
+// MCP client; Zonewiki keeps its hash. Making one asks for the password again
 // (where there is one): a token outlasts the session it was made in, so a
 // session someone else got hold of mustn't be enough to make one.
 //

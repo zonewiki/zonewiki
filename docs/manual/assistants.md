@@ -29,7 +29,7 @@ There are two ways in:
 ### Claude.ai and the Claude desktop app
 
 1. In Claude, open the settings for connectors and add a **custom connector**.
-2. Give it a name, such as `Zone`, and paste the wiki's assistant address.
+2. Give it a name, such as `Zonewiki`, and paste the wiki's assistant address.
 3. Connect it.
    Your wiki opens in the browser, asking **Connect an assistant?**
    Sign in first if you aren't.
@@ -50,7 +50,7 @@ claude mcp add --transport http zone http://localhost:5080/mcp     # a wiki on y
 Then start Claude Code, type `/mcp`, pick `zone` and sign in.
 Your browser opens the same **Connect an assistant?** page; click **Allow** and go back to the terminal.
 
-A wiki without a login has nothing to sign in to, and Claude Code can't connect this way: Zone answers that MCP is off.
+A wiki without a login has nothing to sign in to, and Claude Code can't connect this way: Zonewiki answers that MCP is off.
 There, connect it with a token (below): **Connect an assistant** shows the whole command.
 
 ### ChatGPT and other MCP clients
@@ -61,7 +61,7 @@ Give it the assistant address, with the HTTP transport where it asks.
 If it signs in through the browser, you allow it as above.
 If it doesn't, use a token.
 
-Zone has been tested with Claude's apps and Claude Code.
+Zonewiki has been tested with Claude's apps and Claude Code.
 Other clients follow the same standard, but how each one sets up a server is up to its maker: see its own help.
 
 ### A token for any client
@@ -70,7 +70,7 @@ Other clients follow the same standard, but how each one sets up a server is up 
 2. Under **Your token** (**The wiki's token** in a wiki without users), type your password and click **Make a token**.
    A wiki without a login asks for no password.
 3. Copy the token.
-   It is shown only this once: Zone keeps only a fingerprint of it.
+   It is shown only this once: Zonewiki keeps only a fingerprint of it.
 4. Give it to your assistant:
    - Claude Code: the page shows the whole command, ready to copy:
      `claude mcp add --transport http zone <address> --header "Authorization: Bearer <token>"`.
@@ -152,7 +152,7 @@ An assistant has a set of tools, which it picks by itself from what you ask.
 | Files | Look at an uploaded image or text file, upload a file. |
 | History | See recent changes or a page's versions, restore an old version or a deleted page, undo changes. |
 | Guides | Read [your guides](wiki-guide.md) before it writes, so it follows how your wiki is kept. |
-| Zone's own help | Look things up in Zone's documentation. |
+| Zonewiki's own help | Look things up in Zonewiki's documentation. |
 
 It can't delete tasks (it closes them as won't do, as you would), change settings or users, or do anything you can't do yourself.
 
@@ -171,10 +171,10 @@ Undo what you just did to the Q3 plan page.
 
 When it looks something up elsewhere, in your mail or on the web, and finds a fact a wiki page lacks or gets wrong, it offers to add it, and writes only when you say yes.
 
-## Ask your assistant about Zone
+## Ask your assistant about Zonewiki
 
-Your assistant can read Zone's documentation, this manual among it.
-Ask it how Zone works, in your own words:
+Your assistant can read Zonewiki's documentation, this manual among it.
+Ask it how Zonewiki works, in your own words:
 
 ```text
 How do I make a task repeat every two weeks?

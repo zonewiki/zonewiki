@@ -157,7 +157,7 @@ def test_task_comments_render_math(page, wiki):
 
 def test_a_diagram_makes_no_form(page, wiki):
     # Mermaid's labels are HTML that strict cleans with DOMPurify's defaults,
-    # which keep form controls: a form in a label posted to Zone as the
+    # which keep form controls: a form in a label posted to Zonewiki as the
     # reader with one click. A diagram's own %%{init}%% can't put them back,
     # and its labels keep the HTML they may have (bold, line breaks).
     wiki.write("victim", "# Victim\n\nkeep me\n")

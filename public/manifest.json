@@ -1,6 +1,6 @@
 {
-  "name": "Zone",
-  "short_name": "Zone",
+  "name": "Zonewiki",
+  "short_name": "Zonewiki",
   "description": "Wiki, notes and tasks for you, your team, and your AI agents",
   "start_url": "/",
   "scope": "/",

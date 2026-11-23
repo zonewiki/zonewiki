@@ -1,5 +1,5 @@
-// Markdown to HTML on goldmark: goldmark's own output where Zone doesn't care
-// (footnotes, deflists, entities, URL escaping), Zone's rules where a
+// Markdown to HTML on goldmark: goldmark's own output where Zonewiki doesn't care
+// (footnotes, deflists, entities, URL escaping), Zonewiki's rules where a
 // feature depends on them: checkboxes the page can tick (counted as mdtext
 // counts them), callouts, heading ids that [[Page#Section]] points at, ✎
 // and ☑ N per section, image width and img-block, external links in a new
@@ -49,7 +49,7 @@ type Env struct {
 	// NoStyle: a <style> in the raw HTML shows as text (a task's notes and
 	// comments, renderNotes: they go with the task onto every page that
 	// shows its list, the reader's own among them, where a <style> would
-	// restyle Zone's own controls).
+	// restyle Zonewiki's own controls).
 	NoStyle bool
 }
 
@@ -100,7 +100,7 @@ func markdown(src string, env *Env, inline bool) string {
 	return out
 }
 
-// mdRenderer: a goldmark set up with Zone's rules, built once and reused
+// mdRenderer: a goldmark set up with Zonewiki's rules, built once and reused
 // (a sync.Pool each for block and inline rendering): its transformer and
 // renderer are bound to one render's Env at a time, and the renderer
 // counts the sections it has numbered, so a render has one to itself.
@@ -309,7 +309,7 @@ func (t *zoneTransformer) Transform(doc *ast.Document, reader text.Reader, pc pa
 	})
 }
 
-// unsafeLink: a URL Zone refuses to link (javascript:, vbscript:,
+// unsafeLink: a URL Zonewiki refuses to link (javascript:, vbscript:,
 // data: but an image's). The page policy wouldn't run a script anyway.
 func unsafeLink(href []byte) bool {
 	h := strings.ToLower(strings.TrimSpace(string(href)))
@@ -328,7 +328,7 @@ func unsafeLink(href []byte) bool {
 }
 
 // blockedImage: an image on another site the page policy won't load
-// (pageCSP: only Zone's own, and the external-content setting's hosts). It
+// (pageCSP: only Zonewiki's own, and the external-content setting's hosts). It
 // is shown as a link to it, not as a broken image.
 func (t *zoneTransformer) blockedImage(n *ast.Image) bool {
 	host, ok := urlHost(string(n.Destination))
@@ -336,7 +336,7 @@ func (t *zoneTransformer) blockedImage(n *ast.Image) bool {
 }
 
 // urlHost: the host of an http(s) or scheme-less ("//host/…") URL; false
-// for any other (a path of Zone's own, data:).
+// for any other (a path of Zonewiki's own, data:).
 func urlHost(href string) (string, bool) {
 	rest, ok := strings.CutPrefix(href, "//")
 	if !ok {
@@ -357,7 +357,7 @@ func urlHost(href string) (string, bool) {
 }
 
 // external: an http(s) link to another site opens in a new tab; one to the
-// host the request came in on (Zone itself) does not. Not url.Parse: it
+// host the request came in on (Zonewiki itself) does not. Not url.Parse: it
 // refuses some URLs a browser follows (a ` in the host, say).
 func (t *zoneTransformer) external(n ast.Node, href []byte) {
 	scheme, rest, _ := strings.Cut(string(href), ":")
@@ -411,7 +411,7 @@ func headingTitle(h ast.Node, src []byte) string {
 // <code>, its math as the article's math span (rendered in the browser),
 // emphasis and strikethrough kept; links flattened to their text, a
 // wikilink to its label as text, images and raw HTML left out. So nothing
-// but Zone's own few tags and escaped text is in it: cut out of the
+// but Zonewiki's own few tags and escaped text is in it: cut out of the
 // article (with its links taken out by a pattern), a heading's raw HTML
 // came out joined anew ("<<a>form" a <form>, "src<a>doc=" an srcdoc)
 // past defuseHTML.
@@ -621,16 +621,16 @@ func taskDates(s string) string {
 // links), or that has the browser look another host up (<link
 // rel=dns-prefetch>, which no policy stops: the name asked for can carry
 // what the page's writer wants sent). A page's raw HTML is rendered as
-// written, but these would work as Zone's own: script-src keeps a page's scripts from running and
+// written, but these would work as Zonewiki's own: script-src keeps a page's scripts from running and
 // form-action keeps its forms from posting elsewhere, but a form posting to
-// Zone itself (<form method=post action="/delete/…">, a <button
-// formaction=…> or <button form=…> using one of Zone's own forms) is
+// Zonewiki itself (<form method=post action="/delete/…">, a <button
+// formaction=…> or <button form=…> using one of Zonewiki's own forms) is
 // same-origin, so the Origin check lets it through, and one click on a page
 // another user (or an assistant that read a prompt injection) wrote would
 // delete or overwrite the viewer's pages. And a <script>: none in a page
-// runs (script-src), but a <script type="application/json"> is data Zone's
+// runs (script-src), but a <script type="application/json"> is data Zonewiki's
 // own scripts may read (the task lists' tasks, taskData), so a page makes
-// none, and a script element in a page is always Zone's. Their "<" is
+// none, and a script element in a page is always Zonewiki's. Their "<" is
 // escaped, so they show as text.
 var defusedTagRE = regexp.MustCompile(`(?i)<(/?(?:form|input|button|select|textarea|option|optgroup|datalist|fieldset|keygen|isindex|meta|base|link|script)(?:[\s/>]|$))`)
 
@@ -657,7 +657,7 @@ var defusedTagRE = regexp.MustCompile(`(?i)<(/?(?:form|input|button|select|texta
 // idRE: an id or name attribute's value, wherever "id" or "name" is a name
 // of its own followed by "=" (after what can end an attribute before it:
 // HTML's whitespace, "/", a quote; not "?id=" in a URL, "data-id="). A
-// page's element must not stand in for one of Zone's, which its scripts
+// page's element must not stand in for one of Zonewiki's, which its scripts
 // find by id (getElementById: a <data id="task-edit-id" value=…> ahead of
 // the task dialog's field would aim its save at another task) and the
 // browser by name (window.x, document.x). So the value gets

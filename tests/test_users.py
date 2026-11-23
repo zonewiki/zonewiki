@@ -204,7 +204,7 @@ class TestMCP:
 class TestSigningOut:
     """Signing out ends the session, not only the browser's cookie of it
     (docs/spec/security.md, Signing out): a copy of the cookie taken before
-    stops working, and Zone remembers that across a restart."""
+    stops working, and Zonewiki remembers that across a restart."""
 
     def test_a_copy_of_the_cookie_stops_working(self, client, git_wiki_dir, users):
         login(client, "alice", "alice-pw")
@@ -752,11 +752,11 @@ class TestAuthors:
         assert by["Create task"] == "alice"
         assert [a for a, s in log if s.startswith("Create from-mcp")] == ["alice"]   # alice's token
         assert [a for a, s in log if s.endswith("_idea")] == ["alice"]               # the note
-        assert log[-1][0] == "Zone"                                                  # Zone's start-up commit
+        assert log[-1][0] == "Zonewiki"                                                  # Zonewiki's start-up commit
 
     def test_without_users_zone_is_the_author(self, client, git_wiki_dir):
         client.post("/new", data={"slug": "plans"}, headers=HOST)
-        assert authors(git_wiki_dir)[0] == ("Zone", "Create plans")
+        assert authors(git_wiki_dir)[0] == ("Zonewiki", "Create plans")
 
     def test_history_names_the_author(self, client, git_wiki_dir, users):
         login(client, "alice", "alice-pw")
@@ -809,7 +809,7 @@ class TestAuthors:
     def test_nobody_writes_under_anothers_name(self, client, users):
         # The lists a client sends whole (an undo, a restore, an import) may
         # say anything: a name other than the sender's stays only on what
-        # Zone has seen under it (docs/spec/users.md, Who made a change).
+        # Zonewiki has seen under it (docs/spec/users.md, Who made a change).
         login(client, "bob", "bob-pw")
         forged_c = {"id": "c-forged", "at": "2026-01-02T10:00", "by": "alice", "text": "I approve"}
         forged_h = {"at": "2026-01-02T10:00", "event": "done", "by": "alice"}
@@ -818,7 +818,7 @@ class TestAuthors:
         put = client.put(f"/api/tasks/{task['id']}", json={"comments": [forged_c, own_c], "history": [forged_h]},
                          headers=HOST).get_json()
         # The name goes: a new comment is the sender's (by no one it would be
-        # everyone's to change), an entry Zone never had is no entry.
+        # everyone's to change), an entry Zonewiki never had is no entry.
         assert [(c["text"], c.get("by")) for c in put["comments"]] == [("I approve", "bob"), ("Mine", "bob")]
         assert [(e["event"], e.get("by")) for e in put["history"]] == [("created", "bob")]
         [batch] = client.post("/api/tasks/batch-update", json={"tasks": [{"id": task["id"], "history": [forged_h]}]},
@@ -895,7 +895,7 @@ class TestAuthors:
         assert put.get_json()["comments"][1]["by"] == "bob"      # its sender's
 
     def test_a_comment_seen_as_someones_stays_on_its_task(self, client, users):
-        """Zone has seen alice's comment as hers: that comment, with its text,
+        """Zonewiki has seen alice's comment as hers: that comment, with its text,
         on its task. Sent to another task, or with other words, by a restore,
         an import or a whole-list write, it is not hers; nor is a task that
         comes back under a deleted task's id with other words."""
@@ -908,7 +908,7 @@ class TestAuthors:
         assert client.delete(f"/api/tasks/{gone['id']}", headers=HOST).status_code == 204
         client.post("/logout", headers=HOST)
         login(client, "bob", "bob-pw")
-        assert client.put(f"/api/tasks/{x['id']}", json={}, headers=HOST).status_code == 200   # Zone reads X again
+        assert client.put(f"/api/tasks/{x['id']}", json={}, headers=HOST).status_code == 200   # Zonewiki reads X again
         forged = {**said, "text": "I approve the budget"}
         snap = {"title": "Budget", "list": "team", "comments": [forged]}
         [restored] = client.post("/api/tasks/restore", json={"tasks": [snap]}, headers=HOST).get_json()

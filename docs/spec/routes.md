@@ -1,6 +1,6 @@
 # Routes and page views
 
-Part of Zone's spec (see `AGENTS.md` for the index).
+Part of Zonewiki's spec (see `AGENTS.md` for the index).
 
 Every route the server answers, by area (pages, notes, search, history, uploads, private and group pages, accounts, assistants, the tasks page), the task API on its own, what a page view shows, and the side columns a page gets on big screens.
 
@@ -142,7 +142,7 @@ To anyone else such a link says nothing, not even that there is such a group (`g
 
 | Method | Path                  | Description                                     |
 |--------|-----------------------|-------------------------------------------------|
-| GET, POST | `/login`           | The login page and its form (`username` with users, `password`); `?next=` the local path to go to after (A redirect goes only to Zone's own paths in `docs/spec/security.md`); wrong passwords are throttled (429); without a login a redirect to `/` |
+| GET, POST | `/login`           | The login page and its form (`username` with users, `password`); `?next=` the local path to go to after (A redirect goes only to Zonewiki's own paths in `docs/spec/security.md`); wrong passwords are throttled (429); without a login a redirect to `/` |
 | POST   | `/logout`             | Sign out: the session ends wherever a copy of its cookie is (`.zone/signed-out`); redirects to `/login` |
 | GET, POST | `/setup`           | First run: a wiki other devices reach with no login sets one here, then is signed in (First run in `docs/spec/security.md`); so does a wiki on localhost alone, on purpose (A login on purpose, there); once there is a login, and in a wiki open to the network on purpose, a redirect to `/` |
 | GET, POST | `/signup`          | Sign-up (`email`): mails a link that makes the account (Sign-up in `docs/spec/users.md`); 404 while sign-up is off, a redirect to `/` for whoever is signed in |
@@ -166,14 +166,14 @@ To anyone else such a link says nothing, not even that there is such a group (`g
 | POST   | `/oauth/register`, `/oauth/token` | An MCP client registers, and turns a code or a refresh token into tokens (no login, any origin) |
 | GET, POST | `/oauth/authorize` | An assistant asks to connect: whoever is signed in allows it, with their password, or denies it |
 
-### Zone itself
+### Zonewiki itself
 
 | Method | Path                  | Description                                     |
 |--------|-----------------------|-------------------------------------------------|
-| GET    | `/public/<file>`      | Zone's browser code, styles and vendored libraries, as they are in `public/` or the binary's copy of it (What the binary holds in `docs/spec/deployment.md`; no login needed) |
-| GET    | `/api/version`        | `{ version, build }`: Zone's version and build (see Version in `docs/spec/deployment.md`) |
+| GET    | `/public/<file>`      | Zonewiki's browser code, styles and vendored libraries, as they are in `public/` or the binary's copy of it (What the binary holds in `docs/spec/deployment.md`; no login needed) |
+| GET    | `/api/version`        | `{ version, build }`: Zonewiki's version and build (see Version in `docs/spec/deployment.md`) |
 | GET    | `/api/health`         | `{ ok: true }`, or 503 `{ error }` while the settings file's last change wasn't taken (Reloading in `docs/spec/users.md`); no login needed, for `zonewiki health` |
-| GET    | `/help`               | Help: Zone's manual, its contents first (see Help below) |
+| GET    | `/help`               | Help: Zonewiki's manual, its contents first (see Help below) |
 | GET    | `/help/<page>`        | A page of the manual (`docs/manual/<page>.md`) |
 | GET    | `/help/spec`, `/help/spec/<name>` | The spec's list, and a spec file (`docs/spec/<name>.md`), where the manual links for the full rules |
 | GET    | `/help/screenshots/<file>.png` | The screenshots the manual shows (`docs/screenshots/`) |
@@ -182,7 +182,7 @@ To anyone else such a link says nothing, not even that there is such a group (`g
 
 ### Help
 
-Zone's manual, `docs/manual/`, is written for users: how to do things, in what they see and click, with links to the spec for the full rules.
+Zonewiki's manual, `docs/manual/`, is written for users: how to do things, in what they see and click, with links to the spec for the full rules.
 `/help` shows it in the browser (`go/help.go`, `help.html`), as a page is shown: the document's `#` heading as its title, its headings on the left on big screens, and at its end the pages before and after it.
 The reading order is the contents' (`docs/manual/README.md`): the pages in the order its links name them, then any it doesn't name.
 Links between the docs are written for the files (`tasks.md#views`, `../spec/users.md`, `../screenshots/page.png`, as they read on GitHub) and pointed at `/help/…` when shown.
@@ -311,7 +311,7 @@ Each change is one task's update (`changeTaskFields`): `was` makes a text change
 ### Restoring snapshots
 
 `POST /api/tasks/restore` undid a delete, while the task app had one; nothing in the app calls it now.
-Snapshots keep their original id/created_at/completion state, as far as those are an id and times as Zone writes them (A task snapshot's ids and times in `docs/spec/security.md`); unknown fields are dropped, existing ids skipped.
+Snapshots keep their original id/created_at/completion state, as far as those are an id and times as Zonewiki writes them (A task snapshot's ids and times in `docs/spec/security.md`); unknown fields are dropped, existing ids skipped.
 
 ### Reordering
 
@@ -403,7 +403,7 @@ The left column (`.rail-left`) holds "On this page" (`railToc`): the page's `##`
 An entry is made from the heading as the render parsed it (`Env.TOC`, `tocLabel` in `go/markdown.go`), never cut out of the rendered HTML:
 its text, its code, math, emphasis and strikethrough, a link as its text, a `[[task:…]]` as the task's title, images and raw HTML left out;
 a heading written as raw HTML (`<h2>` in an HTML block) is none.
-(Cut out of the article, with its links taken out by a pattern, a heading's raw HTML came out joined anew, past the defusing: `<<a>form` a form, No form in a page posts to Zone in `docs/spec/security.md`.)
+(Cut out of the article, with its links taken out by a pattern, a heading's raw HTML came out joined anew, past the defusing: `<<a>form` a form, No form in a page posts to Zonewiki in `docs/spec/security.md`.)
 Otherwise it is empty; the column stays so the page keeps its place.
 At its end **↑ Back to top** (`.rail-top`), shown once the page has scrolled a screen down; it scrolls up and drops a `#hash` from the URL.
 `js/chrome.js` marks the section being read (`.active`, `aria-current="location"`): the last heading scrolled past (120px from the top), at the end of the page the last one in view.

@@ -1,7 +1,7 @@
 # Getting around
 
-How to move around Zone: the modules, the buttons at the top of each page, the tab bar on a phone, and the keyboard shortcuts.
-It also covers showing your screen to others (Sharing mode), presenting a page as slides, printing, dark mode and installing Zone on a phone's home screen.
+How to move around Zonewiki: the modules, the buttons at the top of each page, the tab bar on a phone, and the keyboard shortcuts.
+It also covers showing your screen to others (Sharing mode), presenting a page as slides, printing, dark mode and installing Zonewiki on a phone's home screen.
 
 ## The module switcher
 
@@ -21,7 +21,7 @@ If you're in a group, **Groups** stands between Wiki and Private:
 
 ### The trail of recent pages
 
-Next to the switcher, Zone shows the pages you visited last, as a trail, so you can step back to one with a click.
+Next to the switcher, Zonewiki shows the pages you visited last, as a trail, so you can step back to one with a click.
 When the window is narrow, the oldest pages drop out of the trail first.
 
 When other pages link to the one you're on, a `← 3` chip at the end of the row says how many.
@@ -42,7 +42,7 @@ At the top right of each page, on a computer:
 There are no "new" buttons here: a new note is `c n` and a new task `c t`.
 A new page comes from a link to it (see [Pages](pages.md)); the home page of a group and your private home also have a **New page** button.
 
-Next to these buttons, a count of uncommitted changes may appear: pages changed outside Zone, or not saved as a version yet.
+Next to these buttons, a count of uncommitted changes may appear: pages changed outside Zonewiki, or not saved as a version yet.
 [History and undo](history.md) explains what to do with them.
 
 ## The tab bar on a phone
@@ -58,7 +58,7 @@ On a phone, the modules and actions are in a tab bar at the bottom of the screen
 
 The bar hides while you type, since the keyboard needs the room.
 
-![Zone on a phone: a wiki page and the Today view of Tasks, each with the tab bar at the bottom](../screenshots/phone.png)
+![Zonewiki on a phone: a wiki page and the Today view of Tasks, each with the tab bar at the bottom](../screenshots/phone.png)
 
 ## The Tasks counts
 
@@ -77,7 +77,7 @@ See [Tasks](tasks.md).
 
 ## Keyboard shortcuts
 
-Press `?` (or `Ctrl+/`) anywhere to see every shortcut in Zone; `Esc` closes the list.
+Press `?` (or `Ctrl+/`) anywhere to see every shortcut in Zonewiki; `Esc` closes the list.
 Single-letter shortcuts don't work while you're typing in a field.
 Where it says `g` then `h`, press the two keys one after the other.
 
@@ -156,7 +156,7 @@ The search syntax (`"a phrase"`, `-word`, `#tag`, `edited:`, `after:`, `before:`
 | `Delete` | Close as won't do |
 | `Ctrl+Shift+↑` `↓` or `Ctrl+Shift+J` `K` | Move up / down |
 | `Shift+F10` or `Menu` | The task's ⋯ menu |
-| `Ctrl+Z` | Undo, while Zone offers it |
+| `Ctrl+Z` | Undo, while Zonewiki offers it |
 | `Tab` / `Shift+Tab` | Next / previous tab |
 | `o` | Order: manual, by due date, newest |
 | `d` | Show as a list, a plan, by person or by list |
@@ -205,7 +205,7 @@ Phones have no switch for it.
 
 Some pages are hidden entirely in Sharing mode: by default, pages tagged `#noshare`.
 They're left out of search, Notes and every list, a link to one shows as plain text, and opening one shows only "Hidden page".
-Whoever runs your wiki can choose other tags or whole folders (see [Running Zone yourself](self-hosting.md)).
+Whoever runs your wiki can choose other tags or whole folders (see [Running Zonewiki yourself](self-hosting.md)).
 
 ## Presenting a page
 
@@ -225,18 +225,18 @@ Press `e` (or click ✎ in the corner) to edit the current slide's section; afte
 Choose **Print…** in the page's **⋯** menu.
 Your browser's print dialog opens, where you can print or choose "Save as PDF".
 
-Only the page itself is printed: its title, tags and text, without Zone's buttons, columns and links around it.
+Only the page itself is printed: its title, tags and text, without Zonewiki's buttons, columns and links around it.
 Folded sections print unfolded, and a page always prints light, even when your screen is dark.
 
 ## Light and dark
 
-Zone follows your device: when your system is set to dark mode, so is Zone.
-There's no switch in Zone itself; change it in your system's or browser's settings.
+Zonewiki follows your device: when your system is set to dark mode, so is Zonewiki.
+There's no switch in Zonewiki itself; change it in your system's or browser's settings.
 
-## Zone on your home screen
+## Zonewiki on your home screen
 
-On a phone you can add Zone to the home screen, so it opens like an app, with its own icon.
+On a phone you can add Zonewiki to the home screen, so it opens like an app, with its own icon.
 In your phone's browser, open its menu and choose **Add to Home screen** (on an iPhone, the share button, then **Add to Home Screen**).
 
-On Android, Zone opens as an app of its own only when your wiki is reached over HTTPS;
+On Android, Zonewiki opens as an app of its own only when your wiki is reached over HTTPS;
 over plain `http://` the icon just opens a browser tab.

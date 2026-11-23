@@ -1,6 +1,6 @@
 // Sign-up (docs/spec/users.md, Sign-up): with ZONE_SIGNUP on in the
 // deployment, a mail server (mail.go), users and base-url, anyone may ask
-// for an account at /signup with their mail address. Zone mails them a
+// for an account at /signup with their mail address. Zonewiki mails them a
 // link (a welcome link of kind "signup", links.go); on its page they
 // choose a user name and a password, and the account is made with the
 // settings' signup-role, or waits for an admin (signup-approval). The
@@ -177,7 +177,7 @@ func signupRoute(w http.ResponseWriter, r *http.Request) {
 		default:
 			if err := mailSignup(s, v.Email); err != nil {
 				logf("sign-up mail to %s: %v", v.Email, err)
-				v.Error, status = "Zone couldn't send the mail: try again later.", http.StatusBadGateway
+				v.Error, status = "Zonewiki couldn't send the mail: try again later.", http.StatusBadGateway
 				if errors.Is(err, errTooManySignups) {
 					v.Error, status = "Too many sign-ups are waiting: try again later.", http.StatusTooManyRequests
 				}
@@ -243,9 +243,9 @@ func orList(items []string) string {
 }
 
 // userNameHasHistory: a user went by name in this wiki before (one removed,
-// whose private folder, tasks, lists and history Zone keeps): Zone noted
+// whose private folder, tasks, lists and history Zonewiki keeps): Zonewiki noted
 // them removed (.zone/removed-users), their private folder is there or was
-// (in git), a commit names them as its author, Zone keeps a draft or the
+// (in git), a commit names them as its author, Zonewiki keeps a draft or the
 // news they had seen under the name, or a list or task names them (a
 // list's members or owners, also what a deleted list left; a task's
 // assignee or follower), all of which a member who only read leaves, and
@@ -291,7 +291,7 @@ func namedInTasks(name string) bool {
 // The names of the users removed (.zone/removed-users, a JSON list, owner
 // only and not committed, as all account data): written as a user is
 // removed, on the Users tab or by zonewiki user remove, for sign-up
-// (userNameHasHistory), so what of theirs Zone keeps under the name no
+// (userNameHasHistory), so what of theirs Zonewiki keeps under the name no
 // stranger gets, whatever it is.
 func removedUsersPath() string { return statePath("removed-users") }
 
@@ -340,7 +340,7 @@ func removedUsers() ([]string, error) {
 	return names, nil
 }
 
-// wasRemoved: name is among the removed users' names; a file Zone can't
+// wasRemoved: name is among the removed users' names; a file Zonewiki can't
 // read counts as naming everyone (a sign-up waits for it to be fixed).
 func wasRemoved(name string) bool {
 	names, err := removedUsers()

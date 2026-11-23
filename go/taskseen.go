@@ -1,5 +1,5 @@
 // What a user has seen of the tasks' news (Updates in docs/spec/tasks.md):
-// kept beside the tasks, in Zone's folder, not in them.
+// kept beside the tasks, in Zonewiki's folder, not in them.
 package main
 
 import (
@@ -18,11 +18,11 @@ import (
 
 // seenStore: when each user last looked at a task that had news for them:
 // .zone/seen/<user>.json, {"<task id>": {"at": "2026-11-15T09:30", "after":
-// "…"}}, out of git as all of Zone's folder is. after names the last entry
+// "…"}}, out of git as all of Zonewiki's folder is. after names the last entry
 // the task's history had then (lookAfter): a history says its times to the
 // minute, and what happens within the minute of a look, after it, is news. It is the user's state, not the task's: a look
 // writes no task file, makes no commit, and loads nobody's list again.
-// Lost with Zone's folder, the tasks show their news again, and nothing
+// Lost with Zonewiki's folder, the tasks show their news again, and nothing
 // else happens. Read once (every user's: a task's History says who saw it),
 // written when a user looks.
 var seenStore = struct {
@@ -30,7 +30,7 @@ var seenStore = struct {
 	dir     string                     // the folder by was read from
 	by      map[string]map[string]look // user → task id → their look
 	byTask  map[string]map[string]look // task id → user → the same looks
-	version map[string]int64           // user → their looks since Zone started (keptCounts)
+	version map[string]int64           // user → their looks since Zonewiki started (keptCounts)
 }{}
 
 // lookAfter: how a look names the history entry it came after: a few

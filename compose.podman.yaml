@@ -1,6 +1,6 @@
 # Rootless podman: run.sh adds it to compose.yaml or compose.build.yaml
 # (podman compose -f compose.yaml -f compose.podman.yaml up -d, by hand).
-# keep-id maps your user to the same UID inside the container, so Zone runs
+# keep-id maps your user to the same UID inside the container, so Zonewiki runs
 # as you (user: is your id -u/-g) and the files it writes in the wiki are
 # yours. Docker doesn't know keep-id, hence a file of its own.
 services:

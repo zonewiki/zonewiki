@@ -1,11 +1,11 @@
 # Deployment
 
-Part of Zone's spec (see `AGENTS.md` for the index).
+Part of Zonewiki's spec (see `AGENTS.md` for the index).
 
-How Zone is built and run: the files that deploy it (`Containerfile`, the compose files, `run.sh`, `.env`), the commands,
+How Zonewiki is built and run: the files that deploy it (`Containerfile`, the compose files, `run.sh`, `.env`), the commands,
 running it without `run.sh` or from source, the release binaries, with the prebuilt image (on a computer, a server or a NAS), CI on Forgejo and GitHub,
 network access (a Unix socket, systemd), mail, phone access, the version string, the home-screen app,
-the data directory (its data format) and its backups, how Zone packs the wiki's git repository, how big a wiki can be, and moving from Zone 1.
+the data directory (its data format) and its backups, how Zonewiki packs the wiki's git repository, how big a wiki can be, and moving from Zonewiki 1.
 
 ## Files
 
@@ -26,12 +26,12 @@ Three stages:
 
 | Stage | What it does |
 |-------|--------------|
-| `build` | Go (a pinned release, checked against its checksum) builds the server from `go/` with cgo, Zone's own files built in |
+| `build` | Go (a pinned release, checked against its checksum) builds the server from `go/` with cgo, Zonewiki's own files built in |
 | `semantic` | With `ZONE_SEMANTIC_SEARCH=on`, onnxruntime's library and the model's files; off, three empty folders |
 | the image | Ubuntu 26.04 LTS with what the two stages made |
 
 `build` runs `go mod download` first, so a code change doesn't fetch the modules again;
-it copies the root's `go.mod` beside `go/` for it, the module of Zone's own files (What the binary holds, below).
+it copies the root's `go.mod` beside `go/` for it, the module of Zonewiki's own files (What the binary holds, below).
 Then it copies what `zonefiles.go` builds in (the browser code, the docs, the licenses) and the server's code, and builds.
 
 `semantic` fetches onnxruntime's shared library (1.31.0, its GitHub release for the image's architecture) and the model's files (a fixed revision),
@@ -49,8 +49,8 @@ The image has:
   `/app/THIRD_PARTY_LICENSES` (Go, the Go modules, the model) and `/app/licenses/onnxruntime/`
   (the vendored libraries' are in the binary, with its copy of `public/vendor/`: `zonewiki licenses` prints them all;
   Mermaid's bundled packages in `public/vendor/mermaid/THIRD_PARTY_LICENSES`, written by `docs/licenses/mermaid_notices.py`);
-- `HOME=/tmp` (Zone may run as a UID without an account);
-- the command `/app/zonewiki --addr 0.0.0.0:5080`: every interface, so the container's network bridge reaches Zone (the binary's default port alone would be the container's localhost); what the host exposes is the port mapping's (Network access, below).
+- `HOME=/tmp` (Zonewiki may run as a UID without an account);
+- the command `/app/zonewiki --addr 0.0.0.0:5080`: every interface, so the container's network bridge reaches Zonewiki (the binary's default port alone would be the container's localhost); what the host exposes is the port mapping's (Network access, below).
 
 Build args: `ZONE_SEMANTIC_SEARCH` and `ZONE_BUILD` (last layer).
 The image is about 0.23 GB, 0.9 GB with the model.
@@ -68,16 +68,16 @@ It builds the image (`build:` with those args) and runs the `zonewiki` container
 | the wiki | A bind mount with `create_host_path: false` and `selinux: Z` |
 | `init: true` | A minimal init as PID 1 reaps orphaned processes |
 | `restart: unless-stopped` | |
-| `user: ${ZONE_UID:-1000}:${ZONE_GID:-1000}` | Not root: Zone writes the wiki as the host user |
+| `user: ${ZONE_UID:-1000}:${ZONE_GID:-1000}` | Not root: Zonewiki writes the wiki as the host user |
 | healthcheck | `/app/zonewiki health` |
 | log driver | `json-file` |
 
 - `ZONE_HOST_DATA` is the host path, for the MCP tools' `file:` lines.
 - `create_host_path: false`: a mistyped path errors instead of starting an empty wiki.
-- `init: true`: with Zone as PID 1 orphaned processes piled up as zombies (see Packing the repository, below).
+- `init: true`: with Zonewiki as PID 1 orphaned processes piled up as zombies (see Packing the repository, below).
 - The healthcheck, `/app/zonewiki health`, fetches `/api/health` from localhost (port 5080;
-  `zonewiki health :8080` for a Zone started with `--addr :8080`, `zonewiki health unix:PATH` for one on a socket).
-  It fails while the settings file has an error Zone didn't take (see Reloading in `docs/spec/users.md`).
+  `zonewiki health :8080` for a Zonewiki started with `--addr :8080`, `zonewiki health unix:PATH` for one on a socket).
+  It fails while the settings file has an error Zonewiki didn't take (see Reloading in `docs/spec/users.md`).
   The image has no curl or Python.
   It is reported by `compose ps`;
   restarting an unhealthy container is podman's `--health-on-failure` or an autoheal container's job.
@@ -88,9 +88,9 @@ podman-compose turns `env_file` into `podman create -e KEY=value` arguments, so 
 
 ### compose.yaml
 
-Zone without the repo: it runs the prebuilt image `ghcr.io/zonewiki/zonewiki:latest` (amd64 and arm64, built by GitHub's CI, see CI (GitHub Actions)) instead of building it,
+Zonewiki without the repo: it runs the prebuilt image `ghcr.io/zonewiki/zonewiki:latest` (amd64 and arm64, built by GitHub's CI, see CI (GitHub Actions)) instead of building it,
 so the machine needs only Docker (or Podman) with Compose: a computer, a server or a NAS.
-It is the way the manual offers first for running Zone in a container, with `run.sh` beside it or on its own (`docker compose up -d`; a Synology's Container Manager finds it by its name);
+It is the way the manual offers first for running Zonewiki in a container, with `run.sh` beside it or on its own (`docker compose up -d`; a Synology's Container Manager finds it by its name);
 `compose.build.yaml` is for a checkout, to run its code (a change, a branch, semantic search).
 See With the prebuilt image.
 
@@ -98,9 +98,9 @@ Unlike `compose.build.yaml`:
 
 - no `build:`;
 - `ZONE_DATA`, `ZONE_UID` and `ZONE_GID` are required (`${…:?message}`: compose stops with the message instead of guessing;
-  a wrong UID would only show later as files Zone can't write; `run.sh` fills them in);
+  a wrong UID would only show later as files Zonewiki can't write; `run.sh` fills them in);
 - no `selinux: Z` (NAS systems have no SELinux, and older compose versions reject the option):
-  on a host with SELinux enforcing (Fedora), label the wiki folder once, `chcon -Rt container_file_t <folder>`, or run Zone from the repo;
+  on a host with SELinux enforcing (Fedora), label the wiki folder once, `chcon -Rt container_file_t <folder>`, or run Zonewiki from the repo;
 - the log is capped (`max-size` 10m, 3 files);
 - what is built in comes with the image, not from git or `.env`: the build string is CI's (`ZONE_BUILD`, Version), and `ZONE_SEMANTIC_SEARCH` is the image's (off for now: Semantic search paused, below).
 
@@ -109,7 +109,7 @@ The rest is as in `compose.build.yaml` (`init`, `restart`, healthcheck, `create_
 ### run.sh
 
 The entry point, driving `<engine> compose` (podman if installed, else docker; a compose provider must be installed) for up/down/logs/update and the settings file's commands (its commands: Commands, below).
-Where it is decides which Zone it runs:
+Where it is decides which Zonewiki it runs:
 
 | Beside it | Compose file | `up` |
 |-----------|--------------|------|
@@ -117,7 +117,7 @@ Where it is decides which Zone it runs:
 | `compose.yaml` alone (downloaded with it) | `compose.yaml` | Starts the prebuilt image, pulled if it isn't there yet (`compose up -d`) |
 
 Neither, it says it needs `compose.yaml` beside it.
-Without a checkout, the commands for working on Zone (`build`, `test`, `e2e`, `bench`, `retrieval`, `binaries`, `leaks`, `screenshots`, `eval`) say they need one, and do nothing.
+Without a checkout, the commands for working on Zonewiki (`build`, `test`, `e2e`, `bench`, `retrieval`, `binaries`, `leaks`, `screenshots`, `eval`) say they need one, and do nothing.
 
 It works out and exports what compose interpolates:
 
@@ -132,16 +132,16 @@ It works out and exports what compose interpolates:
 - A variable it exports wins over `.env`'s in compose's interpolation, so it reads `ZONE_BIND` and `ZONE_UID`/`ZONE_GID` from `.env` itself: what compose without `run.sh` takes from there holds with it too (a NAS whose wiki folder belongs to another user than who runs `run.sh`).
 
 - `TZ` makes "today" on the server (due count, tasks dates, note names, "Last changed") the user's day.
-- With rootless podman it adds `compose.podman.yaml` (`userns_mode: keep-id`: the host user keeps its UID inside, so Zone runs as you and the wiki's files stay yours); beside `compose.yaml` that file has to be there too, or it says so.
+- With rootless podman it adds `compose.podman.yaml` (`userns_mode: keep-id`: the host user keeps its UID inside, so Zonewiki runs as you and the wiki's files stay yours); beside `compose.yaml` that file has to be there too, or it says so.
 - With rootless docker, which has no keep-id, `ZONE_UID`/`ZONE_GID` are 0 (the container's root is the host user there; another UID would be a subordinate one).
 
-`up` refuses a missing wiki folder or `.env`, then starts Zone as the table says; `update` first pulls the newest code (`git pull`, in a checkout) or image (`compose pull`), then does the same.
+`up` refuses a missing wiki folder or `.env`, then starts Zonewiki as the table says; `update` first pulls the newest code (`git pull`, in a checkout) or image (`compose pull`), then does the same.
 `test`/`e2e` use the engine directly (no `.env` needed), in the tools image.
 
 Platforms: Linux is the only tested one; it is meant to work also on macOS and, on Windows, in WSL2 (Docker Desktop and Podman run on it there).
 It sticks to bash 3.2 (macOS's stock bash: no `${x,,}`, no `declare -A`, no `mapfile`) and to options BSD tools share with GNU ones.
 `.gitattributes` keeps `*.sh` and `.githooks/*` at LF line endings, so a Windows checkout with `core.autocrlf` doesn't break them.
-Without the container, Zone itself should run on any OS Go builds for, with git (From source, below), though only Linux is tested.
+Without the container, Zonewiki itself should run on any OS Go builds for, with git (From source, below), though only Linux is tested.
 
 ### .env.example
 
@@ -150,8 +150,8 @@ The template for `.env` (`cp .env.example .env`): every setting with a comment, 
 
 ### .env
 
-The deployment's settings, read by `run.sh`, compose and Zone at start; gitignored.
-Zone itself reads no `.env` file, only its environment: `run.sh` and compose pass the file's settings on, and a binary run by hand (downloaded or built) takes them as environment variables (`ZONE_DATA=~/notes ./zonewiki`; Where settings live in `docs/manual/self-hosting.md` shows a start script for several).
+The deployment's settings, read by `run.sh`, compose and Zonewiki at start; gitignored.
+Zonewiki itself reads no `.env` file, only its environment: `run.sh` and compose pass the file's settings on, and a binary run by hand (downloaded or built) takes them as environment variables (`ZONE_DATA=~/notes ./zonewiki`; Where settings live in `docs/manual/self-hosting.md` shows a start script for several).
 
 | Setting | What it sets |
 |---------|--------------|
@@ -166,7 +166,7 @@ Zone itself reads no `.env` file, only its environment: `run.sh` and compose pas
 | `ZONE_PORT` | The host's port, for compose (default 5080) |
 
 `ZONE_PUBLIC` is described in Public wikis in `docs/spec/security.md`.
-With rootless podman, keep-id (`compose.podman.yaml`) runs Zone as the host user, so files written to the mounted wiki directory are the host user's.
+With rootless podman, keep-id (`compose.podman.yaml`) runs Zonewiki as the host user, so files written to the mounted wiki directory are the host user's.
 
 ### .zone/config
 
@@ -181,7 +181,7 @@ edited by hand or with `./run.sh user …`/`./run.sh group …`/`./run.sh config
 
 | Command | What it does |
 |---------|--------------|
-| `./run.sh` | Start Zone (default: "up") |
+| `./run.sh` | Start Zonewiki (default: "up") |
 | `./run.sh up` | Start in detached mode: in a checkout built first (`compose up -d --build`), beside `compose.yaml` the prebuilt image (`compose up -d`) |
 | `./run.sh down` | Stop and remove the container (`compose down`) |
 | `./run.sh logs` | Follow the container's logs |
@@ -222,9 +222,9 @@ and where what it makes lands (`binaries`: the `dist/` folder by its full path; 
 - `group`: `group includes NAME [+G] [-G]`, `group owners NAME [+U] [-U]`, `group list`.
 - `config`: `config check|set|unset|passwd|token`: check it, set a key, the password and MCP token without users.
 
-Zone is available at **http://localhost:5080** after `./run.sh up` (the port `ZONE_PORT` says, if set).
+Zonewiki is available at **http://localhost:5080** after `./run.sh up` (the port `ZONE_PORT` says, if set).
 To update: `./run.sh update`.
-To point Zone at an existing folder of Markdown notes, set `ZONE_DATA` to it: Zone makes it a git repository (if it isn't one) and adds a home page.
+To point Zonewiki at an existing folder of Markdown notes, set `ZONE_DATA` to it: Zonewiki makes it a git repository (if it isn't one) and adds a home page.
 
 ## Without run.sh
 
@@ -252,13 +252,13 @@ In Windows PowerShell: `cd go; go build -o zonewiki.exe .; cd ..`, then `$env:ZO
 For semantic search, onnxruntime's library must be where the loader finds it (`docs/spec/search.md`).
 It listens on localhost only: a port alone in `--addr` (`:5080`, the default; `:5081`) is `127.0.0.1`'s unless `ZONE_ALLOW_REMOTE` is set, which opens it on every interface (`listenAddr` in `go/server.go`).
 An address with a host is taken as written (`--addr 0.0.0.0:5080`), and asks for a login first, as `ZONE_ALLOW_REMOTE` does (First run in `docs/spec/security.md`).
-A port another program has stops Zone with what to do (`portTaken` in `go/server.go`): the default is not 5000, which a Mac's AirPlay Receiver and a Synology's DSM use, but another program may have 5080 too: `--addr :5081`.
+A port another program has stops Zonewiki with what to do (`portTaken` in `go/server.go`): the default is not 5000, which a Mac's AirPlay Receiver and a Synology's DSM use, but another program may have 5080 too: `--addr :5081`.
 `zonewiki --help` lists the flags, the commands (`user`, `group`, `config`, `eval`, `health`, `manual`, `licenses`; each takes `--help` too) and the environment.
-`zonewiki version` (or `--version`) prints the version and the build, as the start-up line does (`Zone 0.5.0 (c28ec9e 2026-09-26 19:22)`), without a wiki.
+`zonewiki version` (or `--version`) prints the version and the build, as the start-up line does (`Zonewiki 0.5.0 (c28ec9e 2026-09-26 19:22)`), without a wiki.
 
 ### What the binary holds
 
-The binary carries Zone's own files, so it is all a machine needs besides git:
+The binary carries Zonewiki's own files, so it is all a machine needs besides git:
 the browser code (`public/`), the docs Help and `zone_help` show (`README.md`, `docs/manual/*.md`, `docs/spec/*.md`, `docs/screenshots/*.png`)
 and the licenses (`LICENSE`, `THIRD_PARTY_LICENSES`; the vendored libraries' are in `public/vendor/`).
 `zonewiki licenses` prints every license file it holds, each under its path, so a binary passed on alone still carries them.
@@ -270,10 +270,10 @@ A folder on disk wins over the copy built in, so a checkout serves its files as 
 | The browser code | `--public FOLDER`; `public/` beside the binary, or in the checkout it was built in (`go/zonewiki` → `public/`); the binary's copy |
 | The docs | `--docs FOLDER` (a folder without them: none, and Help says so); the folder the browser code's folder is in, when `docs/spec/` is there; the binary's copy |
 
-A `public/` found from the binary counts only when it holds Zone's entry module, `zonewiki.js`:
-on a Mac's case-insensitive disk, `../public` of a binary in `~/Downloads` is `~/Public`, which Zone would otherwise serve.
-And only when the folder and that file are whoever runs Zone's, or root's, and no one else may write to them (`ownFolder`):
-the browser runs what is in it as Zone's own code, so a binary started in a shared place (`/tmp`) doesn't take a `public/` another user put beside it.
+A `public/` found from the binary counts only when it holds Zonewiki's entry module, `zonewiki.js`:
+on a Mac's case-insensitive disk, `../public` of a binary in `~/Downloads` is `~/Public`, which Zonewiki would otherwise serve.
+And only when the folder and that file are whoever runs Zonewiki's, or root's, and no one else may write to them (`ownFolder`):
+the browser runs what is in it as Zonewiki's own code, so a binary started in a shared place (`/tmp`) doesn't take a `public/` another user put beside it.
 A folder passed over is named in the log, and the binary's copy is served; `--public` takes any folder.
 
 Both are served alike (`go/static.go`): a file's type by its extension, `Last-Modified` (for the binary's copies, which have no time of their own, the time of the binary's file, so a browser asks again after an update),
@@ -288,7 +288,7 @@ so `go build` in `go/` from a fresh clone builds it in, with no step before it.
 
 ## Release binaries
 
-Each `v*` tag's GitHub release carries Zone as one file per platform, for a desktop or a server without Docker:
+Each `v*` tag's GitHub release carries Zonewiki as one file per platform, for a desktop or a server without Docker:
 
 | File | For |
 |------|-----|
@@ -297,7 +297,7 @@ Each `v*` tag's GitHub release carries Zone as one file per platform, for a desk
 | `zonewiki-macos-arm64` | A Mac with Apple silicon |
 | `zonewiki-macos-amd64` | A Mac with an Intel processor |
 | `SHA256SUMS` | The files' SHA-256 sums (`sha256sum -c SHA256SUMS --ignore-missing`; on a Mac `shasum -a 256 -c`) |
-| `LICENSE`, `THIRD_PARTY_LICENSES` | Zone's license and the notices of what the binaries hold |
+| `LICENSE`, `THIRD_PARTY_LICENSES` | Zonewiki's license and the notices of what the binaries hold |
 
 How to use one is in the manual (With the binary in `docs/manual/self-hosting.md`): download, `chmod +x`, run, open `http://localhost:5080`.
 
@@ -306,15 +306,15 @@ CI's test job fails a `v*` tag that isn't (`./run.sh test`, from `GITHUB_REF`), 
 
 ### What a release binary is
 
-- Zone's server with its own files built in (What the binary holds, above): the browser code, Help's docs, the licenses (`zonewiki licenses`).
+- Zonewiki's server with its own files built in (What the binary holds, above): the browser code, Help's docs, the licenses (`zonewiki licenses`).
 - Built without cgo (`CGO_ENABLED=0`), so statically linked on Linux and without semantic search: it searches by keywords (`go/embed_nocgo.go`), as the images CI publishes do for now (Semantic search paused, below).
 - 22 to 24 MB each (`-trimpath -ldflags="-s -w"`); the build string is the tagged commit and its date, from `go build`'s own record of the checkout (`sourceBuild`, Version below).
-- It needs git at run time, for the wiki's history: Zone looks for it on `PATH` at start (`exec.LookPath`) and without it runs with no history, versions or undo.
+- It needs git at run time, for the wiki's history: Zonewiki looks for it on `PATH` at start (`exec.LookPath`) and without it runs with no history, versions or undo.
 - Started with nothing set, the wiki is `~/zonewiki`, made at the first start (Data directory, below), and it listens on port 5080 of localhost only (`127.0.0.1:5080`), printing where to open it.
   There it needs no login; opened to other devices (`ZONE_ALLOW_REMOTE=1`) it shows only its first-run page until one is set, as ever (First run in `docs/spec/security.md`).
 - It isn't signed or notarized: macOS keeps a downloaded one from starting until the quarantine mark is taken off (`xattr -d com.apple.quarantine zonewiki`).
   The arm64 Mac binary carries the ad-hoc signature Go's linker gives every darwin/arm64 binary, which Apple silicon requires to run code at all.
-- No Windows binary: Zone isn't built or tested for Windows, where a file's path and name follow other rules (which the permissions rest on) and no runner of Zone's CI could check them.
+- No Windows binary: Zonewiki isn't built or tested for Windows, where a file's path and name follow other rules (which the permissions rest on) and no runner of Zonewiki's CI could check them.
   On Windows it runs in WSL2: the Linux binary there, or the container (Docker Desktop, Podman).
 
 ### How CI builds them
@@ -325,7 +325,7 @@ It passes git `safe.directory`, so the build string comes from the checkout even
 Run in a git worktree, the container can't reach the repository's own `.git`, and the build string is `unknown`.
 
 GitHub's **release** job (CI (GitHub Actions), below) runs on a `v*` tag once the checks pass:
-it runs `./run.sh binaries`, makes the tag's release when it has none (`gh release create --verify-tag`, titled `Zone <version>`, with GitHub's generated notes)
+it runs `./run.sh binaries`, makes the tag's release when it has none (`gh release create --verify-tag`, titled `Zonewiki <version>`, with GitHub's generated notes)
 and attaches `dist/*` to it (`gh release upload --clobber`, so a run again replaces them),
 with `gh`, which GitHub's runners have, and the workflow's token (`contents: write`): no action of a third party, no secret.
 A release already made for the tag (by hand, with notes of its own) is kept, and gets the files.
@@ -333,7 +333,7 @@ Forgejo's workflow builds no binaries.
 
 ## With the prebuilt image
 
-Any machine with Docker and Compose (your own computer, a server, a NAS, a Raspberry Pi) can run Zone from the prebuilt image, without the repo, git or a build:
+Any machine with Docker and Compose (your own computer, a server, a NAS, a Raspberry Pi) can run Zonewiki from the prebuilt image, without the repo, git or a build:
 `run.sh`, `compose.yaml` (and for rootless Podman `compose.podman.yaml`) and a `.env` with `ZONE_DATA` in one folder, then `./run.sh up`.
 `run.sh` fills in the rest, as in a checkout (run.sh, above), and gives the same commands (`./run.sh user add alice`, `./run.sh config set hosts …`, `./run.sh update`).
 Without `run.sh`, `docker compose up -d` in that folder, with the `.env` below.
@@ -347,11 +347,11 @@ The wiki is untouched by an update; it lives in the folder `ZONE_DATA` names.
 - `ZONE_DATA`: the wiki folder; it must exist (create it first, empty or with Markdown files in it).
   Without `run.sh`, as an absolute path.
 - Without `run.sh`, or for another owner than who runs it: `ZONE_UID`, `ZONE_GID`, the owner of that folder (`id -u` and `id -g` as that user, or `ls -nd <folder>`).
-  Zone runs as that user and writes the wiki as it.
+  Zonewiki runs as that user and writes the wiki as it.
 - Without `run.sh` (which takes the host's): `TZ`, e.g. `Europe/Vienna`, so "today" is your day (else UTC).
 - For other devices (a NAS, a server): `ZONE_ALLOW_REMOTE=1` with `run.sh`, or `ZONE_BIND=0.0.0.0`, which publishes the port on every interface instead of localhost.
 - Optional: `ZONE_PORT` (the host's port, default 5080).
-  `ZONE_SEMANTIC_SEARCH=on` does nothing with the prebuilt image for now: it has no semantic search since 2026-11-18 (Semantic search paused, below), so Zone searches by keywords.
+  `ZONE_SEMANTIC_SEARCH=on` does nothing with the prebuilt image for now: it has no semantic search since 2026-11-18 (Semantic search paused, below), so Zonewiki searches by keywords.
 
 The wiki's own settings go in its settings file (`.zone/config`, `docs/spec/users.md`), through the container, in the folder of `compose.yaml` and `.env` (no repo needed):
 
@@ -362,17 +362,17 @@ The wiki's own settings go in its settings file (`.zone/config`, `docs/spec/user
 ```
 
 On the network, the login needs no command: opened in a browser, a wiki without one asks for a password first
-(First run in `docs/spec/security.md`; `compose.yaml` hands Zone `ZONE_BIND`, so it knows its port is on the LAN),
+(First run in `docs/spec/security.md`; `compose.yaml` hands Zonewiki `ZONE_BIND`, so it knows its port is on the LAN),
 and shows nothing before.
 The commands above set it just as well.
 
-`hosts` are the names and addresses you open Zone by (The Host check in `docs/spec/security.md`);
-without them only localhost gets in, and a browser opening Zone by another name gets a 400 that says to add it (the log names it too).
+`hosts` are the names and addresses you open Zonewiki by (The Host check in `docs/spec/security.md`);
+without them only localhost gets in, and a browser opening Zonewiki by another name gets a 400 that says to add it (the log names it too).
 `ZONE_ALLOW_REMOTE=1` in `.env` instead lets in any IP address (`http://192.168.1.20:5080`) with nothing to set up; a name (`nas.local`) still goes in `hosts`.
-Until a login is set Zone shows only its first-run page (`no-login = yes` in the settings file turns that off, for a wiki open on purpose);
+Until a login is set Zonewiki shows only its first-run page (`no-login = yes` in the settings file turns that off, for a wiki open on purpose);
 `config token` (or `user token NAME`) makes a token for AI clients.
 
-Zone is then at `http://localhost:5080`, or on the network at `http://<nas>:<ZONE_PORT>`.
+Zonewiki is then at `http://localhost:5080`, or on the network at `http://<nas>:<ZONE_PORT>`.
 Over the internet, put HTTPS in front (a reverse proxy, below); the session cookie is `Secure` when the proxy sends `X-Forwarded-Proto: https`.
 
 ### Synology
@@ -386,15 +386,15 @@ With Container Manager (DSM 7.2 or newer; Docker on older DSM works the same ove
 3. **Files**: put `compose.yaml` into the project folder (Container Manager looks for that name), and next to it a `.env` with at least `ZONE_DATA=/volume1/docker/zonewiki/wiki`, `ZONE_UID`, `ZONE_GID`, `TZ`, `ZONE_BIND=0.0.0.0` and `ZONE_PORT=5080`;
    then, over SSH in the project folder, `hosts` (the NAS's name and LAN address) with the command above (`docker compose run …`, or `./run.sh config set hosts …` with `run.sh` put there too);
    or, without SSH, `ZONE_ALLOW_REMOTE=1` in `.env`.
-   The login is set in the browser, on the page Zone shows first.
+   The login is set in the browser, on the page Zonewiki shows first.
 4. **Project**: Container Manager → Project → Create, name `zonewiki`, path the project folder; it finds `compose.yaml` there.
    Finish the wizard with the project set to start once created; the first start pulls the image (about 1.1 GB).
 5. **HTTPS** (optional): Control Panel → Login Portal → Advanced → Reverse Proxy: source `HTTPS`, your host name, port 443; destination `HTTP`, `localhost`, port 5080.
    Under Custom Header, add `X-Forwarded-Proto` = `$scheme` if DSM doesn't send it.
    Add the host name to `hosts` (`config set hosts …`), and a certificate for it (Control Panel → Security → Certificate).
-   The proxy reaches the container through Docker's network, so Zone sees it as the network's gateway (`172.17.0.1` or another in `172.16.0.0/12`);
-   Zone's log names it on the first proxied request ("requests from … carry X-Forwarded-For"),
-   and `config set trusted-proxies <that address>` lets Zone tell the proxy's clients apart when it throttles wrong passwords (without it they count as one).
+   The proxy reaches the container through Docker's network, so Zonewiki sees it as the network's gateway (`172.17.0.1` or another in `172.16.0.0/12`);
+   Zonewiki's log names it on the first proxied request ("requests from … carry X-Forwarded-For"),
+   and `config set trusted-proxies <that address>` lets Zonewiki tell the proxy's clients apart when it throttles wrong passwords (without it they count as one).
 
 Updates: over SSH, `docker compose pull && docker compose up -d` in the project folder (Container Manager's Image list may also offer the update for `ghcr.io/zonewiki/zonewiki`).
 
@@ -445,7 +445,7 @@ It waits for the checks because the jobs share the host's engine:
 beside test's worker per CPU and e2e's browsers, the bench's clients at once measured the CPU they waited for
 (a page beside thirty searches seven times slower than alone, where the slack allows three).
 GitHub's workflow has no bench: what reaches GitHub has passed Forgejo's run (a fork's pull request runs no bench anywhere),
-and GitHub's shared runners would measure their neighbours more than Zone, a red mark on the public main that says nothing.
+and GitHub's shared runners would measure their neighbours more than Zonewiki, a red mark on the public main that says nothing.
 
 **retrieval** measures search's quality on the sample wiki against its floor (Measuring retrieval in `docs/spec/search.md`).
 It builds the app's image with the model, under a tag of its own (`zonewiki-retrieval`), from the engine's cache unless the code or the model changed.
@@ -550,7 +550,7 @@ A new package on ghcr.io is private: make it public once in its settings on GitH
 ### GitHub's code scanning
 
 `.github/workflows/codeql.yml` is a second workflow: CodeQL over the Go, the browser code, the scripts and the workflows, a job a language, on a push to main, a pull request and once a week.
-What it leaves out and what it is told of Zone's checks is in `.github/codeql/` (Code scanning in `docs/spec/security.md`).
+What it leaves out and what it is told of Zonewiki's checks is in `.github/codeql/` (Code scanning in `docs/spec/security.md`).
 
 ## Network access
 
@@ -558,7 +558,7 @@ What it leaves out and what it is told of Zone's checks is in `.github/codeql/` 
 
 - Unset, `run.sh` exports `ZONE_BIND=127.0.0.1`, so the container's port 5080 is only exposed on the host's loopback interface, and the host-header check rejects any `Host` header but localhost and the settings file's `hosts`.
 - With `ZONE_ALLOW_REMOTE=1`, `run.sh` exports `ZONE_BIND=0.0.0.0` (LAN-accessible port binding),
-  and without `hosts` the host-header check lets in any IP address too (and names in `.internal`), so the LAN reaches Zone by address;
+  and without `hosts` the host-header check lets in any IP address too (and names in `.internal`), so the LAN reaches Zonewiki by address;
   a name it is opened by goes in `hosts`.
 
 Both compose files map `${ZONE_BIND:-127.0.0.1}:${ZONE_PORT:-5080}:5080`; without `run.sh`, `ZONE_BIND=0.0.0.0` must be set in `.env`, alongside `ZONE_ALLOW_REMOTE=1` or `hosts`.
@@ -569,11 +569,11 @@ The `Host` check alone wouldn't keep the network out: a client on the LAN sends 
 ### A Unix socket
 
 `zonewiki --addr unix:PATH` listens on a Unix socket at PATH and on no port:
-for a reverse proxy on the same machine, when Zone runs from the binary or in a container with the socket's folder mounted and no network of its own.
+for a reverse proxy on the same machine, when Zonewiki runs from the binary or in a container with the socket's folder mounted and no network of its own.
 Caddy reaches it with `reverse_proxy unix//run/zone/zone.sock`, nginx with `proxy_pass http://unix:/run/zone/zone.sock:;`.
 
 Who may connect is who may reach the path: the socket itself is open to every local user (mode 0666, as a port on localhost is), so the folder it is in decides, and the proxy's user must be able to enter that folder.
-Zone replaces a socket file that a Zone that was killed left behind;
+Zonewiki replaces a socket file that a Zonewiki that was killed left behind;
 it doesn't start when something still listens there, or when the path is a file of another kind (`listen` in `go/server.go`).
 
 Whoever connects has no address and is taken for the proxy: its `X-Forwarded-For` names the client, whatever `trusted-proxies` holds (Throttling in `docs/spec/security.md`).
@@ -582,9 +582,9 @@ The healthcheck over it: `zonewiki health unix:PATH`.
 
 ### Started by systemd, asleep when idle
 
-`zonewiki --addr fd:3` serves on a listening socket Zone was started with, the way systemd hands one to a service it starts for a socket unit
+`zonewiki --addr fd:3` serves on a listening socket Zonewiki was started with, the way systemd hands one to a service it starts for a socket unit
 (socket activation; `fd:3` is the first such socket, and Podman passes it on into a container).
-systemd holds the socket and starts Zone when a connection comes:
+systemd holds the socket and starts Zonewiki when a connection comes:
 
 ```
 # zone.socket                          # zone.service
@@ -593,14 +593,14 @@ ListenStream=/run/zone/zone.sock       Environment=ZONE_DATA=/srv/wiki ZONE_IDLE
                                        ExecStart=/usr/local/bin/zonewiki --addr fd:3
 ```
 
-With `ZONE_IDLE_EXIT` (a duration: `15m`, `1h`; unset or `off`: never) Zone exits, with exit code 0, once no request came for that long (`exitWhenIdle` in `go/server.go`),
+With `ZONE_IDLE_EXIT` (a duration: `15m`, `1h`; unset or `off`: never) Zonewiki exits, with exit code 0, once no request came for that long (`exitWhenIdle` in `go/server.go`),
 and uses no memory until the next one starts it again:
 that one waits in the socket for the start, a fraction of a second, since the search index is in its files.
 
-What counts as a request is everything but `/api/health`, so whatever watches Zone doesn't keep it up;
+What counts as a request is everything but `/api/health`, so whatever watches Zonewiki doesn't keep it up;
 a browser tab nobody is at asks nothing either (`whileUsed`, Modules in `docs/spec/navigation.md`).
 
-Zone stays up:
+Zonewiki stays up:
 
 - while a request runs;
 - while a throttle remembers a wrong password or token (for a day after a client's last wrong try, until its right one): an exit would forget the count and give a guesser five new tries each time;
@@ -611,12 +611,12 @@ so a tab left open over a sleep saves as after any restart
 (plainly if the page is as it was; with a conflict to settle if it changed meanwhile; Several editors in `docs/spec/editor.md`).
 Who wrote a draft that isn't committed yet is only in memory, so before the exit each draft is committed in its author's name (`commitDrafts` in `go/merge.go`).
 
-`ZONE_IDLE_EXIT` on a socket or port Zone opened itself is ignored, with a line in the log, since nothing would start Zone again.
-A Unix socket handed over is treated as one Zone opened (`--addr unix:PATH`, above): its peer is the proxy; the file is the holder's and stays when Zone exits.
+`ZONE_IDLE_EXIT` on a socket or port Zonewiki opened itself is ignored, with a line in the log, since nothing would start Zonewiki again.
+A Unix socket handed over is treated as one Zonewiki opened (`--addr unix:PATH`, above): its peer is the proxy; the file is the holder's and stays when Zonewiki exits.
 
 ## Mail
 
-Zone sends mail for sign-up (Sign-up in `docs/spec/users.md`) and to tell a user that someone gave them a task (Assigning tasks there), mentions them or comments on a task of theirs (Mail in `docs/spec/tasks.md`; each kind only once the user turns it on),
+Zonewiki sends mail for sign-up (Sign-up in `docs/spec/users.md`) and to tell a user that someone gave them a task (Assigning tasks there), mentions them or comments on a task of theirs (Mail in `docs/spec/tasks.md`; each kind only once the user turns it on),
 through an SMTP server the deployment names in `.env` (`go/mail.go`, Go's `net/smtp`; no dependency):
 
 ```bash
@@ -646,7 +646,7 @@ With `none` the password goes only to this machine (`net/smtp`'s `PlainAuth` ref
 
 ### Checked at start
 
-Zone won't start on a mail setting without `ZONE_SMTP_HOST`,
+Zonewiki won't start on a mail setting without `ZONE_SMTP_HOST`,
 a port or TLS mode it doesn't know,
 a password without a user,
 a missing or invalid `ZONE_MAIL_FROM` (a bare address, no name),
@@ -662,7 +662,7 @@ The mail about an assigned task is sent in the background: a task write never wa
 
 Set `ZONE_ALLOW_REMOTE=1` in `.env` (and restart with `./run.sh up`) to bind on all interfaces:
 `run.sh` then maps `0.0.0.0:5080` and the server's host-header check lets in any IP address (a name goes in `hosts`).
-Phones on the same network reach Zone at `http://<host-LAN-IP>:5080`.
+Phones on the same network reach Zonewiki at `http://<host-LAN-IP>:5080`.
 
 A wiki other devices can reach and that has no login yet answers only `/setup`, where the first login is chosen,
 unless `no-login = yes` says it is open on purpose (First run in `docs/spec/security.md`, `go/setup.go`);
@@ -675,22 +675,22 @@ iOS Safari ignores the setting.
 
 ## Version
 
-Zone's version is a semver constant, `version` in `go/config.go`, bumped by hand.
-Zone is an alpha, so its version starts with 0:
+Zonewiki's version is a semver constant, `version` in `go/config.go`, bumped by hand.
+Zonewiki is an alpha, so its version starts with 0:
 a release that changes something people rely on (how tasks are stored, the settings file's keys, the MCP tools, URLs) raises the minor number,
 a release of fixes the patch number.
-1.0 will promise that a newer Zone takes an older wiki over by itself (a step for each change of The data format, below) and that the MCP tools and settings don't break without notice.
-(The numbers 1.0 to 2.0 in the history from before Zone was published were never released.)
+1.0 will promise that a newer Zonewiki takes an older wiki over by itself (a step for each change of The data format, below) and that the MCP tools and settings don't break without notice.
+(The numbers 1.0 to 2.0 in the history from before Zonewiki was published were never released.)
 Next to it the build is shown: the commit it was built from plus that commit's date, e.g. `c28ec9e 2026-09-26 19:22`, with ` +dirty` when `go/` or `public/` had uncommitted changes
 (a commit can't contain its own hash, so this part can't be a committed constant).
 
 | Where | What it shows |
 |-------|---------------|
-| The shortcuts modal (`?`) | Both (`Zone 0.5.0 · c28ec9e 2026-09-26 19:22`) |
-| Every page's bottom-left corner | The version and short hash (`Zone 0.5.0 · c28ec9e`, `+dirty` when so) |
+| The shortcuts modal (`?`) | Both (`Zonewiki 0.5.0 · c28ec9e 2026-09-26 19:22`) |
+| Every page's bottom-left corner | The version and short hash (`Zonewiki 0.5.0 · c28ec9e`, `+dirty` when so) |
 | The `<meta name="generator">` tag | The version |
 | `/api/version` | `{ version, build }` |
-| `zonewiki version`, `--version` | Both, as the start-up line (`Zone 0.5.0 (c28ec9e 2026-09-26 19:22)`) |
+| `zonewiki version`, `--version` | Both, as the start-up line (`Zonewiki 0.5.0 (c28ec9e 2026-09-26 19:22)`) |
 
 The corner shows the full build on hover (`.zone-build` in `layout.html`); it is faint, only from 1140px wide where the margin beside the text column has room, and not in the editor.
 
@@ -699,12 +699,12 @@ The image has no `.git`, so `run.sh` computes the build string and passes it as 
 Without the container, the binary has the same string from what `go build` recorded of the checkout (`sourceBuild()`: the commit, its time, whether the tree had changes);
 `$ZONE_BUILD` wins when set, and with neither the modal shows the version alone.
 
-The shortcuts modal (`?`) also links to Zone's source (`sourceURL` in `go/config.go`) and names its license, AGPL-3.0-or-later:
-whoever runs a changed Zone for others over a network has to offer them its source, so a fork points that constant at its own copy.
+The shortcuts modal (`?`) also links to Zonewiki's source (`sourceURL` in `go/config.go`) and names its license, AGPL-3.0-or-later:
+whoever runs a changed Zonewiki for others over a network has to offer them its source, so a fork points that constant at its own copy.
 
 ## Home-screen app
 
-`public/manifest.json` plus `apple-touch-icon.png`, `icon-192.png` and `icon-512.png` (linked from every page's `<head>` by `templates/layout.html`) give "Add to home screen" a proper Zone name and icon.
+`public/manifest.json` plus `apple-touch-icon.png`, `icon-192.png` and `icon-512.png` (linked from every page's `<head>` by `templates/layout.html`) give "Add to home screen" a proper Zonewiki name and icon.
 Everything under `/public/` is reachable without login, which matters because browsers may fetch these without the session cookie.
 The PNGs are rendered once from `public/icon.svg` (full-bleed green square, the white open frame inside the central 80% "maskable" safe zone; written with the favicon and `docs/logo/` by `docs/logo/make_logo.py`) and committed, so there is still no build step.
 To change the icon, edit the SVG and re-render the PNGs, e.g. with a screenshot in the Playwright image (`zonewiki-tools`).
@@ -715,17 +715,17 @@ iOS Safari is more lenient.
 
 Set `ZONE_DATA` in `.env` to any host path (default: `~/zonewiki`).
 `run.sh` expands a leading `~` to your home directory before starting the container.
-A folder that `ZONE_DATA` names must exist: neither `run.sh up` nor Zone creates it (`loadConfig` exits with "no wiki at …"), so a mistyped path can't start an empty wiki somewhere else.
+A folder that `ZONE_DATA` names must exist: neither `run.sh up` nor Zonewiki creates it (`loadConfig` exits with "no wiki at …"), so a mistyped path can't start an empty wiki somewhere else.
 
-Zone started with `ZONE_DATA` unset (or empty), as the binary is on a desktop, takes `~/zonewiki` (`defaultData` in `go/config.go`: `$HOME/zonewiki`),
+Zonewiki started with `ZONE_DATA` unset (or empty), as the binary is on a desktop, takes `~/zonewiki` (`defaultData` in `go/config.go`: `$HOME/zonewiki`),
 and makes that one folder at the first start, saying so in its log ("ZONE_DATA isn't set: made a new wiki at …");
 the commands (`zonewiki user …`, `config …`) do the same, so a password can be set before the first start.
 It makes nothing else: without a home folder, or with a file at `~/zonewiki`, it exits and says to set `ZONE_DATA`.
 At start it prints where to open it and where the wiki is, under the line it listens on:
 `Open http://localhost:5080 in a browser. The wiki is /home/anna/zonewiki`
-(`base-url` when it is set; no such line on a socket or behind compose, whose port mapping Zone doesn't know: `ZONE_BIND` set).
+(`base-url` when it is set; no such line on a socket or behind compose, whose port mapping Zonewiki doesn't know: `ZONE_BIND` set).
 
-In an existing wiki folder Zone creates what it needs (`_assets/`, `_tasks/`, `index.md`):
+In an existing wiki folder Zonewiki creates what it needs (`_assets/`, `_tasks/`, `index.md`):
 
 ```
 ZONE_DATA=~/zonewiki    # or /home/user/my-wiki, /mnt/nas/wiki, etc.
@@ -739,12 +739,12 @@ A folder is a wiki when it has a `.zone-format`.
 A start on one that isn't makes it one: a home page, `_assets/`, `.zone/`, `.zone-format`, and, with git, a repository whose first commit holds its files as they are.
 An empty folder (or one with only `.zone/`, which the commands write before a first start, `_assets/`, and an empty repository's `.git`) is made a wiki without asking.
 A folder that holds files is made one only with `--init` or `ZONE_INIT=1` (`newWikiError`):
-otherwise Zone doesn't start, leaves the folder as it was, and names the first files it found, how to go on (`--init`, `ZONE_INIT=1` in `.env` for the container), and that ZONE_DATA may name another folder.
+otherwise Zonewiki doesn't start, leaves the folder as it was, and names the first files it found, how to go on (`--init`, `ZONE_INIT=1` in `.env` for the container), and that ZONE_DATA may name another folder.
 That is what a folder of Markdown notes wants once, and what a mistyped `ZONE_DATA` (the home folder, `~/Documents`) must never get: all its files committed.
 After the first start the folder is a wiki, so `ZONE_INIT` may stay set.
-A `.git` doesn't make a folder a wiki: a project's checkout and a home folder kept in git have one, and Zone would commit its home page and its changes into that repository.
+A `.git` doesn't make a folder a wiki: a project's checkout and a home folder kept in git have one, and Zonewiki would commit its home page and its changes into that repository.
 So notes kept in git already need `--init` once too; the wiki's history then goes on from theirs.
-The check runs at start before Zone writes anything in the folder, after the one for a folder inside another repository (Layout, below).
+The check runs at start before Zonewiki writes anything in the folder, after the one for a folder inside another repository (Layout, below).
 
 ### Layout
 
@@ -754,18 +754,18 @@ The check runs at start before Zone writes anything in the folder, after the one
   a group's page's in `groups/<group>/_assets/`, a private page's in `private/<user>/_assets/`, a task's (with users) in `_tasks/files/<task id>/_assets/`
 - `$ZONE_DATA/_tasks/` — the tasks (`tasks.json`, `closed.json`, `closed-YYYY-MM.json`, each list's in `lists/<name>/`, and `lists.json`, the lists' registry, with the settings of All tasks; see Storage in `docs/spec/tasks.md`);
   each user's private tasks in `private/<user>/_tasks/`
-- `$ZONE_DATA/.git/` — the wiki's history: Zone makes the folder a git repository at its first start (`gitSetup`) and commits every change made through it (Packing the repository, below).
-  A folder inside another repository's working tree is made one only where that repository ignores it (`git check-ignore`; a home folder kept in git for its dotfiles, which ignores the rest): otherwise Zone doesn't start, leaves the folder as it was (it checks before it writes anything there), and says to use a folder outside it or to add the folder to that repository's `.gitignore` (`outerRepo`), since a repository of the wiki's own would hide its files from the outer one, whose `git add` records a pointer, not the pages.
+- `$ZONE_DATA/.git/` — the wiki's history: Zonewiki makes the folder a git repository at its first start (`gitSetup`) and commits every change made through it (Packing the repository, below).
+  A folder inside another repository's working tree is made one only where that repository ignores it (`git check-ignore`; a home folder kept in git for its dotfiles, which ignores the rest): otherwise Zonewiki doesn't start, leaves the folder as it was (it checks before it writes anything there), and says to use a folder outside it or to add the folder to that repository's `.gitignore` (`outerRepo`), since a repository of the wiki's own would hide its files from the outer one, whose `git add` records a pointer, not the pages.
   A folder that is a repository already is the wiki's, wherever it lies.
   Its log says which it did at each start: "made … a git repository" (its files as they are, in one commit), "found a git repository in …" (the history goes on), or, without git on `PATH`, that the wiki keeps no history
 - `$ZONE_DATA/.zone-format` — the format the wiki's files are in, a number, in git (The data format, below)
-- `$ZONE_DATA/.zone/` — Zone's own state, out of git (What is in .zone/, below)
+- `$ZONE_DATA/.zone/` — Zonewiki's own state, out of git (What is in .zone/, below)
 
 Uploaded image URLs use `/_assets/<filename>` (served by `serveUpload` from `cfg.Uploads`), not the static file path.
 
 ### What is in .zone/
 
-Zone's own state, none of it in git (`.git/info/exclude` has `/.zone/*`, `excludeState`; each file's name is `statePath(…)` in the code):
+Zonewiki's own state, none of it in git (`.git/info/exclude` has `/.zone/*`, `excludeState`; each file's name is `statePath(…)` in the code):
 
 - `config` — the settings file: the wiki's settings and users, password and token hashes (`docs/spec/users.md`)
 - `secret_key` — the key that signs the session cookies (0600; `secretKey`)
@@ -785,50 +785,50 @@ Zone's own state, none of it in git (`.git/info/exclude` has `/.zone/*`, `exclud
 ### The data format
 
 `.zone-format` at the wiki's root says which format the wiki's files are in: a number and a newline (`1`).
-Zone writes it at a wiki's first start, in a commit of its own ("Note the format of the wiki's files").
-A wiki without it is taken for a new one: Zone takes nothing over from an older Zone's files (what Zone wrote before the file is no longer converted), and writes the file.
+Zonewiki writes it at a wiki's first start, in a commit of its own ("Note the format of the wiki's files").
+A wiki without it is taken for a new one: Zonewiki takes nothing over from an older Zonewiki's files (what Zonewiki wrote before the file is no longer converted), and writes the file.
 
-| The file says | Zone |
+| The file says | Zonewiki |
 |---------------|------|
 | Nothing (no file) | Writes its own format |
 | Its own format | Starts |
 | An older format | Runs the steps from that format on, each writing its number in its own commit |
-| A newer format | Doesn't start: "the wiki's files are in format 2 (.zone-format), which a newer Zone wrote" |
+| A newer format | Doesn't start: "the wiki's files are in format 2 (.zone-format), which a newer Zonewiki wrote" |
 | Anything but a number | Doesn't start, and says how to mend it |
 
 Format 1 is the first, so there are no steps yet: the row for an older format is for when a change raises the number.
 
-**Why it is refused**: a newer Zone changed files in ways this one would misread and then write over (an image rolled back after an upgrade).
-Start the newer Zone again, or go back: revert, newest first, the commits that raised the number (`git log -- .zone-format`), and with them the steps they wrote.
+**Why it is refused**: a newer Zonewiki changed files in ways this one would misread and then write over (an image rolled back after an upgrade).
+Start the newer Zonewiki again, or go back: revert, newest first, the commits that raised the number (`git log -- .zone-format`), and with them the steps they wrote.
 
 **Why it is in git, not in `.zone/`**: it speaks for the files in git, so it has to move with them.
 A revert of a step's commit takes back the files and the number together, and so do a `git pull` and a checkout of an older commit;
-a number in `.zone/` would still say the newer format, so the older Zone would refuse the wiki, and the newer one would skip the step the revert took back.
+a number in `.zone/` would still say the newer format, so the older Zonewiki would refuse the wiki, and the newer one would skip the step the revert took back.
 A backup or a copy of the folder has the file either way, and a clone of the remote has it too.
 No route or tool reads or writes it (`safePath` takes only a page's `.md`).
 
 **How it works** (`go/wikiformat.go`): `checkWikiFormat` reads the file before anything at start writes, and `noteWikiFormat` writes the number into a wiki that has none, after the task files are set up (`setUpTasks`).
-A change to what Zone keeps in git that an older Zone would misread raises `wikiFormat`, with a step at start that takes a wiki of the format before over and writes the new number into the same commit (`writeWikiFormat`).
-Readers stay lenient all the same: the number says which steps Zone ran, not that every file is as Zone wrote it (a file edited by hand or pulled from elsewhere is read as before).
+A change to what Zonewiki keeps in git that an older Zonewiki would misread raises `wikiFormat`, with a step at start that takes a wiki of the format before over and writes the new number into the same commit (`writeWikiFormat`).
+Readers stay lenient all the same: the number says which steps Zonewiki ran, not that every file is as Zonewiki wrote it (a file edited by hand or pulled from elsewhere is read as before).
 The settings file and the rest of `.zone/` aren't covered: they are no wiki data (What is in .zone/, above).
 
-What holds users' words or secrets is written readable by Zone's user alone (0600), whatever the umask: `config`, `secret_key`, `signed-out`, `links`, `grants`, `seen/`, `unsaved-files.json`, `drafts/`, the index files, `index/tasks/` (private tasks' titles among them), `embeddings.json` (every page's slug) and `queries.jsonl` (every user's queries and what they found) (`atomicfile.WriteOwnerOnly`; a file from before is made so at its next write).
+What holds users' words or secrets is written readable by Zonewiki's user alone (0600), whatever the umask: `config`, `secret_key`, `signed-out`, `links`, `grants`, `seen/`, `unsaved-files.json`, `drafts/`, the index files, `index/tasks/` (private tasks' titles among them), `embeddings.json` (every page's slug) and `queries.jsonl` (every user's queries and what they found) (`atomicfile.WriteOwnerOnly`; a file from before is made so at its next write).
 The pages themselves, in the wiki, keep the umask's mode, as a file made in an editor does.
 
 ### A git remote
 
 Optional: `./run.sh config set git-remote git@github.com:user/wiki.git`.
 At start and when it changes, `setGitRemote()` adds or updates `origin` to that URL, so `git push` works from the terminal.
-Zone doesn't push by itself (Backups, below).
+Zonewiki doesn't push by itself (Backups, below).
 
 ### Backups
 
 **Back up the whole data directory** (`ZONE_DATA`): it is the wiki, and there is nothing of it anywhere else.
-The simplest backup is a copy of that folder taken while Zone is stopped (`./run.sh down`), or a snapshot of the file system it is on (a NAS's snapshots, ZFS, btrfs).
-Zone writes each file whole (a reader never sees half of one), but a copy taken file by file while Zone runs can catch a git commit or a task write half done across files.
+The simplest backup is a copy of that folder taken while Zonewiki is stopped (`./run.sh down`), or a snapshot of the file system it is on (a NAS's snapshots, ZFS, btrfs).
+Zonewiki writes each file whole (a reader never sees half of one), but a copy taken file by file while Zonewiki runs can catch a git commit or a task write half done across files.
 
 - **What git holds**: the pages, the uploads (`_assets/` and the private and groups' ones), the tasks and their lists (`_tasks/`, `private/<user>/_tasks/`), each with its history.
-  With `git-remote` set (A git remote, above), `git -C "$ZONE_DATA" push origin` copies that elsewhere (Zone doesn't push by itself); a change made on disk and not committed yet is in no commit.
+  With `git-remote` set (A git remote, above), `git -C "$ZONE_DATA" push origin` copies that elsewhere (Zonewiki doesn't push by itself); a change made on disk and not committed yet is in no commit.
 - **What git doesn't hold, and a clone of the remote lacks**: `.zone/`, above all
   `config` (the users, their roles, groups, mail addresses and password hashes, the MCP tokens' hashes and every setting: without it a clone of a wiki with users won't start, `missingUsers`),
   `secret_key` (without it everyone signs in again),
@@ -838,44 +838,44 @@ Zone writes each file whole (a reader never sees half of one), but a copy taken 
   and `removed-users` (without it a stranger could sign up under the name of a user removed whose trace is only there).
   Back these up with the folder; where the git remote is the only copy, keep a copy of `.zone/` beside it.
   They hold password and token hashes and keys: keep the backup as confidential as the wiki (Before you open it up in `docs/spec/security.md`).
-- **What can be rebuilt, and needn't be backed up**: `.zone/index/` (Zone builds the search indexes again when they are first needed, which takes a while on a big wiki, and with semantic search embeds every section and task again in the background, which takes longer),
+- **What can be rebuilt, and needn't be backed up**: `.zone/index/` (Zonewiki builds the search indexes again when they are first needed, which takes a while on a big wiki, and with semantic search embeds every section and task again in the background, which takes longer),
   `.zone/tmp/`, the lock files and the mark `tasks-checked` (a start without it looks the task files through again and changes nothing that is right).
   Lost, `seen/` shows each user the tasks' news again, `drafts/` loses only a text left in a conflict, `unsaved-files.json` the files pasted in a dialog not saved yet to their uploader (no one opens them), and `queries.jsonl` is a log.
-- **Restoring**: put the folder back where `ZONE_DATA` points and start Zone;
-  the files must belong to the user Zone runs as, and `.zone/config` and `secret_key` should stay readable by it alone (0600: Zone warns in its log when others may read the settings file).
+- **Restoring**: put the folder back where `ZONE_DATA` points and start Zonewiki;
+  the files must belong to the user Zonewiki runs as, and `.zone/config` and `secret_key` should stay readable by it alone (0600: Zonewiki warns in its log when others may read the settings file).
 
 ## Packing the repository
 
-Zone packs the wiki's git repository itself, in the background, so that no commit (and no request that made one) waits for git's housekeeping.
-git's own maintenance is off; Zone packs the loose objects every 50 commits and joins the packs into one when they have become many or heavy.
+Zonewiki packs the wiki's git repository itself, in the background, so that no commit (and no request that made one) waits for git's housekeeping.
+git's own maintenance is off; Zonewiki packs the loose objects every 50 commits and joins the packs into one when they have become many or heavy.
 A run that fails is logged and leaves the repository as it is, only larger.
 
 ### git's own maintenance is off
 
 git runs with `maintenance.autoDetach=false` and `gc.autoDetach=false` (package `gitrepo`'s environment; the tests' own git calls set the same, `settings.GIT_ENV`).
 git 2.47+ starts its automatic maintenance after a commit as a detached process,
-which nobody reaped with Zone as the container's PID 1,
+which nobody reaped with Zonewiki as the container's PID 1,
 so every commit left a zombie until the PID limit (2048) stopped everything (it also crashed test sessions).
 Not detached, git reaps its own children; the compose files' `init: true` (a minimal init as PID 1) covers anything else.
 
 git's own packing after a commit is off too (`gc.auto=0`, `maintenance.auto=false` in the same environment),
 since it runs inside the commit, and the request that made it, when its turn comes.
 
-### When Zone packs
+### When Zonewiki packs
 
 `packSoon`, `packNow` in `go/gitstore.go`; `Repo.Pack` in package `gitrepo`.
 
-- Every 50 commits (`packEvery`), and once after the start, Zone packs the loose objects in the background,
+- Every 50 commits (`packEvery`), and once after the start, Zonewiki packs the loose objects in the background,
   one run at a time, beside whatever commits meanwhile.
-- At start Zone packs only when an earlier run left 200 loose objects or more.
+- At start Zonewiki packs only when an earlier run left 200 loose objects or more.
 - A pack is `git repack -l`, which leaves what is packed as it is.
 - Then, while no commit runs (`commitMu`), the loose objects that are packed now are removed
   (`git prune-packed`: beside a commit it would take away the folder a `git add` is writing into).
-- After each pack Zone adds the new commits to the commit-graph (below), and at the start it writes one for a wiki that has none.
+- After each pack Zonewiki adds the new commits to the commit-graph (below), and at the start it writes one for a wiki that has none.
 
 ### The commit-graph
 
-git's own maintenance would write a commit-graph, and it is off, so Zone writes it (`writeGraph` in `go/gitstore.go`, `Repo.WriteGraph` in package `gitrepo`):
+git's own maintenance would write a commit-graph, and it is off, so Zonewiki writes it (`writeGraph` in `go/gitstore.go`, `Repo.WriteGraph` in package `gitrepo`):
 `git commit-graph write --reachable --changed-paths --split`, in the background beside whatever commits.
 It holds, for each commit, a filter of the paths it changed (a Bloom filter, version 2 where git knows it),
 so a log of one path (a page's history, its last change on the page view, whether a page was deleted, whether a name was ever used) reads only the commits that may have touched it, not the whole history.
@@ -921,7 +921,7 @@ Images and PDFs have no differences worth finding, and comparing them makes a jo
 
 ## How big a wiki can be
 
-Zone keeps no index of the wiki's pages or tasks in memory beyond per-page caches:
+Zonewiki keeps no index of the wiki's pages or tasks in memory beyond per-page caches:
 a page view walks the wiki's folders and looks at every page's links (cached by the file's mtime, so one `stat` a page) for its backlinks,
 and reads the open tasks' file whole,
 once a request (`rq.openTasks`),
@@ -960,7 +960,7 @@ Closed tasks cost nothing until they are looked at: a page view doesn't read the
 What would lift the ceiling, when it is needed: the pages' mtimes taken from the walk instead of a `stat` each (`pageStats`).
 The task files are already parsed once and kept until a file's time, size or inode changes (`parsedFile` in `go/internal/taskfiles`).
 
-## From Zone 1 (or Leaf)
+## From Zonewiki 1 (or Leaf)
 
-Zone takes nothing over from an older Zone's files (Older data in `docs/spec/tasks.md`).
-A wiki last run by Zone 1 (or Leaf) is started once with the last Zone 1 release (it moves `.leaf/` to `.zone/` and `_deck/` to `_tasks/`), then once with Zone 1caf0d78 or older, which takes its lists and views over, before this one; `[[deck …]]` embeds and Zone 1's names (`/deck`, `leaf_help`, `LEAF_…` in `.env`) are rewritten by hand.
+Zonewiki takes nothing over from an older Zonewiki's files (Older data in `docs/spec/tasks.md`).
+A wiki last run by Zonewiki 1 (or Leaf) is started once with the last Zonewiki 1 release (it moves `.leaf/` to `.zone/` and `_deck/` to `_tasks/`), then once with Zonewiki 1caf0d78 or older, which takes its lists and views over, before this one; `[[deck …]]` embeds and Zonewiki 1's names (`/deck`, `leaf_help`, `LEAF_…` in `.env`) are rewritten by hand.

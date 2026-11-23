@@ -2,7 +2,7 @@ import { closeOnBackdropClick, continueList, localDate, pasteUrlAsLink } from '.
 import { linkAutocomplete } from './completion.js';
 
 // ── Markdown textarea ─────────────────────────────────────────────────────────
-// What makes a textarea Zone's markdown editor, shared by the page editor
+// What makes a textarea Zonewiki's markdown editor, shared by the page editor
 // (js/editor.js) and the task app's task notes (tasks.js): page and task
 // completion, the formatting bar and its shortcuts, snippets, list
 // continuation, file paste/drop/attach, URL paste. Every change goes through

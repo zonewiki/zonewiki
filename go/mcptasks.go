@@ -359,7 +359,7 @@ func findTask(raw string, user asker) (*Task, error) {
 }
 
 // dateArg: a date argument, YYYY-MM-DD or a word quick-add knows
-// ("tomorrow", "fri", "+3d"), resolved with Zone's today; "" for none.
+// ("tomorrow", "fri", "+3d"), resolved with Zonewiki's today; "" for none.
 func dateArg(args jsonObj, name string) (string, error) {
 	s, err := strArg(args, name, false)
 	if err != nil || strings.TrimSpace(s) == "" {

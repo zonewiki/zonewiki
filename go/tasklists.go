@@ -869,7 +869,7 @@ func renameListOp(user asker, ref, newName, suffix string, check ...func(pages [
 		text, err := readText(p.Path)
 		if err != nil {
 			logf("rename of list #%s: %v", l.Name, err)
-			return nil, refuse("Nothing was renamed: a page can't be read (Zone's log says which)")
+			return nil, refuse("Nothing was renamed: a page can't be read (Zonewiki's log says which)")
 		}
 		if n := renameListInText(text, renameFor(o)); n != text {
 			pages = append(pages, pageWrite{p, n})

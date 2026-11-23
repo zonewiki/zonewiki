@@ -2,10 +2,10 @@
 // (docs/spec/users.md, Who made a change): the lists come back whole for an
 // undo (a deleted task restored, a comment's delete undone, an import), and
 // a client could write any name into them. So a name other than the
-// sender's own stays only on what Zone itself has seen under that name: that
+// sender's own stays only on what Zonewiki itself has seen under that name: that
 // comment, with that text, on that task; that entry of that task's history;
 // and on a task that comes back (restored, imported) only when it comes back
-// as Zone had it (checkArrived), not as another task under its id.
+// as Zonewiki had it (checkArrived), not as another task under its id.
 package main
 
 import (
@@ -14,7 +14,7 @@ import (
 	"zonewiki/internal/taskmodel"
 )
 
-// seenBy: the comments and history entries Zone took out of the tasks'
+// seenBy: the comments and history entries Zonewiki took out of the tasks'
 // files or was about to replace, as it had them, so the undo that sends
 // them back is believed. In memory, the oldest forgotten past seenByMax:
 // an undo after a restart, or a very late one, loses the names of others.
@@ -26,14 +26,14 @@ var seenBy struct {
 
 const seenByMax = 20000
 
-// commentKey: the comment c of the task id as Zone had it: its id, who
+// commentKey: the comment c of the task id as Zonewiki had it: its id, who
 // wrote it and its text, so neither moves to another task nor says another
 // thing under that name.
 func commentKey(id string, c Comment) string {
 	return "c\x00" + id + "\x00" + c.ID + "\x00" + c.By + "\x00" + c.Text
 }
 
-// taskKey: the task t as Zone had it, what it is to its readers (its id, title,
+// taskKey: the task t as Zonewiki had it, what it is to its readers (its id, title,
 // description, when it was made, who has it, the occurrence before it): a
 // snapshot of another task under its id (deleted, its id taken again), or
 // of it given to another or put in another series, is not it
@@ -42,7 +42,7 @@ func taskKey(t *Task) string {
 	return "k\x00" + t.ID + "\x00" + t.Title + "\x00" + t.Description + "\x00" + t.CreatedAt + "\x00" + t.Assignee + "\x00" + t.SpawnedFrom
 }
 
-// knownTask: with users, t comes back from a snapshot as Zone had it
+// knownTask: with users, t comes back from a snapshot as Zonewiki had it
 // (taskKey): the undo of its delete, or an import of it deleted since.
 func knownTask(t *Task) bool {
 	if settings().Users == nil {
@@ -143,7 +143,7 @@ func rememberBy(tasks ...*Task) {
 
 // knownHistory: with users, the history a client sent for the task id (an
 // undo sends an older one back whole) as it may replace had, the one its
-// file has: only entries Zone has had for the task (in had, or replaced
+// file has: only entries Zonewiki has had for the task (in had, or replaced
 // before: rememberBy), so nobody writes an event that wasn't, such as a
 // "created" in their own name (who made a task may delete it, created_by) or an
 // "assigned" that hands it to whom the history says had it (hadAssignee);
@@ -172,7 +172,7 @@ func knownHistory(id string, sent, had []HistoryEntry) []HistoryEntry {
 }
 
 // ownNewComments: with users, a comment a whole-list write brings that the
-// task didn't have (by its id: old) and Zone never had by no one, but
+// task didn't have (by its id: old) and Zonewiki never had by no one, but
 // with no name (sent so, or a name checkBy dropped), is the sender's: by
 // no one it would be everyone's to change (mayChangeComment).
 func ownNewComments(user string, old []Comment, t *Task) {
@@ -195,7 +195,7 @@ func ownNewComments(user string, old []Comment, t *Task) {
 // checkBy: with users, the names in a task's comments and history as
 // user's request sent them. Their own name stays, and another's on a
 // comment (of this task, with this text) or a history entry (of this task,
-// at that time) Zone has seen as theirs; any other name is dropped: by no
+// at that time) Zonewiki has seen as theirs; any other name is dropped: by no
 // one.
 func checkBy(user string, t *Task) {
 	if settings().Users == nil {
@@ -208,11 +208,11 @@ func checkBy(user string, t *Task) {
 
 // checkArrived: checkBy for a task that comes back from a snapshot (an
 // undo's restore, an import), which may be any task under any id: names
-// other than user's stay only when it comes back as Zone had it (taskKey),
+// other than user's stay only when it comes back as Zonewiki had it (taskKey),
 // so a task deleted for good lends its id to no other task that would carry
 // its people's names; nor does it keep a series it says it is in
 // (spawned_from), which would make a [[task:…]] of a closed task stand for
-// it (resolveTaskRefs). Returns whether it came back as Zone had it.
+// it (resolveTaskRefs). Returns whether it came back as Zonewiki had it.
 func checkArrived(user string, t *Task) bool {
 	if settings().Users == nil {
 		return false
@@ -227,7 +227,7 @@ func checkArrived(user string, t *Task) bool {
 	return known
 }
 
-// checkByLocked: checkBy (seenBy locked); known false: Zone believes no
+// checkByLocked: checkBy (seenBy locked); known false: Zonewiki believes no
 // other name on t.
 func checkByLocked(user string, t *Task, known bool) {
 	for i, c := range t.Comments {
@@ -235,7 +235,7 @@ func checkByLocked(user string, t *Task, known bool) {
 			t.Comments[i].By = ""
 		}
 	}
-	// An entry Zone hasn't had keeps no one else in it: not who did it, nor
+	// An entry Zonewiki hasn't had keeps no one else in it: not who did it, nor
 	// whom it was given to (an "assigned" to bob says he had it, and who had
 	// a task may be given it again: hadAssignee).
 	for i, e := range t.History {

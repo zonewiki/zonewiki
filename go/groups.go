@@ -835,7 +835,7 @@ func errOr(err, other error) error {
 // moveGroupFolder moves the folder of the group old to that of the group
 // name: its pages with every link to them re-pointed and the files they
 // show (moveFolder), then what else lies there (a file no page shows), and
-// a home that still says what Zone wrote says the new name. Nothing to do
+// a home that still says what Zonewiki wrote says the new name. Nothing to do
 // for a group without a folder.
 func moveGroupFolder(user asker, old, name string) error {
 	folder, newFolder := groupsDir+"/"+old, groupsDir+"/"+name

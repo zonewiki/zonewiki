@@ -1,8 +1,8 @@
 # Writing
 
-Zone's editor is a plain Markdown editor with a live preview: you write text, Zone saves it as you go and shows how it will look.
+Zonewiki's editor is a plain Markdown editor with a live preview: you write text, Zonewiki saves it as you go and shows how it will look.
 This page covers the editor and its helpers, what happens when two people edit the same page,
-and then the Markdown Zone understands, including what it adds to the usual syntax.
+and then the Markdown Zonewiki understands, including what it adds to the usual syntax.
 
 ## Opening the editor
 
@@ -19,7 +19,7 @@ F2 hides or shows the preview.
 
 You don't need to save by hand.
 
-- **Auto-save**: two seconds after you stop typing, Zone writes your text to the page's file.
+- **Auto-save**: two seconds after you stop typing, Zonewiki writes your text to the page's file.
   A dot ● in the toolbar shows while there are changes not yet written.
 - **Done** (or Ctrl+S) saves, records the page as a new version in its history and takes you back to the page.
 - Leaving the editor any other way, by a link or the browser's Back button, saves what you typed too.
@@ -85,7 +85,7 @@ A full name like `:tada:` turns into 🎉 when you type the closing colon.
 - A checklist item is `- [ ] text`, ticked `- [x] text`.
   Ctrl+Shift+X ticks or unticks the item on the cursor's line.
 - You can tick a checkbox in the preview, and on the page itself without opening the editor.
-  Zone notes when it was ticked as a small date chip, and offers **Undo**.
+  Zonewiki notes when it was ticked as a small date chip, and offers **Undo**.
 
 ### Snippets
 
@@ -100,7 +100,7 @@ Type one of these words and press Tab:
 ### Pasting a link
 
 Paste a web address over selected text and the text becomes a link to it.
-Paste one with nothing selected and Zone asks for the link's text; leave it empty to keep the plain address.
+Paste one with nothing selected and Zonewiki asks for the link's text; leave it empty to keep the plain address.
 
 ### Adding a task list
 
@@ -124,7 +124,7 @@ Saving puts it back in its place, even if someone changed other parts of the pag
 ## Pasting and dropping files
 
 Paste a file or screenshot into the editor, drag one onto the text, or click **Attach**.
-Zone uploads it and inserts a link: `![name](url)` for an image, `[name](url)` for anything else.
+Zonewiki uploads it and inserts a link: `![name](url)` for an image, `[name](url)` for anything else.
 Several files dropped at once are uploaded one after another.
 Where files are kept and who sees them is in [Pages](pages.md#uploads-and-images).
 
@@ -138,7 +138,7 @@ The formatting bar scrolls sideways, with buttons sized for fingers, and keeps t
 ## Two people editing at once
 
 Two people can have the same page open, and an AI assistant may write to it while you're editing.
-When a save meets a change made since you opened the page, Zone merges the two line by line.
+When a save meets a change made since you opened the page, Zonewiki merges the two line by line.
 If you changed different lines, both changes are kept, your text updates in place, and a note says "Merged Ben's changes".
 
 ### When changes clash
@@ -151,15 +151,15 @@ If you both changed the same lines, a banner says "Ben changed the same lines wh
 | **Keep mine** | saves your text over theirs; their version stays in the page's history |
 | **Merge by hand** | puts both into the text, between `<<<<<<<`, `=======` and `>>>>>>>` lines, for you to sort out (whole pages only) |
 
-After **Merge by hand**, Zone waits to save until the marker lines are gone, and asks before Done if any are left.
+After **Merge by hand**, Zonewiki waits to save until the marker lines are gone, and asks before Done if any are left.
 
-If you leave the editor while a clash is open, Zone keeps your text for you.
+If you leave the editor while a clash is open, Zonewiki keeps your text for you.
 The next time you edit the page, the banner comes back with the same three choices.
 A kept text is dropped after 30 days.
 
-## Zone's Markdown
+## Zonewiki's Markdown
 
-Zone reads Markdown as GitHub does (GitHub Flavored Markdown), plus a few additions of its own.
+Zonewiki reads Markdown as GitHub does (GitHub Flavored Markdown), plus a few additions of its own.
 
 ### The usual syntax
 
@@ -231,7 +231,7 @@ flowchart LR
 ````
 
 Mermaid draws flowcharts, sequence diagrams, timelines and more.
-If a diagram has a mistake, Zone shows its text with Mermaid's error under it.
+If a diagram has a mistake, Zonewiki shows its text with Mermaid's error under it.
 
 ### Sortable tables
 
@@ -242,11 +242,11 @@ Sorting is only for viewing and doesn't change the file.
 ### Links that make themselves
 
 A web address (`https://…` or `www.…`) or an email address in the text becomes a link on its own.
-Links to other websites open in a new tab; links within Zone stay in the same tab.
+Links to other websites open in a new tab; links within Zonewiki stay in the same tab.
 
 ### Raw HTML
 
 You can write HTML in a page, and it's shown as written, with limits for safety:
-scripts and forms show as text, and nothing is loaded from other websites unless the person running your Zone allowed that site.
+scripts and forms show as text, and nothing is loaded from other websites unless the person running your Zonewiki allowed that site.
 An `id` or `name` you give gets `user-content-` in front: a link to `#note` still finds `<a name="note">`, but a `<style>` of your own selects it as `#user-content-note`.
 In a task's description or comment, a `<style>` shows as text ([Raw HTML](../spec/rendering.md#raw-html)).

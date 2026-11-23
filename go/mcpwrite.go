@@ -95,7 +95,7 @@ func writePage(args jsonObj, base string, user asker) (string, error) {
 }
 
 // writeQuicknote: write_page with quicknote, a new note, named by slug
-// (any words; Zone puts the time in front) or else by the content's title.
+// (any words; Zonewiki puts the time in front) or else by the content's title.
 func writeQuicknote(args jsonObj, content, base string, user asker) (string, error) {
 	if jsonobj.True(args["overwrite"]) {
 		return "", toolErr("A note is always a new one: overwrite doesn't apply. " +

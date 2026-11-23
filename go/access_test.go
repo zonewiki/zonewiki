@@ -91,7 +91,7 @@ func TestHiddenPageAndSharing(t *testing.T) {
 		t.Error("sharing")
 	}
 	if hiddenPage(nil, "private/bob/x") {
-		t.Error("no request (Zone itself) sees everything")
+		t.Error("no request (Zonewiki itself) sees everything")
 	}
 }
 
@@ -131,7 +131,7 @@ func TestInQuicknote(t *testing.T) {
 	}
 	withUsers(t, "alice")
 	if !inQuicknote(asUser("alice"), mine) || inQuicknote(asUser("alice"), old) || inQuicknote(asUser("alice"), theirs) || !inQuicknote(asker{}, old) {
-		t.Error("with users: only the user's own; Zone itself sees all")
+		t.Error("with users: only the user's own; Zonewiki itself sees all")
 	}
 }
 
@@ -346,7 +346,7 @@ func TestGroupFolders(t *testing.T) {
 		if canSee(asUser("alice"), c.slug) != c.alice || canSee(asUser("bob"), c.slug) != c.bob {
 			t.Errorf("%s: alice %v bob %v", c.slug, canSee(asUser("alice"), c.slug), canSee(asUser("bob"), c.slug))
 		}
-		// carol is in no group, dana an admin in another, eve disabled, a visitor and Zone's own "" in none.
+		// carol is in no group, dana an admin in another, eve disabled, a visitor and Zonewiki's own "" in none.
 		for _, who := range []string{"carol", "dana", "eve", visitor, "", "nobody"} {
 			if canSee(asUser(who), c.slug) != c.others || canWrite(asUser(who), c.slug) && !c.others {
 				t.Errorf("%s: %q sees %v", c.slug, who, canSee(asUser(who), c.slug))

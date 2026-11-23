@@ -63,8 +63,8 @@ const (
 type DocKey [16]byte
 
 // IndexDoc: a document as WriteIndex asks for it: its tokens, its key, a
-// text to keep for TextHas (Zone: its text squashed, for phrases), and what
-// else its writer wants back with it (Meta; Zone: what makes its doc, so a
+// text to keep for TextHas (Zonewiki: its text squashed, for phrases), and what
+// else its writer wants back with it (Meta; Zonewiki: what makes its doc, so a
 // start needn't read its file).
 type IndexDoc struct {
 	Tokens []string

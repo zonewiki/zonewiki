@@ -36,7 +36,7 @@ var ListSettings = []string{"view", "limit", "group", "keep", "labels", "new", "
 type List struct {
 	Name     string
 	Settings map[string]string
-	Extra    map[string]json.RawMessage // keys Zone doesn't know, as the file had them
+	Extra    map[string]json.RawMessage // keys Zonewiki doesn't know, as the file had them
 	Owner    string
 }
 
@@ -82,7 +82,7 @@ func (r *Registry) Find(name string) *List {
 	return nil
 }
 
-// registryKeys: the keys Zone reads; any other is kept as it is. "version"
+// registryKeys: the keys Zonewiki reads; any other is kept as it is. "version"
 // (until 2026-11-20 the registry's format, which .zone-format says now) is
 // no longer read or written.
 var registryKeys = map[string]bool{"version": true, "lists": true, "pinned": true, "mine": true, "all": true, "order": true}
@@ -199,7 +199,7 @@ func textObject(order []string, m map[string]string, extra map[string]json.RawMe
 
 // Encode: the registry's text: each list on a line of its own (so a list is added or changed by hand in one line, and a commit
 // shows the list that changed), the pins, the settings of All tasks, and
-// the keys Zone doesn't know, A–Z. What is empty has no key.
+// the keys Zonewiki doesn't know, A–Z. What is empty has no key.
 func (r *Registry) Encode() string {
 	var b bytes.Buffer
 	b.WriteString("{\n  \"lists\": [")
@@ -303,7 +303,7 @@ func (s *Store) WriteListsLocked(user asker.Asker, owner string, r *Registry) ([
 	return s.WriteListsOf(owner, r)
 }
 
-// WriteListsOf writes owner's registry, whoever asks: for what Zone does
+// WriteListsOf writes owner's registry, whoever asks: for what Zonewiki does
 // over every owner's files (a start's #general). Returns the paths of the
 // files that changed.
 func (s *Store) WriteListsOf(owner string, r *Registry) ([]string, error) {

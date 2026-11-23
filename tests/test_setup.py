@@ -24,7 +24,7 @@ def fresh(client, git_wiki_dir, monkeypatch):
 
 
 def by_hand(server, path):
-    """A GET to a Zone started on its own (GoServer), as localhost: status, Location."""
+    """A GET to a Zonewiki started on its own (GoServer), as localhost: status, Location."""
     conn = http.client.HTTPConnection("127.0.0.1", server.port, timeout=5)
     try:
         conn.request("GET", path, headers=HOST)
@@ -215,7 +215,7 @@ class TestWhenThereIsNoPage:
     @pytest.mark.parametrize("bind,page", [("0.0.0.0", True), ("192.168.1.5", True), ("::", True),
                                            ("127.0.0.1", False), ("localhost", False), ("::1", False), ("", False)])
     def test_a_port_published_beyond_localhost_counts(self, client, fresh, monkeypatch, bind, page):
-        # compose hands Zone the address its port is published on (ZONE_BIND).
+        # compose hands Zonewiki the address its port is published on (ZONE_BIND).
         monkeypatch.setattr(settings, "ZONE_ALLOW_REMOTE", False)
         monkeypatch.setattr(settings, "ENV", {"ZONE_BIND": bind})
         resp = client.get("/page/plans", headers=HOST)

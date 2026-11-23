@@ -1,13 +1,13 @@
 # Teams
 
-Zone works for one person, and just as well for a team sharing one wiki.
+Zonewiki works for one person, and just as well for a team sharing one wiki.
 This page explains how several people use one wiki: signing in, private pages, groups and roles.
 The second half is for admins: adding people, invite links, sign-up and a public wiki.
 
 ## One wiki, with or without users
 
 A wiki without users has one password for everyone, or no login at all.
-Everything in it is shared, and every change is committed as Zone's own, with no person's name.
+Everything in it is shared, and every change is committed as Zonewiki's own, with no person's name.
 
 A wiki with **users** gives each person their own user name and password.
 Their changes are committed in their name, so a page's history says who wrote what.
@@ -15,7 +15,7 @@ An AI assistant they connect acts as them, and sees only what they see ([AI assi
 Each user also gets private pages, private notes and private tasks, which no one else sees.
 
 An admin adds the users ([For admins](#for-admins), below).
-If you run Zone yourself, the first user you make is the admin.
+If you run Zonewiki yourself, the first user you make is the admin.
 
 ## Signing in
 
@@ -34,13 +34,13 @@ Type **Your password now**, then the new one twice, at least 8 characters, and c
 Every other place you were signed in is signed out, so changing your password is also how you end a session someone else got hold of.
 An assistant you connected stays connected; you end that on **Connect an assistant**.
 
-Forgot your password? Zone doesn't mail one: ask an admin for a reset link ([Reset links](#reset-links)).
+Forgot your password? Zonewiki doesn't mail one: ask an admin for a reset link ([Reset links](#reset-links)).
 
 An account several people share (a demo's) has no **Change password**: see [A shared account](#a-shared-account).
 
 ## Where a page lives decides who sees it
 
-In Zone the folder a page is in is the only thing that decides who sees it.
+In Zonewiki the folder a page is in is the only thing that decides who sees it.
 Not its tags, not its links, not its name.
 
 | Where | Who sees and changes it | Mark |
@@ -54,7 +54,7 @@ A link to it shows as plain words.
 Hover over a page's 🔒 or 👥 mark to see who sees it; on a phone a line under the title says it.
 
 > [!WARNING]
-> Private means hidden inside Zone, from other users and their assistants.
+> Private means hidden inside Zonewiki, from other users and their assistants.
 > It is not encrypted: whoever has the wiki's folder or its git repository on the server can read everything.
 
 ### Your private pages
@@ -93,7 +93,7 @@ Tasks follow the same idea, by list rather than folder:
 - A list is private, a group's, or shared with everyone, as a page is: a group's list is kept in the group's folder.
   You choose when you make it with **New list…**'s **For**: everyone, one of your groups, or only you.
   Its owners move it later with **Who sees it…** in the list's ⋯ menu.
-- Moving a task into a shared list shares it, and Zone asks first.
+- Moving a task into a shared list shares it, and Zonewiki asks first.
   A task you share is assigned to you, unless you say who has it.
 - A shared task can't be made private again: others have seen it.
 
@@ -118,10 +118,10 @@ Anyone who may write can make a group, without waiting for an admin.
 Under **Make a group**, type a name (lowercase letters, digits and hyphens, at most 40), pick the other people, and click **Make the group**.
 
 You are in the group and are its **owner**, so you say who else is in it.
-Zone then opens the group's home page, which asks what the group is for: edit it to say so in a line or two, for its people and their assistants.
+Zonewiki then opens the group's home page, which asks what the group is for: edit it to say so in a line or two, for its people and their assistants.
 A name that is taken can't be used again, including the former name of a renamed group.
 
-People are picked rather than typed blind: as you type, Zone offers matching users, and each pick becomes a pill with × to remove it.
+People are picked rather than typed blind: as you type, Zonewiki offers matching users, and each pick becomes a pill with × to remove it.
 
 ### Owning a group
 
@@ -178,7 +178,7 @@ On a group's page it offers everyone, and any group that includes this one.
 (If you're in no group, the entry is **Make shared…**.)
 The page moves, links to it follow, and so do the files it shows.
 
-A plain rename into a wider place works too: Zone says who will see the page and asks **Yes, move it**.
+A plain rename into a wider place works too: Zonewiki says who will see the page and asks **Yes, move it**.
 
 **To fewer people** only an admin may move a page, or whoever shared it as long as nobody else has changed it since (to undo a mistake of a minute ago).
 Anyone else is told to ask an admin.
@@ -237,7 +237,7 @@ There is no field for typing someone else's password: you never know it.
 ### Invite links
 
 Under **Invite someone**, type a user name, pick a role, and click **Make an invite link**.
-Copy the link and send it any way you like: Zone doesn't mail it, and shows it only once.
+Copy the link and send it any way you like: Zonewiki doesn't mail it, and shows it only once.
 
 The link works once, within 7 days.
 It opens a page that greets them by name and asks for a password twice; **Join** makes the account and signs them in.
@@ -250,7 +250,7 @@ A link stops working when the admin who made it is no longer an admin (made an e
 ### Sign-up
 
 Sign-up lets people ask for an account with their mail address.
-Whoever runs the server turns it on and sets up mail ([Running Zone yourself](self-hosting.md)).
+Whoever runs the server turns it on and sets up mail ([Running Zonewiki yourself](self-hosting.md)).
 When it's on, the login page links to it and the Users tab says so.
 
 They type their address and click **Send the link**; the mail's link, valid 24 hours, asks for a user name and password (**Make my account**).
@@ -259,7 +259,7 @@ To turn someone down, remove them.
 
 ### Reset links
 
-Zone has no "forgot password" mail.
+Zonewiki has no "forgot password" mail.
 Click **Reset password** beside a user, and send them the link; it works once, within 24 hours.
 Setting a new password with it signs them out everywhere and ends the connections of the assistants they allowed.
 
@@ -305,7 +305,7 @@ A group's guide can be changed only by an admin who is in that group.
 
 ### Commands for self-hosting admins
 
-If you run Zone yourself, you can manage users from the server's command line as well.
+If you run Zonewiki yourself, you can manage users from the server's command line as well.
 These edit the wiki's settings file directly, so they need access to the server rather than the admin role.
 Use `./run.sh user …` in the repository, or `zonewiki user …` without the container.
 
@@ -326,12 +326,12 @@ Use `./run.sh user …` in the repository, or `zonewiki user …` without the co
 | `./run.sh user remove ben` | removes them; their private files stay |
 | `./run.sh user list` | lists users, roles and who is disabled |
 
-[Running Zone yourself](self-hosting.md) covers the settings file and the rest of the commands.
+[Running Zonewiki yourself](self-hosting.md) covers the settings file and the rest of the commands.
 
 ## A public wiki
 
 A wiki with users can also be shown to people who aren't signed in, called **visitors**.
-Whoever runs the server sets this where Zone is started (in `.env`, or as an environment variable for the binary: [Where settings live](self-hosting.md#where-settings-live)), not an admin in the browser:
+Whoever runs the server sets this where Zonewiki is started (in `.env`, or as an environment variable for the binary: [Where settings live](self-hosting.md#where-settings-live)), not an admin in the browser:
 
 | `ZONE_PUBLIC` | Visitors can |
 |---------------|--------------|

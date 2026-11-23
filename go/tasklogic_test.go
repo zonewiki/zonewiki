@@ -150,7 +150,7 @@ func TestPrivateTasksInTheirUsersFiles(t *testing.T) {
 		t.Errorf("bob sees %v", got)
 	}
 	if got := titles(taskFiles.Open(asker{})); !reflect.DeepEqual(got, []string{"Shared one"}) {
-		t.Errorf("Zone sees %v", got)
+		t.Errorf("Zonewiki sees %v", got)
 	}
 	shared, own := fileText(t, taskFiles.PathIn("", teamList(t, "alice"), "tasks.json")), fileText(t, taskFiles.PathIn("alice", ownList(t, "alice"), "tasks.json"))
 	if strings.Contains(shared, "Alice's own") || !strings.Contains(own, "Alice's own") ||
@@ -297,7 +297,7 @@ func TestNoPrivateTasksWithoutUsers(t *testing.T) {
 	}
 }
 
-// What Zone does over all task lists reaches every user's files: a rename's
+// What Zonewiki does over all task lists reaches every user's files: a rename's
 // links, the archive of closed tasks, the search index.
 func TestEveryUsersFiles(t *testing.T) {
 	testWiki(t, map[string]string{"old": "# Old\n"})
@@ -312,7 +312,7 @@ func TestEveryUsersFiles(t *testing.T) {
 	if _, err := updateTask(asUser("alice"), mine.ID, last, ""); err != nil {
 		t.Fatal(err)
 	}
-	// Closed years ago: the start of Zone files it into her archive, that month's.
+	// Closed years ago: the start of Zonewiki files it into her archive, that month's.
 	own := func(file string) string { return taskFiles.PathIn("alice", ownList(t, "alice"), file) }
 	done := taskfiles.ReadLenient(own("closed.json"))
 	done[0].ClosedAt = "2001-05-01T10:00:00"

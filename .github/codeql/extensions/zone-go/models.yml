@@ -1,6 +1,6 @@
-# Zone's own checks, for CodeQL (GitHub's code scanning): the functions that
+# Zonewiki's own checks, for CodeQL (GitHub's code scanning): the functions that
 # make a request's value safe for a use, which CodeQL can't tell by itself.
-# Without them every file Zone opens for a page, an upload or a task is an
+# Without them every file Zonewiki opens for a page, an upload or a task is an
 # alert, and a real one would drown among them.
 #
 # A row: package, type (a method's), subtypes, function, signature (empty
@@ -16,7 +16,7 @@ extensions:
       extensible: barrierModel
     data:
       # A page's file from its slug, "" for one that leads out of the wiki,
-      # into a folder Zone keeps (_…, .…) or through a link.
+      # into a folder Zonewiki keeps (_…, .…) or through a link.
       - ["zonewiki", "", False, "safePath", "", "", "ReturnValue", "path-injection", "manual"]
       # An upload's file from its name: one plain part, nothing on the way a link.
       - ["zonewiki", "", False, "uploadPath", "", "", "ReturnValue[0]", "path-injection", "manual"]
@@ -25,13 +25,13 @@ extensions:
       # Whose place a path is: its name is a user's of the settings, or a group's as groupNameRE has it.
       - ["zonewiki", "", False, "placeOf", "", "", "ReturnValue", "path-injection", "manual"]
       # A slug: parts of a-z, 0-9, _ and -, joined by "/": no "..", no leading "/".
-      # It may still start with "_" (a folder Zone keeps): that is safePath's to refuse.
+      # It may still start with "_" (a folder Zonewiki keeps): that is safePath's to refuse.
       - ["zonewiki/internal/mdtext", "", False, "ToSlug", "", "", "ReturnValue", "path-injection", "manual"]
       # A list's folder: the list's name is one path part (listDirRE), or the folder is the owner's.
       - ["zonewiki/internal/taskfiles", "Store", False, "dirOf", "", "", "ReturnValue", "path-injection", "manual"]
       # An archive's month: "YYYY-MM" (monthRE) or "".
       - ["zonewiki/internal/taskfiles", "", False, "pastMonthOf", "", "", "ReturnValue", "path-injection", "manual"]
-      # Markdown rendered as a page is: raw HTML defused (Zone's markdown in docs/spec/rendering.md).
+      # Markdown rendered as a page is: raw HTML defused (Zonewiki's markdown in docs/spec/rendering.md).
       - ["zonewiki", "", False, "renderMd", "", "", "ReturnValue", "html-injection", "manual"]
   - addsTo:
       pack: codeql/go-all

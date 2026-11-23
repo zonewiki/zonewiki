@@ -78,14 +78,14 @@ func (f *fixture) text(t *testing.T, rel string) string {
 	return string(b)
 }
 
-// forgetAll: nothing is known of any file, as when Zone starts.
+// forgetAll: nothing is known of any file, as when Zonewiki starts.
 func forgetAll() {
 	parsed.Lock()
 	clear(parsed.files)
 	parsed.Unlock()
 }
 
-// put writes a file as a hand on the host does, not as Zone.
+// put writes a file as a hand on the host does, not as Zonewiki.
 func (f *fixture) put(t *testing.T, rel, text string) {
 	t.Helper()
 	p := filepath.Join(f.root, filepath.FromSlash(rel))
@@ -227,7 +227,7 @@ func TestWriteFilesByOwnerAndMonth(t *testing.T) {
 }
 
 // The Closed view of a year, and the years there are: over the months'
-// files, those Zone wrote and those put there by hand, and what is still in
+// files, those Zonewiki wrote and those put there by hand, and what is still in
 // closed.json.
 func TestClosedByYear(t *testing.T) {
 	f := newStore(t, "alice")
@@ -235,8 +235,8 @@ func TestClosedByYear(t *testing.T) {
 	_ = f.WriteBothLocked(asker.User("alice"), nil, []*Task{task("now", "", "2026-06-01T10:00:00"), task("spring", "", "2026-03-01T10:00:00"), task("undated", "", "x"),
 		task("old", "", "2024-05-01T10:00:00"), task("older", "", "2024-01-01T10:00:00"), task("hers", "alice", "2023-01-02T10:00:00")}, "Write")
 	f.Unlock()
-	// A month's file put there by hand, beside Zone's of that year, and
-	// another year only in such files; not Zone's writes.
+	// A month's file put there by hand, beside Zonewiki's of that year, and
+	// another year only in such files; not Zonewiki's writes.
 	f.put(t, "_tasks/closed-2024-07.json", `[{"id": "yearfile", "title": "T", "closed_at": "2024-07-01T10:00:00"}]`)
 	f.put(t, "_tasks/closed-2022-07.json", `[{"id": "y22", "title": "T", "closed_at": "2022-07-01T10:00:00"}]`)
 	f.put(t, "private/alice/_tasks/closed-2021-07.json", `[{"id": "h21", "title": "T", "closed_at": "2021-07-01T10:00:00"}]`)
@@ -271,7 +271,7 @@ func TestClosedByYear(t *testing.T) {
 		t.Errorf("a scope with a task in a file put by hand: %v", got)
 	}
 	// A scope asks whose a task is (a private list's): the archives' tasks
-	// say it, those Zone wrote (2023) and those it only read (2021).
+	// say it, those Zonewiki wrote (2023) and those it only read (2021).
 	if got := f.ClosedYears(asker.User("alice"), func(t *Task) bool { return t.Owner == "alice" }); !reflect.DeepEqual(got, []string{"2026", "2023", "2021"}) {
 		t.Errorf("her own tasks' years: %v", got)
 	}
@@ -334,7 +334,7 @@ func TestAMonthAndAYearEnd(t *testing.T) {
 	if got := ids(f.ClosedInYear(asker.User(""), "2026")); !reflect.DeepEqual(got, []string{"nov", "dec"}) {
 		t.Errorf("2026: %v", got)
 	}
-	// February: January's task is in closed.json until Zone starts.
+	// February: January's task is in closed.json until Zonewiki starts.
 	f.now = time.Date(2027, 2, 1, 0, 0, 0, 0, time.UTC)
 	f.commits = nil
 	f.ArchiveOldClosed()
@@ -420,7 +420,7 @@ func TestAnEmptiedArchiveIsRemoved(t *testing.T) {
 	if got := ids(f.ClosedInYear(asker.User("alice"), "2026")); !reflect.DeepEqual(got, []string{"s2"}) {
 		t.Errorf("2026: %v", got)
 	}
-	// An empty archive from before (Zone left one when its last task went) goes at the start.
+	// An empty archive from before (Zonewiki left one when its last task went) goes at the start.
 	f.put(t, "_tasks/closed-2020-01.json", "[]\n")
 	f.put(t, "private/alice/_tasks/closed-2019-04.json", "[]")
 	f.commits = nil
@@ -587,7 +587,7 @@ func TestHolds(t *testing.T) {
 	if holds(path, read) {
 		t.Error("holds a changed task")
 	}
-	// Read from a file Zone didn't write (another process's cache: none).
+	// Read from a file Zonewiki didn't write (another process's cache: none).
 	forgetAll()
 	if holds(path, tasks) {
 		t.Error("known without having been read")
@@ -616,11 +616,11 @@ func TestHolds(t *testing.T) {
 	}
 }
 
-// A file changed by hand, on the host, while Zone runs: a write that reads
+// A file changed by hand, on the host, while Zonewiki runs: a write that reads
 // after the edit keeps it (and leaves the file as the hand wrote it, when
 // its tasks don't change); an edit between a write's read and its write is
-// not taken for the file Zone read: the write is not skipped, the file is
-// what Zone wrote, in the commit, and the next read is of that file.
+// not taken for the file Zonewiki read: the write is not skipped, the file is
+// what Zonewiki wrote, in the commit, and the next read is of that file.
 func TestAFileChangedByHand(t *testing.T) {
 	f := newStore(t)
 	f.write(t, "", []*Task{task("o1", "", "")}, []*Task{task("c1", "", "2026-03-01T10:00:00"), task("c2", "", "2026-03-02T10:00:00"),
@@ -675,7 +675,7 @@ func TestAFileChangedByHand(t *testing.T) {
 			t.Errorf("%s: the write left the file it hadn't read:\n%s", rel, f.text(t, rel))
 		}
 	}
-	// What Zone knows of the files is what they hold.
+	// What Zonewiki knows of the files is what they hold.
 	forgetNothing := ids(f.All(asker.User("")))
 	titles := func() []string {
 		var out []string
@@ -687,10 +687,10 @@ func TestAFileChangedByHand(t *testing.T) {
 	known := titles()
 	forgetAll()
 	if got := titles(); !reflect.DeepEqual(got, known) || len(forgetNothing) != 5 {
-		t.Errorf("Zone took the files for %v, they hold %v", known, got)
+		t.Errorf("Zonewiki took the files for %v, they hold %v", known, got)
 	}
 	// An edit that only reformats, between read and write: the same tasks, so
-	// the closed file stays as the hand wrote it; the open one is Zone's again.
+	// the closed file stays as the hand wrote it; the open one is Zonewiki's again.
 	f.commits = nil
 	var compact string
 	f.rewrite(t, "", "Reformat", func(active, closed []*Task) ([]*Task, []*Task) {
@@ -710,8 +710,8 @@ func TestAFileChangedByHand(t *testing.T) {
 	}
 }
 
-// At the start a file in another format (edited by hand) is written as Zone
-// writes it, also one Zone has read already; a plain write leaves a closed
+// At the start a file in another format (edited by hand) is written as Zonewiki
+// writes it, also one Zonewiki has read already; a plain write leaves a closed
 // file whose tasks didn't change as it is.
 func TestTheStartWritesZonesFormat(t *testing.T) {
 	f := newStore(t)
@@ -727,7 +727,7 @@ func TestTheStartWritesZonesFormat(t *testing.T) {
 	if got := f.text(t, "_tasks/closed-2026-03.json"); got == raw || !strings.Contains(got, "\n    \"id\": \"c1\",\n") {
 		t.Errorf("after the start:\n%s", got)
 	}
-	if !reflect.DeepEqual(f.commits, []string{"|Write the task files in Zone's format|_tasks/closed-2026-03.json"}) {
+	if !reflect.DeepEqual(f.commits, []string{"|Write the task files in Zonewiki's format|_tasks/closed-2026-03.json"}) {
 		t.Errorf("commits: %q", f.commits)
 	}
 	f.ArchiveOldClosed()
@@ -843,7 +843,7 @@ func TestArchiveOldClosed(t *testing.T) {
 }
 
 // A file is parsed once and handed out as copies: what a reader does to its
-// tasks shows in no later read, and a file that changed (written by Zone,
+// tasks shows in no later read, and a file that changed (written by Zonewiki,
 // or by hand) is read again.
 func TestReadsAreCopiesOfAFileParsedOnce(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "tasks.json")
@@ -858,7 +858,7 @@ func TestReadsAreCopiesOfAFileParsedOnce(t *testing.T) {
 	if err != nil || len(second) != 1 || second[0].Title != "One" || second[0].Tags[0] != "a" || *second[0].SortOrder != 1 {
 		t.Errorf("a read changed the next one: %+v, %v", second[0], err)
 	}
-	// Written by Zone: the next read has it.
+	// Written by Zonewiki: the next read has it.
 	if err := Write(path, []*Task{{ID: "1", Title: "Two"}}); err != nil {
 		t.Fatal(err)
 	}
@@ -968,7 +968,7 @@ func TestAStartFilesTheTasksByList(t *testing.T) {
 		t.Fatalf("read before the start: %v", got)
 	}
 	f.ArchiveOldClosed()
-	if len(f.commits) != 1 || !strings.HasPrefix(f.commits[0], "|Write the task files in Zone's format|") {
+	if len(f.commits) != 1 || !strings.HasPrefix(f.commits[0], "|Write the task files in Zonewiki's format|") {
 		t.Fatalf("commits %q", f.commits)
 	}
 	for rel, want := range map[string][]string{"_tasks/tasks.json": {"i1"}, "_tasks/lists/shop/tasks.json": {"s1"},
@@ -1316,12 +1316,12 @@ func TestAReadWaitsForAWritesFiles(t *testing.T) {
 		t.Error("a read still waits after the files were written")
 	}
 	f.Unlock()
-	// Without Lock nothing is held: a command without a running Zone.
+	// Without Lock nothing is held: a command without a running Zonewiki.
 	f.Hold()
 	_ = f.Open(asker.User(""))
 }
 
-// Stamp is another word after a write of Zone's and after a file changed by
+// Stamp is another word after a write of Zonewiki's and after a file changed by
 // hand, and the same while nothing changed; another user's own tasks don't
 // change it.
 func TestStamp(t *testing.T) {

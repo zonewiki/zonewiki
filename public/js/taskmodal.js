@@ -613,7 +613,7 @@ function openNewList() {
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.ref) made = data; else if (data.error) why = data.error;
-    } catch (_) { why = 'The list couldn’t be made: no answer from Zone'; }
+    } catch (_) { why = 'The list couldn’t be made: no answer from Zonewiki'; }
     creating = false;
     if (!made) {
       error.textContent = why;

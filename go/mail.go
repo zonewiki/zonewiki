@@ -1,4 +1,4 @@
-// Mail (docs/spec/deployment.md, Mail): Zone sends a mail for sign-up
+// Mail (docs/spec/deployment.md, Mail): Zonewiki sends a mail for sign-up
 // (signup.go) and about a task given to a user (notify.go), through the
 // SMTP server the deployment names in ZONE_SMTP_HOST … (.env). Go's net/smtp, no dependency. The connection is
 // encrypted unless ZONE_SMTP_TLS=none says otherwise: STARTTLS, which the
@@ -20,9 +20,9 @@ import (
 	"time"
 )
 
-// mailConfig: the SMTP server Zone sends through.
+// mailConfig: the SMTP server Zonewiki sends through.
 type mailConfig struct {
-	Host           string // "": Zone sends no mail
+	Host           string // "": Zonewiki sends no mail
 	Port           int
 	User, Password string // Password only with User: AUTH PLAIN
 	From           string // the sender's address (ZONE_MAIL_FROM)
@@ -69,7 +69,7 @@ func loadMail(getenv func(string) string) (mailConfig, error) {
 		return m, errors.New("ZONE_SMTP_PASSWORD is set, but ZONE_SMTP_USER isn't: set the user it belongs to")
 	}
 	if m.From == "" {
-		return m, errors.New("ZONE_SMTP_HOST is set, but ZONE_MAIL_FROM isn't: set the address Zone's mail comes from " +
+		return m, errors.New("ZONE_SMTP_HOST is set, but ZONE_MAIL_FROM isn't: set the address Zonewiki's mail comes from " +
 			"(e.g. ZONE_MAIL_FROM=wiki@example.org)")
 	}
 	if a, err := mail.ParseAddress(m.From); err != nil || a.Name != "" {
@@ -87,7 +87,7 @@ var (
 // sendMail sends a plain-text mail to the address to.
 func sendMail(m mailConfig, to, subject, body string) error {
 	if m.Host == "" {
-		return errors.New("Zone has no mail server (ZONE_SMTP_HOST)")
+		return errors.New("Zonewiki has no mail server (ZONE_SMTP_HOST)")
 	}
 	addr := net.JoinHostPort(m.Host, strconv.Itoa(m.Port))
 	dialer := &net.Dialer{Timeout: mailDialTimeout}
@@ -145,7 +145,7 @@ func sendMail(m mailConfig, to, subject, body string) error {
 }
 
 // mailMessage: the mail's headers and text (net/smtp turns its line ends
-// into CRLF). to and from are checked addresses; the subject is Zone's,
+// into CRLF). to and from are checked addresses; the subject is Zonewiki's,
 // encoded when it isn't ASCII.
 func mailMessage(from, to, subject, body string) string {
 	id := make([]byte, 12)

@@ -1,6 +1,6 @@
 # Tasks
 
-Zone has a task app beside the wiki: what you have to do, when you plan to do it, and by when it must be done.
+Zonewiki has a task app beside the wiki: what you have to do, when you plan to do it, and by when it must be done.
 It is a task manager in its own right, with a board to plan your days, lists, repeating tasks and, in a team, assignees and comments, so you need no other one beside your wiki.
 This page covers making and planning tasks, lists and who sees them, assigning tasks to others, and showing tasks on a wiki page.
 Tasks share the wiki's links and search, so a task can point to a page and a page can show its tasks.
@@ -23,7 +23,7 @@ A task has a **title** and, if you like, more:
 
 The two dates are independent: moving one never moves the other.
 A start date in the past isn't a warning: the card says "since Sep 21", and the task is on Today until it's done.
-If you plan a task to start after its deadline, Zone asks **Move the deadline too?**, but never forbids it.
+If you plan a task to start after its deadline, Zonewiki asks **Move the deadline too?**, but never forbids it.
 
 ### Keep tasks
 
@@ -134,7 +134,7 @@ The description has the editor's formatting bar and **Edit** | **Preview** (**F2
 
 Tick the checkbox to complete a task.
 It is struck through for a moment, so you can still change your mind, then it moves to Closed.
-If its description still has open checkboxes, Zone asks first (**Complete anyway**).
+If its description still has open checkboxes, Zonewiki asks first (**Complete anyway**).
 
 A task you won't do is closed with **Won't do** (⋯ menu, the dialog, or the **Delete** key): it goes to Closed marked "✗ won't do" and can be reopened from there.
 Tasks are closed, not deleted.
@@ -256,7 +256,7 @@ Assigning never changes who sees or may change the task.
 
 A private task has no assignee.
 A task for someone else needs a shared list: when you name someone on a new task in your Inbox, the dialog asks which shared list it goes to.
-When you share one of your own tasks, Zone assigns it to you, so it stays in your My tasks.
+When you share one of your own tasks, Zonewiki assigns it to you, so it stays in your My tasks.
 A task whose assignee has left (or lost access to the list) shows the name struck through and counts as no one's.
 The full rules are in [Assigning tasks](../spec/users.md#assigning-tasks).
 
@@ -274,7 +274,7 @@ You are told what happens on a task you are assigned, made, or follow: someone g
 - **Follow** in a shared task's ⋯ menu or dialog tells you its news without making it yours to do.
 - **Mentions**: `@name` in a comment or description tells that person, even on a task they have nothing else to do with.
 - **Mail**: in My tasks' **List settings…**, **Mail me when** has three boxes: a task is given to me, someone mentions me, someone comments on a task I have, gave or follow.
-  None is on until you tick it, and they show only where Zone can send mail.
+  None is on until you tick it, and they show only where Zonewiki can send mail.
 
 ## Comments and history
 
@@ -329,7 +329,7 @@ All parameters are in [Task list embed](../spec/tasks.md#task-list-embed).
 ### Pointing to one task
 
 `[[task:…]]` shows a single task inline as a chip with its checkbox, title, dates and list; you can tick it right on the page.
-Type `[[task:` in the editor and pick the task by its title: Zone fills in its id.
+Type `[[task:` in the editor and pick the task by its title: Zonewiki fills in its id.
 A repeating task's chip always shows the current occurrence.
 
 The other way round, a `[[wikilink]]` in a task's title or description lists the task under the page's **Linked tasks**.
@@ -337,7 +337,7 @@ The other way round, a `[[wikilink]]` in a task's title or description lists the
 ## Renaming a tag
 
 Open the tag's view, such as `/tasks?tag=garden`, and choose **Rename tag…** in the ⋯ menu.
-Zone renames it on every task and in the pages' `tag=` embeds and links, in one change you can undo.
+Zonewiki renames it on every task and in the pages' `tag=` embeds and links, in one change you can undo.
 Renaming to a tag that already exists merges the two, after asking.
 
 ## Export and import

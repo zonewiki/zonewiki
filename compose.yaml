@@ -1,4 +1,4 @@
-# Zone from the prebuilt image on ghcr.io (amd64 and arm64), instead of
+# Zonewiki from the prebuilt image on ghcr.io (amd64 and arm64), instead of
 # building it: no checkout, git or build tools needed, on your own computer,
 # a server or a NAS. Put this file, run.sh and a .env with ZONE_DATA=<your
 # wiki folder> next to each other, then:
@@ -7,7 +7,7 @@
 #
 # run.sh fills in what compose can't: your user ID, the timezone, ~ in
 # ZONE_DATA, ZONE_ALLOW_REMOTE=1 as the port's address, and rootless podman's
-# compose.podman.yaml (put it beside this file too). In a checkout of Zone,
+# compose.podman.yaml (put it beside this file too). In a checkout of Zonewiki,
 # run.sh builds the image instead (compose.build.yaml).
 #
 # Without run.sh (a Synology's Container Manager finds this file by its
@@ -21,18 +21,18 @@
 #
 # and then: docker compose up -d (update: docker compose pull, then up -d).
 #
-# Zone is then at http://localhost:5080, on this machine only. For other
+# Zonewiki is then at http://localhost:5080, on this machine only. For other
 # devices (a NAS, a server), open the port to the network in .env:
 #
 #   ZONE_BIND=0.0.0.0                    # or, with run.sh, ZONE_ALLOW_REMOTE=1
 #   ZONE_PORT=5081                       # another port than 5080
 #
-# and tell Zone the names it is opened by, in its settings file
+# and tell Zonewiki the names it is opened by, in its settings file
 # (.zone/config): ./run.sh config set hosts nas.local, or without run.sh
 #
 #   docker compose run --rm zonewiki /app/zonewiki config set hosts nas.local
 #
-# Open to the network, Zone asks in the browser for a password before it
+# Open to the network, Zonewiki asks in the browser for a password before it
 # shows anything (or set the login here: ./run.sh user add alice).
 name: zonewiki
 
@@ -40,8 +40,8 @@ services:
   zonewiki:
     image: ghcr.io/zonewiki/zonewiki:latest
     container_name: zonewiki
-    # Not root: Zone writes the wiki as the folder's owner. No defaults: a
-    # wrong guess would show up later as files Zone can't write.
+    # Not root: Zonewiki writes the wiki as the folder's owner. No defaults: a
+    # wrong guess would show up later as files Zonewiki can't write.
     user: "${ZONE_UID:?set ZONE_UID in .env (id -u of the wiki folder's owner)}:${ZONE_GID:?set ZONE_GID in .env (id -g)}"
     # A minimal init as PID 1 reaps orphaned processes.
     init: true
@@ -75,6 +75,6 @@ services:
     logging:
       driver: json-file
       options:
-        # Zone runs for months: keep the log from growing without bound.
+        # Zonewiki runs for months: keep the log from growing without bound.
         max-size: "10m"
         max-file: "3"

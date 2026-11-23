@@ -137,7 +137,7 @@ export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Tod
     // Left out of My tasks: on a list that is the user's own (a private
     // one; without users any), whose tasks are in My tasks by the list.
     if (name === 'home') return m.list && m.home;
-    // My tasks: Mail me when a task is assigned to me, where Zone can mail the user.
+    // My tasks: Mail me when a task is assigned to me, where Zonewiki can mail the user.
     if (name === 'mail') return m.mine && m.mail && !!f.mail_assigned;
     if (name === 'new') return !m.mine;
     return true;
@@ -369,7 +369,7 @@ export function initTaskSettings(app) {
       tasks = Array.isArray(file) ? file : file?.tasks;
       picked = file;
     } catch (_) {}
-    if (!Array.isArray(tasks)) { showNotice('That isn\u2019t a file of tasks exported from Zone.'); return; }
+    if (!Array.isArray(tasks)) { showNotice('That isn\u2019t a file of tasks exported from Zonewiki.'); return; }
     if (!tasks.length) { showNotice('Nothing imported: the file has no tasks.'); return; }
     importTitle.textContent = `Import ${n(tasks.length)} from \u201c${chosen.name}\u201d`;
     importTag.value = '';

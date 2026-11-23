@@ -9,7 +9,7 @@ This page explains the wiki guide and folder guides, and gives you a starter gui
 The page `wiki-guide` is your wiki's guide.
 Make it like any other page: create a page named `wiki-guide` and write your conventions in plain words.
 
-Its text is shown to every assistant at the start of each session, together with Zone's own advice, and where they differ, your guide wins.
+Its text is shown to every assistant at the start of each session, together with Zonewiki's own advice, and where they differ, your guide wins.
 An edit shows from the next session on.
 Keep it short and to the point: an assistant reads it every time, and a very long guide is cut, with a pointer to read the rest.
 
@@ -36,7 +36,7 @@ Use it to share one piece between guides.
 ## How assistants use guides
 
 Assistants are told to read the guides before they draft anything for the wiki, so the draft follows them from the start.
-Zone also checks: an assistant that writes to a page under a guide it hasn't read is stopped, nothing is written, and it is shown the guide first.
+Zonewiki also checks: an assistant that writes to a page under a guide it hasn't read is stopped, nothing is written, and it is shown the guide first.
 When you change a guide, every assistant sees the new text before its next write there.
 
 Guides cover pages.

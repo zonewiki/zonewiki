@@ -8,7 +8,7 @@ require (
 	golang.org/x/text v0.43.0
 )
 
-// Zone's own files (zonefiles.go at the repository's root: the browser
+// Zonewiki's own files (zonefiles.go at the repository's root: the browser
 // code, the docs, the licenses), built into the binary. A module of its
 // own, since go:embed reaches only below its package's folder.
 require zonefiles v0.0.0

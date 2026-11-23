@@ -19,7 +19,7 @@ import (
 
 // drafts: a page's file, as git names it (wikiRel) → the user whose save
 // last wrote it without a commit (the editor's auto-save, a ticked
-// checkbox). In memory, as Zone is one process; after a restart an
+// checkbox). In memory, as Zonewiki is one process; after a restart an
 // uncommitted file's author is unknown.
 var (
 	draftsMu sync.Mutex
@@ -38,7 +38,7 @@ func noteDraft(path, user string) {
 	}
 }
 
-// draftAuthor: who wrote path's uncommitted text ("": unknown, or Zone).
+// draftAuthor: who wrote path's uncommitted text ("": unknown, or Zonewiki).
 func draftAuthor(path string) string {
 	rel, _ := wikiRel(path)
 	draftsMu.Lock()
@@ -94,11 +94,11 @@ func commitOthersDrafts(user asker) error {
 			return err
 		}
 	}
-	// What Zone didn't see saved (written on disk, or before a restart) has no
+	// What Zonewiki didn't see saved (written on disk, or before a restart) has no
 	// known author, but in a private folder the folder says whose it is: one
 	// commit per owner.
 	// In a group's folder it says whose it is not: what a writer who isn't in
-	// the group would commit there is committed first, as Zone's (one commit
+	// the group would commit there is committed first, as Zonewiki's (one commit
 	// per group), so no one's commit carries text they don't see.
 	byOwner, byGroup := map[string][]string{}, map[string][]string{}
 	for _, f := range gitUncommittedFiles(privateDir, groupsDir) {
@@ -142,8 +142,8 @@ func commitOthersDrafts(user asker) error {
 }
 
 // commitDrafts commits every draft in its author's name ("Save <slug>"),
-// before Zone exits idle: who wrote an uncommitted text is only in memory,
-// and the next Zone would commit it in the name of whoever writes next. A
+// before Zonewiki exits idle: who wrote an uncommitted text is only in memory,
+// and the next Zonewiki would commit it in the name of whoever writes next. A
 // commit that fails is said and stops nothing: the text is in its file.
 func commitDrafts() {
 	if settings().Users == nil {
@@ -169,7 +169,7 @@ func commitDrafts() {
 }
 
 // commitAuthorOf: whom a commit of path's uncommitted text names: who
-// wrote it if Zone knows, else fallback.
+// wrote it if Zonewiki knows, else fallback.
 func commitAuthorOf(path, fallback string) string {
 	if author := draftAuthor(path); author != "" && settings().Users != nil {
 		return author
@@ -232,7 +232,7 @@ func (l *baseList) get(hash string) (string, bool) {
 func keepBase(text string) string      { return writtenBases.keep(text) }
 func keepGivenBase(text string) string { return givenBases.keep(text) }
 
-// baseText: the text behind hash, if Zone still has it.
+// baseText: the text behind hash, if Zonewiki still has it.
 func baseText(hash string) (string, bool) {
 	if text, ok := givenBases.get(hash); ok {
 		return text, true
@@ -339,8 +339,8 @@ func mergeSave(s *editorSave, user asker) (m mergeOutcome, ok bool) {
 	return m, true
 }
 
-// otherAuthor: who other than user changed path last, as far as Zone
-// knows: the draft's author, else the last commit's ("": none, or Zone).
+// otherAuthor: who other than user changed path last, as far as Zonewiki
+// knows: the draft's author, else the last commit's ("": none, or Zonewiki).
 func otherAuthor(path, user string) string {
 	// A public wiki's visitor learns no user's name ("theirs" in a merge).
 	if settings().Users == nil || user == visitor {
@@ -394,7 +394,7 @@ func leftDraftPath(user, path string) string {
 func leaveDraft(user, path, content, base string) {
 	if user == visitor {
 		// Every visitor of a public wiki is the same one: a draft kept for
-		// "them" would be shown to the next, and anyone could fill Zone's
+		// "them" would be shown to the next, and anyone could fill Zonewiki's
 		// folder with them (it isn't counted by storage-max).
 		return
 	}
@@ -452,7 +452,7 @@ func mergeWrite(slug, path, current, content, baseHash string, user asker) (stri
 	base, kept := baseText(baseHash)
 	if !kept {
 		return "", toolErr("Nothing written: " + slug + " changed since you read it (hash " + baseHash +
-			"), and Zone no longer has that version to merge from." + again)
+			"), and Zonewiki no longer has that version to merge from." + again)
 	}
 	label := otherAuthor(path, user.Name)
 	if label == "" {
@@ -460,7 +460,7 @@ func mergeWrite(slug, path, current, content, baseHash string, user asker) (stri
 	}
 	merged, clean, err := mergeText(base, current, content, label)
 	if err != nil {
-		return "", toolErr("Nothing written: " + slug + " changed since you read it, and Zone can't merge (" +
+		return "", toolErr("Nothing written: " + slug + " changed since you read it, and Zonewiki can't merge (" +
 			err.Error() + ")." + again)
 	}
 	if !clean {

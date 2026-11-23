@@ -1,7 +1,7 @@
 // Package mdtext is markdown source text: frontmatter, fenced code, code
 // and math masking, headings and their anchors, wikilink syntax, splicing a
 // section's text, task-list checkboxes, slugs. Pure functions on strings, no files and no
-// Zone state. Offsets into a text (sections, splices) count characters
+// Zonewiki state. Offsets into a text (sections, splices) count characters
 // (runes): the editor sends them back.
 package mdtext
 

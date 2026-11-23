@@ -75,7 +75,7 @@ def test_a_new_task_for_someone_is_mailed_to_them(alice, smtp):
     (to, text), = mails(smtp, 1)
     assert to == "bob@example.org"
     assert "Subject: alice gave you a task: Check the invoice" in text
-    assert "alice assigned this task to you on Zone:" in text and "  Check the invoice\n" in text.replace("\r\n", "\n")
+    assert "alice assigned this task to you on Zonewiki:" in text and "  Check the invoice\n" in text.replace("\r\n", "\n")
     assert f"{BASE}/tasks?task={task['id']}" in text and f"All your tasks: {BASE}/tasks?mine=1" in text
     assert "To turn it off, open My tasks, then its menu, List settings." in text
 
@@ -133,7 +133,7 @@ def test_an_assistants_assignment_is_mailed_too(alice, smtp):
 
 
 def test_the_mail_is_turned_off_in_my_tasks_settings(alice, smtp, wiki_dir):
-    # The dialog has the box where Zone could mail the user (My tasks is
+    # The dialog has the box where Zonewiki could mail the user (My tasks is
     # there once the wiki has a list).
     make_list(alice, "team", headers=HOST)
     assert 'data-settings-mail="1"' in alice.get("/tasks?mine=1", headers=HOST).get_data(as_text=True)
@@ -149,7 +149,7 @@ def test_the_mail_is_turned_off_in_my_tasks_settings(alice, smtp, wiki_dir):
     new(alice, title="Quietly", assignee="bob")
     mails(smtp, 0)
     login(alice, "bob")
-    assert turn("comments,assigned", "").status_code == 200        # the kinds, in Zone's order
+    assert turn("comments,assigned", "").status_code == 200        # the kinds, in Zonewiki's order
     assert '"mine": {"mail": "assigned,comments"}' in (wiki_dir / "private/bob/_tasks/lists.json").read_text()
     login(alice, "alice")
     new(alice, title="Aloud", assignee="bob")
@@ -371,7 +371,7 @@ def test_a_look_is_the_users_not_the_tasks(alice, wiki_dir, smtp):
     assert alice.put(url, json={"due_date": "2030-01-01", "history": seen["history"]}, headers=HOST).status_code == 200
     assert '"seen"' not in path.read_text() and [e["event"] for e in changed["history"]] == ["created", "seen", "due"]
     assert [e["event"] for e in alice.get("/api/tasks", headers=HOST).get_json()[0]["history"]] == ["created", "seen"]
-    # A task whose file says that dan saw it: he hasn't, as far as Zone knows.
+    # A task whose file says that dan saw it: he hasn't, as far as Zonewiki knows.
     other = new(alice, title="An old one", assignee="dan")
     tasks = json.loads(path.read_text())
     for t in tasks:

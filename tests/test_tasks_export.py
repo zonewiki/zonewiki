@@ -112,7 +112,7 @@ def test_import_keeps_dates_zero_padded(client, wiki_dir):
 def test_import_refuses_what_is_no_export(client, wiki_dir):
     for file in ("text", 3, None, {"pages": []}, {"tasks": "x"}, {"tasks": [{"title": "ok"}, {"no": "title"}]}, [7]):
         resp = imp(client, file)
-        assert resp.status_code == 400 and "exported from Zone" in resp.get_json()["error"], file
+        assert resp.status_code == 400 and "exported from Zonewiki" in resp.get_json()["error"], file
     assert titles(client) == []
     assert imp(client, {"tasks": []}).get_json() == {"added": 0, "skipped": 0, "ids": []}
 

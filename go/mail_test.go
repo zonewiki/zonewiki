@@ -100,7 +100,7 @@ func (e envMap) get(k string) string { return e[k] }
 
 func TestSendMail(t *testing.T) {
 	s := startSMTP(t, false)
-	if err := sendMail(s.config("none"), "ann@example.org", "Grüße from Zone", "Line one\nline two"); err != nil {
+	if err := sendMail(s.config("none"), "ann@example.org", "Grüße from Zonewiki", "Line one\nline two"); err != nil {
 		t.Fatal(err)
 	}
 	s.mu.Lock()
@@ -112,7 +112,7 @@ func TestSendMail(t *testing.T) {
 		}
 	}
 	for _, want := range []string{"From: wiki@example.org\r\n", "To: ann@example.org\r\n",
-		"Subject: =?utf-8?q?Gr=C3=BC=C3=9Fe_from_Zone?=\r\n", "Content-Type: text/plain; charset=utf-8\r\n",
+		"Subject: =?utf-8?q?Gr=C3=BC=C3=9Fe_from_Zonewiki?=\r\n", "Content-Type: text/plain; charset=utf-8\r\n",
 		"Message-ID: <", "@example.org>\r\n", "\r\n\r\nLine one\r\nline two\r\n"} {
 		if !strings.Contains(s.data, want) {
 			t.Errorf("no %q in %q", want, s.data)

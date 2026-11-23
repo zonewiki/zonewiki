@@ -3,7 +3,7 @@ private page, upload, draft and tasks in the wiki, bob, signed in or
 through his MCP token, must not see a word of them anywhere, nor change
 them.
 
-Every route Zone registers is either probed here or listed as exempt
+Every route Zonewiki registers is either probed here or listed as exempt
 (test_every_route_is_covered), and every MCP tool
 (test_every_tool_is_covered), so a new one gets checked too."""
 
@@ -83,7 +83,7 @@ def wiki(git_wiki_dir, monkeypatch):
     # Her tasks: a private list of hers, pinned, a page that shows it and
     # one of her tags, her tasks in that list, and one in her Inbox (in no
     # list). A shared list, team, for the tasks everyone sees. The registries
-    # are this Zone's (version 2): a start changes and commits nothing.
+    # are this Zonewiki's (version 2): a start changes and commits nothing.
     (w / "private/alice/deck.md").write_text(
         f"# My tasks {SECRET}\n\n[[tasks: list=secretlist]]\n\n[[tasks: tag=secretlist]]\n")
     tasks = w / "private/alice/_tasks"
@@ -93,7 +93,7 @@ def wiki(git_wiki_dir, monkeypatch):
         '  "pinned": ["secretlist"]\n}\n')
     (w / "_tasks").mkdir(exist_ok=True)
     (w / "_tasks/lists.json").write_text('{\n  "lists": [\n    {"name": "team"}\n  ]\n}\n')
-    # Her closed tasks as Zone files them: this month's, and an earlier month's.
+    # Her closed tasks as Zonewiki files them: this month's, and an earlier month's.
     this_month = datetime.date.today().strftime("%Y-%m")
     inbox = {k: v for k, v in private_task(INBOX_ID, "Inbox").items() if k != "list"}
     # Each list's tasks in its folder, those in no list (her Inbox) beside the registry.
@@ -244,7 +244,7 @@ def test_bob_reads_nothing_of_alices(bob, wiki, method, path, kwargs):
 def test_a_link_in_the_wiki_is_no_page(bob, client, wiki):
     """A symlink made on the host is no page (safePath, iterPages): a shared
     name that links to alice's diary, a folder that links to her folder and
-    a link to Zone's settings file lead to nothing by any door, search
+    a link to Zonewiki's settings file lead to nothing by any door, search
     reads none of them, and nothing is written through them."""
     (wiki / "leak.md").symlink_to(wiki / f"{DIARY}.md")
     (wiki / "peek").symlink_to(wiki / "private/alice")
@@ -272,7 +272,7 @@ def test_a_link_in_the_wiki_is_no_page(bob, client, wiki):
 
 def test_her_archives_by_month_are_hers(client, wiki, tmp_path_factory):
     """A month's file of hers outside its list's folder (put there by hand),
-    and a shared one: a start files both by list in one commit of Zone's.
+    and a shared one: a start files both by list in one commit of Zonewiki's.
     Bob sees the shared year and nothing of hers: not her tasks, not her
     year, not her files' names in the history; she sees both."""
     write = lambda rel, tasks: (wiki / rel).write_text(json.dumps(tasks, indent=2) + "\n")  # noqa: E731
@@ -942,7 +942,7 @@ LONG = " and some more words, so that the line is long enough to give up on\n"
 def test_grep_wiki_reads_no_file_he_may_not_see(client, wiki):
     """grep_wiki's regex runs over what bob sees and nothing else: her
     pages, her uploads, her task's files, a folder of hers made by hand in
-    capitals and Zone's own folders stay unread, so no error tells a word
+    capitals and Zonewiki's own folders stay unread, so no error tells a word
     of them."""
     (wiki / "private/alice/_assets/keys.md").write_text(f"{SECRET}upload{LONG}")
     (wiki / f"_tasks/files/{TASK_ID}/_assets/keys.md").write_text(f"{SECRET}taskfile{LONG}")
@@ -1386,7 +1386,7 @@ EXEMPT = {
     "POST /oauth/authorize", "POST /oauth/token", "POST /assistant/connections/{id}/revoke",
     "POST /assistant/connections/{id}/change",
     "GET /setup", "POST /setup",    # the first-run page: only while the wiki has no login (test_setup.py)
-    "GET /help", "GET /help/{name...}",   # Zone's manual and spec, from docs/: nothing of the wiki's (test_help.py)
+    "GET /help", "GET /help/{name...}",   # Zonewiki's manual and spec, from docs/: nothing of the wiki's (test_help.py)
 }
 
 
@@ -1458,7 +1458,7 @@ def test_a_rename_leaves_her_saved_draft_to_her(client, wiki):
 
 
 def test_a_rename_leaves_a_draft_leaf_doesnt_know_to_its_owner(bob, wiki):
-    """The same for text on disk that Zone never saw (written by hand, or before a
+    """The same for text on disk that Zonewiki never saw (written by hand, or before a
     restart): in a private folder the owner is known from the path."""
     (wiki / f"{DIARY}.md").write_text(DRAFT)
     log, stat = _rename_as_bob(bob, wiki)

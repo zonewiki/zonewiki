@@ -103,7 +103,7 @@ func whoChanged(rq *Req) func(slug string, mtime time.Time) string {
 // who made the last commit of the page, as who may be told; "" when that
 // isn't known, when the file changed after it (text not committed, a
 // checkout: whose isn't known), or when there is nobody to name and no
-// assistant (Zone's own commit, a wiki without users: commitAuthor). A
+// assistant (Zonewiki's own commit, a wiki without users: commitAuthor). A
 // public wiki's visitor learns no user's name, as in a page's history
 // (pageLog), but whether an assistant made it, and which.
 func changedBy(who asker, slug string, mtime time.Time) string {
@@ -228,7 +228,7 @@ func startScan(pages []PageFile) {
 			return // another wiki's (a test's), or another scan's
 		}
 		if err != nil {
-			logf("could not read who changed the pages last (%v): search results don't say until Zone starts again", err)
+			logf("could not read who changed the pages last (%v): search results don't say until Zonewiki starts again", err)
 			lc.broken = true
 			return
 		}
@@ -349,7 +349,7 @@ func lastCommitGit(args ...string) gitResult {
 }
 
 // reflogStamp: the time and size of the reflog of the wiki in that folder,
-// which every commit, reset, checkout and pull changes, Zone's and a
+// which every commit, reset, checkout and pull changes, Zonewiki's and a
 // terminal's alike; false without one (git is asked each time then).
 func reflogStamp(wiki string) (string, bool) {
 	st, err := os.Stat(filepath.Join(wiki, ".git", "logs", "HEAD"))

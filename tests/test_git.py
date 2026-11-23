@@ -1,4 +1,4 @@
-"""Tests for Zone's git-backed version history — commits on write, history,
+"""Tests for Zonewiki's git-backed version history — commits on write, history,
 revision/diff/restore, deleted pages, and the uncommitted-changes workflow.
 
 Unlike the other test modules, the wiki here is a real git repo
@@ -81,7 +81,7 @@ class TestGitSetup:
         assert commit_messages(wiki_dir) == ["Note the format of the wiki's files", "Initial import"]
 
     def test_a_wiki_a_newer_zone_wrote_is_refused(self, wiki_dir, tmp_path_factory):
-        """A Zone that knows an older format than .zone-format says doesn't
+        """A Zonewiki that knows an older format than .zone-format says doesn't
         start, and changes nothing (The data format in deployment.md)."""
         (wiki_dir / ".zone-format").write_text("99\n")
         write_page(wiki_dir, "later", "# Later\n")
@@ -89,13 +89,13 @@ class TestGitSetup:
         log = tmp_path_factory.mktemp("go") / "refused.log"
         with pytest.raises(RuntimeError):
             GoServer(_settings(), log, flags=_flags())
-        assert "the wiki's files are in format 99 (.zone-format), which a newer Zone wrote" in log.read_text()
+        assert "the wiki's files are in format 99 (.zone-format), which a newer Zonewiki wrote" in log.read_text()
         assert head_sha(wiki_dir) == head and (wiki_dir / ".zone-format").read_text() == "99\n"
 
     def test_rerun_restores_missing_identity(self, wiki_dir, tmp_path_factory):
         git(wiki_dir, "config", "--unset", "user.name")
         git_setup(tmp_path_factory)
-        assert git(wiki_dir, "config", "user.name").strip() == "Zone"
+        assert git(wiki_dir, "config", "user.name").strip() == "Zonewiki"
 
     def test_git_remote_added_then_updated(self, wiki_dir, monkeypatch, tmp_path_factory):
         monkeypatch.setattr(settings, "GIT_REMOTE", "https://example.invalid/a.git")

@@ -1,12 +1,12 @@
 # History and undo
 
-Zone keeps every version of every page, so nothing you or anyone else writes is lost for good.
+Zonewiki keeps every version of every page, so nothing you or anyone else writes is lost for good.
 This page shows how to look back at a page's versions, see what changed across the whole wiki,
 bring back an old version or a deleted page, and undo a change, including one made by an AI assistant.
 
 ## Every change is a commit
 
-Your wiki is a git repository, and Zone records each change as a git **commit**: a saved version with a time, a short message and an author.
+Your wiki is a git repository, and Zonewiki records each change as a git **commit**: a saved version with a time, a short message and an author.
 These all make a commit:
 
 - **Done** in the editor
@@ -16,7 +16,7 @@ These all make a commit:
 - an undo
 
 With several users, each commit is made in the name of whoever made the change, and an assistant's in the name of the person it works for.
-In a wiki without users, every commit is Zone's own and shows no person's name.
+In a wiki without users, every commit is Zonewiki's own and shows no person's name.
 
 Two things write a page without a commit: auto-save while you type, and ticking a checkbox on a page.
 Those are kept as [uncommitted changes](#uncommitted-changes) until the next commit of the page.
@@ -126,7 +126,7 @@ It lists every deleted page, most recently deleted first, with its name and the 
 - Click a page's title to read its last version.
 - Click **Restore** to bring it back as it was.
 
-If you open the address of a deleted page, Zone says "This page was deleted on …" and offers **Restore page**.
+If you open the address of a deleted page, Zonewiki says "This page was deleted on …" and offers **Restore page**.
 
 ## Uncommitted changes
 
@@ -143,6 +143,6 @@ Click it for **Uncommitted Changes**, the list of those files, with **Diff** to 
 A page with an uncommitted change also says "— uncommitted" after **Last changed**, with a **Commit** link.
 
 You rarely need to do this yourself.
-When someone else saves, renames or deletes a page that holds your uncommitted text, Zone commits it first in your name,
+When someone else saves, renames or deletes a page that holds your uncommitted text, Zonewiki commits it first in your name,
 so your text is in the history under your name and never ends up in someone else's change.
 Text edited on disk has no known author, so it's committed by whoever commits it.

@@ -727,7 +727,7 @@ def test_a_new_tasks_files_are_its_own_from_the_first(client, wiki):
     assert made.status_code == 201 and made.get_json()["id"] == id
     assert sign_in(client, "bob").get(url, headers=HOST).status_code == 404
     assert sign_in(client, "carol").get(url, headers=HOST).status_code == 200
-    # An id is taken once, and is one of Zone's form.
+    # An id is taken once, and is one of Zonewiki's form.
     again = client.post("/api/tasks", json={"title": "Again", "id": id}, headers=HOST)
     assert again.status_code in (400, 409) and "already" in again.get_data(as_text=True)
     for bad in ("../../x", "notes", "0A1B2C3D-0000-4000-8000-00000000ABCD", 7):
@@ -827,7 +827,7 @@ def test_a_task_that_comes_back_brings_no_one_in(client, wiki):
     """A snapshot (an undo's restore, an import) is whatever its sender made
     it: its assignee is one of the list's members, as for any write, and the
     names in its history (who had it) and its series (spawned_from) are what
-    Zone had for that task, or nothing."""
+    Zonewiki had for that task, or nothing."""
     sign_in(client, "alice")
     closed_one = IDS["done"]
     forged = {"title": "Smuggled", "list": LIST, "assignee": "bob", "spawned_from": closed_one,

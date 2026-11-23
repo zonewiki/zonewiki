@@ -3,7 +3,7 @@ sample wiki, so they can be redone whenever the UI changes:
 
     ./run.sh screenshots
 
-It runs Zone on a throwaway wiki (pages, tasks dated around today, a git
+It runs Zonewiki on a throwaway wiki (pages, tasks dated around today, a git
 repo) and photographs it with headless Chromium (Playwright), as the browser
 tests do: in the tools image, which has both.
 """
@@ -171,8 +171,8 @@ def main():
     from playwright.sync_api import sync_playwright
     from tests.goserver import GoServer
 
-    build_wiki()                     # before Zone starts: its first commit takes them in
-    # ZONE_INIT: the sample wiki holds its pages before Zone first starts.
+    build_wiki()                     # before Zonewiki starts: its first commit takes them in
+    # ZONE_INIT: the sample wiki holds its pages before Zonewiki first starts.
     env = {**{k: v for k, v in os.environ.items() if k.startswith("ZONE_")}, "ZONE_INIT": "1"}
     srv = GoServer(env, WIKI.parent / "zonewiki.log", config="")       # the wiki has its own (above)
     base = f"http://127.0.0.1:{srv.port}"

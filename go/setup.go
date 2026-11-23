@@ -19,17 +19,17 @@ import (
 	"zonewiki/internal/settingsfile"
 )
 
-// needsSetup: other devices reach Zone (ZONE_ALLOW_REMOTE, names in hosts,
-// a port compose published beyond localhost, or Zone started by hand on an
+// needsSetup: other devices reach Zonewiki (ZONE_ALLOW_REMOTE, names in hosts,
+// a port compose published beyond localhost, or Zonewiki started by hand on an
 // address beyond loopback, as --addr 0.0.0.0:5080: Config.Published), it has
 // no login, and that isn't on purpose (no-login = yes). On localhost alone
-// Zone needs no login, as ever.
+// Zonewiki needs no login, as ever.
 func needsSetup() bool {
 	s := settings()
 	return !s.authOn() && !s.NoLogin && reachable(s)
 }
 
-// reachable: other devices reach Zone (needsSetup's three ways).
+// reachable: other devices reach Zonewiki (needsSetup's three ways).
 func reachable(s *Settings) bool {
 	return cfg.AllowRemote || cfg.Published || len(s.Hosts) > 0
 }
@@ -57,11 +57,11 @@ func setLoginHref() string {
 	return "/help/self-hosting#setting-a-login"
 }
 
-// setupFirstMsg: what anything but a page view is told while Zone waits
+// setupFirstMsg: what anything but a page view is told while Zonewiki waits
 // for its first login.
 const setupFirstMsg = "This wiki has no login yet: open it in a browser and set a password first."
 
-// setupExempt: what answers while Zone waits for its first login: the
+// setupExempt: what answers while Zonewiki waits for its first login: the
 // page itself, the browser code it needs, the healthcheck, and /mcp, which
 // has a token of its own or is off.
 func setupExempt(r *http.Request) bool {
@@ -83,13 +83,13 @@ type setupView struct {
 	view
 	Username, Error string
 	ConfigName      string
-	Asked           bool // Zone waits for a login (needsSetup); false: set on purpose, from the menu
+	Asked           bool // Zonewiki waits for a login (needsSetup); false: set on purpose, from the menu
 	HasToken        bool // the wiki has an MCP token, which a first user ends
 }
 
 // setupRoute: GET /setup shows the form, POST /setup sets the login: a
 // password for the wiki, or with a name the first user, an admin. Only
-// while Zone has none (the settings file is checked again as it is
+// while Zonewiki has none (the settings file is checked again as it is
 // written: of two people sending the form at once, one sets the login,
 // the other is told to sign in), and only where it may be set in the
 // browser (maySetLogin).

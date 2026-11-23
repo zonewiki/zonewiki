@@ -1,7 +1,7 @@
 """OAuth for /mcp (docs/spec/mcp.md, Connecting with OAuth): the tests play
 an MCP client over HTTP: discovery, registration, the user's Allow in the
 browser, the code for tokens, /mcp with them, refresh, the end of a
-connection, and everything Zone refuses on the way."""
+connection, and everything Zonewiki refuses on the way."""
 
 import base64
 import hashlib
@@ -358,7 +358,7 @@ class TestTokens:
 
     def test_tags_on_several_tasks_at_once(self, bob, wiki_dir):
         """update_task with ids takes only the tag arguments, and the
-        connection's name Zone adds to every call through one (for the
+        connection's name Zonewiki adds to every call through one (for the
         commit's message) is none of the client's."""
         _, tokens = connect(bob, "bob-pw")
         bob.cookies.clear()

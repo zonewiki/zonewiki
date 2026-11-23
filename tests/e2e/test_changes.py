@@ -8,7 +8,7 @@ from tests.e2e.test_layout import horizontal_overflow
 
 
 def _commits(wiki):
-    """Pages committed as Zone commits a save, one of them as an assistant's."""
+    """Pages committed as Zonewiki commits a save, one of them as an assistant's."""
     for slug, message in (("garden", "Update garden"), ("trips/rome", "Create trips/rome: from the mail (MCP)\n\nAssistant: MCP token"),
                           ("a-page-with-a-rather-long-name/and-a-folder-above-it", "Update the long one")):
         wiki.write(slug, f"# {slug}\n\nText of {slug}.\n")

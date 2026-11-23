@@ -1,7 +1,7 @@
 # Security policy
 
-A wiki holds what people would not publish, so Zone takes a security problem
-seriously. What Zone protects against, and how, is in
+A wiki holds what people would not publish, so Zonewiki takes a security problem
+seriously. What Zonewiki protects against, and how, is in
 [`docs/spec/security.md`](docs/spec/security.md) (and, for users, private
 pages and groups, in [`docs/spec/users.md`](docs/spec/users.md)).
 
@@ -13,7 +13,7 @@ Don't open a public issue. Report it privately on GitHub instead:
 
 Please include:
 
-- Zone's version (press `?` in Zone, or open `/api/version`) and how you run
+- Zonewiki's version (press `?` in Zonewiki, or open `/api/version`) and how you run
   it (the image, `run.sh`, or the binary; with a password, users or neither;
   `ZONE_PUBLIC`, a reverse proxy).
 - What an attacker can do, and what they need first (a session, an MCP
@@ -25,7 +25,7 @@ published, naming you unless you'd rather not be named.
 
 ## What counts
 
-Anything that gets past a rule Zone states, for example:
+Anything that gets past a rule Zonewiki states, for example:
 
 - reading or changing a private page, a group's page, a task or a list you
   aren't allowed to, through any door (the browser, `/mcp`, search, history,

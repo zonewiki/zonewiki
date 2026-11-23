@@ -139,7 +139,7 @@ func oneLine(s string) string {
 }
 
 // assignedMail: the text of the mail about tasks by gave a user: each
-// task's title and, where Zone knows its own address (base-url), its link.
+// task's title and, where Zonewiki knows its own address (base-url), its link.
 func assignedMail(s *Settings, by string, tasks []*Task) string {
 	var b strings.Builder
 	if len(tasks) == 1 {

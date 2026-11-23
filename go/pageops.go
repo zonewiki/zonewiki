@@ -121,7 +121,7 @@ func deletePageOp(user asker, slug, suffix string) (kept bool, err error) {
 // first. old: its text before, nil when it was deleted.
 func restorePageOp(user asker, slug, sha, suffix string) (old *string, kept bool, err error) {
 	if !cfg.GitEnabled {
-		return nil, false, refuseAs(refusedNotFound, "There is no history: git isn't installed where Zone runs.")
+		return nil, false, refuseAs(refusedNotFound, "There is no history: git isn't installed where Zonewiki runs.")
 	}
 	path := ""
 	if canWrite(user, slug) {
@@ -359,7 +359,7 @@ func checkRename(user asker, slug, newSlug string, sure moveSure) (path, newPath
 }
 
 // checkTarget: why the page slug can't move to newSlug, a new name for
-// it, if not: a folder Zone skips, another user's folder or a group's the
+// it, if not: a folder Zonewiki skips, another user's folder or a group's the
 // user isn't in, a page there already, or a move to other readers that
 // isn't the user's to make, or that the door hasn't asked about yet
 // (checkReaders: an askError then).
@@ -550,7 +550,7 @@ func checkTagRename(user asker, tag, newName string, merge bool) (*tagPlan, erro
 		text, err := readText(p.Path)
 		if err != nil {
 			logf("rename of tag #%s: %v", old, err)
-			return nil, refuse("Nothing was renamed: a page can't be read (Zone's log says which)")
+			return nil, refuse("Nothing was renamed: a page can't be read (Zonewiki's log says which)")
 		}
 		texts[i] = text
 		// A group's page shows shared tasks, as a shared page does: only a
@@ -719,7 +719,7 @@ func (u *undone) pages() []string { return append(slices.Clone(u.back), u.gone..
 // (the MCP tool's guides).
 func undoChangesOp(user asker, versions []string, suffix string, check func(slugs []string) error) (*undone, error) {
 	if !cfg.GitEnabled {
-		return nil, refuseAs(refusedNotFound, "There is no history: git isn't installed where Zone runs.")
+		return nil, refuseAs(refusedNotFound, "There is no history: git isn't installed where Zonewiki runs.")
 	}
 	if len(versions) == 0 || len(versions) > undoMost {
 		return nil, refuse(fmt.Sprintf("Name one change to undo, or up to %d", undoMost))
@@ -903,7 +903,7 @@ func undoChangesOp(user asker, versions []string, suffix string, check func(slug
 
 // keepPending: before a write that replaces or removes the page at path,
 // what it holds uncommitted (an auto-save left, an edit on disk) is
-// committed first by whoever wrote it ("Save <slug>"; Zone if not known),
+// committed first by whoever wrote it ("Save <slug>"; Zonewiki if not known),
 // the writer's own draft too: so the write never loses text that was never
 // in git, and its own commit holds only its change. True when it did.
 // (A write that continues the text, an auto-save or a checkbox, commits

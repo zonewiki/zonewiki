@@ -4,8 +4,8 @@
 // config checks the settings, sets and unsets a key and the wiki's
 // password and token.
 // They edit .zone/config in the wiki ZONE_DATA names, keeping its comments,
-// and refuse a change that would leave settings Zone doesn't start with; a
-// running Zone takes the change within a second and logs it (the file is
+// and refuse a change that would leave settings Zonewiki doesn't start with; a
+// running Zonewiki takes the change within a second and logs it (the file is
 // kept out of git). New MCP tokens are shown once and kept as hashes.
 package main
 
@@ -82,8 +82,8 @@ func openConfig(getenv func(string) string) (*settingsfile.File, error) {
 // saveConfig writes f, if the settings it makes are good.
 func saveConfig(f *settingsfile.File) error {
 	if len(f.Lines) == 0 || !strings.HasPrefix(strings.TrimSpace(f.Lines[0]), "#") {
-		header := []string{"# Zone's settings and users (docs/spec/users.md). " +
-			"Zone reloads this file when it changes."}
+		header := []string{"# Zonewiki's settings and users (docs/spec/users.md). " +
+			"Zonewiki reloads this file when it changes."}
 		if len(f.Lines) > 0 && strings.TrimSpace(f.Lines[0]) != "" {
 			header = append(header, "")
 		}
@@ -121,7 +121,7 @@ func saveConfig(f *settingsfile.File) error {
 }
 
 // settingsOf: the settings text makes; empty ones if it has an error (a
-// file Zone doesn't start with has no admin to keep).
+// file Zonewiki doesn't start with has no admin to keep).
 func settingsOf(text string) *Settings {
 	if f, err := parseConfig(text); err == nil {
 		if s, err := loadSettings(f); err == nil {
@@ -315,7 +315,7 @@ func (c *userCommand) link() int {
 	base := settingsOf(c.f.Read).BaseURL
 	fmt.Fprintln(c.stdout, linkURL(base, nil, token))
 	if base == "" {
-		fmt.Fprintln(c.stdout, "Put Zone's address in front of it (or set base-url: zonewiki config set base-url https://…).")
+		fmt.Fprintln(c.stdout, "Put Zonewiki's address in front of it (or set base-url: zonewiki config set base-url https://…).")
 	}
 	return 0
 }
@@ -724,7 +724,7 @@ func (c *userCommand) remove() int {
 	if _, err := revokeLink(c.name); err != nil {
 		fmt.Fprintf(c.stderr, "%s's open link couldn't be removed: %v\n", c.name, err)
 	}
-	// Nor does a stranger who signs up by that name get what Zone keeps
+	// Nor does a stranger who signs up by that name get what Zonewiki keeps
 	// of theirs (userNameHasHistory).
 	if err := noteRemoved(c.name); err != nil {
 		fmt.Fprintf(c.stderr, "%s couldn't be noted as removed in %s/removed-users: %v\n", c.name, stateDirName, err)
@@ -732,7 +732,7 @@ func (c *userCommand) remove() int {
 	switch {
 	case c.openFlag:
 		fmt.Fprintln(c.stdout, "No users and no password now: the wiki has no login, and private/ is an "+
-			"ordinary folder. A running Zone takes this only at its next start (restart it).")
+			"ordinary folder. A running Zonewiki takes this only at its next start (restart it).")
 	case c.passwordFlag:
 		fmt.Fprintln(c.stdout, "No users now: the wiki's password signs in, and private/ is an ordinary folder.")
 	}
@@ -820,7 +820,7 @@ func configMain(args []string, getenv func(string) string, stdin io.Reader, stdo
 		case key == "mcp-token" && args[0] == "set":
 			return fail("the MCP token is made with: zonewiki config token")
 		case !knownKey(key):
-			return fail("%q isn't a setting Zone knows.", key)
+			return fail("%q isn't a setting Zonewiki knows.", key)
 		}
 		if args[0] == "set" {
 			value := strings.Join(args[2:], " ")
@@ -835,7 +835,7 @@ func configMain(args []string, getenv func(string) string, stdin io.Reader, stdo
 			return fail("%v", err)
 		}
 		if args[0] == "unset" && key == "password" && len(f.Users) == 0 {
-			fmt.Fprintln(stdout, "The wiki has no login now. A running Zone takes this only at its next "+
+			fmt.Fprintln(stdout, "The wiki has no login now. A running Zonewiki takes this only at its next "+
 				"start (restart it).")
 		}
 	case "passwd", "token":
@@ -874,7 +874,7 @@ func firstOf(args []string) string {
 // showSettings prints the settings in effect and where each comes from,
 // hashes masked.
 func showSettings(w io.Writer, f *settingsfile.File, s *Settings) {
-	fmt.Fprintf(w, "Settings in effect (%s, else Zone's default):\n", configName())
+	fmt.Fprintf(w, "Settings in effect (%s, else Zonewiki's default):\n", configName())
 	for _, k := range configKeys {
 		v, set := f.Top[k]
 		value, from := v.Value, fmt.Sprintf("line %d", v.Line)

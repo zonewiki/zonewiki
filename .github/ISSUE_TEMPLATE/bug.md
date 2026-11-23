@@ -1,11 +1,11 @@
 ---
 name: Bug report
-about: Something in Zone doesn't work as it should
+about: Something in Zonewiki doesn't work as it should
 labels:
   - bug
 ---
 
-**Zone's version** (press `?` in Zone; it's at the bottom of the dialog):
+**Zonewiki's version** (press `?` in Zonewiki; it's at the bottom of the dialog):
 
 **How you run it** (the release binary, the prebuilt image, or a checkout with run.sh / built from source; OS; browser, phone or not):
 

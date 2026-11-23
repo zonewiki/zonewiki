@@ -1,7 +1,7 @@
-// Zone's views: the page shell every view shares, the
+// Zonewiki's views: the page shell every view shares, the
 // breadcrumb and module switcher, menus and dialogs, side columns, around
 // each view's template (templates/, html/template, auto-escaped). A value
-// that is HTML Zone built itself is a template.HTML; nothing else is.
+// that is HTML Zonewiki built itself is a template.HTML; nothing else is.
 package main
 
 import (
@@ -118,7 +118,7 @@ func diffLines(diff string) []diffLine {
 	return lines
 }
 
-// Zone's modules: the wiki, the tasks, with users your Private home, and the
+// Zonewiki's modules: the wiki, the tasks, with users your Private home, and the
 // notes. Every view names the one it belongs to (<body data-module>:
 // "private" for a page in your private folder); the matching links are
 // aria-current, and js/actions.js makes "New" create that module's kind.
@@ -790,7 +790,7 @@ func changeOf(slug, path string, st os.FileInfo) changeFacts {
 // changeStamp: what a page's changeFacts depend on, as a string that differs
 // when any of it changed: the page's file (its time and size), and the
 // repository's reflog and index, which every commit, checkout, pull, reset,
-// add and rm writes, Zone's own and those made in a terminal. Without a
+// add and rm writes, Zonewiki's own and those made in a terminal. Without a
 // reflog (a repository that keeps none, or a .git that is a file) nothing is
 // kept, and git is asked at every view, as before.
 func changeStamp(page os.FileInfo) (string, bool) {

@@ -1,10 +1,10 @@
 # Search
 
-Part of Zone's spec (see `AGENTS.md` for the index).
+Part of Zonewiki's spec (see `AGENTS.md` for the index).
 
 What a search is asked first (Query syntax, How words match), then what it gives back (Results) and who finds what (Who searches what).
 How it works follows: Indexing, Ranking, Semantic search (opt-in), The index on disk.
-Measuring retrieval, at the end, says how search's quality is measured on your wiki and on Zone's sample wiki.
+Measuring retrieval, at the end, says how search's quality is measured on your wiki and on Zonewiki's sample wiki.
 
 Search runs on the server, over pages and tasks alike.
 It answers the search modal (Ctrl+P, `js/search.js`), the results page `/search`, `GET /api/search` and the MCP tools `search_wiki` and `search_tasks` (`docs/spec/mcp.md`).
@@ -120,14 +120,14 @@ A page result says who made its last change, after its date: in the search dialo
 | A user's assistant's | `by anna through Claude` where its connection named it, as Changes says it (Which assistant in `docs/spec/mcp.md`), else `by anna's assistant` |
 | An assistant's, in a wiki without users | `by an assistant`, `by an assistant through Claude` |
 | A public wiki's visitor's | `by anonymous` |
-| Zone's own (a page made at start, a migration), or a person's in a wiki without users | nothing more |
+| Zonewiki's own (a page made at start, a migration), or a person's in a wiki without users | nothing more |
 | Not committed yet, or the file changed on disk or was checked out after its last commit | nothing more: whose that change is isn't known |
 
 The date is the file's (Date filters, above); the name is its last commit's, and is said only while the file is no newer than that commit (to the second git keeps),
 so a draft auto-saved and not committed,
 an edit on disk or a checkout is never put in the name of whoever committed before.
 A rename is a change: a page's last commit is then its rename.
-Whether an assistant made it, and which, is asked of the commit as everywhere else, by its `Assistant` trailer (`commitMarkOf`: Which assistant in `docs/spec/mcp.md`; a token's is "anna's assistant"), and the name is the one a page's history shows (`commitAuthor`: nobody without users, and not Zone).
+Whether an assistant made it, and which, is asked of the commit as everywhere else, by its `Assistant` trailer (`commitMarkOf`: Which assistant in `docs/spec/mcp.md`; a token's is "anna's assistant"), and the name is the one a page's history shows (`commitAuthor`: nobody without users, and not Zonewiki).
 
 **Who learns it**: whoever finds the result, which shows only to who may see the page.
 A public wiki's visitor learns no user's name, as in a page's history (`pageLog`): an assistant's change says `by an assistant through Claude`, a visitor's `by anonymous`, a user's nothing more.
@@ -139,11 +139,11 @@ Sharing mode names them, as Changes and a page's history do; it leaves out the p
 
 - **The first search scans the history** (`scanLastCommits`): one `git log --name-status` from the newest commit back, read as git writes it and stopped once every page on disk is seen (so to the history's start when a page was never committed or not changed since the first commit).
   The search starts it before it ranks (`lastCommitsSoon`), and it runs on beside it; a search waits for it until a second after it started (`lastCommitWait`), and until it is done results go without names.
-- **After that, a search looks at the reflog** (`.git/logs/HEAD`, its time and size: one `stat`), which every commit, reset, checkout and pull writes, Zone's and a terminal's alike.
+- **After that, a search looks at the reflog** (`.git/logs/HEAD`, its time and size: one `stat`), which every commit, reset, checkout and pull writes, Zonewiki's and a terminal's alike.
   When it moved, git is asked for the commits since (`lastCommitsSince`: `rev-parse`, `merge-base --is-ancestor`, then `log` of those alone): a page they changed takes the newest, a page they deleted has none.
   When the commit it knew is no longer in the history (a reset, a rewrite), the history is scanned again.
 - **Nothing of it is on disk**: each start scans at its first search.
-  A scan that fails (past `scanTimeout`, ten minutes) is logged, and results go without names until Zone starts again.
+  A scan that fails (past `scanTimeout`, ten minutes) is logged, and results go without names until Zonewiki starts again.
 
 What it costs (the scan, a search after a commit, a search when nothing moved, the memory) is measured by `BenchmarkWhoChanged` in `go/bench_test.go`; the numbers are in How big a wiki can be in `docs/spec/deployment.md`.
 
@@ -238,7 +238,7 @@ the bench's pages-and-groups case in `docs/spec/testing.md` guards that nothing 
 
 ## Indexing
 
-**Ranking is BM25**, implemented in Go (`go/internal/textsearch`, a package of its own without Zone's state; no database; `golang.org/x/text` for case folding and accents).
+**Ranking is BM25**, implemented in Go (`go/internal/textsearch`, a package of its own without Zonewiki's state; no database; `golang.org/x/text` for case folding and accents).
 Pages and tasks are scored in **one combined index** so their relevance scores are directly comparable.
 
 ### What is indexed
@@ -264,7 +264,7 @@ Smaller than that would be another kind of doc for the search itself, not a lean
 every other file's stay, unread.
 A task that didn't change keeps its doc, which is how the index tells what did.
 
-**An archive's docs are kept in Zone's folder** (`.zone/index/tasks/<hash>.gob`: `archiveDocs`, `saveArchiveDocs`; the records with their keys, as made from the file with that time and size),
+**An archive's docs are kept in Zonewiki's folder** (`.zone/index/tasks/<hash>.gob`: `archiveDocs`, `saveArchiveDocs`; the records with their keys, as made from the file with that time and size),
 so a start knows the closed tasks of earlier months without reading them: its first search reads no archive but for a hit in one.
 Whose a task is never comes from there: it is the folder its archive is in.
 
@@ -339,7 +339,7 @@ that was most of a search's time.
 ## Semantic search
 
 Semantic search finds what a query means as well as the words it says (`go/embed.go`).
-It is opt-in; unset, Zone is keyword-only and nothing in this section runs.
+It is opt-in; unset, Zonewiki is keyword-only and nothing in this section runs.
 
 ### Turning it on
 
@@ -362,7 +362,7 @@ with its tokenizer in Go (`go/internal/tokenizer`, the model's `tokenizer.json`;
 with its recipe (at most 512 tokens, the token vectors averaged where the attention mask is set, normalised, no query or passage prefixes),
 and another model may need another recipe,
 so there is no setting for one.
-Until 2026-10 the Python Zone ran it, with fastembed before that; the vectors are the same bit for bit, and the cache keeps its name `fastembed:<model>`, so it stays valid.
+Until 2026-10 the Python Zonewiki ran it, with fastembed before that; the vectors are the same bit for bit, and the cache keeps its name `fastembed:<model>`, so it stays valid.
 (An Ollama backend existed and was removed as unused; it is in the git history.)
 
 ### Chunks
@@ -415,7 +415,7 @@ Then two rules, both in `hybrid`, in the browser's search, `search_wiki` and `se
 
 A page found only by meaning gets its most similar section as excerpt and link target (Results open the matching section), since it has no word to mark.
 The fusion's constant, its depth and a weight for the meaning ranking were measured (`./run.sh eval`) and left as they are: other values gained nothing.
-Zone's floor holds both rankings to what they find (Zone's own floor below, `tests/retrieval/README.md`).
+Zonewiki's floor holds both rankings to what they find (Zonewiki's own floor below, `tests/retrieval/README.md`).
 
 #### Ties
 
@@ -476,7 +476,7 @@ A rebuild writes it straight from the docs (`WriteIndex`, holding only the posti
 A mapped file is never written to, so a search still reading the old one goes on reading it;
 the mapping is undone once nothing holds it, and nothing read from it points into it (terms, postings and keys are copies, texts are only searched).
 The file has a version and a checksum, and its terms and postings are checked when it's opened:
-one Zone can't read (another version, cut short, damaged, or not as the writer makes them) is built again, with a log line.
+one Zonewiki can't read (another version, cut short, damaged, or not as the writer makes them) is built again, with a log line.
 
 ### A start without a rebuild
 
@@ -519,7 +519,7 @@ Then the questions not ranked first in every mode, with their rank per mode (`-`
 
 With `query-log = yes` in the settings file (off by default), `search_wiki` appends each query to `.zone/queries.jsonl` (`logQuery`),
 one JSON line: `at` (local time), `q`, `under` when given, and `results`, what it found as targets (`slug#anchor`, `task:<id>`, `resultTarget`).
-In `.zone/`, so never in git, and readable by Zone's user alone (0600); past 1 MB (`queryLogMax`) the file moves to `queries.1.jsonl`, replacing the one before.
+In `.zone/`, so never in git, and readable by Zonewiki's user alone (0600); past 1 MB (`queryLogMax`) the file moves to `queries.1.jsonl`, replacing the one before.
 A write that fails is logged (`[queries] …`) and doesn't fail the search.
 Only `search_wiki`: the browser's search runs as you type, so its queries are fragments.
 
@@ -537,7 +537,7 @@ After the report the command says what is under its floor and exits 1, or "No mo
 A mode with a floor that didn't run (hybrid without its model) is under it,
 and so is a run with a target that names nothing: its question would count as not found, and lower the numbers unseen.
 
-### Zone's own floor
+### Zonewiki's own floor
 
 `tests/retrieval/` (its `README.md`) holds a sample wiki (54 pages and 12 tasks of a made-up household and the bike workshop in its yard, a third of it German: projects, recipes, how-tos, meeting notes with the same headings, tickets with ids, people),
 68 questions (in other words than the page's, by id and name, German and English, and across the two)

@@ -1,4 +1,4 @@
-// Zone's own files: the browser code (public/) and the docs Help and
+// Zonewiki's own files: the browser code (public/) and the docs Help and
 // zone_help show (README.md, docs/), from a folder on disk or the copies
 // built into the binary (package zonefiles, at the repository's root). A
 // folder wins: a checkout serves its files as they are edited, and a
@@ -38,7 +38,7 @@ func publicFiles() fs.FS {
 
 // findPublic finds public/ from the binary: next to it, or in the checkout
 // it was built in (go/zonewiki → public/); "" when there is none, for the
-// copy built into it. A folder counts when it holds Zone's entry module
+// copy built into it. A folder counts when it holds Zonewiki's entry module
 // (zonewiki.js), so a downloaded binary doesn't take some other folder for
 // it (macOS's ~/Public is ../public to one in ~/Downloads).
 func findPublic() string {
@@ -49,9 +49,9 @@ func findPublic() string {
 	return publicNear(filepath.Dir(exe))
 }
 
-// publicNear: Zone's public/ in dir or beside it (findPublic), or "". Only
-// a folder that is whoever runs Zone's, or root's, and that others can't
-// write to (ownFolder): the browser runs what is in it as Zone's own code,
+// publicNear: Zonewiki's public/ in dir or beside it (findPublic), or "". Only
+// a folder that is whoever runs Zonewiki's, or root's, and that others can't
+// write to (ownFolder): the browser runs what is in it as Zonewiki's own code,
 // so a binary started in a shared place (/tmp) doesn't take a public/
 // someone else put beside it. --public names any folder.
 func publicNear(dir string) string {
@@ -70,7 +70,7 @@ func publicNear(dir string) string {
 	return ""
 }
 
-// docsRoot: Zone's docs, README.md and docs/ at their paths in the
+// docsRoot: Zonewiki's docs, README.md and docs/ at their paths in the
 // repository: from the folder --docs names (nil when they aren't there:
 // Help says it isn't installed), else from beside publicDir's folder (a
 // checkout), else the binary's copy.
@@ -106,7 +106,7 @@ func fsExists(files fs.FS, name string) bool {
 }
 
 // modTime: a file's time; the binary's for the files built into it, which
-// have none of their own, so a browser keeps them until Zone is updated.
+// have none of their own, so a browser keeps them until Zonewiki is updated.
 func modTime(st fs.FileInfo) time.Time {
 	if t := st.ModTime(); !t.IsZero() {
 		return t
@@ -114,7 +114,7 @@ func modTime(st fs.FileInfo) time.Time {
 	return builtTime()
 }
 
-// builtTime: when the binary's file was written (the time Zone started if
+// builtTime: when the binary's file was written (the time Zonewiki started if
 // that can't be told).
 var builtTime = sync.OnceValue(func() time.Time {
 	if exe, err := os.Executable(); err == nil {
@@ -126,7 +126,7 @@ var builtTime = sync.OnceValue(func() time.Time {
 })
 
 const licensesUsage = `Usage: zonewiki licenses
-  print the licenses of what this binary holds: Zone's own (LICENSE, the AGPL),
+  print the licenses of what this binary holds: Zonewiki's own (LICENSE, the AGPL),
   Go's, the Go modules' and the model's (THIRD_PARTY_LICENSES), and those of the
   libraries in its browser code (public/vendor/)`
 
@@ -155,7 +155,7 @@ func licensesMain(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-// licenseFiles: the license files built into the binary: Zone's, the
+// licenseFiles: the license files built into the binary: Zonewiki's, the
 // notices of what is compiled in, then each vendored library's (LICENSE,
 // THIRD_PARTY_LICENSES, COPYING…).
 func licenseFiles() []string {

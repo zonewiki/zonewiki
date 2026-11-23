@@ -60,7 +60,7 @@ type embedSettingsAt struct {
 	Raw          string
 	Embed        bool // an embed on a page, whose params can be written there
 	Mine         bool // My tasks on /tasks: its settings are the user's (mineParams)
-	Mail         bool // My tasks: Zone could mail the user about a task assigned to them (it sends mail, they have an address): the dialog has the box
+	Mail         bool // My tasks: Zonewiki could mail the user about a task assigned to them (it sends mail, they have an address): the dialog has the box
 	List         string
 	ListSettings string
 	Home         bool // the list can be left out of the user's My tasks (its setting home)
@@ -254,7 +254,7 @@ func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless bool, p
 // noListHTML: what stands in the place of an embed whose list=<name> no
 // list has (for whoever looks): a line that says so, and for who may make
 // lists a button that makes it; instance: which embed of the page (its
-// id, by which js/forms.js knows its form is Zone's).
+// id, by which js/forms.js knows its form is Zonewiki's).
 func noListHTML(rq *Req, name string, instance int) string {
 	sfx := ""
 	if instance > 0 {
@@ -369,7 +369,7 @@ func tasksSettingsRoute(w http.ResponseWriter, r *http.Request) {
 	default:
 		// Written, but not committed (notCommitted): the page has the change.
 		logf("%s %s: %v", r.Method, r.URL.Path, err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "The settings couldn't be saved (Zone's log says why)"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "The settings couldn't be saved (Zonewiki's log says why)"})
 	}
 }
 
@@ -577,7 +577,7 @@ func taskCounts(rq *Req) TaskCounts {
 // countsKept: the counts each user was last shown (the Tasks links' and the
 // list switcher's, by a place's key), for as long as what they are counted
 // from is what it was: the task files and registries the user reads
-// (taskFiles.Stamp: a write of Zone's, a change by hand), what the user has
+// (taskFiles.Stamp: a write of Zonewiki's, a change by hand), what the user has
 // seen (seenVersion), the day (what is due), and the settings (who is a
 // user). Every page view shows the Tasks
 // links' counts and every open page asks for them once a minute: counted

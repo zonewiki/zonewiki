@@ -5624,7 +5624,7 @@ def test_export_and_import_a_lists_tasks(page, wiki, tmp_path):
     other = tmp_path / "notes.json"
     other.write_text('{"pages": []}')
     pick(other)
-    expect(page.locator(".task-undo-toast").last).to_contain_text("exported from Zone")
+    expect(page.locator(".task-undo-toast").last).to_contain_text("exported from Zonewiki")
     expect(dialog).to_be_hidden()
     # One the server refuses says why in the dialog.
     other.write_text('[{"notes": "no title"}]')

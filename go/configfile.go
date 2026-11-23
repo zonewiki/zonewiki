@@ -1,9 +1,9 @@
 // The settings file, .zone/config in the wiki (docs/spec/users.md,
-// docs/spec/deployment.md): the wiki's settings and its users, which Zone
+// docs/spec/deployment.md): the wiki's settings and its users, which Zonewiki
 // reloads when the file changes, so adding a user or changing a password
-// needs no restart. A small INI, read by Zone's own parser:
+// needs no restart. A small INI, read by Zonewiki's own parser:
 //
-//	# Zone's settings. Zone reloads this file when it changes.
+//	# Zonewiki's settings. Zonewiki reloads this file when it changes.
 //	locale = de-AT
 //	hosts = wiki.example.org, nas.local
 //
@@ -63,7 +63,7 @@ func knownKey(key string) bool { return slices.Contains(configKeys, key) }
 // groups.go). Any other is an error, so a file from before can't have meant
 // anything by one that comes later (readers: docs/spec/users.md, Groups).
 //
-// was: the names the group went by before a rename (Zone writes it): its
+// was: the names the group went by before a rename (Zonewiki writes it): its
 // folder's history under those names is its own, so it may take one of
 // them back, which no other group may (groupNameTaken).
 var groupKeys = []string{"includes", "owners", "was"}
@@ -82,7 +82,7 @@ func lineError(n int, format string, args ...any) error {
 }
 
 // readConfigFile reads the file at path; a missing file is an empty one
-// (nil). Zone warns when others may read it: it holds password hashes and
+// (nil). Zonewiki warns when others may read it: it holds password hashes and
 // tokens.
 func readConfigFile(path string) (*settingsfile.File, error) {
 	b, err := os.ReadFile(path)
@@ -113,7 +113,7 @@ type Settings struct {
 	partOf           map[string][]string // a group, and every group it is in by way of those (joinGroups; groupIn)
 	Owners           map[string][]string // a group's owners ([group apollo] owners = anna), A–Z: they say who is in it (groups.go)
 	Was              map[string][]string // the names a group went by before ([group artemis] was = apollo): its own to take back
-	BaseURL          string              // Zone's address as the user's browser knows it
+	BaseURL          string              // Zonewiki's address as the user's browser knows it
 	QueryLog         bool                // keep search_wiki's queries in .zone/queries.jsonl
 	GitRemote        string
 	Hosts            map[string]bool // names besides localhost, without port, lowercase
@@ -127,7 +127,7 @@ type Settings struct {
 	StorageMax       int64          // what the wiki may hold in bytes (storage.go); 0: no limit
 	External         []string       // the hosts pages may load images, media and frames from (security.go: externalRE); "*": any
 	Notice           string         // a line every page shows at the top, for everyone (layout.html); "": none
-	NoLogin          bool           // no login on purpose, though other devices reach Zone: no first-run page (setup.go)
+	NoLogin          bool           // no login on purpose, though other devices reach Zonewiki: no first-run page (setup.go)
 	SignupDomains    []string       // the mail domains sign-up takes (signup.go), lowercase; none: any
 	SignupRole       string         // the role an account made by sign-up gets: roleViewer (default) or roleEditor
 	SignupApproval   bool           // an account made by sign-up waits for an admin (pending)
@@ -338,7 +338,7 @@ func fileUsers(f *settingsfile.File) (map[string]*User, error) {
 		role := roleEditor
 		if v, ok := u.Values["role"]; ok {
 			if role = strings.ToLower(v.Value); !slices.Contains(roles, role) {
-				return nil, lineError(v.Line, "%s's role %s isn't one Zone knows: admin, editor or viewer.",
+				return nil, lineError(v.Line, "%s's role %s isn't one Zonewiki knows: admin, editor or viewer.",
 					u.Name, v.Value)
 			}
 		}
@@ -478,7 +478,7 @@ func tokenMatches(given, kept string) bool {
 
 // Reloading: the request checks call reloadSettings, which looks at the
 // file at most once a second (no watcher: no dependency, no goroutine).
-// A file with an error keeps the settings Zone has, so a broken edit
+// A file with an error keeps the settings Zonewiki has, so a broken edit
 // never locks everyone out or opens the wiki; health() reports it.
 var (
 	reloadMu    sync.Mutex
@@ -488,7 +488,7 @@ var (
 	settingsErr atomic.Pointer[string]
 )
 
-// startSettings: the settings Zone starts with, and the file's state for
+// startSettings: the settings Zonewiki starts with, and the file's state for
 // reloads.
 func startSettings(s *Settings) {
 	current.Store(s)
@@ -656,10 +656,10 @@ func takeSettings() (s *Settings) {
 		return nil
 	}
 	if st == nil {
-		// Gone (or between an editor's delete and write): keep what Zone
+		// Gone (or between an editor's delete and write): keep what Zonewiki
 		// has, as taking it away could open the wiki.
 		lastStat = nil
-		settingsFailed(fmt.Errorf("%s was removed: Zone keeps the settings it had until it is back, or a restart", configName()))
+		settingsFailed(fmt.Errorf("%s was removed: Zonewiki keeps the settings it had until it is back, or a restart", configName()))
 		return nil
 	}
 	lastStat = st
@@ -671,7 +671,7 @@ func takeSettings() (s *Settings) {
 		// The users (or the password) gone: everyone could get in, and
 		// private/ would be an ordinary folder. Only on purpose, a restart.
 		err = fmt.Errorf("%s sets no users and no password now, which leaves the wiki without a login "+
-			"(and private/ open to everyone): Zone takes that only at its next start", configName())
+			"(and private/ open to everyone): Zonewiki takes that only at its next start", configName())
 	}
 	if err != nil {
 		settingsFailed(err)
@@ -784,7 +784,7 @@ func settingsChange(old, s *Settings) string {
 func sameFloat(a, b *float64) bool { return a == nil && b == nil || a != nil && b != nil && *a == *b }
 
 func settingsFailed(err error) {
-	msg := err.Error() + " (Zone keeps its settings from before)"
+	msg := err.Error() + " (Zonewiki keeps its settings from before)"
 	settingsErr.Store(&msg)
 	logf("%s", msg)
 }

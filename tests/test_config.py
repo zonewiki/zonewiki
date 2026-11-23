@@ -1,7 +1,7 @@
-"""The settings file, .zone/config (docs/spec/users.md): Zone reloads it
+"""The settings file, .zone/config (docs/spec/users.md): Zonewiki reloads it
 when it changes, so users, passwords and tokens change without a restart;
 a broken file keeps the settings from before and says so on /api/health;
-Zone commits the file (its tokens only as hashes), but no route or history
+Zonewiki commits the file (its tokens only as hashes), but no route or history
 view shows it."""
 
 import subprocess
@@ -18,14 +18,14 @@ USERS = {"alice": ("alice-pw", "alice-token")}
 
 @pytest.fixture()
 def config(wiki_dir, client, monkeypatch):
-    """alice from the settings file, Zone running; returns the file."""
+    """alice from the settings file, Zonewiki running; returns the file."""
     monkeypatch.setattr(settings, "USERS", dict(USERS))
     client.live.ensure()
     return wiki_dir / ".zone" / "config"
 
 
 def write(path, text):
-    """Rewrites the file as an editor would, and waits until Zone looks at
+    """Rewrites the file as an editor would, and waits until Zonewiki looks at
     it again (at most once a second, at a request): its next request takes
     the change. (Not polled with logins: wrong ones are throttled.)"""
     path.write_text(text, encoding="utf-8")
@@ -38,7 +38,7 @@ def user(name, password, token=""):
 
 
 def until(check, timeout=5.0):
-    """check() turns true within timeout (Zone looks at the file at most
+    """check() turns true within timeout (Zonewiki looks at the file at most
     once a second)."""
     end = time.monotonic() + timeout
     while True:
@@ -79,7 +79,7 @@ def test_a_removed_user_is_signed_out(client, config):
 
 def test_removing_every_user_keeps_the_login_until_a_restart(client, config):
     """No users and no password would open the wiki, and private/ with it:
-    a running Zone doesn't take that from a reload."""
+    a running Zonewiki doesn't take that from a reload."""
     login(client, "alice", "alice-pw")
     write(config, "locale = de-AT\n")
     assert until(lambda: client.get("/api/health", headers=HOST).status_code == 503)
@@ -133,7 +133,7 @@ def test_health_tells_only_who_may_read_the_wiki_what_is_wrong(client, config):
     write(config, config.read_text() + "[user dave]\n")
     assert until(lambda: client.get("/api/health", headers=HOST).status_code == 503)
     error = client.get("/api/health", headers=HOST).get_json()["error"]
-    assert "dave" not in error and "see Zone's log" in error
+    assert "dave" not in error and "see Zonewiki's log" in error
     login(client, "alice", "alice-pw")
     assert "dave" in client.get("/api/health", headers=HOST).get_json()["error"]
 
@@ -159,9 +159,9 @@ def git(wiki, *args):
 
 
 def test_the_file_is_kept_out_of_git_and_never_shown(client, git_wiki_dir, monkeypatch):
-    """Zone keeps all of .zone/ out of git, the settings file too (account data
+    """Zonewiki keeps all of .zone/ out of git, the settings file too (account data
     stays out of git); a change goes to the log, names and keys only; no page
-    route serves it, and Zone's history leaves it out."""
+    route serves it, and Zonewiki's history leaves it out."""
     monkeypatch.setattr(settings, "USERS", dict(USERS))
     login(client, "alice", "alice-pw")
     config = git_wiki_dir / ".zone" / "config"

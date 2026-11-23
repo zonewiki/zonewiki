@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-// zonewiki health asks localhost at the port Zone listens on.
+// zonewiki health asks localhost at the port Zonewiki listens on.
 func TestHealthURL(t *testing.T) {
 	for args, want := range map[string]string{
 		"":                 "http://localhost:5080/api/health",
@@ -31,7 +31,7 @@ func TestHealthURL(t *testing.T) {
 	}
 }
 
-// --addr: a port alone is localhost's unless ZONE_ALLOW_REMOTE, so a Zone
+// --addr: a port alone is localhost's unless ZONE_ALLOW_REMOTE, so a Zonewiki
 // started by hand with no login isn't on the network; what is beyond
 // loopback counts as reachable (a login first).
 func TestListenAddr(t *testing.T) {
@@ -63,8 +63,8 @@ func TestListenAddr(t *testing.T) {
 	}
 }
 
-// --addr unix:PATH: Zone answers on a socket anyone who reaches the path may
-// connect to, zonewiki health asks over it, and a socket file a killed Zone
+// --addr unix:PATH: Zonewiki answers on a socket anyone who reaches the path may
+// connect to, zonewiki health asks over it, and a socket file a killed Zonewiki
 // left is replaced, but not one still listened on, nor another file.
 func TestListenOnSocket(t *testing.T) {
 	configWiki(t, "")
@@ -72,7 +72,7 @@ func TestListenOnSocket(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "zone.sock")
 	addr := socketPrefix + path
 
-	// What a killed Zone leaves: the file, and nobody listening.
+	// What a killed Zonewiki leaves: the file, and nobody listening.
 	dead, err := net.Listen("unix", path)
 	if err != nil {
 		t.Fatal(err)
@@ -96,7 +96,7 @@ func TestListenOnSocket(t *testing.T) {
 		t.Errorf("health over the socket: %d", code)
 	}
 	if _, err := listen(addr); err == nil || !strings.Contains(err.Error(), "listens") {
-		t.Errorf("a second Zone on the socket: %v", err)
+		t.Errorf("a second Zonewiki on the socket: %v", err)
 	}
 
 	file := filepath.Join(t.TempDir(), "notes.md")
@@ -147,10 +147,10 @@ func TestClientKeyOnSocket(t *testing.T) {
 	}
 }
 
-// A TCP socket Zone was handed that listens beyond this machine counts as
+// A TCP socket Zonewiki was handed that listens beyond this machine counts as
 // open to the network (a wiki without a login then asks for one first):
 // "fd:3" doesn't say where it listens, the socket does. One on loopback,
-// and a socket Zone opened itself (--addr says where), don't.
+// and a socket Zonewiki opened itself (--addr says where), don't.
 func TestAHandedTCPSocketBeyondLoopback(t *testing.T) {
 	configWiki(t, "")
 	t.Cleanup(func() { onSocket, handedSocket = false, false })
@@ -168,7 +168,7 @@ func TestAHandedTCPSocketBeyondLoopback(t *testing.T) {
 		}
 		handedSocket = false
 		if handedBeyondLoopback(holder) {
-			t.Errorf("%s, opened by Zone: counted as handed", c.addr)
+			t.Errorf("%s, opened by Zonewiki: counted as handed", c.addr)
 		}
 		ln, err := listen("fd:" + strconv.Itoa(int(f.Fd())))
 		if err != nil {
@@ -183,9 +183,9 @@ func TestAHandedTCPSocketBeyondLoopback(t *testing.T) {
 	}
 }
 
-// --addr fd:N: Zone serves on a listening socket it was started with, as
+// --addr fd:N: Zonewiki serves on a listening socket it was started with, as
 // systemd hands one to a service of a socket unit. A Unix socket's file
-// stays when Zone closes its listener: it is the holder's.
+// stays when Zonewiki closes its listener: it is the holder's.
 func TestListenOnAHandedSocket(t *testing.T) {
 	configWiki(t, "")
 	t.Cleanup(func() { onSocket, handedSocket = false, false })
@@ -216,7 +216,7 @@ func TestListenOnAHandedSocket(t *testing.T) {
 	}
 	ln.Close()
 	if _, err := os.Stat(path); err != nil {
-		t.Errorf("the holder's socket file went with Zone's listener: %v", err)
+		t.Errorf("the holder's socket file went with Zonewiki's listener: %v", err)
 	}
 	for _, bad := range []string{"fd:", "fd:x", "fd:2", "fd:987"} {
 		if _, err := listen(bad); err == nil {
@@ -233,7 +233,7 @@ func TestListenOnAHandedSocket(t *testing.T) {
 	}
 }
 
-// Zone is idle long enough to exit when nothing was asked for that long,
+// Zonewiki is idle long enough to exit when nothing was asked for that long,
 // nothing runs, and no throttle remembers a wrong try; the healthcheck is
 // no request.
 func TestIdleLongEnough(t *testing.T) {
@@ -341,7 +341,7 @@ func TestTheWikiByDefault(t *testing.T) {
 	}
 }
 
-// The line at start says where to open Zone: base-url, else localhost at
+// The line at start says where to open Zonewiki: base-url, else localhost at
 // its port; nothing on a socket or behind compose's port mapping.
 func TestOpenURL(t *testing.T) {
 	testWiki(t, nil)
@@ -378,7 +378,7 @@ func TestOpenURL(t *testing.T) {
 	}
 }
 
-// A port another program has: the error says to start Zone on another one.
+// A port another program has: the error says to start Zonewiki on another one.
 func TestPortTaken(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

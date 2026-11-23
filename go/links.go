@@ -1,8 +1,8 @@
 // Invite and reset links (docs/spec/users.md, Invite and reset links): a
 // link that lets one person set a password, once. An invite adds a new
 // user with the role the admin chose; a reset sets an existing user's new
-// password. Zone doesn't mail these: the admin copies the link and sends it any
-// way they like. Zone keeps only the token's hash, in .zone/links (owner
+// password. Zonewiki doesn't mail these: the admin copies the link and sends it any
+// way they like. Zonewiki keeps only the token's hash, in .zone/links (owner
 // only, not committed: it is state, like the session key), with whom it is
 // for, what it does, who made it and when it expires.
 package main
@@ -143,7 +143,7 @@ func revokeLink(name string) (found bool, err error) {
 
 // madeByAdmin: the link is as good as who made it: an admin still, or the
 // host (By "": zonewiki user invite or reset, and a sign-up's, which
-// Zone made). A link gives what its maker may give, so one whose maker
+// Zonewiki made). A link gives what its maker may give, so one whose maker
 // was demoted, disabled or removed since lets no one in (an invite as an
 // admin least of all).
 func madeByAdmin(s *Settings, l welcomeLink) bool { return l.By == "" || s.isAdmin(l.By) }

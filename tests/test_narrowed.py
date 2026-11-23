@@ -118,7 +118,7 @@ def test_without_the_private_place_its_grep_reads_none_of_it(client, private_wik
 
 
 def errors(client, access, tool, **args):
-    """A tool's text and whether it is an error; a failure inside Zone (a 500) fails the test."""
+    """A tool's text and whether it is an error; a failure inside Zonewiki (a 500) fails the test."""
     resp = client.post("/mcp", headers={**HOST, "Authorization": f"Bearer {access}"}, json={
         "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": tool, "arguments": args}})
     assert resp.status_code == 200, (tool, resp.data)
@@ -128,7 +128,7 @@ def errors(client, access, tool, **args):
 
 def test_ordinary_work_on_what_is_shared_goes_on(client, private_wiki, without_private):
     """Every tool does its shared work for a connection without the private
-    place, and none fails inside Zone for what it can't reach."""
+    place, and none fails inside Zonewiki for what it can't reach."""
     a = without_private
     before = P._alices_files(private_wiki)
     for tool, args in (("search_wiki", {"query": "plans"}), ("search_tasks", {}), ("search_tasks", {"list": "team"}),

@@ -1,4 +1,4 @@
-# Tools image: what checking Zone needs beyond the app itself. Microsoft's
+# Tools image: what checking Zonewiki needs beyond the app itself. Microsoft's
 # Playwright image (Ubuntu, Chromium + system deps preinstalled) plus Go,
 # which builds and tests the server, the tests' Python packages
 # (tests/requirements.txt: pytest, pytest-xdist, which runs them in
@@ -66,7 +66,7 @@ RUN TARGETARCH=${TARGETARCH:-$(dpkg --print-architecture)} \
 # race detector's run turns it on (run.sh).
 ENV PATH=/usr/local/go/bin:$PATH GOTOOLCHAIN=local CGO_ENABLED=0
 # The server's modules (go.sum checks them), so a test run fetches nothing;
-# with the root's go.mod, the module of Zone's own files (zonefiles.go),
+# with the root's go.mod, the module of Zonewiki's own files (zonefiles.go),
 # which go/go.mod takes from ../.
 COPY go.mod /tmp/gomod/
 COPY go/go.mod go/go.sum /tmp/gomod/go/

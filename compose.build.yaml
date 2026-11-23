@@ -1,4 +1,4 @@
-# Zone: build the image from this checkout and run it.
+# Zonewiki: build the image from this checkout and run it.
 #
 # ./run.sh up drives this file in a checkout (beside compose.yaml alone, it
 # runs the prebuilt image instead): it fills in what compose can't work out
@@ -25,12 +25,12 @@ services:
         ZONE_SEMANTIC_SEARCH: ${ZONE_SEMANTIC_SEARCH:-}
     image: zonewiki
     container_name: zonewiki
-    # Not root: Zone runs as the host user, so the files it writes in the wiki
+    # Not root: Zonewiki runs as the host user, so the files it writes in the wiki
     # are theirs. run.sh sets your id -u/-g (with rootless podman plus
     # compose.podman.yaml's keep-id, which maps them in unchanged). Used
     # directly, set ZONE_UID/ZONE_GID in .env if yours aren't 1000.
     user: "${ZONE_UID:-1000}:${ZONE_GID:-1000}"
-    # A minimal init as PID 1 reaps orphaned processes (Zone as PID 1
+    # A minimal init as PID 1 reaps orphaned processes (Zonewiki as PID 1
     # wouldn't, and they would pile up as zombies until the PID limit).
     init: true
     restart: unless-stopped
@@ -59,7 +59,7 @@ services:
           create_host_path: false
           # Relabel for SELinux (ignored where SELinux is off).
           selinux: Z
-    # Reported as unhealthy when Zone stops answering (compose ps); restarting
+    # Reported as unhealthy when Zonewiki stops answering (compose ps); restarting
     # then is podman's --health-on-failure or an autoheal container's job.
     healthcheck:
       test: ["CMD", "/app/zonewiki", "health"]

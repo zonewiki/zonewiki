@@ -19,7 +19,7 @@ import (
 
 // servePublic serves the browser code (public/): files only, nothing
 // outside the folder. The vendored libraries (public/vendor/) change only
-// with an update of Zone, so the browser keeps them a day without asking;
+// with an update of Zonewiki, so the browser keeps them a day without asking;
 // their scripts and styles go gzipped to a browser that takes it (Mermaid:
 // 5.5 MB, 1.5 MB gzipped).
 func servePublic(w http.ResponseWriter, r *http.Request) {

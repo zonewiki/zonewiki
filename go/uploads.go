@@ -26,7 +26,7 @@ import (
 )
 
 // Uploads are shown inline only when the browser treats them as passive
-// media. Anything else (HTML, JS, …) would run with Zone's origin, and so
+// media. Anything else (HTML, JS, …) would run with Zonewiki's origin, and so
 // could read and rewrite the wiki, so it is served as a download. SVG stays
 // inline for <img> tags but gets a sandbox CSP, which disables its scripts
 // when the file is opened directly.
@@ -89,7 +89,7 @@ func taskUploadPlace(user asker, id string) (p place, ok bool) {
 // has the id its files are theirs alone (seesTaskFiles); the record goes
 // when the task is made (createTask), so the files are its readers' from
 // then on, and a task deleted for good leaves them to no one (until an
-// undo brings the task back). Kept in Zone's folder, out of git
+// undo brings the task back). Kept in Zonewiki's folder, out of git
 // (.zone/unsaved-files.json); one older than unsavedKept is forgotten (a
 // dialog closed without a Save), and its files are no one's.
 var unsavedFiles = struct {
@@ -321,7 +321,7 @@ func serveUploadFile(w http.ResponseWriter, r *http.Request, p place, filename s
 	} else {
 		// A download keeps its name but not its type: an uploaded .js served
 		// as text/javascript would run from <script src=…> (a download
-		// doesn't stop that), and script-src 'self' trusts Zone's own origin.
+		// doesn't stop that), and script-src 'self' trusts Zonewiki's own origin.
 		w.Header().Set("Content-Type", "application/octet-stream")
 		disposition = "attachment"
 	}
@@ -575,7 +575,7 @@ func uploadName(name string) string {
 // part, no '/' nor '\\' nor NUL, no line break or other control
 // character (as a page's name: safePath), not a dot file ("..", ".git"
 // and friends), no end in '.' or ' ' and no device's name (plainPart). A ':'
-// stays: screenshots are named by the time, and Zone runs on no system
+// stays: screenshots are named by the time, and Zonewiki runs on no system
 // that minds.
 func uploadNamed(name string) bool {
 	return name != "" && !strings.ContainsAny(name, "/\\\x00") && !strings.ContainsFunc(name, mdtext.BadNameRune) &&

@@ -102,7 +102,7 @@ func TestMCPToolDefinitions(t *testing.T) {
 		if !ok || row.run == nil && row.content == nil {
 			t.Errorf("%s has no function", name)
 		}
-		// What the definition tells the client and what Zone does with the
+		// What the definition tells the client and what Zonewiki does with the
 		// tool agree: a tool that isn't read-only says what it writes (so it
 		// takes pagesMu for pages, and a viewer doesn't get it).
 		ann, _ := tool["annotations"].(map[string]any)
@@ -125,9 +125,9 @@ func TestMCPToolDefinitions(t *testing.T) {
 	// a task's place in the manual order (2026-11): what a drop in a list
 	// does, an assistant does too. From 36600 for history's assistant and
 	// outside (2026-11): Changes' filters by connection and by text from
-	// elsewhere, at both doors.
+	// elsewhere, at both doors. From 36900 for the name Zonewiki (2026-11).
 	// tests/test_mcp.py caps what is served (the same list, compact).
-	if len(mcpToolsJSON) > 36900 {
+	if len(mcpToolsJSON) > 36950 {
 		t.Errorf("the definitions grew to %d bytes: every session loads them", len(mcpToolsJSON))
 	}
 }
@@ -188,7 +188,7 @@ func TestQueryLogMovesAsideWhenFull(t *testing.T) {
 	}
 }
 
-// Zone's own state that holds users' words is its owner's alone to read on
+// Zonewiki's own state that holds users' words is its owner's alone to read on
 // the host, as the settings file is: the query log (every user's queries,
 // and the private pages they found), a task archive's records (private
 // tasks' titles), what a user has seen, the semantic cache's pages, who
@@ -247,7 +247,7 @@ func TestGrepTimeout(t *testing.T) {
 }
 
 // git grep is told folders as patterns: one whose name holds a wildcard is
-// itself, and what is below Zone's own folders (_…, .…) isn't searched.
+// itself, and what is below Zonewiki's own folders (_…, .…) isn't searched.
 func TestGrepFoldersAreThemselves(t *testing.T) {
 	testWiki(t, map[string]string{"top": "needle", "a[1]*?/x": "needle", "a1/x": "hay", "notes/_drafts/y": "needle",
 		"notes/.old/z": "needle", "notes/n": "needle"})

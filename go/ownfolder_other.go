@@ -2,5 +2,5 @@
 
 package main
 
-// ownFolder: elsewhere a file's owner and mode say nothing Zone reads.
+// ownFolder: elsewhere a file's owner and mode say nothing Zonewiki reads.
 func ownFolder(path string) bool { return true }

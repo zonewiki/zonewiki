@@ -5,7 +5,7 @@
 // vector (cosine similarity, brute force). That is plenty fast at wiki
 // scale, so there is no vector database: the vectors live in memory and in
 // a rebuildable cache file, .zone/index/embeddings.json in the wiki (kept
-// out of git), the same file the Python Zone kept: its cache stays valid.
+// out of git), the same file the Python Zonewiki kept: its cache stays valid.
 //
 // Vectors are content-addressed: a section's vector is keyed by a hash of
 // its text, so editing one section re-embeds only that section, and a page

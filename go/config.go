@@ -1,4 +1,4 @@
-// Zone's deployment settings: from the environment (.env through run.sh),
+// Zonewiki's deployment settings: from the environment (.env through run.sh),
 // and the wiki's directories, read once at start. The wiki's own settings
 // are in its settings file (configfile.go).
 package main
@@ -16,34 +16,34 @@ import (
 	"time"
 )
 
-const appName = "Zone"
+const appName = "Zonewiki"
 
-// Zone's version (semver), bumped by hand when a change is worth a number:
+// Zonewiki's version (semver), bumped by hand when a change is worth a number:
 // before 1.0 the minor one when something people rely on changes, the patch for fixes.
 const version = "0.5.0"
 
 // Where this version's source is, linked from the shortcuts dialog. The AGPL has
-// whoever runs a changed Zone for others offer them its source: a fork changes this.
+// whoever runs a changed Zonewiki for others offer them its source: a fork changes this.
 const sourceURL = "https://github.com/zonewiki/zonewiki"
 
-// environ: the environment Zone reads its deployment settings from.
+// environ: the environment Zonewiki reads its deployment settings from.
 var environ = os.Getenv
 
 // Config: what is fixed for the process, from the environment. What the
-// wiki's settings file can set, and Zone reloads, is Settings
+// wiki's settings file can set, and Zonewiki reloads, is Settings
 // (configfile.go).
 type Config struct {
 	Build       string
 	HostData    string // the wiki folder as the host sees it
 	AllowRemote bool   // listen on the LAN: no Host check unless Hosts is set
 	Published   bool   // open to the network: the container's port (ZONE_BIND, from compose), or --addr beyond loopback
-	// PortMapped: compose publishes Zone's port (ZONE_BIND is set), maybe
-	// as another one (compose.yaml: ZONE_PORT), so the address Zone listens
+	// PortMapped: compose publishes Zonewiki's port (ZONE_BIND is set), maybe
+	// as another one (compose.yaml: ZONE_PORT), so the address Zonewiki listens
 	// on isn't the one to open it at (openURL).
 	PortMapped bool
-	// IdleExit: Zone exits after this long without a request, when it
+	// IdleExit: Zonewiki exits after this long without a request, when it
 	// listens on a socket it was handed (--addr fd:3), which whoever
-	// handed it starts Zone on again; 0: never (ZONE_IDLE_EXIT).
+	// handed it starts Zonewiki on again; 0: never (ZONE_IDLE_EXIT).
 	IdleExit   time.Duration
 	Data       string // the wiki (ZONE_DATA)
 	Uploads    string // Data/_assets
@@ -51,19 +51,19 @@ type Config struct {
 	Init       bool       // ZONE_INIT, --init: the folder becomes a wiki though it holds files already (newWikiError)
 	Signup     bool       // ZONE_SIGNUP: people may make an account themselves (signup.go)
 	Public     string     // ZONE_PUBLIC: who isn't signed in reads the wiki (publicView) or edits its pages too (publicEdit); "": signs in first
-	Mail       mailConfig // ZONE_SMTP_HOST …, ZONE_MAIL_FROM: how Zone sends mail (mail.go); Host "": it sends none
+	Mail       mailConfig // ZONE_SMTP_HOST …, ZONE_MAIL_FROM: how Zonewiki sends mail (mail.go); Host "": it sends none
 }
 
 var cfg *Config
 
-// Zone's own folder in the wiki: the settings file, the session key, the
+// Zonewiki's own folder in the wiki: the settings file, the session key, the
 // caches, drafts. None of it is in git (excludeState).
 const stateDirName = ".zone"
 
-// stateDirIn: Zone's folder in the wiki data.
+// stateDirIn: Zonewiki's folder in the wiki data.
 func stateDirIn(data string) string { return filepath.Join(data, stateDirName) }
 
-// statePath: a file in Zone's folder of the wiki (stateDirIn).
+// statePath: a file in Zonewiki's folder of the wiki (stateDirIn).
 func statePath(parts ...string) string {
 	return filepath.Join(append([]string{stateDirIn(cfg.Data)}, parts...)...)
 }
@@ -110,7 +110,7 @@ var localeRE = regexp.MustCompile(`^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$`)
 
 // loadConfig reads the settings, the deployment's from the environment and
 // the wiki's from its settings file, or says what is wrong with them: a typo shouldn't leave
-// Zone running on a default.
+// Zonewiki running on a default.
 func loadConfig(getenv func(string) string) (*Config, *Settings, error) {
 	c, err := loadWiki(getenv)
 	if err != nil {
@@ -136,7 +136,7 @@ func loadWiki(getenv func(string) string) (*Config, error) {
 		Published:   published(getenv("ZONE_BIND")),
 		PortMapped:  strings.TrimSpace(getenv("ZONE_BIND")) != "",
 	}
-	// A ZONE_DATA that is set must exist: Zone doesn't make a wiki where a
+	// A ZONE_DATA that is set must exist: Zonewiki doesn't make a wiki where a
 	// mistyped one points. Unset, the wiki is ~/zonewiki, made if need be.
 	if c.Data = getenv("ZONE_DATA"); c.Data == "" {
 		data, err := defaultData(getenv)
@@ -167,7 +167,7 @@ func loadWiki(getenv func(string) string) (*Config, error) {
 	}
 	if v := strings.TrimSpace(getenv("ZONE_IDLE_EXIT")); v != "" && v != "off" && v != "0" {
 		if c.IdleExit, err = time.ParseDuration(v); err != nil || c.IdleExit < time.Second {
-			return nil, fmt.Errorf("ZONE_IDLE_EXIT is %q: it is how long Zone waits without a request before it exits, "+
+			return nil, fmt.Errorf("ZONE_IDLE_EXIT is %q: it is how long Zonewiki waits without a request before it exits, "+
 				"as 15m or 1h (a second at least), or off", v)
 		}
 	}
@@ -212,17 +212,17 @@ func defaultData(getenv func(string) string) (string, error) {
 	return data, nil
 }
 
-// newWikiError: why Zone doesn't make the wiki's folder a wiki without
+// newWikiError: why Zonewiki doesn't make the wiki's folder a wiki without
 // being asked (--init, ZONE_INIT): it isn't one yet (no .zone-format) and
 // holds files, which a start would make the wiki's pages and, with git,
 // commit, all of them. That is what a folder of notes wants once, and
 // what a mistyped ZONE_DATA (the home folder, a Documents folder, a
 // project's checkout) must never get. A .git doesn't make a folder a
-// wiki: a checkout and a home folder kept in git have one, and Zone would
+// wiki: a checkout and a home folder kept in git have one, and Zonewiki would
 // commit its pages into that repository. An empty folder needs nothing, nor
-// one with only what Zone's own commands write before a first start
+// one with only what Zonewiki's own commands write before a first start
 // (.zone/, the settings file) or an older start made (_assets/). Asked at
-// start before Zone writes anything in the folder.
+// start before Zonewiki writes anything in the folder.
 func newWikiError() error {
 	if cfg.Init {
 		return nil
@@ -254,17 +254,17 @@ func newWikiError() error {
 	}
 	history := "the first commit of its history"
 	if isDir(filepath.Join(cfg.Data, ".git")) {
-		history = "Zone commits its changes to the git repository there"
+		history = "Zonewiki commits its changes to the git repository there"
 	}
-	return fmt.Errorf("%s holds files (%s) but isn't a wiki yet. Zone would make it one: its files become the wiki's "+
-		"pages and %s. If that is what you want, start Zone once with --init "+
+	return fmt.Errorf("%s holds files (%s) but isn't a wiki yet. Zonewiki would make it one: its files become the wiki's "+
+		"pages and %s. If that is what you want, start Zonewiki once with --init "+
 		"(or ZONE_INIT=1, in .env for the container); else set ZONE_DATA to an empty folder or to your wiki.",
 		cfg.Data, shown, history)
 }
 
-// published: ZONE_BIND, the address compose publishes Zone's port on
+// published: ZONE_BIND, the address compose publishes Zonewiki's port on
 // (compose.build.yaml and compose.yaml hand it in), isn't this
-// machine alone: other devices reach Zone. Not set (Zone run by hand):
+// machine alone: other devices reach Zonewiki. Not set (Zonewiki run by hand):
 // not known, so no.
 func published(bind string) bool {
 	bind = strings.Trim(strings.TrimSpace(bind), "[]")
@@ -284,7 +284,7 @@ func buildOf(getenv func(string) string) string {
 	return sourceBuild()
 }
 
-// sourceBuild is the build Zone runs from, as "<short hash> <commit date>"
+// sourceBuild is the build Zonewiki runs from, as "<short hash> <commit date>"
 // ("+dirty" when built with uncommitted changes), from what go build
 // recorded. The container image is built without .git, so run.sh passes
 // the same string in ZONE_BUILD instead. Shown next to the version.

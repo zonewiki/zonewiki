@@ -510,7 +510,7 @@ def test_a_task_someone_gave_you_is_marked_new(alice):
 
 
 def test_my_tasks_settings_turn_the_mails_on(page, wiki, monkeypatch):
-    # Where Zone could mail her, My tasks' settings have a box for each kind
+    # Where Zonewiki could mail her, My tasks' settings have a box for each kind
     # of mail, none ticked: mail is for who asks for it.
     monkeypatch.setattr(settings, "USERS", {name: ("pw", "") for name in ("alice", "bob")})
     monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"email": "alice@example.org"}})

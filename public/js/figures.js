@@ -117,11 +117,11 @@ export async function diagramsForPaper(on) {
 
 // What a diagram's text may not make: Mermaid's labels are HTML, which strict
 // cleans with DOMPurify's defaults, and those keep form controls (a form in a
-// label posts to Zone as the reader, as one in a page would: defuseHTML in
+// label posts to Zonewiki as the reader, as one in a page would: defuseHTML in
 // go/markdown.go), refreshes and frames. So its labels go through DOMPurify
 // without them (dompurifyConfig, which a diagram's own %%{init}%% can't
 // change: secure), ids and names too (a label's element must not stand in for
-// one of Zone's, getElementById); and whatever of them is in the drawn SVG
+// one of Zonewiki's, getElementById); and whatever of them is in the drawn SVG
 // anyway (a label Mermaid doesn't clean that way) is taken out before the
 // diagram goes into the page (defuseDiagram).
 const DIAGRAM_TAGS = ['form', 'input', 'button', 'select', 'textarea', 'option', 'optgroup', 'datalist',

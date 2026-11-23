@@ -561,7 +561,7 @@ def metas(client, q):
 
 
 def by_hand(wiki_dir, slug, text, author):
-    """A page written and committed in a terminal, not by Zone."""
+    """A page written and committed in a terminal, not by Zonewiki."""
     (wiki_dir / f"{slug}.md").write_text(text)
     git(wiki_dir, "add", f"{slug}.md")
     git(wiki_dir, "-c", f"user.name={author}", "-c", f"user.email={author}@x", "commit", "-q", "-m", f"Add {slug}")
@@ -573,7 +573,7 @@ EDITED = r"edited \d{4}-\d\d-\d\d"
 def test_a_search_result_says_who_changed_its_page_last(client, wiki_dir, connected):
     """A page result says who made its last change: a user, a user's
     assistant (and which, where its connection named one), whoever committed
-    in a terminal, before Zone's first search or after it; nobody for a
+    in a terminal, before Zonewiki's first search or after it; nobody for a
     page changed since its last commit. In the search dialog's results,
     on /search and in search_wiki."""
     by_hand(wiki_dir, "old-notes", "# Old notes\n\nwombat\n", "carol")       # before the first search

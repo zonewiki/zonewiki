@@ -155,8 +155,8 @@ func TestInline(t *testing.T) {
 }
 
 // A page's raw HTML can't make or submit a form, nor refresh or re-base
-// the page, nor make a <script> (data Zone's own scripts might read): those
-// tags show as text; the rest stays as written, and Zone's own checkboxes
+// the page, nor make a <script> (data Zonewiki's own scripts might read): those
+// tags show as text; the rest stays as written, and Zonewiki's own checkboxes
 // are inputs still.
 func TestRawHTMLDefused(t *testing.T) {
 	html := render(t, "<form method=\"post\" action=\"/delete/x\">\n<button>Go</button>\n</form>\n\n"+
@@ -222,10 +222,10 @@ func TestRawHTMLDefused(t *testing.T) {
 	}
 }
 
-// A page's raw HTML gives no element one of Zone's ids or names (its
+// A page's raw HTML gives no element one of Zonewiki's ids or names (its
 // scripts find elements by id, the browser by name: window.x): theirs get
 // "user-content-" in front, however written, and an SVG's url(#…) follows;
-// a longer name ending in "id", a URL's "?id=" and Zone's own ids stay.
+// a longer name ending in "id", a URL's "?id=" and Zonewiki's own ids stay.
 func TestRawHTMLIDsAreItsOwn(t *testing.T) {
 	for src, want := range map[string]string{
 		`<data id="task-edit-id" value="x">a</data>`:                                         `<data id="user-content-task-edit-id" value="x">a</data>`,

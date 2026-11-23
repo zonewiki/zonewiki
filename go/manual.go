@@ -1,7 +1,7 @@
-// Zone's own documentation, for the MCP tool zone_help: the manual
+// Zonewiki's own documentation, for the MCP tool zone_help: the manual
 // (docs/manual/*.md, for users), the README and the spec (docs/spec/*.md,
-// for whoever builds Zone), searched by section with BM25, so an assistant
-// answers questions about Zone itself (how to rename a task list's tabs, a
+// for whoever builds Zonewiki), searched by section with BM25, so an assistant
+// answers questions about Zonewiki itself (how to rename a task list's tabs, a
 // setting, the query syntax) from the docs rather than from guesses. The
 // manual's passages come first: they say it in a user's words.
 package main
@@ -20,7 +20,7 @@ import (
 // binary's copy (docsRoot in files.go).
 var docsDir string
 
-// How Zone is tested: nothing a user asks about.
+// How Zonewiki is tested: nothing a user asks about.
 var manualSkip = map[string]bool{"testing": true}
 
 // manualChunkChars: a search hit's size. Long sections are split at

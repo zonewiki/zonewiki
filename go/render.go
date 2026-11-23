@@ -1,4 +1,4 @@
-// A page's markdown to HTML: Zone's directives
+// A page's markdown to HTML: Zonewiki's directives
 // (wikilinks, [[tasks:]], [[task:…]]) around markdown.go, and the HTML after
 // it (task chips, task list embeds, the frontmatter block, sources).
 package main

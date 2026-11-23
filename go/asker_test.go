@@ -21,7 +21,7 @@ import (
 //   - A request's asker is made once, where its session or token is
 //     checked (askerMakers); everything after takes it from userOf(r).
 //   - asUser(name) is the person themselves, with all they may: only for
-//     a user Zone knows by name and asks about (whom a task is given to,
+//     a user Zonewiki knows by name and asks about (whom a task is given to,
 //     who gets a mail, who loses a page in a move), in the functions listed
 //     here. A new one is added to the list after a look at where its name
 //     comes from: never from a request.

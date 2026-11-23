@@ -1,6 +1,6 @@
 """Sign-up (docs/spec/users.md, Sign-up): with ZONE_SIGNUP and a mail
 server in the deployment, users and base-url in the settings, anyone asks
-for an account at /signup; Zone mails a link, on whose page they choose a
+for an account at /signup; Zonewiki mails a link, on whose page they choose a
 name and password."""
 
 import json
@@ -133,7 +133,7 @@ class TestSignup:
         resp = ask(client, "Ann@Example.ORG")
         assert resp.status_code == 200 and "Check your mail" in resp.data.decode()
         to, text = signup.mails[-1]
-        assert to == "Ann@example.org" and "Subject: Confirm your account on Zone" in text
+        assert to == "Ann@example.org" and "Subject: Confirm your account on Zonewiki" in text
         link = signup.link()
         assert "ann" not in config(wiki_dir)   # no account before the link is used
 

@@ -68,7 +68,7 @@ func TestTheBinaryHoldsAllOfPublic(t *testing.T) {
 	}
 }
 
-// Without a public/ folder, Zone serves the binary's copy as it serves the
+// Without a public/ folder, Zonewiki serves the binary's copy as it serves the
 // folder: each file with its type and time (so a browser asks again only
 // when it changed), the vendored scripts and styles gzipped and kept a day,
 // nothing that isn't a file in it.
@@ -231,7 +231,7 @@ func TestTheBuiltInDocs(t *testing.T) {
 	if spec := specDocs(); len(spec) != len(specOnDisk) {
 		t.Errorf("%d spec files, %d on disk", len(spec), len(specOnDisk))
 	}
-	for path, want := range map[string]string{"/help": "Zone&#39;s manual", "/help/tasks": "<h1", "/help/spec/deployment": "Deployment"} {
+	for path, want := range map[string]string{"/help": "Zonewiki&#39;s manual", "/help/tasks": "<h1", "/help/spec/deployment": "Deployment"} {
 		if resp, body := fetch(t, srv, path); resp.StatusCode != 200 || !strings.Contains(string(body), want) {
 			t.Errorf("%s: %d", path, resp.StatusCode)
 		}
@@ -258,7 +258,7 @@ func TestTheBuiltInDocs(t *testing.T) {
 	}
 }
 
-// publicNear takes a folder for Zone's browser code only when it holds
+// publicNear takes a folder for Zonewiki's browser code only when it holds
 // zonewiki.js: a binary in ~/Downloads on a Mac, where ../public is
 // ~/Public, serves its own copy.
 func TestFindsOnlyZonesPublic(t *testing.T) {
@@ -280,7 +280,7 @@ func TestFindsOnlyZonesPublic(t *testing.T) {
 		t.Errorf("public/ beside the binary: %q", got)
 	}
 	// A folder anyone may write to (as one put in /tmp by somebody else
-	// would be to them) isn't Zone's code: the next one, or the binary's.
+	// would be to them) isn't Zonewiki's code: the next one, or the binary's.
 	if runtime.GOOS == "windows" {
 		return
 	}
@@ -296,7 +296,7 @@ func TestFindsOnlyZonesPublic(t *testing.T) {
 	}
 }
 
-// zonewiki licenses prints every license file the binary holds: Zone's,
+// zonewiki licenses prints every license file the binary holds: Zonewiki's,
 // THIRD_PARTY_LICENSES and each vendored library's.
 func TestLicensesCommand(t *testing.T) {
 	var out, errs bytes.Buffer
@@ -318,7 +318,7 @@ func TestLicensesCommand(t *testing.T) {
 		}
 	}
 	if !strings.HasPrefix(text, "==> LICENSE <==\n\n") || !strings.Contains(text, "GNU AFFERO GENERAL PUBLIC LICENSE") {
-		t.Errorf("Zone's own license first: %.100q", text)
+		t.Errorf("Zonewiki's own license first: %.100q", text)
 	}
 	out.Reset()
 	if code := licensesMain([]string{"--help"}, &out, &errs); code != 0 || !strings.Contains(out.String(), "zonewiki licenses") {

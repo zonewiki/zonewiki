@@ -1,12 +1,12 @@
 # Users
 
-Part of Zone's spec (see `AGENTS.md` for the index).
+Part of Zonewiki's spec (see `AGENTS.md` for the index).
 
 Several people on one wiki: each signs in with their own name and password, their changes are committed in their name, and an assistant connected with their MCP token acts as them.
 Everything in the wiki is shared and editable by every user, except each user's private folder, `private/<name>/`, and their private tasks, which only they see, and a group's folder, `groups/<group>/`, which only its members see.
 
 Users are `[user NAME]` sections of the wiki's settings file, `.zone/config` (below).
-Without them none of this applies: one password (or none) and one MCP token, and Zone commits as itself.
+Without them none of this applies: one password (or none) and one MCP token, and Zonewiki commits as itself.
 
 This file says first how the settings file and its commands are used, then roles, groups, the admin page, links, sign-up and signing in, then private pages, group pages, who may move a page, private tasks, assigning tasks and who made a change; how each works follows its use.
 
@@ -15,10 +15,10 @@ This file says first how the settings file and its commands are used, then roles
 Three rules; the rest of this file is how they are kept.
 
 1. **A folder is yours, a group's, or everyone's.**
-   `private/<you>/` holds your private pages, your uploads (`_assets/`) and your private tasks (`_tasks/`): no one else sees it in Zone, in search, in history, or through their assistant.
+   `private/<you>/` holds your private pages, your uploads (`_assets/`) and your private tasks (`_tasks/`): no one else sees it in Zonewiki, in search, in history, or through their assistant.
    `groups/<group>/` holds a group's pages and their uploads: its members see and change them, and to anyone else they are not there (Group pages, below).
    Everything outside the two is shared, and every user may change it, but a viewer, who changes nothing (Roles, below).
-   (Hidden inside Zone, not encrypted: whoever has the wiki's folder or git repository has it all.)
+   (Hidden inside Zonewiki, not encrypted: whoever has the wiki's folder or git repository has it all.)
 2. **Where something is kept is who sees it.**
    Not its tags, not its links, not its name.
    A new page starts where it is made: from a link to `private/<you>/…` or `groups/<group>/…`.
@@ -38,12 +38,12 @@ Three rules; the rest of this file is how they are kept.
 
 ## The settings file
 
-The wiki's settings and its users are in `.zone/config` in the wiki, a small INI read by Zone's own parser (`go/configfile.go`; no dependency).
-Zone reloads it when it changes, so nothing here needs a restart.
+The wiki's settings and its users are in `.zone/config` in the wiki, a small INI read by Zonewiki's own parser (`go/configfile.go`; no dependency).
+Zonewiki reloads it when it changes, so nothing here needs a restart.
 `.env` holds only the deployment (`docs/spec/deployment.md`).
 
 ```ini
-# Zone's settings and users (docs/spec/users.md). Zone reloads this file when it changes.
+# Zonewiki's settings and users (docs/spec/users.md). Zonewiki reloads this file when it changes.
 locale = de-AT
 hosts = wiki.example.org, nas.local
 noshare = #noshare, people/
@@ -67,7 +67,7 @@ the wiki's, before the first section (`configKeys`);
 a user's, in their `[user NAME]` section (`userKeys`);
 a group's, in a `[group NAME]` section for a group that says more than its name (`groupKeys`).
 Any other key is an error (Errors in the file, below).
-Edit it by hand or with the commands (Commands, below); a running Zone takes each change within a second.
+Edit it by hand or with the commands (Commands, below); a running Zonewiki takes each change within a second.
 
 ### The wiki's keys
 
@@ -75,8 +75,8 @@ Edit it by hand or with the commands (Commands, below); a running Zone takes eac
 |-----|------|--------|---------|
 | `password` | The login gate without users: a hash (`zonewiki config passwd`) | `pbkdf2-sha256:<iterations>:<salt>:<hash>` | no login |
 | `mcp-token` | Turns on `/mcp` without users: the token's hash (`zonewiki config token`) | `sha256:` and 64 lowercase hex digits | `/mcp` off |
-| `hosts` | Names Zone may be reached by besides localhost (The Host check in `docs/spec/security.md`) | host names, comma-separated | localhost only |
-| `base-url` | Zone's address as the browser knows it, for links handed to AI clients (`docs/spec/mcp.md`) and links in mail | a URL (`https://wiki.example.org`) | the address the request came in on |
+| `hosts` | Names Zonewiki may be reached by besides localhost (The Host check in `docs/spec/security.md`) | host names, comma-separated | localhost only |
+| `base-url` | Zonewiki's address as the browser knows it, for links handed to AI clients (`docs/spec/mcp.md`) and links in mail | a URL (`https://wiki.example.org`) | the address the request came in on |
 | `git-remote` | A remote for the wiki's repository; `origin` is set to it (`setGitRemote`) | a git remote's URL | none |
 | `noshare` | Pages hidden in sharing mode (`docs/spec/navigation.md`) | `#tags` and `folders/`; empty: none | `#noshare` |
 | `locale` | How dates read and the day weeks start on (`docs/spec/tasks.md`) | a BCP 47 tag like `de-AT` | US English dates, weeks from Monday |
@@ -85,9 +85,9 @@ Edit it by hand or with the commands (Commands, below); a running Zone takes eac
 | `semantic-min-score` | How similar a passage must be to be a semantic hit (`searchFloor`, `docs/spec/search.md`) | -1 to 1 | the model's floor |
 | `trusted-proxies` | Reverse proxies whose `X-Forwarded-For` names the client, for the throttle on wrong passwords (`clientKey`, Throttling in `docs/spec/security.md`) | IP addresses or networks (`172.17.0.1, 10.0.0.0/8`); empty: none | loopback (`127.0.0.0/8, ::1`) |
 | `upload-max` | The biggest upload (`Settings.uploadMax`, Request bodies in `docs/spec/security.md`) | a size (`25MB`; Sizes, below) | 100 MB |
-| `external-content` | Hosts a page may load images, media and frames from (A page loads nothing from other hosts, `docs/spec/security.md`) | host names (`upload.wikimedia.org, *.example.org`); `*`: any | none: only Zone itself |
+| `external-content` | Hosts a page may load images, media and frames from (A page loads nothing from other hosts, `docs/spec/security.md`) | host names (`upload.wikimedia.org, *.example.org`); `*`: any | none: only Zonewiki itself |
 | `notice` | A line across the top of every page, for everyone (The notice, below) | text, one line, at most 200 characters | none |
-| `no-login` | The wiki has no login on purpose, though other devices reach it, so Zone shows no first-run page (First run, `docs/spec/security.md`) | `yes`/`no` (as `query-log`) | no |
+| `no-login` | The wiki has no login on purpose, though other devices reach it, so Zonewiki shows no first-run page (First run, `docs/spec/security.md`) | `yes`/`no` (as `query-log`) | no |
 | `mcp-oauth` | `no`: assistants connect with a static token only, not by signing in through the browser (Connecting with OAuth, `docs/spec/mcp.md`) | `yes`/`no` (as `query-log`) | yes, with a login |
 | `storage-max` | How much the wiki may hold: past it, nothing new is made (Storage limit, below) | a size (`5GB`) | no limit |
 | `signup-domains` | Sign-up takes only addresses at these domains (Sign-up, below) | domains, comma-separated (`example.org, example.net`), a leading `@` allowed | any address |
@@ -131,7 +131,7 @@ A user's section, `[user NAME]` (the name: lowercase letters, digits and inner h
 Sign-up writes `email` (Sign-up, below); for anyone else an admin with access to the host sets it with `zonewiki user email bob bob@example.org` (`./run.sh user email …`; there is no field for it in the browser yet).
 The command refuses what isn't a bare address and an address another user has already (case aside, as sign-up tells accounts apart by it), leaving the file as it was;
 `zonewiki user email bob --remove` takes the address out, and `zonewiki user email bob` alone says it.
-A hand edit works too (`email = bob@example.org` under `[user bob]`): Zone takes it within a second, or refuses the file, naming the line, when it isn't an address.
+A hand edit works too (`email = bob@example.org` under `[user bob]`): Zonewiki takes it within a second, or refuses the file, naming the line, when it isn't an address.
 Without it the user gets no mail about tasks, whatever they tick in My tasks' settings (Mail in `docs/spec/tasks.md`).
 
 ### A group's keys
@@ -142,7 +142,7 @@ A group's section, `[group NAME]` (the name: lowercase letters, digits and hyphe
 |-----|------|--------|---------|
 | `includes` | The groups it is made of: who is in one of them is in this one (A group made of groups, below; `zonewiki group includes`) | group names, as `groups`; not itself, by whatever way round | none |
 | `owners` | The users who say who is in it, in the browser (A group's owners, below; `zonewiki group owners`) | user names, by commas or spaces; a name that is no user's counts as none | none: an admin's alone |
-| `was` | The names it went by before a rename, which only it may take back (Zone writes it; A name that is taken, below) | group names | none |
+| `was` | The names it went by before a rename, which only it may take back (Zonewiki writes it; A name that is taken, below) | group names | none |
 
 ### Format
 
@@ -152,14 +152,14 @@ A group's section, `[group NAME]` (the name: lowercase letters, digits and hyphe
 ### Sizes
 
 `upload-max` and `storage-max` take a size (`parseSize` in `go/storage.go`): bytes (`300`, or with B or bytes), or a number with KB, MB, GB or TB, any case, a space optional, decimals too (`1.5GB`).
-They count by 1024, as Zone's caps always have (100 MB is 100 × 1024 × 1024 bytes).
-Empty is unset; 0, or a unit Zone doesn't know, is an error.
+They count by 1024, as Zonewiki's caps always have (100 MB is 100 × 1024 × 1024 bytes).
+Empty is unset; 0, or a unit Zonewiki doesn't know, is an error.
 
 ### Errors in the file
 
-Errors name their line (`.zone/config line 3: "pasword" isn't a setting Zone knows.`),
-and Zone won't start on one:
-a key it doesn't know (a typo shouldn't leave Zone on a default),
+Errors name their line (`.zone/config line 3: "pasword" isn't a setting Zonewiki knows.`),
+and Zonewiki won't start on one:
+a key it doesn't know (a typo shouldn't leave Zonewiki on a default),
 a value that doesn't check (`localeRE`, `parseNoshare` …; `query-log` takes yes/no, 1/0, true/false),
 a section other than `[user NAME]` and `[group NAME]`,
 a user's key outside a section or the wiki's inside one,
@@ -168,7 +168,7 @@ a key or a section given twice,
 a line that isn't `key = value`,
 `password` or `mcp-token` of the wiki together with users (each has their own; a shared one would make the user unknown).
 Messages never repeat a password or token.
-A running Zone keeps its settings when a changed file has an error (Reloading, below).
+A running Zonewiki keeps its settings when a changed file has an error (Reloading, below).
 
 ### Storage limit
 
@@ -182,29 +182,29 @@ A running Zone keeps its settings when a changed file has an error (Reloading, b
 A refusal (`checkRoom`, `refusedFull`) is 507 Insufficient Storage, "The wiki is full: 5.0 GB of 5 GB used. Delete pages or files to make room.", and an MCP tool's error.
 The browser shows the refusal of an upload or a new note (`alert`); the editor never opens on a new page, so nothing typed is refused.
 
-What counts is every file in the data directory but `.git/` and Zone's own `.zone/` (the settings file, the session key, the search cache): the user's pages, uploads (`_assets/`, `private/<user>/_assets/`), tasks and any other files there.
+What counts is every file in the data directory but `.git/` and Zonewiki's own `.zone/` (the settings file, the session key, the search cache): the user's pages, uploads (`_assets/`, `private/<user>/_assets/`), tasks and any other files there.
 Not the history: a deleted file still in git frees its space, and the history, mostly text, is the host's to plan for.
 
 #### How storage is counted
 
-Zone walks the directory only when a write asks for room, and then at most once a minute (`usedBytes`; a walk reads names and sizes, no contents);
+Zonewiki walks the directory only when a write asks for room, and then at most once a minute (`usedBytes`; a walk reads names and sizes, no contents);
 an upload or a new page adds its size at once (`added`), so uploads in a row can't slip past.
 A figure that says full is walked again first, but at most every 5 seconds (`usageRecheck`), so a client asking over and over in a full wiki doesn't make a walk each time:
-a file deleted on disk counts within seconds, a page deleted through Zone at once (`forgetUsage`).
+a file deleted on disk counts within seconds, a page deleted through Zonewiki at once (`forgetUsage`).
 
 ### Passwords and tokens
 
 Passwords are kept as hashes, never in plain text: PBKDF2-SHA256 with a random 16-byte salt and 600,000 iterations (`hashPassword`; Go's own `crypto/pbkdf2`), written `pbkdf2-sha256:<iterations>:<salt>:<hash>` (base64 without padding); checked at sign-in by `checkPassword`.
 
 MCP tokens are kept as hashes too, `sha256:` and 64 lowercase hex digits (`hashToken`, `isTokenHash`): the commands make a token (32 random bytes, hex), show it once and keep only its hash;
-Zone compares the SHA-256 of the token a client sends (`tokenMatches`, constant time).
+Zonewiki compares the SHA-256 of the token a client sends (`tokenMatches`, constant time).
 A token is random, so its hash is no use to whoever has the repository.
 A plain token in the file is an error.
 
 ### Kept out of git
 
 The file is kept out of git, as all of `.zone/` is (the session key, caches, the query log): `.git/info/exclude` has `/.zone/*` (`excludeState`, also before a new wiki's first commit).
-Zone never shows it either (The settings file is never shown in `docs/spec/security.md`): `canSeePath` is false for `.zone/` for everyone, so history, the uncommitted list, Commit all and the MCP tools leave it (and a commit of nothing else) out, and `safePath` refuses it to every page route and MCP tool.
+Zonewiki never shows it either (The settings file is never shown in `docs/spec/security.md`): `canSeePath` is false for `.zone/` for everyone, so history, the uncommitted list, Commit all and the MCP tools leave it (and a commit of nothing else) out, and `safePath` refuses it to every page route and MCP tool.
 
 **Account data stays out of git**: the file holds the users,
 their password and token hashes,
@@ -215,7 +215,7 @@ What stays in git is authorship: commits name their user (`alice <alice@zone>`),
 A key that says something about a person goes into this file or another one in `.zone/`, never into a committed one.
 
 Whoever has the file (a backup of the data folder, a hosted wiki's export) has the hashes: PBKDF2 at 600,000 rounds is made to withstand that, but a weak password can still be guessed offline.
-A wiki whose git history has the file from before Zone kept it out (Zone 1 committed it) still holds it there, and still tracks it unless taken out (`git rm --cached .zone/config` and a commit),
+A wiki whose git history has the file from before Zonewiki kept it out (Zonewiki 1 committed it) still holds it there, and still tracks it unless taken out (`git rm --cached .zone/config` and a commit),
 so a wiki pushed where others can read it should get new passwords.
 
 #### Backups and the settings file
@@ -226,7 +226,7 @@ Back up `.zone/config` too where the git remote is the only copy, or add the use
 #### A wiki that lost its users
 
 A wiki that lost its users doesn't start open (`missingUsers`): when there is no settings file but the history has commits by users (a clone of its git remote),
-Zone refuses to start,
+Zonewiki refuses to start,
 naming one of them,
 and says to restore the file from a backup,
 add the users again,
@@ -235,7 +235,7 @@ A new wiki has no such commits and starts as before.
 
 ### Commands
 
-The commands edit the file and refuse a change Zone wouldn't start with; a running Zone takes each change within a second.
+The commands edit the file and refuse a change Zonewiki wouldn't start with; a running Zonewiki takes each change within a second.
 With `run.sh` they are `./run.sh user …`, `./run.sh group …` and `./run.sh config …`:
 
 | Command | Does |
@@ -257,7 +257,7 @@ With `run.sh` they are `./run.sh user …`, `./run.sh group …` and `./run.sh c
 | `group list` | The groups: what each includes, its owners, and who is in it |
 | `config check` | What's wrong, or each setting in effect and where it comes from |
 | `config set KEY VALUE` | Sets any other key of the wiki's table; a value is one line |
-| `config unset KEY` | Back to its default; `password`: no login (a running Zone takes it only at a restart), `mcp-token`: `/mcp` off |
+| `config unset KEY` | Back to its default; `password`: no login (a running Zonewiki takes it only at a restart), `mcp-token`: `/mcp` off |
 | `config passwd` | Without users: the wiki's password, asked twice |
 | `config token` | Without users: the wiki's MCP token, shown once |
 
@@ -277,7 +277,7 @@ With `run.sh` they are `./run.sh user …`, `./run.sh group …` and `./run.sh c
 
 Without the container it is `zonewiki user …`, `zonewiki group …`, `zonewiki config …` on the wiki in `ZONE_DATA` (unset: `~/zonewiki`, Data directory in `docs/spec/deployment.md`) (`go/commands.go`: `userMain`, `groupMain`, `configMain`; `zonewiki user --help` and the others print their usage);
 in a container, `./run.sh user …` (and without `run.sh`, `docker compose run --rm zonewiki /app/zonewiki user add alice` beside `compose.yaml`).
-`run.sh` runs the binary in a one-off container of the app's image (in a checkout `compose build -q zonewiki` first, its output only on failure; then `compose run --rm --no-deps zonewiki /app/zonewiki …`), with `.env` and the wiki mounted as `up` has them, so the file is written as Zone's user;
+`run.sh` runs the binary in a one-off container of the app's image (in a checkout `compose build -q zonewiki` first, its output only on failure; then `compose run --rm --no-deps zonewiki /app/zonewiki …`), with `.env` and the wiki mounted as `up` has them, so the file is written as Zonewiki's user;
 the password prompt's echo is off (`echoOff`, the container has a terminal; `-T` when stdin isn't one).
 
 #### A password from a command
@@ -287,7 +287,7 @@ A password from a command has at least 8 characters (`askPassword`, `passwordMin
 
 #### What the commands refuse
 
-They refuse a change Zone wouldn't start with ("not changed: …", the file as it was):
+They refuse a change Zonewiki wouldn't start with ("not changed: …", the file as it was):
 a user who is there already (add) or isn't (the others),
 a value that doesn't check (or isn't one line),
 `config passwd`/`token` with users (each has their own),
@@ -323,7 +323,7 @@ A user's MCP token is optional: without one they have no MCP access.
 
 ### Reloading
 
-Zone looks at the file at most once a second and takes a change without a restart; a change takes effect between requests, so a request sees one set of settings from start to end (How reloading works, below).
+Zonewiki looks at the file at most once a second and takes a change without a restart; a change takes effect between requests, so a request sees one set of settings from start to end (How reloading works, below).
 
 #### What a reload changes
 
@@ -338,12 +338,12 @@ Throttles, caches and the search index stay.
 
 #### A file with an error
 
-On reload, Zone keeps the settings it has,
+On reload, Zonewiki keeps the settings it has,
 logs the error with its line,
 and `GET /api/health` answers 503 with it (without a session: only that there is one, see the log, as it may name users),
 so `zonewiki health` (the container's healthcheck) fails until the file is fixed.
 A broken edit never locks everyone out or opens the wiki.
-A file removed while Zone runs counts the same (taking the users away would open the wiki): Zone keeps its settings until the file is back, or a restart.
+A file removed while Zonewiki runs counts the same (taking the users away would open the wiki): Zonewiki keeps its settings until the file is back, or a restart.
 So does a file that takes the login away, no users and no password where there were (by hand, `user remove --open` or `config unset password`): only a restart takes that, on purpose.
 
 #### How the file is written
@@ -353,7 +353,7 @@ whole,
 to a temporary file in `.zone/` synced and renamed over it (a reload never reads half a file),
 one command at a time (`lockFile` on `.zone/config.lock`, flock) and only onto the file as the command read it (changed meanwhile, by another command or an editor: "not changed: … Run it again."),
 keeping the comments and order of the lines they don't change (`go/internal/settingsfile`: `File.Set`, `Unset`, `RemoveUser`, `Write`).
-Zone logs a warning when others may read it.
+Zonewiki logs a warning when others may read it.
 
 Changes go to the log, not the history: each reload that took a change logs what changed by name and key only, never a value (`settingsChange`: `Change settings: add user carol, alice's password, locale`), and who made it on the Users tab (`(by alice)`, `settingsAuthor`).
 
@@ -417,13 +417,13 @@ A wiki from before roles has no admin until `zonewiki user role NAME admin` make
 No admin sees another user's private pages, tasks or notes, or knows their password.
 Rule 1 above holds for everyone.
 **But an admin decides who a user is**,
-and that is a way in which Zone can't close,
-as Zone mails no invite or reset link and the admin hands the links out: a reset link sets a user's password for whoever opens it,
+and that is a way in which Zonewiki can't close,
+as Zonewiki mails no invite or reset link and the admin hands the links out: a reset link sets a user's password for whoever opens it,
 the admin too,
 and someone invited under a removed user's name gets that user's private folder (as Remove's dialog says).
 So private pages are private from an admin as long as the admin leaves the account alone, not against one who takes it over.
 It doesn't go unseen: a reset ends the user's sessions and their old password stops working, and the settings file's log line names the change.
-Whoever has the host reads everything anyway: private is hidden inside Zone, not encrypted (Private pages and tasks in `docs/spec/security.md`).
+Whoever has the host reads everything anyway: private is hidden inside Zonewiki, not encrypted (Private pages and tasks in `docs/spec/security.md`).
 The Users tab says so.
 
 ### Disabled users
@@ -451,7 +451,7 @@ What it can't do is what would lock the others out, since each of them knows the
 The password and the token are set on the host (`zonewiki user passwd NAME`, `zonewiki user token NAME`), and an admin's reset link still sets a new password.
 A shared account can't be an admin: `role = admin` with `shared = yes` is an error of the file, so the commands and the Users tab refuse either change ("… is shared and an admin: an account several people sign in to can't be an admin.").
 
-It is one user to Zone: its private folder, its groups and its assistants' connections are everyone's who signs in to it, and what one of them writes is in the history under its name.
+It is one user to Zonewiki: its private folder, its groups and its assistants' connections are everyone's who signs in to it, and what one of them writes is in the history under its name.
 Signing out ends only the session it is done in.
 
 #### How a shared account is kept from changing its login
@@ -675,7 +675,7 @@ The new name must be free, as a new group's, or one the group went by before (`w
 There is no command for it: a rename writes pages and task files, which only the running server does (One process, in `AGENTS.md`).
 
 What is the group's by its name goes along, so nobody loses anything:
-the folder `groups/old/` becomes `groups/new/`, every link to its pages re-pointed on pages and in tasks, the files its pages show and those no page shows along (its task lists and their tasks among them, in `_tasks/`, moved under the task store's lock), and a home that still says what Zone wrote says the new name;
+the folder `groups/old/` becomes `groups/new/`, every link to its pages re-pointed on pages and in tasks, the files its pages show and those no page shows along (its task lists and their tasks among them, in `_tasks/`, moved under the task store's lock), and a home that still says what Zonewiki wrote says the new name;
 then the settings name it anew, on the users, in the groups that include it and its own section.
 It is up to two commits (the folder with its links, the files no page shows), by whoever renamed it; an admin who is not in the group moves its pages without seeing any.
 Who manages a group moves its pages whoever wrote them, so where they come from isn't asked, but where they land is, as for any move: a page that would land where a shared guide pulls a page in (Guides, above), or where `safePath` opens no page, stops the rename before anything changes (`groupMoveRefused`).
@@ -702,7 +702,7 @@ There is no command for it, as for a rename.
 | **Delete the pages** (`pages=delete`) | the pages and their files are deleted, in one commit ("Remove the group dev: its pages") |
 
 A move to the wiki is a move to more people, asked as such: the form says how many pages everyone who uses the wiki will see.
-A folder of that name in the wiki already is refused ("give the pages' folder another name"), as is one in `private/` or `groups/`, or one Zone skips.
+A folder of that name in the wiki already is refused ("give the pages' folder another name"), as is one in `private/` or `groups/`, or one Zonewiki skips.
 Files in the folder that no page shows go with the folder; they stay in git.
 Deleted pages can't be brought back in the browser (Deleted Pages goes by the path, and nobody is in a group of that name), and stay in git on the host.
 Links to them are links to pages there aren't.
@@ -778,14 +778,14 @@ An admin who demoted themselves is sent to the home page.
 The page keeps the commands' rules: it edits the settings file with `go/internal/settingsfile` and saves it with `saveConfig` (checked, locked, only onto the file as read: a change made meanwhile by hand or a command is never overwritten),
 so a change that leaves the wiki without an admin is refused here too.
 
-A change is taken at once and logged with the admin: after the write Zone reloads the file at once (`changeSettings`), not within the second;
+A change is taken at once and logged with the admin: after the write Zonewiki reloads the file at once (`changeSettings`), not within the second;
 the change takes effect once the requests running (the admin's own too) have ended (Reloading, above), and the page lists the users as that change has them (`latestSettings`).
 Its line in the log names the admin (`Change settings: bob's role (by alice)`, `settingsAuthor`); the file isn't in git.
 
 ## Invite and reset links
 
 A link that lets one person set a password, once (`go/links.go`).
-Zone doesn't mail these: the admin copies the link and sends it any way they like (only sign-up mails its link, below).
+Zonewiki doesn't mail these: the admin copies the link and sends it any way they like (only sign-up mails its link, below).
 
 ```bash
 ./run.sh user invite dave --role viewer   # an invite: the link, shown once
@@ -856,16 +856,16 @@ signup-approval = yes                    # an admin approves each account; defau
 
 ### When sign-up is on
 
-On when `ZONE_SIGNUP` is, with a mail server (Zone won't start with `ZONE_SIGNUP` and no `ZONE_SMTP_HOST`), the wiki has users (an admin to manage them) and `base-url` is set (`signupOn`).
+On when `ZONE_SIGNUP` is, with a mail server (Zonewiki won't start with `ZONE_SIGNUP` and no `ZONE_SMTP_HOST`), the wiki has users (an admin to manage them) and `base-url` is set (`signupOn`).
 The link in the mail is always on `base-url`, never on the address the request came in on: a request with a forged `Host` would otherwise send the link to another site.
-Without users or `base-url` it is off and Zone says why in its log at start; `/signup` answers 404 then.
+Without users or `base-url` it is off and Zonewiki says why in its log at start; `/signup` answers 404 then.
 The login page links to it ("No account yet? Sign up"), and the admin page's Users tab says it is on, for whom and as what.
 
 ### Asking for an account
 
 `/signup` (signed out; someone signed in is sent home) asks for a mail address, nothing else.
 It must be a bare address (`name@example.org`: no display name, no spaces or commas, a domain with a dot; `validEmail`; else 400 "That isn't a mail address. Write it as name@example.org."), at one of `signup-domains` if there are any (refused on the form, 400, naming them: "This wiki takes sign-ups only with an address at …").
-Zone then mails the address a link, and the page says "Check your mail".
+Zonewiki then mails the address a link, and the page says "Check your mail".
 The name and password are chosen only after the address is confirmed, so this form tells no one which names exist.
 The link's page does say that a name is taken (The sign-up link, below), as a person choosing one must be told, but only to whoever confirmed an address, and slowly: each refusal there counts as a wrong try.
 An address that has an account gets a mail with its user name instead of a link, and the form says the same "Check your mail": the page tells no one who has an account.
@@ -881,9 +881,9 @@ Its page (`/welcome/<token>`) says the address is confirmed and asks for a user 
 A name that is taken, by a user or an open invite, is refused there ("The user name alice is taken: choose another.") and the link stays good, as for any other mistake on the form.
 **Each name refused counts as a wrong try** (`welcomeThrottle`, under the link, apart from the check of the link itself, which a link that works passes): after 5 in a row the page waits a minute, doubling up to an hour (429, "Too many wrong attempts …"), and the client's total over every link and every wrong one bounds the rest (Throttling in `docs/spec/security.md`), so a link is no way to try every name to learn which are taken.
 So is the name of a user who was removed (`userNameHasHistory`):
-Zone noted them removed (`.zone/removed-users`, written by the Users tab's Remove and by `zonewiki user remove`),
+Zonewiki noted them removed (`.zone/removed-users`, written by the Users tab's Remove and by `zonewiki user remove`),
 their private folder is there or in the history, a commit names them as its author,
-Zone keeps a draft of theirs or what news they had seen (`.zone/drafts/<name>/`, `.zone/seen/<name>.json`),
+Zonewiki keeps a draft of theirs or what news they had seen (`.zone/drafts/<name>/`, `.zone/seen/<name>.json`),
 or a list or a task names them: a list's owners (a shared or a group's list), a task's assignee or follower, which is all a member who only read leaves.
 An address that got an account meanwhile is refused too ("There is an account with your address already: sign in with it.").
 Removing a user keeps their private pages, tasks and lists, and their comments and history, so a stranger signing up under the name would get all of it; an admin may still give the name again (`user add`, an invite).
@@ -897,12 +897,12 @@ The address is kept as the user's `email` in the settings file (out of git, as a
 With `signup-approval = yes`, a `pending` user is disabled in every way a disabled user is (no sign-in, no session, no MCP token), and the login tells them, with the right password, "Your account waits for an admin of this wiki to approve it."
 The Users tab shows them as "Waiting for approval" with an **Approve** button (the Enable route: it takes out `pending` and `disabled`; the log says `approve NAME`); `zonewiki user enable NAME` does the same, and `user list` shows them as waiting.
 To turn one down, **Remove** them.
-Zone doesn't mail the admins about a waiting account: they see it on the Users tab.
+Zonewiki doesn't mail the admins about a waiting account: they see it on the Users tab.
 
 ### Sign-up's limits
 
 5 mails per client and 50 in all in an hour (`hourlyCap`, in memory; "Too many sign-ups in the last hour: try again later.", 429), so the form can't flood someone's inbox or the mail server's quota.
-A mail that can't be sent (the server down, refusing, no STARTTLS) is logged with why, the link is taken back, and the form says "Zone couldn't send the mail: try again later." (502).
+A mail that can't be sent (the server down, refusing, no STARTTLS) is logged with why, the link is taken back, and the form says "Zonewiki couldn't send the mail: try again later." (502).
 Not yet: a password reset by mail ("forgot password"): an admin makes a reset link, as before.
 
 ## Signing in
@@ -912,7 +912,7 @@ Not yet: a password reset by mail ("forgot password"): an admin makes a reset li
 The login page asks for the user name and the password (`login.html`; the name field only with users).
 The name is compared in lower case, without surrounding spaces.
 A wrong name or password says "Incorrect user name or password." (not which one; without users "Incorrect password."), keeps the name typed, and costs the same time either way: an unknown name is checked against a dummy hash (`authenticate`), so timing doesn't tell which names exist.
-The dummy hash has a real one's iterations but zeros for salt and key (`dummyHash`), so Zone doesn't spend the 600,000 rounds making it at every start.
+The dummy hash has a real one's iterations but zeros for salt and key (`dummyHash`), so Zonewiki doesn't spend the 600,000 rounds making it at every start.
 Every try checks one password, a disabled or waiting user's too (the check that says "Your account is disabled" is the try's own), so timing doesn't tell which accounts are disabled or wait for approval either.
 Wrong tries are throttled per client and the user name it tries, with a total for the client over every name (`loginThrottle`, Throttling in `docs/spec/security.md`): signing in as oneself clears only one's own count, not the guesses at someone else's password; there is no count for a name over all clients, which would let anyone lock a user out.
 
@@ -1104,10 +1104,10 @@ A file goes only where the page goes: a page moved into a group's folder takes i
 
 ### What "private" means
 
-Hidden inside Zone, from other users and their assistants.
+Hidden inside Zonewiki, from other users and their assistants.
 Not encrypted, and not hidden from whoever has the wiki's folder or its git repository: the files, their history and a git remote hold everything.
 Search finds your private pages for you alone, and another user's words take no part in your ranking, nor in what a typo matches (Who searches what in `docs/spec/search.md`).
-The query log (`query-log`) is the wiki owner's file in `.zone/`, never shown in Zone: with users it holds every user's queries and the private pages they found.
+The query log (`query-log`) is the wiki owner's file in `.zone/`, never shown in Zonewiki: with users it holds every user's queries and the private pages they found.
 Without users nothing is private, and `private/` is an ordinary folder.
 
 ### How private pages are kept
@@ -1120,7 +1120,7 @@ Names compare in lower case (`private/` and `groups/` in any case, as a case-ins
 a page is opened only by the path it was judged by, never through a symlink nor by a name the file system reads as another (A page is the file its name says in `docs/spec/security.md`).
 
 **No one's pages**: anything under `private/` outside a user's folder (a page in `private/` itself, `private/alice.md` beside the folder, the folder of a user no longer there) is seen by no one;
-Zone logs each such entry when it starts (`strayPrivate`), and the admin page's Users tab names them (Managing users, above), so the admin can move them.
+Zonewiki logs each such entry when it starts (`strayPrivate`), and the admin page's Users tab names them (Managing users, above), so the admin can move them.
 
 **Opening another user's page** (view, editor, history, a version, a diff, the search preview) is a plain 404, the same as for a page that doesn't exist, for every slug in their folder (`refusePage`), so it doesn't tell what exists there.
 Sharing mode's "Hidden page" stays for pages `noshare` hides.
@@ -1155,7 +1155,7 @@ and private tasks (open, closed, archived; one a shared page refers to with `[[t
 holding a word no response to bob may contain,
 and probes every route and MCP read tool as bob,
 and every write route and MCP write tool (her files and the commits must stay as they were);
-a route Zone registers, and an MCP tool, must be probed or listed as exempt there (`test_every_route_is_covered`, `test_every_tool_is_covered`).
+a route Zonewiki registers, and an MCP tool, must be probed or listed as exempt there (`test_every_route_is_covered`, `test_every_tool_is_covered`).
 Further tests there cover what alice does with her own (notes, uploads, a new private page, history, Commit all, private tasks and their defaults); the Go tests in `go/tasklogic_test.go` the per-user task files.
 
 ## Group pages
@@ -1177,7 +1177,7 @@ There is nothing to set up for the folder itself: it is the folder of the group 
 
 The way in (`go/private.go`) is a pill in the switcher, for whoever is in a group (Modules in `docs/spec/navigation.md`; **g g**): called by the group for who is in one, **Groups** with a menu of them for who is in several.
 `/groups/<group>` opens the group's home, `groups/<group>/index`, and makes it on the first visit of someone in the group who may write, from a small template (`# dev`, a line in italics that asks what the group is for, a team or a project, a line that the pages in this folder are seen and changed by whoever is in the group, a `## Links` heading; committed in their name, `Create groups/dev/index`; `groupHomeText`).
-A rename rewrites a home that is still the template, as Zone writes it now or wrote it before it asked (`isGroupHomeText`), and leaves one its people changed.
+A rename rewrites a home that is still the template, as Zonewiki writes it now or wrote it before it asked (`isGroupHomeText`), and leaves one its people changed.
 It is an ordinary page of the group; like the wiki's home and a private one it can't be renamed or deleted (`isGroupHome`, `isProtected`).
 To anyone not in the group the address is a 404 that makes nothing, and so it is to a member who may not write (a viewer) while the home isn't made yet.
 
@@ -1199,9 +1199,9 @@ Its pages are left out of search, the page list, Deleted Pages, the uncommitted 
 A rename or a new page aimed at a group you aren't in is refused with "that folder is a group's you aren't in", which says nothing of whether there is such a group.
 
 **The folder is the group's whoever is in it**: `groups/nobody/`, of a group nobody is in, is seen by no one, and so is anything in `groups/` outside a group's folder (a page in `groups/` itself, a folder no group can be named as).
-Zone logs each such entry when it starts (`strayGroups`).
+Zonewiki logs each such entry when it starts (`strayGroups`).
 So emptying a group never publishes its pages, and what is shared doesn't depend on who is in which group.
-A wiki that already had a folder `groups/` when it got users, or when Zone got group folders, finds its pages there seen only by the groups of those names, or by no one: move them out on disk, or put people in a group of the folder's name.
+A wiki that already had a folder `groups/` when it got users, or when Zonewiki got group folders, finds its pages there seen only by the groups of those names, or by no one: move them out on disk, or put people in a group of the folder's name.
 Without users `groups/` is an ordinary folder.
 
 ### The group's mark
@@ -1252,7 +1252,7 @@ A `[[task:…]]` on a group's page counts as its title in search only for a task
 A group's page is a page at a path, so there is nothing new to call (`docs/spec/mcp.md`): `write_page` with `groups/dev/…` makes one, `rename_page` moves one (to fewer people only by an admin or by whoever shared it while nobody else changed it, with `narrow`), `upload_file` with `page` keeps a file with it.
 An assistant is told who sees a page with every answer about one that isn't everyone's ("seen by: the group @dev only …"), and the instructions name the folders of the groups its user is in.
 
-**What Zone didn't see saved** in a group's folder (written on disk) has no known author: before a write by someone who isn't in the group re-points links there, it is committed as Zone's ("Save 3 files in groups/dev"), so nobody's commit carries text they don't see (`commitOthersDrafts`).
+**What Zonewiki didn't see saved** in a group's folder (written on disk) has no known author: before a write by someone who isn't in the group re-points links there, it is committed as Zonewiki's ("Save 3 files in groups/dev"), so nobody's commit carries text they don't see (`commitOthersDrafts`).
 
 ### What a group's folder is not
 
@@ -1295,7 +1295,7 @@ Where nobody who sees the page now would lose it (the same people see both place
 **Whoever shared a page takes it back while nobody else has changed it**: every commit of the page since it came to where it is (the move that shared it, or its first save) is theirs, nothing of anyone else's is in it uncommitted, and it goes back to where it came from or to a place at least that wide.
 A page they made where it is, theirs alone since, is theirs to move anywhere, as is one not in git yet that they wrote.
 Asked first, as an admin is.
-Zone reads the page's commits back to that move or its first commit, however many there are (the newest 50 first, `tookBackFirst`, and the rest only when those are all theirs):
+Zonewiki reads the page's commits back to that move or its first commit, however many there are (the newest 50 first, `tookBackFirst`, and the rest only when those are all theirs):
 a long run of one's own edits says nothing of whose the page was before it, so fifty edits don't make someone else's page yours.
 Without git nobody takes a page back.
 
@@ -1429,7 +1429,7 @@ List settings has it under More, "Shows only the tasks of".
 **The counts** on the Tasks links and the list switcher count what each user's lists show them: `assignee=me` is whoever asks (`assigneeParamMatches` in `go/tasksyntax.go`, the server's mirror of the filter).
 An export of such a list holds the tasks it shows (`/api/tasks/export?assignee=`).
 **My tasks**, where the Tasks links go, is what is yours: of the shared tasks those assigned to you, whatever list they are in, and your own private ones; an unassigned shared task is its list's backlog (My tasks in `docs/spec/tasks.md`).
-Zone assigns a new task to no one; its maker says who has it.
+Zonewiki assigns a new task to no one; its maker says who has it.
 Only a task of your own that you share is yours unless you say otherwise (Sharing a task, above).
 
 ### By person
@@ -1457,7 +1457,7 @@ A removed user's open link (an invite not taken, a reset) goes with them, by the
 Any other name is refused with a 400 that says why (`notAssignable`: "… is not a user of this wiki", "…'s account is waiting for an admin's approval", "…'s account is disabled", "… is a viewer, and a viewer can't change tasks"; "… isn't one of those the list #… is for"), and nothing of the write is kept.
 
 **`me` and `none` are reserved names**, since they are the words for whoever is signed in and for no one (and `anonymous` too: User names, above).
-No user has one: `zonewiki user add`, an invite, sign-up and the first-run page refuse it ("… can't be a user name"), and a settings file that has a `[user me]`, `[user none]` or `[user anonymous]` (written by hand) is refused like any other mistake in it: Zone doesn't start with it, and a running Zone keeps the settings it had.
+No user has one: `zonewiki user add`, an invite, sign-up and the first-run page refuse it ("… can't be a user name"), and a settings file that has a `[user me]`, `[user none]` or `[user anonymous]` (written by hand) is refused like any other mistake in it: Zonewiki doesn't start with it, and a running Zonewiki keeps the settings it had.
 
 **A private task has no assignee**: it is its owner's, and nobody else sees it.
 `assignee` on a private task is a 400 ("A private task is yours alone. Put it in a shared list to assign it"); a write that shares a task (`list` with `share`) can assign it at once.
@@ -1501,14 +1501,14 @@ A file that has one (a wiki that had users) keeps it through reads and writes.
 
 ### Commits
 
-Every commit Zone makes for a user's action names them as its author, `alice <alice@zone>` (`gitCommit(user, …)`); the committer stays Zone.
+Every commit Zonewiki makes for a user's action names them as its author, `alice <alice@zone>` (`gitCommit(user, …)`); the committer stays Zonewiki.
 Commits run one at a time (`commitMu` around `git add` and `git commit`), and each commits only its own paths, so one user's files never go into another's commit.
-Commits Zone makes on its own (start-up, archiving the tasks) are Zone's: the wiki's git committer is `Zone <zone@localhost>` (`setCommitter`), and the history shows no name for its commits (`commitAuthor`).
-Without users all commits are Zone's.
+Commits Zonewiki makes on its own (start-up, archiving the tasks) are Zonewiki's: the wiki's git committer is `Zonewiki <zonewiki@localhost>` (`setCommitter`), and the history shows no name for its commits (`commitAuthor`), nor for those of `Zone`, its name in an older wiki's history.
+Without users all commits are Zonewiki's.
 
 #### A draft is committed in its author's name
 
-Zone remembers who auto-saved a page's uncommitted text (`drafts` in `go/merge.go`, in memory: the editor's auto-save and a ticked checkbox note it, a commit of the file forgets it).
+Zonewiki remembers who auto-saved a page's uncommitted text (`drafts` in `go/merge.go`, in memory: the editor's auto-save and a ticked checkbox note it, a commit of the file forgets it).
 Before another user's save,
 Done or checkbox tick on that page (and before a write that changes other pages on the way: a rename re-pointing links, a folder move, Append to page, `commitOthersDrafts`),
 the draft is committed first as its author's `Save <slug>` (`commitOthersDraft`),
@@ -1519,8 +1519,8 @@ A write that replaces or removes the page's text (a delete, rename or restore, K
 the writer's own draft too,
 so it is never lost and the write's own commit holds only its change (`keepPending`, `keepPendingPages` in `go/pageops.go`: one commit per author);
 Commit file and Commit all commit a draft as its author too (`commitAuthorOf`).
-Before Zone exits idle (`ZONE_IDLE_EXIT`) it commits every draft as its author's `Save <slug>` (`commitDrafts`), as who wrote it is only in memory.
-Text whose author Zone doesn't know (edited on disk, or auto-saved before a restart) is committed by the one committing, or by Zone for an assistant's write.
+Before Zonewiki exits idle (`ZONE_IDLE_EXIT`) it commits every draft as its author's `Save <slug>` (`commitDrafts`), as who wrote it is only in memory.
+Text whose author Zonewiki doesn't know (edited on disk, or auto-saved before a restart) is committed by the one committing, or by Zonewiki for an assistant's write.
 
 #### In another user's private folder
 
@@ -1532,7 +1532,7 @@ so a rename of a shared page never carries their unfinished text in its commit.
 ### In the history
 
 A page's history shows the author after a version's label ("Edited · alice", `.hist-by`; `GitEntry.Author`, `commitAuthor`), and the MCP `history` tool adds "(by alice)" to a version's or a change's message.
-Zone's own commits, and every commit in a wiki without users, show no name.
+Zonewiki's own commits, and every commit in a wiki without users, show no name.
 An assistant's commit also says through which assistant (" · alice through …", without users " · through …"; in the tool "(by alice through …)") (Which assistant in `docs/spec/mcp.md`).
 
 ### Comments and history of tasks
@@ -1545,16 +1545,16 @@ A comment is its author's: only they edit or delete it, and an admin may delete 
 
 `go/taskby.go`: the routes that take comments or history whole (`PUT /api/tasks/<id>` and `batch-update` for an undo, `/api/tasks/restore`, `/api/tasks/import`) get them from the browser, which could say anything.
 A `by` that is the sender's own stays;
-another user's stays only on a comment (that comment, by its id, with its text, of that task) or a history entry (of that task, at that time, with those dates) Zone has seen under that name: it notes them as it deletes a task or a comment and before a request replaces a task's lists (`rememberBy`, in memory, the newest 20 000),
+another user's stays only on a comment (that comment, by its id, with its text, of that task) or a history entry (of that task, at that time, with those dates) Zonewiki has seen under that name: it notes them as it deletes a task or a comment and before a request replaces a task's lists (`rememberBy`, in memory, the newest 20 000),
 so the undo that sends them back is believed, and nothing else: a comment of alice's sent to another task, or with other words, is not hers.
-**A task that comes back from a snapshot** (`/api/tasks/restore`, a non-admin's import: `checkArrived`) keeps another's name only when it comes back as Zone had it (its id, title, description, when it was made, who has it and the occurrence before it, `taskKey`):
-a task deleted for good lends its id to no other task that would carry its people's names, and a history entry Zone hasn't had names no one but the sender, also not whom it was given to (`assigned`, `mentioned`: who had a task may be given it again, `hadAssignee`).
-Its assignee is one of its list's members, as for any write (else no one: the import says how many), and its `spawned_from` stays only when it comes back as Zone had it.
+**A task that comes back from a snapshot** (`/api/tasks/restore`, a non-admin's import: `checkArrived`) keeps another's name only when it comes back as Zonewiki had it (its id, title, description, when it was made, who has it and the occurrence before it, `taskKey`):
+a task deleted for good lends its id to no other task that would carry its people's names, and a history entry Zonewiki hasn't had names no one but the sender, also not whom it was given to (`assigned`, `mentioned`: who had a task may be given it again, `hadAssignee`).
+Its assignee is one of its list's members, as for any write (else no one: the import says how many), and its `spawned_from` stays only when it comes back as Zonewiki had it.
 Any other name is dropped (`checkBy`: by no one), also an undo after a restart.
-A write that sends a task's comments whole changes only the sender's own: another user's comment must come back as Zone has seen it, and only an admin drops one (`othersCommentsKept`; else 403 "Only its author changes a comment").
-**A history sent for a task that is there** (an undo's) keeps only the entries Zone has had for that task (in its file, or noted before it was replaced; `knownHistory`), and always its `created` entry:
+A write that sends a task's comments whole changes only the sender's own: another user's comment must come back as Zonewiki has seen it, and only an admin drops one (`othersCommentsKept`; else 403 "Only its author changes a comment").
+**A history sent for a task that is there** (an undo's) keeps only the entries Zonewiki has had for that task (in its file, or noted before it was replaced; `knownHistory`), and always its `created` entry:
 so nobody writes an event that wasn't, such as a `created` in their own name (who made a task may delete it and move it to fewer people) or an `assigned` (a task goes back to whom its history says had it), and nobody makes a task no one's by dropping who made it.
 Who made it is the task's `created_by`, which no history sent changes.
-**A comment a whole-list write brings with no name** (sent so, or its name dropped), that the task didn't have and Zone never had by no one, is the sender's (`ownNewComments`): by no one it would be everyone's to change.
+**A comment a whole-list write brings with no name** (sent so, or its name dropped), that the task didn't have and Zonewiki never had by no one, is the sender's (`ownNewComments`): by no one it would be everyone's to change.
 An admin's import keeps the file's names (a wiki moved, a backup put back).
 `TestAuthors` in `tests/test_users.py`.

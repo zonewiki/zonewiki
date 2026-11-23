@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Run Zone with compose, and run its tests. Where it is decides which Zone:
+# Run Zonewiki with compose, and run its tests. Where it is decides which Zonewiki:
 # in a checkout (a Containerfile beside it) it builds the image from the code
 # there (compose.build.yaml); downloaded on its own next to compose.yaml, it
 # runs the prebuilt image (ghcr.io/zonewiki/zonewiki). The tests and the other
-# commands for working on Zone need the checkout. This script works out what
+# commands for working on Zonewiki need the checkout. This script works out what
 # compose can't: the build string from git, the port's bind address from
 # ZONE_ALLOW_REMOTE, your user ID, the host's timezone, and the wiki path.
 set -e
@@ -17,7 +17,7 @@ elif [[ -f compose.yaml ]]; then
   CHECKOUT=
   COMPOSE_FILES=(-f compose.yaml)
 else
-  echo "Error: run.sh needs compose.yaml beside it (the prebuilt image), or a checkout of Zone." >&2
+  echo "Error: run.sh needs compose.yaml beside it (the prebuilt image), or a checkout of Zonewiki." >&2
   exit 1
 fi
 
@@ -72,7 +72,7 @@ case "$ZONE_ALLOW_REMOTE" in
 esac
 export ZONE_BIND="${ZONE_BIND:-127.0.0.1}"
 
-# The user Zone runs as (the compose files' user:), so the files it writes
+# The user Zonewiki runs as (the compose files' user:), so the files it writes
 # are the host user's: your own IDs, unless .env names others (a NAS, where
 # the wiki folder's owner isn't who runs this). Rootless podman maps them
 # into the container as they are (keep-id, compose.podman.yaml, which has to
@@ -91,8 +91,8 @@ elif [[ $ENGINE == docker && "$(id -u)" -ne 0 && -z "$(env_val ZONE_UID)" ]] &&
   export ZONE_UID=0 ZONE_GID=0
 fi
 
-# The build Zone's image comes from ("<hash> <commit date>", "+dirty" with
-# uncommitted source changes), shown next to Zone's version; same format as
+# The build Zonewiki's image comes from ("<hash> <commit date>", "+dirty" with
+# uncommitted source changes), shown next to Zonewiki's version; same format as
 # a local go build's (go/config.go sourceBuild).
 # Only a checkout's: the prebuilt image carries CI's.
 ZONE_BUILD=
@@ -183,17 +183,17 @@ build_image() {
   rm -f "$log" "$iid"
 }
 
-# The commands for working on Zone need a checkout: say so instead of
+# The commands for working on Zonewiki need a checkout: say so instead of
 # failing somewhere in compose.
 needs_checkout() {
   if [[ -z "$CHECKOUT" ]]; then
-    echo "./run.sh $1 needs a checkout of Zone (git clone https://github.com/zonewiki/zonewiki);" \
+    echo "./run.sh $1 needs a checkout of Zonewiki (git clone https://github.com/zonewiki/zonewiki);" \
          "beside compose.yaml alone, run.sh runs the prebuilt image: up, down, logs, update, user, group, config." >&2
     exit 1
   fi
 }
 
-# up and the settings file's commands need the wiki and .env: Zone doesn't
+# up and the settings file's commands need the wiki and .env: Zonewiki doesn't
 # make a wiki where a typo in .env points.
 needs_wiki() {
   if [[ ! -d "$ZONE_DATA" ]]; then
@@ -206,27 +206,27 @@ needs_wiki() {
   fi
 }
 
-# Start Zone (up, update): a checkout builds the image first, compose.yaml
+# Start Zonewiki (up, update): a checkout builds the image first, compose.yaml
 # pulls the prebuilt one if it isn't here yet.
 start() {
   needs_wiki
   if [[ -n "$CHECKOUT" ]]; then
-    say "Building Zone's image from this checkout with $ENGINE compose (the binary is compiled inside it, not into this folder) and starting it…"
+    say "Building Zonewiki's image from this checkout with $ENGINE compose (the binary is compiled inside it, not into this folder) and starting it…"
     compose up -d --build
   else
-    say "Starting Zone from the prebuilt image (ghcr.io/zonewiki/zonewiki) with $ENGINE compose…"
+    say "Starting Zonewiki from the prebuilt image (ghcr.io/zonewiki/zonewiki) with $ENGINE compose…"
     compose up -d
   fi
   local port
   port=$(env_val ZONE_PORT)
-  echo "Zone running at http://localhost:${port:-5080}"
-  echo "Zone data: $ZONE_DATA"
+  echo "Zonewiki running at http://localhost:${port:-5080}"
+  echo "Zonewiki data: $ZONE_DATA"
 }
 
 case "${1:-up}" in
   build)
     needs_checkout build
-    say "Building Zone's image with $ENGINE compose (the binary is compiled inside it, not into this folder)…"
+    say "Building Zonewiki's image with $ENGINE compose (the binary is compiled inside it, not into this folder)…"
     compose build
     say "Built. ./run.sh up starts it; ./run.sh binaries builds binaries into dist/."
     ;;
@@ -235,7 +235,7 @@ case "${1:-up}" in
     ;;
   update)
     # A checkout pulls the code and builds it; beside compose.yaml, the
-    # newest prebuilt image. Then Zone starts again on it.
+    # newest prebuilt image. Then Zonewiki starts again on it.
     if [[ -n "$CHECKOUT" ]]; then
       say "Pulling the newest code (git pull)…"
       git pull
@@ -246,7 +246,7 @@ case "${1:-up}" in
     start
     ;;
   down)
-    say "Stopping Zone…"
+    say "Stopping Zonewiki…"
     compose down
     ;;
   logs)
@@ -446,13 +446,13 @@ case "${1:-up}" in
   user|group|config)
     # The settings file's commands (zonewiki user …, zonewiki group …, zonewiki config …; see
     # docs/spec/users.md), in a one-off container of the app's image, with
-    # .env and the wiki as up gives them, so the file is written as Zone's
-    # user and import sees .env. A running Zone takes the change itself.
+    # .env and the wiki as up gives them, so the file is written as Zonewiki's
+    # user and import sees .env. A running Zonewiki takes the change itself.
     needs_wiki
     # In a checkout, the image as up builds it, its output only when the
     # build fails; the prebuilt image compose run pulls if it isn't here.
     if [[ -n "$CHECKOUT" ]]; then
-      say "Building Zone's image with $ENGINE compose…"
+      say "Building Zonewiki's image with $ENGINE compose…"
       log=$(mktemp)
       if ! compose build -q zonewiki >"$log" 2>&1; then
         cat "$log" >&2
@@ -467,11 +467,11 @@ case "${1:-up}" in
     ;;
   *)
     echo "Usage: $0 [up|down|logs|update|user|group|config|build|test|e2e|flaky|bench|retrieval|binaries|leaks|screenshots|eval]"
-    echo "In a checkout, Zone's image is built from it; beside compose.yaml alone, the prebuilt image runs."
-    echo "  up     - start Zone (default); in a checkout, build its image first"
-    echo "  down   - stop Zone"
+    echo "In a checkout, Zonewiki's image is built from it; beside compose.yaml alone, the prebuilt image runs."
+    echo "  up     - start Zonewiki (default); in a checkout, build its image first"
+    echo "  down   - stop Zonewiki"
     echo "  logs   - follow container logs"
-    echo "  update - pull the newest code (checkout) or prebuilt image, and start Zone again"
+    echo "  update - pull the newest code (checkout) or prebuilt image, and start Zonewiki again"
     echo "  user add|passwd|token|role|email|group|disable|enable|shared|invite|reset|remove NAME, user list - the users in the wiki's settings file"
     echo "  group includes NAME [+G] [-G], group owners NAME [+U] [-U], group list - groups made of groups and a group's owners, in the wiki's settings file"
     echo "  config check|set|unset|passwd|token - the wiki's settings file: check it, set a key, the password"

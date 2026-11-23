@@ -15,7 +15,7 @@ import (
 	"zonewiki/internal/taskmodel"
 )
 
-// How Zone's requests grow with the wiki: a page view walks the wiki's
+// How Zonewiki's requests grow with the wiki: a page view walks the wiki's
 // folders and looks at every page's links (for the backlinks) and every
 // open task (for the linked tasks), and the tasks API reads the task files
 // whole. The numbers that came out are in docs/spec/deployment.md (How big
@@ -204,7 +204,7 @@ func benchHistory(b *testing.B, pages, commits int) {
 	var stream strings.Builder
 	at := time.Now().Add(-time.Duration(commits+1) * time.Minute).Unix()
 	data := func(s string) { fmt.Fprintf(&stream, "data %d\n%s\n", len(s), s) }
-	fmt.Fprintf(&stream, "commit refs/heads/main\nauthor Zone <zone@localhost> %d +0000\ncommitter Zone <zone@localhost> %d +0000\n", at, at)
+	fmt.Fprintf(&stream, "commit refs/heads/main\nauthor Zonewiki <zonewiki@localhost> %d +0000\ncommitter Zonewiki <zonewiki@localhost> %d +0000\n", at, at)
 	data("Initial import")
 	for i := range pages {
 		fmt.Fprintf(&stream, "M 100644 inline %s\n", name(i))
@@ -222,7 +222,7 @@ func benchHistory(b *testing.B, pages, commits int) {
 			msg += " (MCP)" + commitTrailers("Claude", "")
 		}
 		u := users[c%3]
-		fmt.Fprintf(&stream, "commit refs/heads/main\nauthor %s <%s@zone> %d +0000\ncommitter Zone <zone@localhost> %d +0000\n", u, u, at, at)
+		fmt.Fprintf(&stream, "commit refs/heads/main\nauthor %s <%s@zone> %d +0000\ncommitter Zonewiki <zonewiki@localhost> %d +0000\n", u, u, at, at)
 		data(msg)
 		fmt.Fprintf(&stream, "M 100644 inline %s\n", name(page))
 		data(fmt.Sprintf("# Page %d\n\nChange %d.\n", page, c))

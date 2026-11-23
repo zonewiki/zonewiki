@@ -220,7 +220,7 @@ func existingPage(args jsonObj, name string, user asker) (string, string, error)
 
 // pageName: the slug a page of a name or slug has ("Tickets/BUG 1234" →
 // "tickets/bug-1234"), whether or not it is there; refused when it would be
-// outside the wiki or in a folder Zone skips (_assets, _tasks, .git …).
+// outside the wiki or in a folder Zonewiki skips (_assets, _tasks, .git …).
 func pageName(raw string) (string, error) {
 	raw = strings.TrimSuffix(strings.Trim(slugInput(raw), "/"), ".md")
 	slug := mdtext.ToSlug(raw)

@@ -18,7 +18,7 @@
 // moved by hand, a list renamed) is filed where it belongs by the next
 // write of its owner's tasks, or at start (ArchiveOldClosed).
 //
-// A Store knows nothing of Zone's process: the wiki's folder, its users,
+// A Store knows nothing of Zonewiki's process: the wiki's folder, its users,
 // the clock, who may write and how a write is committed are handed to it.
 package taskfiles
 
@@ -73,7 +73,7 @@ type Store struct {
 	// are in them: the group's place is theirs); for Everyone every group.
 	// nil: no groups. Every read and write of a user's asks, through Owners.
 	Groups func(user asker.Asker) []string
-	// Commit commits the files a write changed, by user ("": Zone itself);
+	// Commit commits the files a write changed, by user ("": Zonewiki itself);
 	// tasks: the ids of the tasks the write changed (Touched), for the
 	// commit to name.
 	Commit func(user, message string, tasks []string, paths ...string) error
@@ -175,7 +175,7 @@ func (s *Store) Touched() []string {
 // registries: readers wait from here until Release, so that they see every
 // file of the write or none. Every write of the store's takes it itself;
 // code that writes a task file on its own (taskfiles.Write) calls it first.
-// Without Lock (a command without a running Zone, a test) there is no write
+// Without Lock (a command without a running Zonewiki, a test) there is no write
 // in progress to hold it for.
 func (s *Store) Hold() {
 	if s.locked && !s.held {
@@ -267,7 +267,7 @@ func (s *Store) dirOf(owner, list string) string {
 	return filepath.Join(s.Dir(owner), ListsDirName, list)
 }
 
-// Everyone: who reads every folder (dirs): Zone itself, for what is done
+// Everyone: who reads every folder (dirs): Zonewiki itself, for what is done
 // over all the tasks (a start's filing, a rename's links, the search index,
 // which filters by user later). No user's name: a name has no NUL.
 var Everyone = asker.Asker{Name: "\x00everyone"}
@@ -467,7 +467,7 @@ func eachOwner(owners []string, list func(owner string) []*Task) []*Task {
 
 // What a file held when it was last parsed: every page view reads the open
 // tasks (the Tasks links' count), and a write reads every file, so a file
-// is parsed once and handed out as copies until it changes. Zone is one
+// is parsed once and handed out as copies until it changes. Zonewiki is one
 // process and writes its task files here (Write, which forgets the file); a
 // file changed by hand is a file with another time, size or inode.
 type parsedFile struct {
@@ -481,7 +481,7 @@ type parsedFile struct {
 // parsed after it was last read. The open tasks and this month's closed
 // ones are read all the time; an archive is read by the Closed view of its
 // year, a search's index and a change to an old task, and a wiki keeps
-// years of them: parsed and kept, they are most of what Zone holds in
+// years of them: parsed and kept, they are most of what Zonewiki holds in
 // memory (62 of 163 MB with 80,000 tasks, measured 2026-11-15).
 const archiveKept = 10 * time.Minute
 
@@ -489,10 +489,10 @@ const archiveKept = 10 * time.Minute
 // ask to see that something didn't read the wiki's task files.
 var parses atomic.Int64
 
-// Parsed: how many task files were parsed since Zone started.
+// Parsed: how many task files were parsed since Zonewiki started.
 func Parsed() int64 { return parses.Load() }
 
-// ForgetParsed: nothing is kept parsed, as when Zone starts.
+// ForgetParsed: nothing is kept parsed, as when Zonewiki starts.
 func ForgetParsed() {
 	parsed.Lock()
 	clear(parsed.files)
@@ -660,7 +660,7 @@ func holds(path string, tasks []*Task) bool {
 	return true
 }
 
-// changes counts the writes of task files and registries since Zone
+// changes counts the writes of task files and registries since Zonewiki
 // started, each under the folder it is in (a list's, an owner's _tasks/;
 // a registry under its own path), so that a page can ask whether the tasks
 // it holds are still what the server has (Word) without fetching them, and
@@ -721,7 +721,7 @@ func (s *Store) Word(who asker.Asker, places []Place) string {
 // user's tasks are read from: the registries they read, the open tasks,
 // this month's closed ones and last month's archives (RecentClosed), of
 // every folder. By the files' times and sizes, so a change by hand counts
-// as one of Zone's does. It costs a look at each file, not a read.
+// as one of Zonewiki's does. It costs a look at each file, not a read.
 func (s *Store) Stamp(user asker.Asker) string {
 	last := s.Now().AddDate(0, -1, 0).Format("2006-01")
 	var b strings.Builder
@@ -745,7 +745,7 @@ func (s *Store) Stamp(user asker.Asker) string {
 			add(archiveIn(d, last))
 		}
 	}
-	// Zone's own writes by their count too (Word): two of them within one
+	// Zonewiki's own writes by their count too (Word): two of them within one
 	// tick of the file system's clock that leave a file its size are two.
 	return b.String() + s.Word(user, places)
 }
@@ -832,7 +832,7 @@ func (s *Store) lenient(who asker.Asker, read func(who asker.Asker, owner string
 }
 
 // OpenOf: owner's open tasks, read without the lock (the user commands,
-// which have no running Zone).
+// which have no running Zonewiki).
 func (s *Store) OpenOf(owner string) []*Task { return s.lenient(Everyone, s.openOf)(owner) }
 
 // Open: the open tasks user sees, under the lock: a task made private or
@@ -1375,7 +1375,7 @@ func (s *Store) WriteBothLocked(user asker.Asker, active, closed []*Task, messag
 // ArchiveOldClosed rolls earlier months' closed tasks into their
 // archives (at start; every write files by month too), files a task found
 // in another folder than its list's there, and writes files in another
-// format (a hand-edited file) as Zone writes them, so later commits show
+// format (a hand-edited file) as Zonewiki writes them, so later commits show
 // only what changed; every owner's files, in one commit. An unreadable
 // file is left alone (its owner's files are): this is never worth failing
 // over.
@@ -1400,7 +1400,7 @@ func (s *Store) ArchiveOldClosed() {
 	if len(changed) == 0 {
 		return
 	}
-	msg := "Write the task files in Zone's format"
+	msg := "Write the task files in Zonewiki's format"
 	if moved {
 		msg = "Archive closed tasks"
 	}

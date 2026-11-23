@@ -1120,7 +1120,7 @@ func TestGeneralInAWikiWithoutARegistry(t *testing.T) {
 }
 
 // A start reads every task file to file tasks and set up the lists once;
-// from then on, while git says the task files are as Zone left them, a
+// from then on, while git says the task files are as Zonewiki left them, a
 // start reads the open tasks' files and this month's closed ones, not the
 // archives. A file changed by hand, users turned on or off, or no mark, and
 // it reads them again.
@@ -1166,7 +1166,7 @@ func TestAStartReadsTheArchivesWhenItMust(t *testing.T) {
 	if n, read := start(); read {
 		t.Errorf("a start with nothing to do read the archive (%d files parsed)", n)
 	}
-	// A task file changed by hand: read again, and written in Zone's format.
+	// A task file changed by hand: read again, and written in Zonewiki's format.
 	raw, _ := os.ReadFile(archive)
 	if err := os.WriteFile(archive, append([]byte(" "), raw...), 0o666); err != nil {
 		t.Fatal(err)
@@ -1177,7 +1177,7 @@ func TestAStartReadsTheArchivesWhenItMust(t *testing.T) {
 	if _, read := start(); !read || !tasksChecked() {
 		t.Errorf("after a hand edit: read %v, checked %v", read, tasksChecked())
 	}
-	// A task file committed by hand (or pulled): no commit of Zone's.
+	// A task file committed by hand (or pulled): no commit of Zonewiki's.
 	raw, _ = os.ReadFile(archive)
 	if err := os.WriteFile(archive, append([]byte("\n"), raw...), 0o666); err != nil {
 		t.Fatal(err)
@@ -1186,7 +1186,7 @@ func TestAStartReadsTheArchivesWhenItMust(t *testing.T) {
 		t.Errorf("checked with a task file committed by hand (%d %s)", r.Code, r.Stderr)
 	}
 	start()
-	// Zone's own commit of a task file: the mark follows it.
+	// Zonewiki's own commit of a task file: the mark follows it.
 	title := jsonObj{}
 	title.Set("title", "Eggs, a dozen")
 	for _, x := range taskFiles.Open(asUser("alice")) {
@@ -1201,7 +1201,7 @@ func TestAStartReadsTheArchivesWhenItMust(t *testing.T) {
 	}
 	if !tasksChecked() {
 		mark, _ := os.ReadFile(tasksCheckedPath())
-		t.Errorf("not checked after Zone's own commit of a task file: mark %q, head %q, status %q, log %q", mark,
+		t.Errorf("not checked after Zonewiki's own commit of a task file: mark %q, head %q, status %q, log %q", mark,
 			runGit("rev-parse", "HEAD").Stdout, runGit("status", "--porcelain", "--untracked-files=all").Stdout,
 			runGit("log", "--format=%h %s", "-4").Stdout)
 	}
@@ -1222,7 +1222,7 @@ func TestAStartReadsTheArchivesWhenItMust(t *testing.T) {
 // The search keeps a task's record, not the task: what is long (its
 // description, comments, history) is read from its file for a hit. Docs
 // are made file by file: a change makes one file's anew and leaves the
-// others as they are, unread; an archive's are kept in Zone's folder, so a
+// others as they are, unread; an archive's are kept in Zonewiki's folder, so a
 // start knows the wiki's closed tasks of years without reading them, and
 // whose they are is the folder's to say, never the saved file's.
 func TestTheSearchKeepsRecordsOfTasks(t *testing.T) {
@@ -1291,7 +1291,7 @@ func TestTheSearchKeepsRecordsOfTasks(t *testing.T) {
 		t.Error("a change of one task: its doc is the old one, or another's is a new one")
 	}
 	// A start: nothing parsed, nothing known. The archives' docs come from
-	// Zone's folder, with their keys; the archives aren't read.
+	// Zonewiki's folder, with their keys; the archives aren't read.
 	taskDocs.mu.Lock()
 	taskDocs.done, taskDocs.docs, taskDocs.files = false, nil, nil
 	taskDocs.mu.Unlock()
@@ -1303,7 +1303,7 @@ func TestTheSearchKeepsRecordsOfTasks(t *testing.T) {
 	for _, id := range []string{old.ID, hers.ID} {
 		a, b := again[id], after[id]
 		if a == nil || a.key != b.key || *a.tk != *b.tk || a.Task.Title != b.Task.Title || a.Task.Owner != b.Task.Owner || a.Task.ClosedAt != b.Task.ClosedAt {
-			t.Errorf("an archive's doc from Zone's folder: %+v %+v, was %+v %+v", a.Task, a.tk, b.Task, b.tk)
+			t.Errorf("an archive's doc from Zonewiki's folder: %+v %+v, was %+v %+v", a.Task, a.tk, b.Task, b.tk)
 		}
 	}
 	if text, ok := again[old.ID].taskText(); !ok || !strings.Contains(text, "Zephyrscale") {

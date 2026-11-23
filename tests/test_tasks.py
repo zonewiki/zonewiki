@@ -1,4 +1,4 @@
-"""Comprehensive tests for the Zone task app API."""
+"""Comprehensive tests for the Zonewiki task app API."""
 
 import json
 import os
@@ -1734,9 +1734,9 @@ class TestLimitParam:
 
 
 class TestFileFormat:
-    """Zone writes each task's fields in one order; files in another (the
-    Python Zone's, a hand edit) are rewritten once, at start, in a commit of
-    their own. Keys Zone doesn't know stay."""
+    """Zonewiki writes each task's fields in one order; files in another (the
+    Python Zonewiki's, a hand edit) are rewritten once, at start, in a commit of
+    their own. Keys Zonewiki doesn't know stay."""
 
     OLD = [{"id": "a1", "title": "Old", "description": "", "tags": [], "due_date": None,
             "created_at": "2026-01-02T10:00:00", "closed_at": None, "wont_do": False,
@@ -1752,7 +1752,7 @@ class TestFileFormat:
         subprocess.run(["git", "add", "-A"], cwd=git_wiki_dir, env=settings.GIT_ENV, check=True)
         subprocess.run(["git", "commit", "-qm", "old"], cwd=git_wiki_dir, env=settings.GIT_ENV, check=True)
         git_setup(tmp_path_factory)   # a start
-        assert self.log(git_wiki_dir)[0] == "Write the task files in Zone's format"
+        assert self.log(git_wiki_dir)[0] == "Write the task files in Zonewiki's format"
         task = json.loads(tasks.read_text(encoding="utf-8"))[0]
         assert list(task)[:5] == ["id", "title", "description", "tags", "start_date"]
         assert list(task)[-1] == "blocked_by" and task["blocked_by"] == ["x"]
@@ -2111,7 +2111,7 @@ class TestClosedByMonth:
 
     def test_export_and_import_hold_every_year(self, client, wiki_dir):
         year = self._seed(wiki_dir)
-        # Ids as Zone makes them: an import keeps those (and gives a task without one a new one).
+        # Ids as Zonewiki makes them: an import keeps those (and gives a task without one a new one).
         names = ["now", "undated", "y1-dec", "y1-may", "y2-mar", "y2-nov"]
         uid = {name: f"0000000{i}-0000-4000-8000-000000000000" for i, name in enumerate(names)}
         for path in (wiki_dir / "_tasks").glob("closed*.json"):
@@ -2186,7 +2186,7 @@ class TestClosedByMonth:
         """What a hand changes in a closed file (a task added, one removed)
         is what the next read and the next write have."""
         year = self._seed(wiki_dir)
-        client.put("/api/tasks/now", json={"title": "Filed"})    # Zone has read and written every file
+        client.put("/api/tasks/now", json={"title": "Filed"})    # Zonewiki has read and written every file
         assert closed_files(wiki_dir) == self._filed(year)
         write_closed(wiki_dir, f"closed-{year-1}-05.json", [
             {"id": "y1-may", "title": "May, by hand", "closed_at": f"{year-1}-05-01T10:00:00"},
@@ -2816,7 +2816,7 @@ class TestComments:
     def test_a_style_in_a_tasks_text_is_text(self, client):
         # A task's notes and comments go with it onto every page that shows
         # its list, the reader's own among them: a <style> there could lay
-        # Zone's own (closed) dialogs over the page. It shows as text; a
+        # Zonewiki's own (closed) dialogs over the page. It shows as text; a
         # page's own <style> stays (it styles that page only), as do inline
         # styles.
         style = '<style>#page-delete-dialog { display: block }</style>\n\n<span style="color: red">red</span>'
@@ -3038,7 +3038,7 @@ class TestMyTasksOrder:
 
 def test_the_counts_follow_the_task_files(client, wiki_dir):
     """The Tasks links' counts are kept per user and counted anew when a
-    task file is another one: after Zone's own write, also one that leaves
+    task file is another one: after Zonewiki's own write, also one that leaves
     the file its size within one tick of the clock, and after a change by
     hand."""
     today, tomorrow = date.today().isoformat(), (date.today() + timedelta(days=1)).isoformat()

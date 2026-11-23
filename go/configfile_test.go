@@ -74,7 +74,7 @@ func TestLoadSettingsFromFile(t *testing.T) {
 	}
 }
 
-// configWiki: a test wiki with this settings file, Zone started on it.
+// configWiki: a test wiki with this settings file, Zonewiki started on it.
 func configWiki(t *testing.T, text string) string {
 	t.Helper()
 	testWiki(t, nil)
@@ -351,7 +351,7 @@ func TestUserCommands(t *testing.T) {
 			t.Errorf("%v: %d %q", c.args, code, errs)
 		}
 	}
-	// A change Zone wouldn't start with is refused, the file left as it was.
+	// A change Zonewiki wouldn't start with is refused, the file left as it was.
 	path := filepath.Join(wiki, ".zone", "config")
 	_ = settingsfile.Write(path, before+"[user dave]\n")
 	if code, _, errs := run("password\npassword\n", "add", "carol"); code == 0 || !strings.Contains(errs, "not changed") {
@@ -903,7 +903,7 @@ func TestRolesInTheFile(t *testing.T) {
 		"[user a]\npassword = " + hash + "\ndisabled = maybe\n":                                                              "line 3: a's disabled = maybe isn't yes or no",
 		"[user a]\npassword = " + hash + "\nshared = maybe\n":                                                                "line 3: a's shared = maybe isn't yes or no",
 		"[user a]\npassword = " + hash + "\nrole = admin\n\n[user d]\npassword = " + hash + "\nrole = admin\nshared = yes\n": "line 8: d is shared and an admin",
-		"role = admin\n": `"role" isn't a setting Zone knows`,
+		"role = admin\n": `"role" isn't a setting Zonewiki knows`,
 	} {
 		f, err := parseConfig(text)
 		if err == nil {

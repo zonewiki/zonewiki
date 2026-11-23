@@ -1,6 +1,6 @@
 # Tests
 
-Part of Zone's spec (see `AGENTS.md` for the index).
+Part of Zonewiki's spec (see `AGENTS.md` for the index).
 
 How the suite is set up, which tests guard against a forgotten step, where each area's tests live and how the suites run.
 The rules (run it, add tests with every change) are in `AGENTS.md`.
@@ -10,11 +10,11 @@ What a test checks is said by its name and its docstring: this file names module
 
 ### Fixtures and helpers
 
-`tests/conftest.py` holds the shared setup: every test gets a fresh temp wiki (`wiki_dir`: just `index.md`, `_assets/` and `_tasks/`; `git_wiki_dir`: the same set up as a git repository, as Zone does at start; `client`, a server on it),
+`tests/conftest.py` holds the shared setup: every test gets a fresh temp wiki (`wiki_dir`: just `index.md`, `_assets/` and `_tasks/`; `git_wiki_dir`: the same set up as a git repository, as Zonewiki does at start; `client`, a server on it),
 plus helpers that modules import from `tests.conftest`: `HOST`,
 `write_page`,
 `create_task`,
-`make_list` (a task list, made as New list… makes it) and `list_page` (`write_page`, plus the lists the page's `[[tasks: list=…]]` embeds show, made through the browser's routes with the embed's list settings, and pinned as a `pin=` there says: a page no longer makes or pins a list, so `pin=` in a test's page is this helper's to read, not Zone's; the browser tests have both in `tests/e2e/conftest.py`, taking the page),
+`make_list` (a task list, made as New list… makes it) and `list_page` (`write_page`, plus the lists the page's `[[tasks: list=…]]` embeds show, made through the browser's routes with the embed's list settings, and pinned as a `pin=` there says: a page no longer makes or pins a list, so `pin=` in a test's page is this helper's to read, not Zonewiki's; the browser tests have both in `tests/e2e/conftest.py`, taking the page),
 `content_hash`,
 `section_fields` (the editor's hidden fields for a section, read from its `/edit` page),
 `preview` (markdown as `/api/preview` renders it),
@@ -30,7 +30,7 @@ answering with werkzeug's `TestResponse` (`get_json()`, `get_data(as_text=True)`
 The browser tests' `wiki` fixture starts one on a port fixed for the session.
 
 The settings a test changes in `tests/settings.py` (`monkeypatch.setattr(settings, "PASSWORD", …)`: `HOSTS`, `LOCALE`, `NOSHARE_TAGS`, `GIT_ENABLED` (a `PATH` without git) …) reach the server in its settings file,
-`.zone/config` (`config_text` in `goserver.py`: the settings that differ from Zone's defaults, passwords and tokens as their hashes, then `settings.CONFIG_FILE`, more of the file's text, then the users as `[user …]` sections;
+`.zone/config` (`config_text` in `goserver.py`: the settings that differ from Zonewiki's defaults, passwords and tokens as their hashes, then `settings.CONFIG_FILE`, more of the file's text, then the users as `[user …]` sections;
 written before the server starts, and removed once the settings give none),
 the deployment's (`ZONE_ALLOW_REMOTE`, `settings.ENV`) as its environment): when they change,
 it restarts on the same wiki (and port) before the next request;
@@ -38,12 +38,12 @@ the browser tests' server restarts the moment a test sets one (a `__setattr__` o
 `settings.USERS` maps a name to its password and token, `settings.USER_SETTINGS` a name to more of its section (`role`, `disabled`);
 `goserver.py` writes their hashes into the settings file (`password_hash`: a fixed salt and few iterations, so the server's settings stay the same between requests and logins are quick).
 The tests' server has `no-login = yes` (`settings.NO_LOGIN`), so the first-run page doesn't stand in the way.
-Zone looks at the settings file at most once a second, so a test that rewrites it while the server runs waits that out (`write` in `tests/test_config.py`) rather than polling logins, which the throttle would count.
+Zonewiki looks at the settings file at most once a second, so a test that rewrites it while the server runs waits that out (`write` in `tests/test_config.py`) rather than polling logins, which the throttle would count.
 
-Zone's docs folder (`settings.DOCS`, which `TestZoneHelp` points elsewhere) reaches the server as `--docs`;
+Zonewiki's docs folder (`settings.DOCS`, which `TestZoneHelp` points elsewhere) reaches the server as `--docs`;
 the semantic index (`settings.SEMANTIC`, a `tests/semantic.py` `FakeIndex`: words mapped to a few "concept" axes, so no onnxruntime and no model) as `--semantic-test`: the server gets the fake concept embedder and floors (`go/embedtest.go`), syncs once at start when the test called `sync()`, and restarts after each `sync()`, so it sees the wiki as it is then.
 
-A server makes the wiki a git repository at start (`gitSetup`), so every module's wiki is a repository, and `git_setup(tmp_path_factory)` (a server started and stopped) is how a test "restarts Zone" (start-up commits, `index.md`, the yearly archives).
+A server makes the wiki a git repository at start (`gitSetup`), so every module's wiki is a repository, and `git_setup(tmp_path_factory)` (a server started and stopped) is how a test "restarts Zonewiki" (start-up commits, `index.md`, the yearly archives).
 `settings.GIT_ENABLED = False` gives the server a `PATH` without git, for the fallbacks; the git tests skip when git is not installed.
 
 ### Other test doubles
@@ -54,7 +54,7 @@ A server makes the wiki a git repository at start (`gitSetup`), so every module'
 - A failed commit: `tests/test_groups_own.py` forces a rename to fail part way with a `pre-commit` hook in the wiki's repository that refuses a commit holding a group's page (`no_commits_of_the_groups_pages`).
 - `run.sh` without an engine: `tests/test_run_sh.py` puts a stub `podman` first on `PATH` (it logs its arguments; `run`/`start` exit with `FAKE_EXIT`), in a scratch git repo holding copies of `run.sh` and `.githooks/pre-commit`.
   Its hook tests skip when a local gitleaks is on `PATH` beside bash; one in a folder of its own (the tools image's) is left off the scratch repo's `PATH`, so they run there and in CI.
-- A socket handed over as systemd would: `tests/test_socket.py` holds the socket itself and starts Zone with `--addr fd:N` (and `ZONE_IDLE_EXIT=1s`).
+- A socket handed over as systemd would: `tests/test_socket.py` holds the socket itself and starts Zonewiki with `--addr fd:N` (and `ZONE_IDLE_EXIT=1s`).
 - Node: `tests/test_tasks_core.py` and `tests/test_text_parity.py` run `public/tasks-core.js` and `public/js/mdtext.js` under Node (`node -e`) and skip without it; the tools image installs Ubuntu's `nodejs`.
 - The clock in the browser: Playwright's clock moves time where a test waits for a minute to pass (`test_tasks_show_what_someone_else_changed_within_a_minute`).
 
@@ -68,16 +68,16 @@ Without Playwright installed they skip, so plain `pytest tests/` is unaffected.
 - `conftest.py` starts a server per test on a fresh temp wiki with its own git repo (on a port fixed for the session); each test gets a fresh browser context.
   Dates in the task app's date picker go through `pick_date(picker, d, tap=False)`: the tests take dates from the real clock (today + N), and the picker opens on the month of the date it holds, so near a month's end the date can be a page before or after.
   Tests of how the editor behaves over a slow connection (`test_editor.py`'s `slow_saves`) put a small proxy between the browser and the server that answers auto-saves 2.5 seconds late.
-  A request to any other host is aborted (offline, deterministic) and fails the test: Zone loads nothing from a CDN.
+  A request to any other host is aborted (offline, deterministic) and fails the test: Zonewiki loads nothing from a CDN.
   Uncaught page JS errors fail the test.
 - A test that never ends: under load Playwright's driver or the browser sometimes dies (`new_page` fails with "Target crashed" or "Connection closed while reading from the driver"), and the next call of its sync API then waits forever, which nothing inside the test can interrupt.
   So `conftest.py` stops the process of a test that runs longer than `TEST_TIMEOUT` (120 s; the slowest takes under 10), setup and teardown included (`pytest_runtest_protocol`), after writing which test it was and where every thread stood.
   With pytest-xdist that process is one worker: the run reports the test as failed ("worker crashed while running …") and goes on with a new worker, instead of standing still until someone stops it.
-  Such a failure says the machine was short of CPU or memory, not that Zone is wrong: run the test again by itself.
-- A page is ready before a test acts on it: `page.goto`, `page.reload` and `page.wait_for_url` return only once Zone's code has started on the page and every task list that started shows its tasks (`_wait_when_there`, `READY_JS` in `conftest.py`).
+  Such a failure says the machine was short of CPU or memory, not that Zonewiki is wrong: run the test again by itself.
+- A page is ready before a test acts on it: `page.goto`, `page.reload` and `page.wait_for_url` return only once Zonewiki's code has started on the page and every task list that started shows its tasks (`_wait_when_there`, `READY_JS` in `conftest.py`).
   Before that a click does what the plain HTML does (a dialog's form posted as it is, its error in the URL) and a task list has no cards, which on a busy machine is what a test met.
   The page says so itself: `<html data-ready>` once the entry module `zonewiki.js` has run, `data-loaded` on a `.tasks-app` once it has drawn its tasks (`fetchTasks` in `js/taskdata.js`; on Closed once those are there); only the tests read the two.
-  A page without Zone's script (a download, an error page) counts as ready, once it is read to its end: `wait_for_url` returns when the address has changed, before the new page's script tag is there to be found.
+  A page without Zonewiki's script (a download, an error page) counts as ready, once it is read to its end: `wait_for_url` returns when the address has changed, before the new page's script tag is there to be found.
   `ready=False` on any of the three returns as Playwright does, for a test that keeps the script from running or looks at the page while it loads.
   After a navigation none of them started (a link clicked, a form that leaves the page), `wait_ready(page)` waits the same way where the next step needs it.
 - Waiting: for what the page shows, `expect(…)`, which waits by itself, up to 15 s (`WAIT_MS`; Playwright's own 5 s ran out on a machine busy with other work).
@@ -86,7 +86,7 @@ Without Playwright installed they skip, so plain `pytest tests/` is unaffected.
   The page's address is asked with `expect(page).to_have_url(…)` / `not_to_have_url(…)`, not read from `page.url` right after the page changed it itself (`history.replaceState`): `page.url` is what Playwright last heard, which can be a moment behind what the page already shows.
   For what it can't watch (the API's answer, a file on disk, a request a route held back), `wait_until(page, predicate)` from `conftest.py`, which looks every 100 ms (as long as `expect`) through the page, so the page's routes and events go on meanwhile (`time.sleep` would stop them).
   A fixed `page.wait_for_timeout(…)` is only for showing that nothing happens (no request went out, a card stayed where it was) and for the pace of a gesture (a touch held, a drag's steps): never for something that is about to happen.
-- The page catches up with the server: Zone writes before it answers, so a test that saw a change in the API or on disk could act on a page that hadn't had the answer yet (a menu still offering Follow, a dialog opened from the task as it was, a box ticked and the page reloaded before its request went through).
+- The page catches up with the server: Zonewiki writes before it answers, so a test that saw a change in the API or on disk could act on a page that hadn't had the answer yet (a menu still offering Follow, a dialog opened from the task as it was, a box ticked and the page reloaded before its request went through).
   So `wait_until`, `page.goto` and `page.reload` first settle (`settle(page)` in `conftest.py`): they wait until the page's own fetch and XHR requests of its current document have their answers and the page has handled them, and fail naming a request that never ends.
   A test that holds a request back in a route passes `settled=False` (to `wait_until`, `goto` or `reload`).
   A request of a page that is gone is not waited for: the harness forgets a document's requests when the next one is asked for and again when it is there, since a page sends on until then (the uncommitted count, asked while the browser was sent to another host, never said it ended).
@@ -108,7 +108,7 @@ Without Playwright installed they skip, so plain `pytest tests/` is unaffected.
   It asserts nothing about appearance.
 - Playwright's HTML5 drag cannot auto-scroll mid-drag, so drag tests must keep source and target on screen (e.g. enlarge the viewport).
 - Keep the `playwright==` pin in `tests/requirements.txt` equal to `Containerfile.tools`' image tag version.
-- Content-Security-Policy: Zone's pages run under `script-src 'self'` (The page policy in `docs/spec/security.md`).
+- Content-Security-Policy: Zonewiki's pages run under `script-src 'self'` (The page policy in `docs/spec/security.md`).
   The harness collects the violations Chromium reports on the console (`page.csp_violations`) and fails a test that has any, so new code can't bring in an inline script or handler unnoticed; a test that blocks one on purpose (`test_security.py`) clears the list.
   Under that policy Playwright can't `eval` in the page: `page.wait_for_function` needs a function (`"() => scrollY > 0"`), as an expression string is evaluated with `eval`; `page.evaluate` works either way.
 
@@ -118,7 +118,7 @@ Tests that fail when a change forgets a step elsewhere: a new route, tool, setti
 
 | Test | Enforces | When it fails |
 |------|----------|---------------|
-| `test_every_route_is_covered` (`tests/test_privacy.py`) | Every route Zone registers is probed for leaks of another user's private page and tasks, or exempt | Add a probe to `READS` or `WRITES` (or, with a reason, to `EXEMPT`) |
+| `test_every_route_is_covered` (`tests/test_privacy.py`) | Every route Zonewiki registers is probed for leaks of another user's private page and tasks, or exempt | Add a probe to `READS` or `WRITES` (or, with a reason, to `EXEMPT`) |
 | `test_every_tool_is_covered` (`tests/test_privacy.py`) | Every MCP tool is probed the same way | Add a probe to `MCP_READS` or `MCP_WRITES` |
 | `tests/test_group_pages.py` | The privacy probes, aimed at a group's folder, run as an editor and an admin outside the group | Nothing to add: it takes `test_privacy.py`'s probes; fix the leak |
 | `tests/test_group_lists.py` | A group's list leaks nothing to non-members on the routes that show or write tasks and lists | No completeness check: add a probe to `READS`/`WRITES` for a new task or list route by hand |
@@ -135,11 +135,11 @@ Tests that fail when a change forgets a step elsewhere: a new route, tool, setti
 | `TestGolden` (`go/golden_test.go`) | The Go text functions give `go/testdata/golden.json.gz`'s answers | After a deliberate change, update the file (Shared case files) |
 | `tests/test_text_parity.py` | The browser's copies in `public/js/mdtext.js` give the same answers | Change the JavaScript along with the Go |
 | `*_cases.json` runners (Shared case files) | The server's and the browser's task rules agree on one table | Change both sides, add the case to the table |
-| `tests/test_image.py` | Base images and CI actions pinned by hash; the functions CodeQL is told are Zone's checks exist (`.github/codeql/`); the model's revision and hashes are `go/embed.go`'s; both images build with the same Go and fetch the modules with the root's `go.mod`; the build stage copies what `zonefiles.go` builds in, and the image no copy beside the binary; the image ships the licenses; a `v*` tag releases the four binaries `./run.sh binaries` builds; `THIRD_PARTY_LICENSES` names what is pinned; every `public/vendor/` library has a `LICENSE`; Mermaid's notices match the vendored bundle | Update the pin, hash or notice that drifted (Dependencies in `AGENTS.md`; for Mermaid `python3 docs/licenses/mermaid_notices.py VERSION`) |
+| `tests/test_image.py` | Base images and CI actions pinned by hash; the functions CodeQL is told are Zonewiki's checks exist (`.github/codeql/`); the model's revision and hashes are `go/embed.go`'s; both images build with the same Go and fetch the modules with the root's `go.mod`; the build stage copies what `zonefiles.go` builds in, and the image no copy beside the binary; the image ships the licenses; a `v*` tag releases the four binaries `./run.sh binaries` builds; `THIRD_PARTY_LICENSES` names what is pinned; every `public/vendor/` library has a `LICENSE`; Mermaid's notices match the vendored bundle | Update the pin, hash or notice that drifted (Dependencies in `AGENTS.md`; for Mermaid `python3 docs/licenses/mermaid_notices.py VERSION`) |
 | `tests/test_env_example.py` | `.env.example` lists every setting the source, `run.sh` and the compose files read, and nothing else | Add the new variable to `.env.example`, or to `INTERNAL` if no user sets it (run, build, test or bench only) |
 | `TestUsage` (`tests/test_routes.py`) | `zonewiki --help` names its commands, environment and flags (with two dashes); each command answers `--help` with exit 0 and without a wiki | Fix the usage text; a new command goes in the test's list |
 | `tests/test_e2e_harness.py` | No browser test calls `locator.bounding_box()`: `box_of` in `conftest.py` is the one place | Measure with `box_of(locator)` (`moving=True` while something moves) |
-| Browser harness (`tests/e2e/conftest.py`) | No request to another host, no uncaught JS error, no CSP violation | Load from `public/vendor/`, fix the error, move inline script into Zone's script files |
+| Browser harness (`tests/e2e/conftest.py`) | No request to another host, no uncaught JS error, no CSP violation | Load from `public/vendor/`, fix the error, move inline script into Zonewiki's script files |
 
 `TestWhatIsTheirsIsAskedInOnePlace` is a regex over the lines of `go/*.go`, so it catches only those written its way: `owner == user.Name` or `user.Name != t.Owner` (a name ending in `owner`/`Owner`, `==` or `!=`) and `memberOf(…)`/`groupsOf(…)`, each with the asker named `user`, `rq.user`, `rq.who()` or `userOf(r)`.
 It misses an asker under another name (`u.Name`, `who.Name`), its name copied first (`name := user.Name`), another way to compare (`slices.Contains(owners, user.Name)`, `strings.EqualFold`, a `switch`), another way into the settings (`s.Users[user.Name].Groups`, `groupMembers`), a line broken in two, and the packages in `go/internal/`: a review still has to look.
@@ -233,7 +233,7 @@ Prefer an API test when the behaviour shows through a route, a Go test when it d
 | `tests/test_semantic.py` | search.md | Semantic search through the server with the fake embedder |
 | `tests/test_setup.py` | security.md | The first-run page (`/setup`) |
 | `tests/test_signup.py` | users.md | Sign-up against `FakeSMTP`, approval |
-| `tests/test_socket.py` | deployment.md | Zone on a Unix socket and one handed over, idle exit |
+| `tests/test_socket.py` | deployment.md | Zonewiki on a Unix socket and one handed over, idle exit |
 | `tests/test_task_app_wiring.py` | rendering.md | Guard (above) |
 | `tests/test_task_assignee.py` | tasks.md | A task's assignee through API and MCP, My tasks per user, a shared task kept in a list |
 | `tests/test_task_follow.py` | tasks.md | Following a task and what a follower is told |
@@ -294,7 +294,7 @@ A case added for one side is a case for both.
 | `go/testdata/filter_cases.json` | `TestFilterCases` (`go/tasklists_test.go`) | `TestFilterCases` (`tests/test_tasks_core.py`) |
 | `go/testdata/focus_cases.json` | `TestFocusCases` (`go/tasklists_test.go`) | `TestFocusCases` (`tests/test_tasks_core.py`) |
 
-`golden.json.gz` holds the text functions' answers on every string in the tests from when Zone was ported from Python (recorded from the Python Zone) and on edge cases added since.
+`golden.json.gz` holds the text functions' answers on every string in the tests from when Zonewiki was ported from Python (recorded from the Python Zonewiki) and on edge cases added since.
 After a deliberate change to one of those functions, `ZONE_GOLDEN_UPDATE=1 go test -run TestGolden` (in `go/`) logs every case that changed and writes the new answers; then make the JavaScript give them too.
 The `*_cases.json` files are edited by hand: add the case, then change both sides until both pass.
 
@@ -359,15 +359,15 @@ Sizes and counts are the same on any machine and have no slack.
 Its parts:
 
 - **Tasks**: a generated wiki in git (100 users with ten Inbox tasks each, 40 shared lists, 5,000 open and 25,000 closed tasks, most assigned), signed in as one user, the median over HTTP of: a page without tasks, My tasks, one list, All tasks (time and size), the due count, a task changed, a task completed, My tasks reordered, ten tasks tagged at once, a search right after a write.
-  The repository's growth per 100 writes is measured three ways: as the commits leave it, packed in steps as Zone packs every 50 commits, and joined as Zone joins its packs (with how long the join takes).
-  It also reads the Zone process's resident memory at the end.
+  The repository's growth per 100 writes is measured three ways: as the commits leave it, packed in steps as Zonewiki packs every 50 commits, and joined as Zonewiki joins its packs (with how long the join takes).
+  It also reads the Zonewiki process's resident memory at the end.
 - **Reads beside writes** (`test_reads_beside_writes`): six clients who open a page without tasks, My tasks and the due count without a pause, and four who each change a task four times a second, for fifteen seconds; the 95th percentile and the slowest of each.
-- **A write beside a join** (`test_a_write_beside_a_join`): the repository is given a history first (20,000 commits to 40 files of tasks, with `git fast-import`, and 55 small packs after it, so that Zone's next pack is followed by a join), then a task is changed again and again while Zone joins the packs; the slowest write has a budget of 250 ms.
+- **A write beside a join** (`test_a_write_beside_a_join`): the repository is given a history first (20,000 commits to 40 files of tasks, with `git fast-import`, and 55 small packs after it, so that Zonewiki's next pack is followed by a join), then a task is changed again and again while Zonewiki joins the packs; the slowest write has a budget of 250 ms.
 - **Pages and groups** (`test_pages_and_groups_at_a_teams_size`): 2,000 shared pages and 200 in the folder of each of ten groups (300 words a page), every user in one group and every fifth in two, a group made of three others, and a guide that pulls a page in.
   It measures a group's page, the page list, a search by the same person again, a search by thirty people in turn, and thirty people who search twice a second at once for ten seconds, with a page opened ten times a second beside them (a page view asks whether its reader may change it, which walks the wiki's guides at most once a second).
   The two searches by thirty guard that nothing is made per searcher (Nothing is kept per viewer in `docs/spec/search.md`).
 - **A long history** (`test_a_long_history`): a wiki given 100,000 commits before its server starts (with `git fast-import`: pages in folders edited, made and deleted, task-like files changed more often, a page renamed twice), so the start writes its commit-graph (The commit-graph in `docs/spec/deployment.md`).
-  It measures how long that takes, a page's history, a renamed page's, a link to a page that never was (Zone asks whether it was deleted) and the deleted pages a second time (the first look, which reads every commit, is printed).
+  It measures how long that takes, a page's history, a renamed page's, a link to a page that never was (Zonewiki asks whether it was deleted) and the deleted pages a second time (the first look, which reads every commit, is printed).
   A history read with `--follow`, or without the graph, passes the budgets many times over.
 
 ### Go benchmarks

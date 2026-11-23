@@ -197,7 +197,7 @@ def test_who_is_not_in_the_group_changes_nothing_of_it(client, wiki, who, method
     assert group_files(wiki) == before
     assert SECRET not in resp.data.decode(errors="replace")
     for commit in git(wiki, "log", "--format=%H", f"{log.split()[0]}..HEAD").split():
-        # Zone's own commit of what lay uncommitted there is no change of theirs.
+        # Zonewiki's own commit of what lay uncommitted there is no change of theirs.
         stat, author = git(wiki, "show", "--stat", "--format=", commit), git(wiki, "show", "-s", "--format=%an", commit)
         assert GROUP not in stat or author not in OUTSIDERS, stat
 
@@ -472,7 +472,7 @@ def test_the_history_names_no_page_of_the_group_to_anyone_else(client, wiki):
 def test_a_write_of_someone_else_commits_what_lay_there_as_zones(client, wiki):
     """The draft in the group's folder has no known author. bob's rename of
     a shared page re-points the diary's link in a commit of his: what lay
-    uncommitted in the group's folder is committed first, as Zone's, so his
+    uncommitted in the group's folder is committed first, as Zonewiki's, so his
     commit carries nothing he doesn't see."""
     sign_in(client, "bob")
     assert client.post("/rename/plans", data={"new_name": "plan"}, headers=HOST).status_code == 302

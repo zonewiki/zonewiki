@@ -89,7 +89,7 @@ func groupHomeText(group string) string {
 		", and by no one else in this wiki.\n\n## Links\n\n"
 }
 
-// isGroupHomeText: text is what Zone wrote on group's home, now or before
+// isGroupHomeText: text is what Zonewiki wrote on group's home, now or before
 // the home asked what the group is for; a rename writes the new name's.
 func isGroupHomeText(text, group string) bool {
 	return text == groupHomeText(group) || text == "# "+group+

@@ -60,7 +60,7 @@ func wikiRel(path string) (string, bool) {
 // gives an existing one a committer, and points origin at the git-remote setting.
 // It says in the log which it did: made the repository, found one, or
 // found no git to keep a history with. The error: the folder is inside
-// another repository that doesn't ignore it (outerRepo), so Zone doesn't
+// another repository that doesn't ignore it (outerRepo), so Zonewiki doesn't
 // start.
 func gitSetup() error {
 	if !cfg.GitEnabled {
@@ -104,7 +104,7 @@ func gitSetup() error {
 	return nil
 }
 
-// wikiFolderError: why Zone doesn't use the wiki's folder (outerRepo),
+// wikiFolderError: why Zonewiki doesn't use the wiki's folder (outerRepo),
 // nil if it does. The start asks it first, before anything is written
 // there, so a folder refused is left as it was; gitSetup asks it again
 // before it makes the repository.
@@ -140,7 +140,7 @@ func outerRepo() error {
 	if err != nil || rel == "." {
 		return nil
 	}
-	// check-ignore takes no literal pathspecs (Zone's default for git), so
+	// check-ignore takes no literal pathspecs (Zonewiki's default for git), so
 	// the folder's name is one with its glob characters escaped.
 	spec := strings.NewReplacer(`\`, `\\`, "*", `\*`, "?", `\?`, "[", `\[`).Replace(filepath.ToSlash(rel)) + "/"
 	ignored := gitrepo.Repo{Dir: top}.Run(context.Background(),
@@ -149,8 +149,8 @@ func outerRepo() error {
 		return nil
 	}
 	return fmt.Errorf("%s is inside the git repository %s, which doesn't ignore it. "+
-		"Zone keeps the wiki's history in a repository of its own, which would hide the wiki's files from that one. "+
-		"Use a folder outside it, or add the folder to that repository's .gitignore (%s/), then start Zone again.",
+		"Zonewiki keeps the wiki's history in a repository of its own, which would hide the wiki's files from that one. "+
+		"Use a folder outside it, or add the folder to that repository's .gitignore (%s/), then start Zonewiki again.",
 		cfg.Data, top, filepath.ToSlash(rel))
 }
 
@@ -169,9 +169,9 @@ func setGitRemote() {
 	}
 }
 
-// setCommitter: Zone commits as "Zone <zone@localhost>".
+// setCommitter: Zonewiki commits as "Zonewiki <zonewiki@localhost>".
 func setCommitter() {
-	for _, kv := range [][2]string{{"user.email", "zone@localhost"}, {"user.name", "Zone"}} {
+	for _, kv := range [][2]string{{"user.email", "zonewiki@localhost"}, {"user.name", "Zonewiki"}} {
 		if r := runGit("config", kv[0], kv[1]); r.Code != 0 {
 			logf("git config %s failed: %s", kv[0], strings.TrimSpace(r.Stderr))
 		}
@@ -179,10 +179,11 @@ func setCommitter() {
 }
 
 // commitAuthor: who a commit is by, as the history shows it, with users: a
-// user's name, or whoever committed by hand; "" for Zone's own, and
+// user's name, or whoever committed by hand; "" for Zonewiki's own (and
+// for "Zone", its name before 2026-11-23, in an older wiki's history), and
 // without users, so a wiki without them shows no names.
 func commitAuthor(name string) string {
-	if settings().Users == nil || name == appName {
+	if settings().Users == nil || name == appName || name == "Zone" {
 		return ""
 	}
 	return name
@@ -191,8 +192,8 @@ func commitAuthor(name string) string {
 var commitMu sync.Mutex
 
 // gitCommit stages paths (in the wiki) and commits them, and only them,
-// together, by user (the author; "": Zone itself, or a wiki without users).
-// The committer is always Zone. One at a time (commitMu): another's add
+// together, by user (the author; "": Zonewiki itself, or a wiki without users).
+// The committer is always Zonewiki. One at a time (commitMu): another's add
 // between this add and its commit would go into this commit, in this
 // user's name. Only these paths go in (git commit -- paths): whatever else
 // is staged (a git add by hand on the host) stays staged, out of this
@@ -295,9 +296,9 @@ func gitCommit(user, message string, paths ...string) error {
 }
 
 // Packing: a commit leaves loose objects (git's own packing after a commit
-// is off: package gitrepo), and every packEvery commits Zone packs them in
+// is off: package gitrepo), and every packEvery commits Zonewiki packs them in
 // the background, one run at a time, beside whatever commits meanwhile; and
-// once after the start, when an earlier run left many (packLoose: a Zone
+// once after the start, when an earlier run left many (packLoose: a Zonewiki
 // that is stopped while idle may never count packEvery commits in one run).
 const (
 	packEvery   = 50
@@ -365,7 +366,7 @@ func packNow(atLeast int) {
 	}()
 	repo := wikiRepo()
 	if atLeast > 0 && looseObjects() < atLeast {
-		if !repo.HasGraph() { // a wiki from before Zone wrote it
+		if !repo.HasGraph() { // a wiki from before Zonewiki wrote it
 			writeGraph(repo)
 		}
 		return
@@ -413,13 +414,13 @@ func joinPacks(repo gitrepo.Repo) gitrepo.Result {
 	return repo.Prune(context.Background(), gitTimeout)
 }
 
-// excludeState keeps Zone's folder .zone/ out of git, all of it: the
+// excludeState keeps Zonewiki's folder .zone/ out of git, all of it: the
 // session key, the caches, the query log, and the settings file, which
 // holds the users and their password hashes (docs/spec/users.md: account
 // data stays out of git).
 func excludeState(wiki string) { excludeFromGit(wiki, "/"+stateDirName+"/*") }
 
-// usersInHistory: a user who made a commit in the wiki's history (Zone
+// usersInHistory: a user who made a commit in the wiki's history (Zonewiki
 // commits as "name <name@zone>" for a user: gitCommit), "" if none did.
 // A wiki with such commits but no settings file lost its users (a clone
 // of its git remote, which holds no settings file): missingUsers.
@@ -430,7 +431,7 @@ func usersInHistory() string {
 	return strings.TrimSpace(runGit("log", "-1", "--author=@zone>", "--format=%an").Stdout)
 }
 
-// missingUsers: why Zone won't start, if its wiki had users but its
+// missingUsers: why Zonewiki won't start, if its wiki had users but its
 // settings file is gone: else it would run without a login. An empty file
 // says no login on purpose.
 func missingUsers() error {
@@ -439,7 +440,7 @@ func missingUsers() error {
 	}
 	if user := usersInHistory(); user != "" {
 		return fmt.Errorf("this wiki had users (%s made changes in its history), but its settings file %s, "+
-			"which holds them, isn't there: Zone doesn't keep it in git, so a clone of the git remote has none. "+
+			"which holds them, isn't there: Zonewiki doesn't keep it in git, so a clone of the git remote has none. "+
 			"Restore %s from a backup, or add the users again (zonewiki user add NAME). "+
 			"To run this wiki without a login on purpose, create an empty %s.",
 			user, configName(), configName(), configName())
@@ -1002,7 +1003,7 @@ type GrepHit struct {
 // or that takes too long is a refusal.
 //
 // The regex never reads a file user may not see: git is given only the
-// folders of seenFolders, Zone's own (_…, .…) left out below them too.
+// folders of seenFolders, Zonewiki's own (_…, .…) left out below them too.
 // Hits it doesn't return still tell: a pattern that gives up on a line
 // holding a word (PCRE's match limit, or the timeout) is an error only
 // where that word is, so a search over everything, its hits filtered
@@ -1043,7 +1044,7 @@ func grepPages(user asker, pattern string, ignoreCase bool) ([]GrepHit, error) {
 	}
 	grepPerl.Unlock()
 	// The pathspecs are patterns (package gitrepo takes paths literally):
-	// git's, since Zone wrote them, a folder's name escaped.
+	// git's, since Zonewiki wrote them, a folder's name escaped.
 	specs := []string{":(exclude,glob)**/_*/**", ":(exclude,glob)**/.*/**"}
 	for _, folder := range seenFolders(user) {
 		if folder == "" {
@@ -1411,7 +1412,7 @@ var (
 	undoneNRE  = regexp.MustCompile(`^Undo (\d+) changes: `)
 )
 
-// versionLabel: what a commit did to the page, in words: Zone's own commit
+// versionLabel: what a commit did to the page, in words: Zonewiki's own commit
 // messages read alike in a list, so they are named by kind; others as written.
 func versionLabel(e GitEntry, entries []GitEntry) string {
 	msg := commitWhat(e.Msg, e.commitMark)

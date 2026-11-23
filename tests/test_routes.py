@@ -1,4 +1,4 @@
-"""Tests for Zone HTTP routes — page view/edit/save, search, upload, auth,
+"""Tests for Zonewiki HTTP routes — page view/edit/save, search, upload, auth,
 rename with reference updates, conflict detection, and API endpoints."""
 
 import gzip
@@ -277,7 +277,7 @@ class TestViewPage:
     def test_page_title_in_head(self, client, wiki_dir):
         write_page(wiki_dir, "about", "# About Us\n\nInfo.\n")
         resp = client.get("/page/about", headers=HOST)
-        assert "<title>About Us — Zone</title>" in resp.data.decode()
+        assert "<title>About Us — Zonewiki</title>" in resp.data.decode()
 
     def test_edit_link_present(self, client, wiki_dir):
         write_page(wiki_dir, "editable", "# Editable\n\ncontent\n")
@@ -422,7 +422,7 @@ class TestViewPage:
     def test_side_toc_is_made_from_the_parsed_headings(self, client, wiki_dir):
         # Regression: the column cut each heading out of the rendered article
         # and took its links out with a pattern, which joined a heading's raw
-        # HTML anew past defuseHTML: "<<a>form" a <form> posting to Zone, a
+        # HTML anew past defuseHTML: "<<a>form" a <form> posting to Zonewiki, a
         # <meta> refresh to another site, an iframe's srcdoc, a <link>. Its
         # entries are the parsed headings now: escaped text, code, math,
         # emphasis; a heading of raw HTML isn't one.
@@ -1655,7 +1655,7 @@ class TestApiUpload:
 
 
 class TestServeUpload:
-    """Uploads must not run scripts with Zone's origin (stored XSS)."""
+    """Uploads must not run scripts with Zonewiki's origin (stored XSS)."""
 
     def put(self, wiki_dir, name, data=b"x"):
         (wiki_dir / "_assets" / name).write_bytes(data)
@@ -1678,7 +1678,7 @@ class TestServeUpload:
         assert resp.headers["X-Content-Type-Options"] == "nosniff"
 
     def test_script_upload_is_not_served_as_a_script(self, client, wiki_dir):
-        # script-src 'self' trusts Zone's origin, so an uploaded .js served as
+        # script-src 'self' trusts Zonewiki's origin, so an uploaded .js served as
         # text/javascript would run from <script src="/_assets/…">.
         resp = client.get(self.put(wiki_dir, "x.js", b"window.x=1"), headers=HOST)
         assert resp.headers["Content-Type"] == "application/octet-stream"
@@ -1747,7 +1747,7 @@ class TestAuth:
         monkeypatch.setattr(settings, "ZONE_ALLOW_REMOTE", True)
         body = auth_client.get("/login", headers=HOST).data.decode()
         assert body.count('class="remote-badge"') == 1
-        assert re.search(r'<h2>Sign in to Zone<span class="remote-badge"[^>]*>🌐</span></h2>', body)
+        assert re.search(r'<h2>Sign in to Zonewiki<span class="remote-badge"[^>]*>🌐</span></h2>', body)
         monkeypatch.setattr(settings, "ZONE_ALLOW_REMOTE", False)
         assert "remote-badge" not in auth_client.get("/login", headers=HOST).data.decode()
 
@@ -1794,7 +1794,7 @@ class TestAuth:
         manifest = auth_client.get("/public/manifest.json", headers=HOST)
         assert manifest.status_code == 200
         data = json.loads(manifest.data)
-        assert data["name"] == "Zone" and data["start_url"] == "/"
+        assert data["name"] == "Zonewiki" and data["start_url"] == "/"
         for icon in data["icons"]:
             resp = auth_client.get(icon["src"], headers=HOST)
             assert resp.status_code == 200, icon["src"]
@@ -2083,8 +2083,8 @@ class TestStorageMax:
 class TestProduction:
 
     def test_no_framing_by_other_sites_or_by_zone(self, client, wiki_dir):
-        # A page's raw HTML may hold an <iframe>: of Zone's views none is
-        # framed, by another site or by Zone; an upload may be (a PDF in a page).
+        # A page's raw HTML may hold an <iframe>: of Zonewiki's views none is
+        # framed, by another site or by Zonewiki; an upload may be (a PDF in a page).
         for path in ("/page/index", "/tasks", "/api/version", "/login", "/changes", "/public/style.css", "/nope"):
             resp = client.get(path, headers=HOST)
             assert resp.headers["Content-Security-Policy"].endswith("; frame-ancestors 'none'"), path
@@ -2124,7 +2124,7 @@ class TestProduction:
         # for can carry what the page's writer wants sent.
         for path in ("/page/index", "/tasks", "/api/tasks", "/login", "/public/zonewiki.js", "/_assets/nope.png"):
             assert client.get(path, headers=HOST).headers["X-DNS-Prefetch-Control"] == "off", path
-        # A markdown image elsewhere is a link to it; Zone's own and pasted ones stay images.
+        # A markdown image elsewhere is a link to it; Zonewiki's own and pasted ones stay images.
         html = preview(client, "![A cat|200](https://elsewhere.example/cat.png?q=1) ![](//elsewhere.example/x.png) "
                                "![mine](/_assets/x.png) ![rel](pic.png) ![pasted](data:image/png;base64,AA)")
         assert '<a href="https://elsewhere.example/cat.png?q=1"' in html and 'class="external-image"' in html
@@ -2588,7 +2588,7 @@ class TestCrossSiteWrites:
         assert client.get("/page/r", headers=self.EVIL).status_code == 200
 
 
-# ── Zone version ──────────────────────────────────────────────────────────────
+# ── Zonewiki version ──────────────────────────────────────────────────────────────
 
 
 class TestVersion:
@@ -2596,8 +2596,8 @@ class TestVersion:
         v = client.get("/api/version", headers=HOST).get_json()["version"]
         monkeypatch.setattr(settings, "ZONE_BUILD", "abc1234 2026-09-26 12:00")
         body = client.get("/page/index", headers=HOST).get_data(as_text=True)
-        assert f'<p class="zone-version">Zone {v} · abc1234 2026-09-26 12:00</p>' in body
-        assert f'<meta name="generator" content="Zone {v}">' in body
+        assert f'<p class="zone-version">Zonewiki {v} · abc1234 2026-09-26 12:00</p>' in body
+        assert f'<meta name="generator" content="Zonewiki {v}">' in body
         assert client.get("/api/version", headers=HOST).get_json() == {
             "version": v, "build": "abc1234 2026-09-26 12:00"}
 
@@ -2605,10 +2605,10 @@ class TestVersion:
         v = client.get("/api/version", headers=HOST).get_json()["version"]
         monkeypatch.setattr(settings, "ZONE_BUILD", "unknown")
         body = client.get("/page/index", headers=HOST).get_data(as_text=True)
-        assert f'<p class="zone-version">Zone {v}</p>' in body
+        assert f'<p class="zone-version">Zonewiki {v}</p>' in body
 
     def test_shortcuts_link_to_the_source(self, client, wiki_dir):
-        # The AGPL's offer of the source to everyone using Zone over a network.
+        # The AGPL's offer of the source to everyone using Zonewiki over a network.
         for path in ("/page/index", "/tasks", "/edit/index"):
             body = client.get(path, headers=HOST).get_data(as_text=True)
             assert ('<p class="zone-version"><a href="https://github.com/zonewiki/zonewiki">Get the source code</a>'
@@ -2620,13 +2620,13 @@ class TestVersion:
         for path in ("/page/index", "/tasks", "/edit/index"):
             body = client.get(path, headers=HOST).get_data(as_text=True)
             assert ('<div class="zone-build" title="Build abc1234 2026-09-26 12:00">'
-                    f'Zone {v} · abc1234</div>') in body, path
+                    f'Zonewiki {v} · abc1234</div>') in body, path
         monkeypatch.setattr(settings, "ZONE_BUILD", "abc1234 2026-09-26 12:00 +dirty")
         body = client.get("/page/index", headers=HOST).get_data(as_text=True)
-        assert f">Zone {v} · abc1234+dirty</div>" in body
+        assert f">Zonewiki {v} · abc1234+dirty</div>" in body
         monkeypatch.setattr(settings, "ZONE_BUILD", "unknown")
         body = client.get("/page/index", headers=HOST).get_data(as_text=True)
-        assert f'<div class="zone-build">Zone {v}</div>' in body
+        assert f'<div class="zone-build">Zonewiki {v}</div>' in body
 
     def test_build_escaped(self, client, wiki_dir, monkeypatch):
         monkeypatch.setattr(settings, "ZONE_BUILD", "<b>")
@@ -2636,7 +2636,7 @@ class TestVersion:
     @staticmethod
     def _start(wiki: Path | str | None, home: Path | None = None, *args: str,
                **more_env: str) -> subprocess.CompletedProcess:
-        """Start Zone with ZONE_DATA=wiki (None: unset), HOME=home if given,
+        """Start Zonewiki with ZONE_DATA=wiki (None: unset), HOME=home if given,
         the flags args and the environment more_env, until it listens."""
         env = {k: v for k, v in os.environ.items() if not k.startswith("ZONE_")}
         if wiki is not None:
@@ -2693,7 +2693,7 @@ class TestVersion:
         assert not (wiki / ".git").exists()
 
     def test_refuses_a_missing_wiki_folder(self, tmp_path):
-        # Zone never makes a wiki that ZONE_DATA names, so a mistyped one
+        # Zonewiki never makes a wiki that ZONE_DATA names, so a mistyped one
         # can't start an empty wiki somewhere else (the default is made).
         r = self._start(tmp_path / "nowhere", home=tmp_path)
         assert r.returncode != 0
@@ -2701,7 +2701,7 @@ class TestVersion:
         assert not (tmp_path / "nowhere").exists() and not (tmp_path / "zonewiki").exists()
 
     def test_refuses_a_folder_inside_another_repository_untouched(self, tmp_path):
-        # A ZONE_DATA naming a folder of a checkout: Zone doesn't start, and
+        # A ZONE_DATA naming a folder of a checkout: Zonewiki doesn't start, and
         # leaves the folder as it was (no .zone/, _assets/ or .git).
         outer = Path(os.path.realpath(tmp_path))
         subprocess.run(["git", "init", "-q", str(outer)], check=True)
@@ -2745,7 +2745,7 @@ class TestVersion:
 
     def test_a_repository_with_files_is_no_wiki_yet(self, tmp_path):
         # A .git doesn't make a folder a wiki: a project's checkout or a
-        # home folder kept in git has one, and Zone would commit into it.
+        # home folder kept in git has one, and Zonewiki would commit into it.
         # Refused untouched, as any folder with files; --init once, for
         # notes kept in git, whose history then goes on.
         wiki = Path(os.path.realpath(tmp_path))
@@ -2818,7 +2818,7 @@ class TestUsage:
         # The version and the build, as the start-up line names them, without a wiki.
         r = self._run(arg)
         assert r.returncode == 0, r.stderr
-        assert re.fullmatch(r"Zone \d+\.\d+\.\d+ \(.+\)\n", r.stdout), r.stdout
+        assert re.fullmatch(r"Zonewiki \d+\.\d+\.\d+ \(.+\)\n", r.stdout), r.stdout
         assert r.stderr == ""
 
     def test_licenses(self):
@@ -2861,7 +2861,7 @@ class TestTheBinaryAlone:
             assert gzip.decompress(body) == (public / "vendor" / "katex" / "katex.min.css").read_bytes()
             assert get("/public/vendor/")[0].status == 404
             resp, body = get("/help")
-            assert resp.status == 200 and b"Zone&#39;s manual" in body
+            assert resp.status == 200 and b"Zonewiki&#39;s manual" in body
             resp, body = get("/help/screenshots/page.png")
             assert resp.status == 200 and resp.getheader("Content-Type") == "image/png"
             resp, body = get("/page/index")
@@ -3204,7 +3204,7 @@ def test_vendored_libraries_are_cached_and_gzipped(client, wiki_dir):
     assert len(r.data) < len(raw) / 2 and gzip.decompress(r.data) == raw
     plain = client.get(path, headers={**HOST, "Accept-Encoding": "gzip;q=0"})
     assert "Content-Encoding" not in plain.headers and plain.data == raw
-    # Zone's own code isn't kept: it changes with every edit.
+    # Zonewiki's own code isn't kept: it changes with every edit.
     own = client.get("/public/js/figures.js", headers={**HOST, "Accept-Encoding": "gzip"})
     assert own.status_code == 200 and "Cache-Control" not in own.headers
     assert client.get("/public/vendor/nope.js", headers={**HOST, "Accept-Encoding": "gzip"}).status_code == 404

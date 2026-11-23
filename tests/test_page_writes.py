@@ -341,7 +341,7 @@ class TestWikiFull:
         assert delete(client, door, "q")
 
     def test_room_again_once_deleted(self, client, full, door):
-        """A delete through Zone counts at once (one on disk within seconds)."""
+        """A delete through Zonewiki counts at once (one on disk within seconds)."""
         commit(full, "big", "# Big\n\n" + "x" * 20_000)
         assert not create(client, door, "new-page")
         (full / "_assets" / "big.bin").unlink()
@@ -362,7 +362,7 @@ class TestWrites:
 
 class TestCommits:
     def test_only_the_writes_files_go_in(self, client, wiki):
-        """What is staged by hand stays staged, out of Zone's commit."""
+        """What is staged by hand stays staged, out of Zonewiki's commit."""
         (wiki / "notes.txt").write_text("by hand\n")
         git(wiki, "add", "notes.txt")
         assert create(client, "browser", "fresh")

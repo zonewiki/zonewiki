@@ -19,7 +19,7 @@ import (
 )
 
 // assistantMark ends the first line of a commit an assistant made (mcpMark),
-// for whoever reads the history with git. It says nothing to Zone: a page's
+// for whoever reads the history with git. It says nothing to Zonewiki: a page's
 // name can end in it too ("notes (MCP)"), so what an assistant wrote is told
 // by its trailer (commitMarkOf), and the mark is taken off only there.
 const assistantMark = "(MCP)"
@@ -58,7 +58,7 @@ func commitTrailers(via, source string) string {
 }
 
 // withTrailers: a commit message with these trailer lines added to the ones
-// it has (Zone's messages are a first line and, for an assistant's, its
+// it has (Zonewiki's messages are a first line and, for an assistant's, its
 // trailers: commitTrailers), or after it.
 func withTrailers(message string, lines []string) string {
 	if len(lines) == 0 {
@@ -160,7 +160,7 @@ const (
 
 // taskTrailers: the trailer lines naming the tasks ids a commit changed:
 // "Task: <id>" for each of the first taskTrailersMost whose id is one plain
-// word (taskFolderRE: what Zone makes, an import keeps; nothing that could
+// word (taskFolderRE: what Zonewiki makes, an import keeps; nothing that could
 // start a line of its own), "More-Tasks: N" for the rest.
 func taskTrailers(ids []string) []string {
 	var lines []string

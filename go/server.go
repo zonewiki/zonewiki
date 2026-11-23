@@ -1,7 +1,7 @@
-// Zone's web server: one process, its request checks and routes.
+// Zonewiki's web server: one process, its request checks and routes.
 // Run: zonewiki [--addr :5080] [--public dir], the wiki in ZONE_DATA
 // (default ~/zonewiki). Also: zonewiki eval
-// measures retrieval (eval.go), zonewiki health asks a running Zone whether
+// measures retrieval (eval.go), zonewiki health asks a running Zonewiki whether
 // it answers (the container's healthcheck), zonewiki user and zonewiki config edit
 // and check the settings file (commands.go).
 package main
@@ -34,7 +34,7 @@ import (
 var publicDir string
 
 func logf(format string, args ...any) {
-	fmt.Fprintf(os.Stderr, "Zone: "+format+"\n", args...)
+	fmt.Fprintf(os.Stderr, "Zonewiki: "+format+"\n", args...)
 }
 
 const usage = `Usage: zonewiki [--addr ADDRESS] [--init] [--public FOLDER] [--docs FOLDER]
@@ -47,9 +47,9 @@ Commands:
   group COMMAND              the wiki's groups: what one includes, its owners (includes, owners, list)
   config COMMAND             the wiki's settings file .zone/config (check, set, unset, passwd, token)
   eval [--k N] [--new] FILE  measure search_wiki's retrieval against the questions in FILE
-  health [ADDR]              whether a Zone running here answers (the container's healthcheck)
+  health [ADDR]              whether a Zonewiki running here answers (the container's healthcheck)
   manual DIR                 write the manual and the spec to DIR as HTML fragments, for a website
-  licenses                   the licenses of what this binary holds (Zone's, Go's, the libraries')
+  licenses                   the licenses of what this binary holds (Zonewiki's, Go's, the libraries')
   version                    this binary's version and build (--version too)
   help                       this text; zonewiki COMMAND --help a command's
 
@@ -57,22 +57,22 @@ Environment:
   ZONE_DATA                  the wiki's folder (default ~/zonewiki, made at the first start; a folder
                              that is set must exist)
   ZONE_INIT                  1: make the wiki's folder a wiki though it holds files already (--init)
-  ZONE_ALLOW_REMOTE          1: open Zone to the network: --addr :PORT on every interface, not only
+  ZONE_ALLOW_REMOTE          1: open Zonewiki to the network: --addr :PORT on every interface, not only
                              localhost, and every IP address let in (unless hosts is set)
   ZONE_BIND                  the address the container's port is published on (compose sets it): not
-                             localhost's, and no login yet, Zone asks for a password in the browser first
+                             localhost's, and no login yet, Zonewiki asks for a password in the browser first
   ZONE_HOST_DATA             the wiki's folder as the host sees it, for the MCP tools' file: lines
   ZONE_SEMANTIC_SEARCH       on: semantic search besides keywords (needs onnxruntime)
   ZONE_MODEL_DIR             where the semantic model's files are
   ZONE_PUBLIC                view: anyone reads the shared pages without signing in; edit: and edits
                              them (needs users; no tasks, notes or private pages for visitors)
   ZONE_SIGNUP                1: people may make an account at /signup (needs mail, users, base-url)
-  ZONE_SMTP_HOST, _PORT      the mail server Zone sends sign-up mail through (port default 587)
+  ZONE_SMTP_HOST, _PORT      the mail server Zonewiki sends sign-up mail through (port default 587)
   ZONE_SMTP_USER, _PASSWORD  signing in to it (only over TLS, or to this machine)
   ZONE_SMTP_TLS              starttls (default), tls (465) or none
-  ZONE_MAIL_FROM             the address Zone's mail comes from
+  ZONE_MAIL_FROM             the address Zonewiki's mail comes from
   ZONE_BUILD                 the build shown next to the version
-  ZONE_IDLE_EXIT             15m: exit after that long without a request, for a Zone systemd starts
+  ZONE_IDLE_EXIT             15m: exit after that long without a request, for a Zonewiki systemd starts
                              on its socket (--addr fd:3) when the next one comes
 
 Flags:`
@@ -119,7 +119,7 @@ func main() {
 			printUsage()
 			os.Exit(0)
 		case "version", "--version", "-version":
-			fmt.Printf("Zone %s (%s)\n", version, buildOf(environ))
+			fmt.Printf("Zonewiki %s (%s)\n", version, buildOf(environ))
 			os.Exit(0)
 		case "eval":
 			os.Exit(evalMain(os.Args[2:], os.Stdout, os.Stderr))
@@ -154,7 +154,7 @@ func main() {
 	}
 	cfg = c
 	cfg.Init = cfg.Init || *initWiki
-	// Before Zone writes anything in the wiki's folder (.zone/, _assets/):
+	// Before Zonewiki writes anything in the wiki's folder (.zone/, _assets/):
 	// a folder it won't use is left as it was.
 	if err := wikiFolderError(); err != nil {
 		fatal(err)
@@ -168,16 +168,16 @@ func main() {
 		cfg.Published = true // started by hand on the network: a login first (needsSetup)
 	}
 	startSettings(s)
-	format, err := checkWikiFormat() // a wiki a newer Zone wrote isn't touched (wikiformat.go)
+	format, err := checkWikiFormat() // a wiki a newer Zonewiki wrote isn't touched (wikiformat.go)
 	if err != nil {
 		fatal(err)
 	}
-	endFormerAdminsLinks(s) // demoted or removed while Zone was down
+	endFormerAdminsLinks(s) // demoted or removed while Zonewiki was down
 	if publicDir = *public; publicDir == "" {
 		publicDir = findPublic()
 	}
 	if needsSetup() {
-		logf("other devices can reach this wiki and it has no login: Zone asks for a password in the browser " +
+		logf("other devices can reach this wiki and it has no login: Zonewiki asks for a password in the browser " +
 			"before it shows anything (/setup). To run it without a login on purpose: zonewiki config set no-login yes")
 	}
 	if why := signupOffReason(s); why != "" {
@@ -218,7 +218,7 @@ func main() {
 	noDeltaForUploads(cfg.Data)
 	ensureHomePage()
 	cleanLeftDrafts()
-	setUpTasks() // the task files as this Zone keeps them (tasksetup.go)
+	setUpTasks() // the task files as this Zonewiki keeps them (tasksetup.go)
 	noteWikiFormat(format)
 	packAtStart() // the repository's loose objects, in the background (gitstore.go)
 	// The semantic index's worker reads tasks: after the task files are set up.
@@ -240,11 +240,11 @@ func main() {
 		fatal(portTaken(err))
 	}
 	if handedBeyondLoopback(ln) {
-		// A TCP socket Zone was handed (--addr fd:3) that other devices
+		// A TCP socket Zonewiki was handed (--addr fd:3) that other devices
 		// reach: a login first, as with --addr beyond loopback (needsSetup).
 		cfg.Published = true
 		if needsSetup() {
-			logf("the socket Zone was handed (%s) is open to other devices and the wiki has no login: Zone asks for "+
+			logf("the socket Zonewiki was handed (%s) is open to other devices and the wiki has no login: Zonewiki asks for "+
 				"a password in the browser before it shows anything (/setup)", ln.Addr())
 		}
 	}
@@ -256,7 +256,7 @@ func main() {
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
-	started := fmt.Sprintf("Zone %s (%s) listening on %s\n", version, cfg.Build, listenName(ln))
+	started := fmt.Sprintf("Zonewiki %s (%s) listening on %s\n", version, cfg.Build, listenName(ln))
 	if u := openURL(ln, s.BaseURL); u != "" {
 		started += fmt.Sprintf("Open %s in a browser. The wiki is %s\n", u, cfg.Data)
 	}
@@ -264,8 +264,8 @@ func main() {
 	switch {
 	case cfg.IdleExit == 0:
 	case !handedSocket:
-		logf("ZONE_IDLE_EXIT is set, but Zone opened its own socket (--addr %s): nothing would start it again, so it stays. "+
-			"It is for a Zone that systemd starts on a socket it holds (--addr fd:3).", *addr)
+		logf("ZONE_IDLE_EXIT is set, but Zonewiki opened its own socket (--addr %s): nothing would start it again, so it stays. "+
+			"It is for a Zonewiki that systemd starts on a socket it holds (--addr fd:3).", *addr)
 	default:
 		idle.last.Store(now().UnixNano())
 		go exitWhenIdle(srv, cfg.IdleExit)
@@ -275,15 +275,15 @@ func main() {
 	// those beyond the limit wait.
 	err = srv.Serve(limitListener(ln, 100))
 	if errors.Is(err, http.ErrServerClosed) {
-		select {} // exitWhenIdle is ending Zone, once what still runs is answered
+		select {} // exitWhenIdle is ending Zonewiki, once what still runs is answered
 	}
 	fatal(err)
 }
 
-// openURL: where to open Zone, for the line at start: base-url (the
-// settings file's), else the port Zone listens on at localhost (at the
+// openURL: where to open Zonewiki, for the line at start: base-url (the
+// settings file's), else the port Zonewiki listens on at localhost (at the
 // address it listens on, when that is one of the machine's others); "" on
-// a socket, and behind compose's port mapping, whose host port Zone
+// a socket, and behind compose's port mapping, whose host port Zonewiki
 // doesn't know (cfg.PortMapped).
 func openURL(ln net.Listener, baseURL string) string {
 	if baseURL != "" {
@@ -301,11 +301,11 @@ func openURL(ln net.Listener, baseURL string) string {
 }
 
 // portTaken: a listen error, with what to do when another program has the
-// port: on a Mac, AirPlay Receiver listens on 5000, which is why Zone's default is not.
+// port: on a Mac, AirPlay Receiver listens on 5000, which is why Zonewiki's default is not.
 func portTaken(err error) error {
 	if errors.Is(err, syscall.EADDRINUSE) {
 		return fmt.Errorf("%w. Another program has that port (on a Mac, AirPlay Receiver has 5000): "+
-			"start Zone on another one, as zonewiki --addr :5081", err)
+			"start Zonewiki on another one, as zonewiki --addr :5081", err)
 	}
 	return err
 }
@@ -313,7 +313,7 @@ func portTaken(err error) error {
 // socketPrefix: an --addr that names a Unix socket's path, not a TCP address.
 const socketPrefix = "unix:"
 
-// onSocket: Zone listens on a Unix socket. Its peers have no address: each
+// onSocket: Zonewiki listens on a Unix socket. Its peers have no address: each
 // is the reverse proxy the socket is for (clientAddr).
 var onSocket bool
 
@@ -321,11 +321,11 @@ var onSocket bool
 // for a reverse proxy on the same machine, with no port for anyone else: who
 // may connect is who may reach the path, so the socket itself is open to all
 // (0666, as a port on localhost is to every local user) and the folder it is
-// in decides. A socket file a Zone that was killed left is replaced; one
+// in decides. A socket file a Zonewiki that was killed left is replaced; one
 // something still listens on, or a file that is no socket, is refused.
-// listenAddr: the address Zone listens on for --addr. A port alone
+// listenAddr: the address Zonewiki listens on for --addr. A port alone
 // (":5080", the default) is this machine's alone (127.0.0.1), unless
-// ZONE_ALLOW_REMOTE opens Zone to the network: a Zone started by hand has
+// ZONE_ALLOW_REMOTE opens Zonewiki to the network: a Zonewiki started by hand has
 // no login, and the Host check wouldn't keep the network out (a client on
 // the LAN sends Host: localhost). An address with a host, a socket or a
 // handed one (fd:N) is taken as written.
@@ -339,7 +339,7 @@ func listenAddr(addr string, remote bool) string {
 	return addr
 }
 
-// beyondLoopback: whether other devices can reach Zone listening on addr
+// beyondLoopback: whether other devices can reach Zonewiki listening on addr
 // (as listenAddr made it): a TCP address that isn't this machine's
 // loopback, every interface (no host) or a name included. A socket, or one
 // handed over, is its owner's to open, and isn't counted.
@@ -355,7 +355,7 @@ func beyondLoopback(addr string) bool {
 	return err != nil || !ip.IsLoopback()
 }
 
-// handedBeyondLoopback: ln is a TCP socket Zone was handed (--addr fd:N)
+// handedBeyondLoopback: ln is a TCP socket Zonewiki was handed (--addr fd:N)
 // and other devices reach it: beyondLoopback can't tell from "fd:3", only
 // the socket says where it listens. A Unix socket is its owner's to open.
 func handedBeyondLoopback(ln net.Listener) bool {
@@ -401,32 +401,32 @@ func listen(addr string) (net.Listener, error) {
 	return ln, nil
 }
 
-// fdPrefix: an --addr that names a listening socket Zone was started with,
+// fdPrefix: an --addr that names a listening socket Zonewiki was started with,
 // by its file descriptor: fd:3 is the first one systemd hands a service it
 // starts for a socket unit (socket activation), also into a container.
 const fdPrefix = "fd:"
 
-// handedSocket: Zone listens on a socket it was handed (--addr fd:N), not
-// one it opened: whoever holds it starts Zone again when a connection
-// comes, so Zone may exit while nobody asks (ZONE_IDLE_EXIT).
+// handedSocket: Zonewiki listens on a socket it was handed (--addr fd:N), not
+// one it opened: whoever holds it starts Zonewiki again when a connection
+// comes, so Zonewiki may exit while nobody asks (ZONE_IDLE_EXIT).
 var handedSocket bool
 
 // handedListener: the listener on file descriptor fd, which must be a
 // listening socket. A Unix socket's peers are the proxy's, as with
-// unix:PATH; its file is the holder's, and stays when Zone closes it.
+// unix:PATH; its file is the holder's, and stays when Zonewiki closes it.
 func handedListener(fd string) (net.Listener, error) {
 	n, err := strconv.Atoi(fd)
 	if err != nil || n < 3 {
-		return nil, fmt.Errorf("--addr fd:%s: it takes the number of a file descriptor Zone was started with, as fd:3", fd)
+		return nil, fmt.Errorf("--addr fd:%s: it takes the number of a file descriptor Zonewiki was started with, as fd:3", fd)
 	}
 	f := os.NewFile(uintptr(n), "socket "+fd)
 	if f == nil {
-		return nil, fmt.Errorf("--addr fd:%s: Zone was started without that file descriptor", fd)
+		return nil, fmt.Errorf("--addr fd:%s: Zonewiki was started without that file descriptor", fd)
 	}
 	defer f.Close() // the listener has its own copy
 	ln, err := net.FileListener(f)
 	if err != nil {
-		return nil, fmt.Errorf("--addr fd:%s: not a listening socket Zone was started with (%v)", fd, err)
+		return nil, fmt.Errorf("--addr fd:%s: not a listening socket Zonewiki was started with (%v)", fd, err)
 	}
 	handedSocket = true
 	onSocket = ln.Addr().Network() == "unix"
@@ -434,7 +434,7 @@ func handedListener(fd string) (net.Listener, error) {
 }
 
 // idle: when the last request came (or ended), and how many run now, for
-// exitWhenIdle. The healthcheck isn't one: whoever watches Zone would keep
+// exitWhenIdle. The healthcheck isn't one: whoever watches Zonewiki would keep
 // it up for ever.
 var idle struct {
 	last atomic.Int64 // UnixNano
@@ -469,10 +469,10 @@ func idleLongEnough(after time.Duration) bool {
 		!loginThrottle.remembers() && !mcpThrottle.remembers() && !packingNow()
 }
 
-// exitWhenIdle ends Zone, with exit code 0, once idleLongEnough: requests
+// exitWhenIdle ends Zonewiki, with exit code 0, once idleLongEnough: requests
 // that came meanwhile are answered first, and connections that come after
-// wait in the socket, which its holder starts Zone on again. Everything
-// Zone keeps is in the wiki's files (the search index too), so the next
+// wait in the socket, which its holder starts Zonewiki on again. Everything
+// Zonewiki keeps is in the wiki's files (the search index too), so the next
 // start loses nothing but what the caches held, and what an editor's save
 // is merged from: a tab left open over a sleep saves as after any restart
 // (a conflict to settle by hand, if the page changed meanwhile). Who wrote
@@ -484,7 +484,7 @@ func exitWhenIdle(srv *http.Server, after time.Duration) {
 		if !idleLongEnough(after) {
 			continue
 		}
-		logf("no request for %s: exiting; the next one starts Zone again", after)
+		logf("no request for %s: exiting; the next one starts Zonewiki again", after)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		srv.Shutdown(ctx)
 		cancel()
@@ -501,18 +501,18 @@ func listenName(ln net.Listener) string {
 	return ln.Addr().String()
 }
 
-// fatal says what stops Zone from starting (or serving), and exits.
+// fatal says what stops Zonewiki from starting (or serving), and exits.
 func fatal(err error) {
-	fmt.Fprintln(os.Stderr, "Zone:", err)
+	fmt.Fprintln(os.Stderr, "Zonewiki:", err)
 	os.Exit(1)
 }
 
 const healthUsage = `Usage: zonewiki health [ADDR]
-  whether the Zone listening on ADDR (its --addr, default :5080; unix:PATH for a
+  whether the Zonewiki listening on ADDR (its --addr, default :5080; unix:PATH for a
   socket) answers on localhost and took its settings file: exit code 0, or 1`
 
 // healthURL: /api/health on localhost at the port of zonewiki health's
-// argument, the --addr Zone listens on (":8080"; default :5080). For a
+// argument, the --addr Zonewiki listens on (":8080"; default :5080). For a
 // socket (unix:PATH) there is no port: healthClient connects to it.
 func healthURL(args []string) string {
 	port := "5080"
@@ -541,22 +541,22 @@ func healthClient(args []string) *http.Client {
 	return client
 }
 
-// health: whether Zone answers at url within the client's 5 seconds, its
+// health: whether Zonewiki answers at url within the client's 5 seconds, its
 // settings file taken (0), or not (1), for the container's healthcheck
 // (the compose files'), which has no curl.
 func health(client *http.Client, url string) int {
 	resp, err := client.Get(url)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "Zone:", err)
+		fmt.Fprintln(os.Stderr, "Zonewiki:", err)
 		return 1
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		var answer struct{ Error string }
 		if json.NewDecoder(io.LimitReader(resp.Body, 64<<10)).Decode(&answer) == nil && answer.Error != "" {
-			fmt.Fprintln(os.Stderr, "Zone:", answer.Error)
+			fmt.Fprintln(os.Stderr, "Zonewiki:", answer.Error)
 		} else {
-			fmt.Fprintln(os.Stderr, "Zone:", resp.Status)
+			fmt.Fprintln(os.Stderr, "Zonewiki:", resp.Status)
 		}
 		return 1
 	}
@@ -692,15 +692,15 @@ func viewerGate(mux *http.ServeMux) http.Handler {
 	})
 }
 
-// apiHealth: Zone answers, and took its settings file's last change (503
-// with the error if not: Zone runs on the settings from before), for
+// apiHealth: Zonewiki answers, and took its settings file's last change (503
+// with the error if not: Zonewiki runs on the settings from before), for
 // zonewiki health. It needs no login, and the error may name users: the error
 // itself only to whoever may read the wiki, everyone else is pointed to
 // the log.
 func apiHealth(w http.ResponseWriter, r *http.Request) {
 	if msg := settingsError(); msg != "" {
 		if _, ok, _ := signedIn(r); settings().authOn() && !ok {
-			msg = configName() + " has an error, or a change Zone doesn't take while it runs: see Zone's log " +
+			msg = configName() + " has an error, or a change Zonewiki doesn't take while it runs: see Zonewiki's log " +
 				"(./run.sh logs), or run zonewiki config check"
 		}
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": msg})

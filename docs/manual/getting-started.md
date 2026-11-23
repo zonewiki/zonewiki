@@ -1,13 +1,13 @@
 # Getting started
 
-Your first ten minutes in Zone: what's where, your first page, a note and a task, planning your day, and how to find things again.
+Your first ten minutes in Zonewiki: what's where, your first page, a note and a task, planning your day, and how to find things again.
 Everything else in this manual builds on these few steps.
 
-![A wiki page in Zone: the page in the middle, its table of contents on the left, backlinks and linked tasks on the right](../screenshots/page.png)
+![A wiki page in Zonewiki: the page in the middle, its table of contents on the left, backlinks and linked tasks on the right](../screenshots/page.png)
 
 ## The modules
 
-Zone has three parts, called modules.
+Zonewiki has three parts, called modules.
 You switch between them with the pills at the top left of every page (on a phone, with the tab bar at the bottom):
 
 | Module | What it is |
@@ -43,9 +43,9 @@ Things I'm working on:
 - [[Q3 plan]]
 ```
 
-Zone saves as you type.
+Zonewiki saves as you type.
 Click **Done** (or press `Ctrl+S`) to finish: the page is shown again and the change is saved as a version you can go back to.
-[Writing](writing.md) has the editor and Zone's Markdown in full.
+[Writing](writing.md) has the editor and Zonewiki's Markdown in full.
 
 ## Link to a page not written yet
 
@@ -54,7 +54,7 @@ The page doesn't exist yet, so the link is shown in red with a dashed underline.
 Click it, and the editor opens for the new page, ready to write.
 Click **Done**, and the page exists, and the link on the home page works.
 
-Starting a page from a link to it is the usual way in Zone: the page is linked from somewhere from the start.
+Starting a page from a link to it is the usual way in Zonewiki: the page is linked from somewhere from the start.
 [Pages](pages.md) covers folders, renaming and moving.
 
 ## Write a note
@@ -78,7 +78,7 @@ Call Ben tomorrow #work due:fri
 ```
 
 That makes the task "Call Ben", starting tomorrow, due on Friday, tagged `#work`.
-The fields below the title show what Zone understood as you type.
+The fields below the title show what Zonewiki understood as you type.
 Click **Save**: the task goes to your **Inbox**, and you stay on the page you were on.
 
 Without a date of your own, the task starts today, so it shows up in **Today** in Tasks.
@@ -120,7 +120,7 @@ The most useful ones to start with:
 ## Where to go next
 
 - [Pages](pages.md): links, folders, renaming, moving and deleting
-- [Writing](writing.md): the editor and Zone's Markdown
+- [Writing](writing.md): the editor and Zonewiki's Markdown
 - [Tasks](tasks.md): Today and the Plan board, lists, dates, repeating tasks and assigning
 - [Notes](notes.md): filing notes into the wiki
 - [Search](search.md): finding pages and tasks

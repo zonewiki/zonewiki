@@ -3,7 +3,7 @@ docs/spec/security.md, Public wikis): whoever isn't signed in, a visitor,
 reads the shared pages (view) or edits them too (edit), and nothing else: no
 task, no note, no private page, no upload, rename or delete.
 
-Every route Zone registers is asked here without a session
+Every route Zonewiki registers is asked here without a session
 (test_every_route_is_a_visitors_or_closed): one that answers a visitor must
 be on the lists below, which must be the server's own (visitorRoutes,
 visitorEdits), so a route opens to visitors only by a change to both."""
@@ -166,7 +166,7 @@ def test_nothing_changes_for_a_visitor_of_a_wiki_to_read(client, wiki, view):
     """Every route asked as a visitor with a write's method: the wiki's
     files and its history stay as they were."""
     def state():
-        # A task file as what it holds: Zone writes it in its own layout when it starts.
+        # A task file as what it holds: Zonewiki writes it in its own layout when it starts.
         return {p.relative_to(wiki).as_posix(): json.loads(p.read_bytes()) if p.suffix == ".json" else p.read_bytes()
                 for p in wiki.rglob("*") if p.is_file() and not p.relative_to(wiki).as_posix().startswith((".git/", ".zone/"))}
     client.get("/page/index", headers=HOST)
@@ -271,7 +271,7 @@ def test_a_visitor_edits_and_makes_pages_as_anonymous(client, wiki, edit):
 
 
 def test_what_a_visitor_never_writes(client, wiki, edit):
-    client.get("/page/index", headers=HOST)   # Zone has started: its own commits are made
+    client.get("/page/index", headers=HOST)   # Zonewiki has started: its own commits are made
     # A private page: not there for them, to read or to write.
     assert client.get("/edit/private/alice/diary", headers=HOST).status_code == 404
     assert client.post("/api/save/private/alice/diary", data={"content": "# Mine\n"}, headers=HOST).status_code == 404
@@ -349,7 +349,7 @@ def test_a_visitors_search_names_no_user_either(client, wiki, edit):
 
 def test_no_draft_is_kept_for_a_visitor(client, wiki, edit):
     """Every visitor is the same one: a draft left for "them" would be the
-    next visitor's, and would fill Zone's folder."""
+    next visitor's, and would fill Zonewiki's folder."""
     for extra in ({"keep_left": "1"}, {"leaving": "1", "file_hash": "0" * 64}):
         client.post("/api/save/garden", data={"content": "# Planted\n" * 50, **extra}, headers=HOST)
     assert not (wiki / ".zone/drafts/_visitor").exists()

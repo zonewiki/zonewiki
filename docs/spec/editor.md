@@ -1,6 +1,6 @@
 # Editor
 
-Part of Zone's spec (see `AGENTS.md` for the index).
+Part of Zonewiki's spec (see `AGENTS.md` for the index).
 
 The in-browser editor, as a user meets it: opening it, saving (auto-save and Done), the formatting bar, the smart helpers (completion, emoji, lists, snippets, the task list dialog, checkboxes), section editing, renaming a page, pasting and dropping files, the editor on a phone, and several editors on one page (merge on save, conflicts).
 How it works comes last: saves in order, the code the task app shares, section saves, the checkbox index.
@@ -181,7 +181,7 @@ The formatting bar's Task list shows **List settings**, the dialog a list's ⋯ 
 
 ### Task list checkboxes
 
-`- [ ] task` and `- [x] task` render as interactive checkboxes in page view (Zone's `checkbox` node in `go/markdown.go`, rendered without `disabled`).
+`- [ ] task` and `- [x] task` render as interactive checkboxes in page view (Zonewiki's `checkbox` node in `go/markdown.go`, rendered without `disabled`).
 
 - Clicking a checkbox in page view toggles the `[ ]`/`[x]` in the `.md` file and shows an **undo toast** ("Checked “…” · Undo"; undo is a second toggle).
 - Ticking also records when: it appends `<!--d:YYYY-MM-DDTHH:MM:SS-->` (or adds ` d:…` to an existing `<!--t:<created>-->`), unticking takes it out again;
@@ -246,7 +246,7 @@ anyone else is refused (Who may move a page to other readers in `docs/spec/users
 
 If the new slug already exists, nothing is overwritten: the server redirects back with `?rename_name=…&rename_error=…`
 (to the editor, which shows the rename bar with the error and the name typed, or with `from=page` to the page view, whose rename dialog reopens with them);
-so does a name in a folder Zone skips (`_…`, `.…`) or another user's private folder.
+so does a name in a folder Zonewiki skips (`_…`, `.…`) or another user's private folder.
 The new slug is validated with `safePath()` before renaming.
 The browser and the MCP tool `rename_page` refuse alike (`renamePageOp` in `go/pageops.go`),
 and text the page held that wasn't committed yet is committed first (`Save <slug>`), so the rename's commit only moves the page.
@@ -264,7 +264,7 @@ When a page is renamed, every link to it is re-pointed (`rewritePageLinks()` via
   Images are never touched.
 - Links inside fenced code and inline code are left alone (`mdtext.MaskCode`).
 - A page that can't be read or written keeps its links: the rename is done and committed all the same
-  (`linksLeft`; the browser goes on to the new page, Zone's log names the page and why, the MCP tools add a note that names neither, as the page may be one the user doesn't see; `check_links` finds what is left).
+  (`linksLeft`; the browser goes on to the new page, Zonewiki's log names the page and why, the MCP tools add a note that names neither, as the page may be one the user doesn't see; `check_links` finds what is left).
 - **Moved pages keep their own links.** A page that moves into another folder (a rename into a folder, a folder move, a note promoted into a folder) has its relative links re-based,
   through `rewriteMovedLinks()` (`rebaseLinks()` per page): each still reaches the same page or file from where the page is now,
   including links to other pages that moved too.
@@ -341,7 +341,7 @@ Then the banner shows (A clash, below).
 
 #### The texts merged from
 
-Zone keeps the texts behind recent hashes (`go/merge.go`) in two lists,
+Zonewiki keeps the texts behind recent hashes (`go/merge.go`) in two lists,
 so a busy page's auto-saves don't push out the text an idle editor started from:
 the texts handed out (`keepGivenBase`: every text `/edit` gives, read_page's, a conflict's) and the texts saves write (`keepBase`),
 each the 200 most recent,
@@ -377,7 +377,7 @@ Overwrites (`force_section` for a section, or no hash; `overwrite=1`).
 A section goes where its heading is now, the line the editor keeps in `section_heading`, found by `findSection`: never by its number alone, as a section added above moves the numbers;
 if that can't be told, the heading gone or several like it, nothing is written, a 409 `section_gone` the banner explains.
 Whatever the page held that was never in git is committed first (only for `overwrite=1` or `force_section`, so a new page's saves, which have no hash yet, commit nothing),
-by its author or Zone (`keepPending`, as before a delete, restore or rename: Commits in `docs/spec/users.md`).
+by its author or Zonewiki (`keepPending`, as before a delete, restore or rename: Commits in `docs/spec/users.md`).
 
 #### Merge by hand
 

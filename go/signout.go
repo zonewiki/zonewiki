@@ -1,6 +1,6 @@
 // Signed-out sessions (docs/spec/security.md, Signing out): a session is a
 // signed cookie, valid wherever a copy of it is, so signing out has to be
-// remembered here. Zone keeps the ids of the sessions signed out in
+// remembered here. Zonewiki keeps the ids of the sessions signed out in
 // .zone/signed-out (owner only, not committed: state, like the session
 // key), each until no cookie of that session can still be valid.
 package main
@@ -44,7 +44,7 @@ func loadSignedOut() {
 	if err != nil {
 		// Unreadable: those sessions work again, which is said, not
 		// a reason to refuse everyone.
-		fmt.Fprintf(os.Stderr, "Zone: %s: %v\n", filepath.Base(stateDirIn(cfg.Data))+"/signed-out", err)
+		fmt.Fprintf(os.Stderr, "Zonewiki: %s: %v\n", filepath.Base(stateDirIn(cfg.Data))+"/signed-out", err)
 		signedOut.until = map[string]time.Time{}
 	}
 }

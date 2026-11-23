@@ -114,7 +114,7 @@ func loginAccount(r *http.Request) string {
 func logout(w http.ResponseWriter, r *http.Request) {
 	if s, ok := readSession(r); ok {
 		if err := signOut(s.ID); err != nil {
-			fmt.Fprintln(os.Stderr, "Zone: signing out:", err)
+			fmt.Fprintln(os.Stderr, "Zonewiki: signing out:", err)
 		}
 	}
 	clearSession(w, r)

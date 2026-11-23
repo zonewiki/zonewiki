@@ -68,7 +68,7 @@ func apiNewList(w http.ResponseWriter, r *http.Request) {
 	default:
 		// Written, but not committed (notCommitted), or a registry unreadable.
 		logf("%s %s: %v", r.Method, r.URL.Path, err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "The list couldn't be made (Zone's log says why)"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "The list couldn't be made (Zonewiki's log says why)"})
 	}
 }
 
@@ -431,7 +431,7 @@ func apiRestore(w http.ResponseWriter, r *http.Request) error {
 		known := checkArrived(user.Name, t)
 		general = placeSnapshot(user, t, snap, lists) || general
 		// Its assignee as any write takes one: one of its list's members,
-		// unless it comes back as Zone had it (the undo of a delete).
+		// unless it comes back as Zonewiki had it (the undo of a delete).
 		if !known && !t.Private() && assigneeGone(t) {
 			t.Assignee = ""
 		}
@@ -463,7 +463,7 @@ func apiRestore(w http.ResponseWriter, r *http.Request) error {
 // importMax: the most tasks one import takes.
 const importMax = 10000
 
-// importIDRE: an id an imported task may keep (a UUID, as Zone makes them).
+// importIDRE: an id an imported task may keep (a UUID, as Zonewiki makes them).
 var importIDRE = regexp.MustCompile(`^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$`)
 
 // apiExport: the tasks a view shows (?list=, ?lists= or ?mine=1, ?tag=, ?assignee=, as an embed's params;
@@ -521,7 +521,7 @@ func apiImport(w http.ResponseWriter, r *http.Request) error {
 	if err := mayWriteTasks(user); err != nil {
 		return err
 	}
-	notExport := refuse("Not a file of tasks exported from Zone")
+	notExport := refuse("Not a file of tasks exported from Zonewiki")
 	snaps, ok := jsonobj.As[[]json.RawMessage](data["file"])
 	if !ok {
 		file, isObj := jsonobj.As[jsonObj](data["file"])
@@ -602,7 +602,7 @@ func apiImport(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 		// Its assignee as any write takes one: one of its list's members,
-		// unless it comes back as Zone had it.
+		// unless it comes back as Zonewiki had it.
 		if !known && !t.Private() && assigneeGone(t) {
 			t.Assignee, lost = "", true
 		}

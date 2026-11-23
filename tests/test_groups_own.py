@@ -246,7 +246,7 @@ def apollo(client, wiki):
     it."""
     sign_in(client, "alice")
     make(client, "apollo", "bob")
-    assert until(lambda: client.get("/groups/apollo", headers=HOST).status_code == 302)      # its home, as Zone writes it
+    assert until(lambda: client.get("/groups/apollo", headers=HOST).status_code == 302)      # its home, as Zonewiki writes it
     save = lambda slug, text: client.post(f"/api/save/{slug}", data={"content": text}, headers=HOST)
     assert save("groups/apollo/notes", "# Notes\n").status_code == 200
     assert save("groups/apollo/roadmap", "# Roadmap\n\n![plan](/groups/apollo/_assets/plan.png) [[groups/apollo/notes]]\n").status_code == 200
@@ -265,14 +265,14 @@ def apollo(client, wiki):
 
 
 def test_a_rename_rewrites_a_home_an_older_zone_wrote(client, wiki, apollo):
-    """A home as Zone wrote it before it asked what the group is for is
-    Zone's still: a rename writes the new name's; one its people changed
+    """A home as Zonewiki wrote it before it asked what the group is for is
+    Zonewiki's still: a rename writes the new name's; one its people changed
     stays as they wrote it."""
     (wiki / "groups/apollo/index.md").write_text(
         "# apollo\n\nPages in this folder are seen and changed by whoever is in the group @apollo, and by no one else in this wiki.\n\n## Links\n\n")
     git(wiki, "commit", "-qam", "The home as it was")
     assert client.post("/groups/apollo/rename", data={"name": "artemis"}, headers=HOST).status_code == 303
-    text = (wiki / "groups/artemis/index.md").read_text()            # what Zone writes now, of the new name
+    text = (wiki / "groups/artemis/index.md").read_text()            # what Zonewiki writes now, of the new name
     assert text.startswith("# artemis\n\n_What is this group for?") and "whoever is in the group @artemis," in text
     (wiki / "groups/artemis/index.md").write_text("# artemis\n\nOur launch.\n")
     git(wiki, "commit", "-qam", "Said what it is for")
@@ -517,7 +517,7 @@ def test_a_group_with_pages_asks_what_becomes_of_them(client, wiki, free):
     before, head = config(wiki), git(wiki, "rev-parse", "HEAD")
     resp = remove(client, "apollo")
     assert resp.status_code == 400 and "say what becomes of them" in said(resp)
-    # Where they can't go: a folder there is, one that isn't the shared wiki's, one Zone skips.
+    # Where they can't go: a folder there is, one that isn't the shared wiki's, one Zonewiki skips.
     (wiki / "taken").mkdir()
     (wiki / "taken/x.md").write_text("# X\n")
     for folder, why in (("taken", "There is a folder"), ("private/alice/apollo", "no folder of the shared wiki"),

@@ -37,7 +37,7 @@ func TestCommitTrailers(t *testing.T) {
 
 // Whether an assistant wrote a commit is its trailer's to say, not its
 // first line's: a page named "notes (MCP)" saved by a person is a person's
-// change, and an assistant's keeps its mark for git log but not in Zone.
+// change, and an assistant's keeps its mark for git log but not in Zonewiki.
 func TestAnAssistantsCommitIsToldByItsTrailer(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("no git")

@@ -1,4 +1,4 @@
-// ── Zone Task App ────────────────────────────────────────────────────────────
+// ── Zonewiki Task App ────────────────────────────────────────────────────────────
 // An ES module; zonewiki.js imports it on every page. initTaskApps() starts each
 // task app (.tasks-app) on the page, and one added later (the hidden tasks
 // that a new task from any page loads, actions.js).

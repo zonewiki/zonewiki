@@ -37,7 +37,7 @@ func writePageSaying(t *testing.T, rel, what string) string {
 	return path
 }
 
-// commitPage changes a page and commits it, by Zone's gitCommit.
+// commitPage changes a page and commits it, by Zonewiki's gitCommit.
 func commitPage(t *testing.T, rel, user, msg string) string {
 	t.Helper()
 	path := writePageSaying(t, rel, msg)
@@ -88,7 +88,7 @@ func wantWho(t *testing.T, what string, got, want map[string]string) {
 
 // A page's last commit says who made it, and whether through an assistant
 // and which: a user, a user's assistant, someone committing in a terminal;
-// not Zone's own commit, nor a page whose file changed since (whose that
+// not Zonewiki's own commit, nor a page whose file changed since (whose that
 // change is isn't known), nor one never committed. A visitor learns no
 // user's name, but an assistant's, and that a visitor made a change.
 func TestWhoChangedAPage(t *testing.T) {
@@ -131,7 +131,7 @@ func TestWhoChangedWithoutUsers(t *testing.T) {
 
 // The history is read once, and only as far back as the pages need: here
 // not the commit that made both pages, since later ones changed each. Then
-// git is asked again only when the repository moved, by Zone's commit or
+// git is asked again only when the repository moved, by Zonewiki's commit or
 // one made in a terminal, for the commits since; a reset to an older
 // commit reads the history again; a page deleted has no last change.
 func TestLastCommitsFollowTheRepository(t *testing.T) {

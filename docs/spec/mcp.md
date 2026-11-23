@@ -1,8 +1,8 @@
 # MCP server
 
-Part of Zone's spec (see `AGENTS.md` for the index).
+Part of Zonewiki's spec (see `AGENTS.md` for the index).
 
-How an AI assistant (any MCP client) works with Zone: what the MCP server is, how an assistant connects (a token, or signing in through the browser with OAuth, and what a connection may see and do), the tools and what each does, what every write does, guides, who sees a page, and the links in results.
+How an AI assistant (any MCP client) works with Zonewiki: what the MCP server is, how an assistant connects (a token, or signing in through the browser with OAuth, and what a connection may see and do), the tools and what each does, what every write does, guides, who sees a page, and the links in results.
 How it works (the protocol, the instructions, the size of the tool list, retrieval, auth and OAuth's internals) is at the end.
 
 ## What the MCP server is
@@ -13,9 +13,9 @@ Every write is a git commit the user can undo, marked as an assistant's.
 
 ### What the assistant is told
 
-When a client connects, Zone sends it instructions (The instructions, under How it works) telling the model what Zone is,
+When a client connects, Zonewiki sends it instructions (The instructions, under How it works) telling the model what Zonewiki is,
 which tools find what,
-to call `zone_help` for questions about Zone itself,
+to call `zone_help` for questions about Zonewiki itself,
 and how to write (search before creating a page, extend rather than duplicate, edit_page/append_to_page over rewriting, a summary per write, `read_guides` before drafting).
 The wiki's guide follows them (Guides).
 
@@ -69,8 +69,8 @@ With OAuth, the page says how an assistant signs in (the address to paste; the l
 ### Connecting with OAuth
 
 `go/oauth.go`, `go/grants.go`, `oauth.html`.
-What Claude's apps (web, Desktop, mobile: a "custom connector"), Claude Code (`claude mcp add --transport http zone <address>`, then `/mcp`) and ChatGPT (a connector, in developer mode) do with a remote MCP server: the user pastes the address of `/mcp`, a browser opens, they sign in to Zone and click Allow.
-Zone is its own authorization server, on the same address, as the MCP authorization spec (2025-11-25) has it; nothing but Go's standard library.
+What Claude's apps (web, Desktop, mobile: a "custom connector"), Claude Code (`claude mcp add --transport http zone <address>`, then `/mcp`) and ChatGPT (a connector, in developer mode) do with a remote MCP server: the user pastes the address of `/mcp`, a browser opens, they sign in to Zonewiki and click Allow.
+Zonewiki is its own authorization server, on the same address, as the MCP authorization spec (2025-11-25) has it; nothing but Go's standard library.
 How it is built (the metadata, registration, codes, tokens, where connections are kept) is in How OAuth works, at the end.
 
 #### Only with a login
@@ -80,7 +80,7 @@ Someone has to sign in and allow, so OAuth is on when the wiki has users or a pa
 
 #### What reaches it
 
-An assistant that runs on its maker's servers (Claude's apps, ChatGPT) calls Zone from there, so the wiki must be on the internet over https (set `base-url` and `hosts`).
+An assistant that runs on its maker's servers (Claude's apps, ChatGPT) calls Zonewiki from there, so the wiki must be on the internet over https (set `base-url` and `hosts`).
 One on the user's computer (Claude Code) reaches any wiki that computer does.
 
 #### The question
@@ -105,7 +105,7 @@ An ordinary new password (Change password, `zonewiki user passwd`) leaves them, 
 
 #### What OAuth doesn't offer yet
 
-**Not yet**: Client ID Metadata Documents, CORS for clients that run in a browser, `/oauth/revoke` (a client's "disconnect" doesn't end the connection in Zone: End does).
+**Not yet**: Client ID Metadata Documents, CORS for clients that run in a browser, `/oauth/revoke` (a client's "disconnect" doesn't end the connection in Zonewiki: End does).
 Tested against real clients so far: Claude.
 
 ### Read-only connections
@@ -186,7 +186,7 @@ Annotated `readOnlyHint`.
 | `list_pages(limit=100, under, orphans=false, notes=false)` | Pages, most recently edited first, with how many link to each; one folder, orphans or notes only. |
 | `list_tags()` | Tags in use on pages and tasks, with counts, then the task lists the user sees. |
 | `history(slug, version, since, under, limit=20)` | Git history: the wiki's recent commits, a page's versions, or what one version changed. |
-| `zone_help(query, topic, heading, limit=5)` | Zone's own documentation, searched by passage, or a doc or one section whole. |
+| `zone_help(query, topic, heading, limit=5)` | Zonewiki's own documentation, searched by passage, or a doc or one section whole. |
 | `read_guides(slug, guides)` | The guides for a page, a folder or the whole wiki, with the ids writes pass. |
 | `read_file(url)` | An upload a page or task links to, by the link's target (Files, below): an image as an image, a text file as its text. |
 | `check_links(under)` | Every link leading to no page, by page, with the page it was probably meant for. |
@@ -255,7 +255,7 @@ A bad pattern is a tool error that says what is wrong with it; the timeout, or t
 Without git, the pattern is matched as plain text and the result says so.
 
 **The regex reads only what its asker sees.**
-git is given the folders of `seenFolders` (`go/access.go`) as pathspecs, and no other: the wiki's top, its shared folders, and in `private/` and `groups/` the folders of the places the asker sees (judged as `placeOf` judges, in lower case), with Zone's own folders (`_…`, `.…`) left out at every depth.
+git is given the folders of `seenFolders` (`go/access.go`) as pathspecs, and no other: the wiki's top, its shared folders, and in `private/` and `groups/` the folders of the places the asker sees (judged as `placeOf` judges, in lower case), with Zonewiki's own folders (`_…`, `.…`) left out at every depth.
 A folder made since they were listed isn't searched.
 Filtering the hits afterwards wasn't enough: a pattern that gives up only on a line holding a word (`^(?=.*word)(?:.|.)*(*FAIL)`) failed only where that word was, so the error read other users' pages, uploads and drafts a guess at a time.
 
@@ -289,7 +289,7 @@ A page that isn't there (deleted) is named as `read_guides` names a page not yet
 
 #### `zone_help`
 
-Zone's own documentation (`go/manual.go`), so the model answers how-to questions about Zone (how to rename a task list's tabs, a setting, the query syntax) from the docs instead of guessing.
+Zonewiki's own documentation (`go/manual.go`), so the model answers how-to questions about Zonewiki (how to rename a task list's tabs, a setting, the query syntax) from the docs instead of guessing.
 The docs are the manual, `docs/manual/*.md` (topic `manual` for its contents, `README.md`, and `manual/<page>` for a page, in reading order: Help in `docs/spec/routes.md`), `README.md` (topic `readme`) and `docs/spec/*.md` (topic = file name), all but `testing.md`;
 the binary carries them, and `docsRoot` takes a checkout's instead (What the binary holds in `docs/spec/deployment.md`); with `--docs` naming a folder without them, the tool errors.
 
@@ -306,7 +306,7 @@ The description tells the model the manual is written for users and the spec for
 The guides for a page (also a new one) or a folder (`messages/`, or a folder's name without the slash), or without `slug` the whole wiki's (`readGuides`): each as `=== guide <slug> (id <id>) ===` and its text, the whole wiki's first, after a line with the ids to pass with writes.
 Ids in `guides` (ones the model already has) are named, not repeated.
 Reading them counts: a write with those ids goes through at once (The guide gate).
-A name without the slash is a folder when the asker sees a page in it, never by what is on disk, and what `safePath` refuses (a folder outside the wiki, Zone's own `_…` and `.…`) is refused before anything is looked at: so the answer tells nothing of another user's private folder, a group's the asker isn't in, or the server's folders.
+A name without the slash is a folder when the asker sees a page in it, never by what is on disk, and what `safePath` refuses (a folder outside the wiki, Zonewiki's own `_…` and `.…`) is refused before anything is looked at: so the answer tells nothing of another user's private folder, a group's the asker isn't in, or the server's folders.
 
 Its description tells the model to call it before drafting anything meant for the wiki, and ends with the folders that have a guide and each guide's title (`toolList`, built at each `tools/list`; at most `guidedShown`, 25, then "… and N more"), so the model knows from the start, before it writes a word, that `messages/` has instructions.
 Tool descriptions stay in the model's context like the instructions, but aren't cut at 2 KB.
@@ -319,7 +319,7 @@ Writes name the new ones in a note in the same form (Wikilink check).
 
 ### Writing
 
-The wiki is mostly written by LLMs, so they write through Zone rather than to the files: each write is a git commit (no `/uncommitted` pile), a rename re-points links, and the result tells the model what it would otherwise have to look up.
+The wiki is mostly written by LLMs, so they write through Zonewiki rather than to the files: each write is a git commit (no `/uncommitted` pile), a rename re-points links, and the result tells the model what it would otherwise have to look up.
 Every write tool takes an optional `summary` for its commit message (What every write does), and every page write takes `guides` (The guide gate).
 Tools that only add are annotated `destructiveHint: false`, those that change or remove `true`, so a client can ask before those.
 The token `/mcp` requires (Auth) guards writes as it guards reads, and git keeps every change undoable.
@@ -346,14 +346,14 @@ The token `/mcp` requires (Auth) guards writes as it guards reads, and git keeps
 
 Creates a page.
 `content`'s description gives the frontmatter's format and keys (`tags`, `tldr`, `sources`; see Frontmatter in `rendering.md`), since a model writing a page otherwise learns them only from pages it has read.
-The slug may be a name (`Tickets/BUG 1234` → `tickets/bug-1234`, `mdtext.ToSlug`); folders starting with `_` or `.` are refused (`newSlug` via `safePath`: Zone doesn't list or serve pages there).
+The slug may be a name (`Tickets/BUG 1234` → `tickets/bug-1234`, `mdtext.ToSlug`); folders starting with `_` or `.` are refused (`newSlug` via `safePath`: Zonewiki doesn't list or serve pages there).
 Content gets one trailing newline.
 
 **An existing page** (`mcpPageSlug`) is an error that points at edit_page/append_to_page, unless `overwrite`, which replaces its text.
 
 - **`base_hash`** (with `overwrite`; read_page's `hash:`): if the page changed since the model read it (the user edited it meanwhile), the model's text is merged with that change as the editor's saves are (`mergeWrite`, `mergeText`; Merge on save in `editor.md`), and the result says it merged.
   Where both changed the same lines nothing is written, and the error shows only the clashing blocks with git's markers (`conflictBlocks`).
-  A hash Zone no longer keeps (a restart) or no git: nothing written, read it again.
+  A hash Zonewiki no longer keeps (a restart) or no git: nothing written, read it again.
 - Without `base_hash`, an overwrite replaces whatever the page holds (what it held uncommitted committed first: Pages open in the editor).
 
 **A new page's result** names up to five pages whose title or file name is close (`similarPages`: `difflib` ratio ≥ 0.8 on normalised titles and last slug parts), so the model notices when it should extend one instead.
@@ -361,7 +361,7 @@ With semantic search it also names the three pages closest to it in content (`cl
 
 **`note=true`** makes a note instead (`writeQuicknote`, `quicknote.create`, as the browser's New note):
 
-- `slug` is then just its name in any words (`Alex prep`), and Zone puts the date and time in front (`2026-10-15_09-30-00_alex-prep`; a `/` is a hyphen, and a second note of that name in the same second gets the next second).
+- `slug` is then just its name in any words (`Alex prep`), and Zonewiki puts the date and time in front (`2026-10-15_09-30-00_alex-prep`; a `/` is a hyphen, and a second note of that name in the same second gets the next second).
 - Without a `# Title` in the content (after any frontmatter) the name becomes it; without either it is an error.
 - `overwrite` is an error (a note is always new); the wiki's guide gates it as a page at the top level.
 - The result says it is in Notes, not the wiki, and names file_note.
@@ -400,10 +400,10 @@ Where it'd otherwise take grep_wiki plus an edit_page per page, or `sed` on the 
 **By default a dry run**: nothing is written, and the result lists each changed line as `  <line>: - old` / `  <line>: + new` under its page (the first `limit` lines, cut as grep_wiki cuts them), so the model (or the user) checks it before calling again with `dry_run=false`.
 A write changing more than `max_pages` pages (at most 1000) is refused, with nothing written; the dry run says so beforehand.
 
-A write first commits the pages' uncommitted changes as `Save pages before replacing "<find>"` (`keepPendingPages`; one commit per user who auto-saved them, Zone for the rest), then commits `Replace "<find>"`, and names the pages changed and any wikilinks the replacement made that lead nowhere.
+A write first commits the pages' uncommitted changes as `Save pages before replacing "<find>"` (`keepPendingPages`; one commit per user who auto-saved them, Zonewiki for the rest), then commits `Replace "<find>"`, and names the pages changed and any wikilinks the replacement made that lead nowhere.
 The commits name no page and no count: the pages may be the writer's private ones beside shared ones, and the history shows everyone else the pages of a commit they see, so a count would tell of the others.
 
-**A regex can't hang the server**: RE2 matches in time linear in the text (it never backtracks), so even `(a+)+$` runs in the server, without the process and timeout the Python Zone needed (whose regexes had lookarounds, at the price of a pattern backtracking for hours).
+**A regex can't hang the server**: RE2 matches in time linear in the text (it never backtracks), so even `(a+)+$` runs in the server, without the process and timeout the Python Zonewiki needed (whose regexes had lookarounds, at the price of a pattern backtracking for hours).
 
 #### `append_to_page`
 
@@ -500,7 +500,7 @@ The place is the `position` field of the write (`positionField`, `moveTo` in `go
 
 **A date is the deadline**: the field descriptions send a date the user gives the task ("tomorrow", "by Friday") to `due`, and `start` only to a stated start ("start Monday", "work on it tomorrow"); the model had put "for tomorrow" in start.
 
-**Dates** (`due`, `start`, and `history`'s `since`) are `YYYY-MM-DD` or a word quick-add knows (`today`, `tomorrow`/`tmrw`, a weekday prefix of 3+ letters = the next one, `+3`/`+3d`/`+2w`; `parseDateWord`, mirroring `TasksCore.parseDateWord`), resolved with Zone's own date, so "tomorrow" is right whatever the client's clock or context says; the result starts `Created (today is YYYY-MM-DD).`
+**Dates** (`due`, `start`, and `history`'s `since`) are `YYYY-MM-DD` or a word quick-add knows (`today`, `tomorrow`/`tmrw`, a weekday prefix of 3+ letters = the next one, `+3`/`+3d`/`+2w`; `parseDateWord`, mirroring `TasksCore.parseDateWord`), resolved with Zonewiki's own date, so "tomorrow" is right whatever the client's clock or context says; the result starts `Created (today is YYYY-MM-DD).`
 
 **Tag hints** (`tagHints`), after the task:
 
@@ -597,7 +597,7 @@ Both tools' refusals name the two `curl` commands (`fileRoutesHint`).
 ### Commit message and summary
 
 Every write tool takes an optional `summary`; the commit message's first line is the action, then the summary, then `(MCP)` (`commitMsg`: `Update tickets/bug-1: add findings (MCP)`, `Create task (MCP)`), for whoever reads the history with git.
-Zone doesn't go by that line: a page's name can end in `(MCP)` too.
+Zonewiki doesn't go by that line: a page's name can end in `(MCP)` too.
 What tells the history the model's changes from the user's is the trailer after it (Which assistant).
 
 ### Which assistant
@@ -623,7 +623,7 @@ Not yet: `read_page` saying which passages came from outside.
 
 The browser editor auto-saves to the file without committing (a commit comes with Done/Ctrl+S).
 A write tool that ran on such a page would take the user's draft into its own `(MCP)` commit, and an overwrite or delete would lose it, as it was never in git.
-So every page write first commits what the page holds uncommitted (`keepPending` in `go/pageops.go`: `isUncommitted`, then `Save <slug>`, the message the Uncommitted list's commit gives; by the user who auto-saved it, with users, else Zone), and the result says so: the user may have the page open.
+So every page write first commits what the page holds uncommitted (`keepPending` in `go/pageops.go`: `isUncommitted`, then `Save <slug>`, the message the Uncommitted list's commit gives; by the user who auto-saved it, with users, else Zonewiki), and the result says so: the user may have the page open.
 The browser's writes that replace or remove a page's text (delete, restore, rename, Keep mine, Reload theirs) do the same, through the same function.
 The editor's side is its own: each auto-save sends the hash of the text it last saw,
 so its next save after the model's write is merged with it (the user's textarea gets the model's change),
@@ -652,7 +652,7 @@ It never counts as an orphan (list_pages).
 
 ### Folder guides
 
-The user's instructions for writing the pages in a folder and its subfolders live in a `CLAUDE.md` or `AGENTS.md` in it (any case; `checkGuides`), the files coding assistants read, so one guide serves an assistant working on the files and one working through Zone.
+The user's instructions for writing the pages in a folder and its subfolders live in a `CLAUDE.md` or `AGENTS.md` in it (any case; `checkGuides`), the files coding assistants read, so one guide serves an assistant working on the files and one working through Zonewiki.
 `wiki-guide` and a `CLAUDE.md`/`AGENTS.md` at the root are the whole wiki's.
 The guides for a page (`folderGuides`) are the root's, then each folder's on the way down to the page's.
 A line that is only `@other.md` is replaced by that page's text, relative to the guide's folder (`guideText`, Claude Code's import), at most 3 deep.
@@ -690,8 +690,8 @@ The tools' descriptions say only that a move to fewer readers is an admin's, or 
 
 ## Links and file paths
 
-**Links** in tool results start with `base-url` from the settings file (e.g. `http://localhost:5080`, Zone's address as your browser knows it) when set, else with the address the request came in on (`siteURL`, as the page and OAuth's addresses: https when Zone's own connection is, or a proxy's `X-Forwarded-Proto: https` says so).
-A client in a container reaches Zone as `host.containers.internal`, and links with that host don't open in the browser on the host.
+**Links** in tool results start with `base-url` from the settings file (e.g. `http://localhost:5080`, Zonewiki's address as your browser knows it) when set, else with the address the request came in on (`siteURL`, as the page and OAuth's addresses: https when Zonewiki's own connection is, or a proxy's `X-Forwarded-Proto: https` says so).
+A client in a container reaches Zonewiki as `host.containers.internal`, and links with that host don't open in the browser on the host.
 
 **File paths** (`file:`, `hostFile`: search_wiki's sections, read_page) are the host's wiki folder plus `<slug>.md` (a slug is the file's path relative to the wiki, unchanged): `ZONE_HOST_DATA`, which `run.sh` sets to `ZONE_DATA`'s host path, since inside the container the wiki is only `/wiki-data`;
 unset (no container), `ZONE_DATA` resolved.
@@ -763,29 +763,29 @@ A call with no `Authorization` header at all is no guess and isn't counted again
 
 #### The metadata
 
-No login needed: `GET /.well-known/oauth-protected-resource/mcp` and `/.well-known/oauth-protected-resource` (RFC 9728: `resource`, the address of `/mcp`; `authorization_servers`, Zone's own address) and `GET /.well-known/oauth-authorization-server` (RFC 8414: the endpoints below, `code_challenge_methods_supported: ["S256"]`, `token_endpoint_auth_methods_supported: ["none"]`).
+No login needed: `GET /.well-known/oauth-protected-resource/mcp` and `/.well-known/oauth-protected-resource` (RFC 9728: `resource`, the address of `/mcp`; `authorization_servers`, Zonewiki's own address) and `GET /.well-known/oauth-authorization-server` (RFC 8414: the endpoints below, `code_challenge_methods_supported: ["S256"]`, `token_endpoint_auth_methods_supported: ["none"]`).
 The addresses are on `base-url`, else on the address the request came in on (`siteURL`): behind a proxy set `base-url`, or `resource` won't be the address the user typed and the client refuses it.
 
 #### Registration
 
 `POST /oauth/register` (RFC 7591; no login, any origin): a client sends its `client_name` and `redirect_uris` and gets a `client_id`.
 Public clients only: there is no secret.
-Zone keeps nothing: the client id *is* the name and the redirect URIs, signed with Zone's key (`.zone/secret_key`; `oauthClient.id`, `clientOf`), so strangers calling the endpoint leave nothing behind, and a client id Zone didn't sign is no client.
+Zonewiki keeps nothing: the client id *is* the name and the redirect URIs, signed with Zonewiki's key (`.zone/secret_key`; `oauthClient.id`, `clientOf`), so strangers calling the endpoint leave nothing behind, and a client id Zonewiki didn't sign is no client.
 A redirect URI is `https`, or `http` on `localhost`, `127.0.0.1` or `[::1]` (a program on the user's computer, RFC 8252), without a fragment or a user, its host in ASCII (an international name as its punycode, `xn--…`, also when sent percent-encoded); one to ten of them (**400** `invalid_redirect_uri`).
 So the question and Connect an assistant show every host as it is spelled: a name in letters that look like Latin ones (`clаude.ai` with a Cyrillic а) can't pass there for the name it copies.
 Other schemes (`cursor://` …) are refused for now.
-Client ID Metadata Documents aren't offered yet (the metadata doesn't advertise them, so clients register): they would have Zone fetch an address a stranger names.
+Client ID Metadata Documents aren't offered yet (the metadata doesn't advertise them, so clients register): they would have Zonewiki fetch an address a stranger names.
 
 #### The question's checks
 
 What The question (above) checks before and after the user answers:
 
-- Before anything is shown, the client id and the redirect URI are checked: one Zone doesn't know is a page saying so (**400**), never a redirect.
+- Before anything is shown, the client id and the redirect URI are checked: one Zonewiki doesn't know is a page saying so (**400**), never a redirect.
   The answer goes only where the registration said: that address exactly, or for a program on this computer the same address at whatever port.
 - What else the client got wrong (no `response_type=code`, no PKCE challenge with `S256`, a `resource` that isn't this wiki's `/mcp`) is a page too (400), with a link back that tells the client (`error=…`).
 - The POST of Allow is behind the Origin check as every form.
 - **The answer is a page, not a redirect**: "Connected", with a `Refresh` header that sends the browser on to the client (`<redirect_uri>?code=…&state=…&iss=…`) and the same address as a link.
-  The page policy lets a form lead only to Zone itself (`form-action 'self'`), and browsers hold a form's redirects to that, so a redirect would be blocked; this way the policy stays as it is.
+  The page policy lets a form lead only to Zonewiki itself (`form-action 'self'`), and browsers hold a form's redirects to that, so a redirect would be blocked; this way the policy stays as it is.
   Deny goes back the same way with `error=access_denied`.
 - The code is 32 random bytes, kept in memory as its hash for a minute, for one use (`authCodes`; a restart drops the few that are open).
   Used, it is remembered for ten minutes (`spentFor`) with the connection made with it: one used again was copied (the client, or whoever read it on the way, has the tokens), so that connection is ended and the log says so (RFC 6749, 4.1.2), also when the second use came while the first was still being answered.
@@ -795,7 +795,7 @@ What The question (above) checks before and after the user answers:
 `POST /oauth/token` (form-encoded; no login, any origin): `grant_type=authorization_code` with the `code`, its `code_verifier` (PKCE, S256), the same `client_id` and `redirect_uri`; or `grant_type=refresh_token` with the `refresh_token` and `client_id`.
 The answer: an `access_token` (an hour), a `refresh_token`, `token_type: Bearer`, `scope: mcp`.
 
-- Both are 32 random bytes and Zone keeps only their hashes, as of a static token; not JWTs, so ending a connection takes effect at once.
+- Both are 32 random bytes and Zonewiki keeps only their hashes, as of a static token; not JWTs, so ending a connection takes effect at once.
 - **A refresh token works once**: each use gives a new pair, and the access token before stops working.
   Unused for 90 days it expires, and the connection with it.
   One used a second time was copied (the client, or a thief, has a newer one): the connection is ended and the log says so.

@@ -15,7 +15,7 @@ import (
 )
 
 // setUpTasks: what a start does over the task files: closed tasks filed by
-// month, tasks filed by list and files written in Zone's format
+// month, tasks filed by list and files written in Zonewiki's format
 // (ArchiveOldClosed), and with users a shared task in no list given the
 // list "general" (fileInGeneral). All of that reads and encodes every task
 // of the wiki's years, so it is done when something may need it, not at
@@ -39,7 +39,7 @@ func setUpTasks() {
 // fileInGeneral: with users a shared task is always in a list. One in none
 // (a wiki whose users were turned on later, a file edited by hand) goes to
 // the shared list "general", made for it and pinned for the wiki, and is
-// filed in its folder, in one commit by Zone. A task file that can't be
+// filed in its folder, in one commit by Zonewiki. A task file that can't be
 // read stops it before anything is written.
 func fileInGeneral() error {
 	if settings().Users == nil {
@@ -101,7 +101,7 @@ func fileInGeneral() error {
 }
 
 // tasksCheckedPath: the mark that the task files are as a start of this
-// Zone leaves them, in Zone's folder of the wiki (out of git).
+// Zonewiki leaves them, in Zonewiki's folder of the wiki (out of git).
 func tasksCheckedPath() string { return statePath("tasks-checked") }
 
 // tasksCheckedMark: what the mark says: the layout a start leaves (2: each
@@ -126,12 +126,12 @@ func taskDirs() []string {
 	return dirs
 }
 
-// tasksChecked: the task files are as a start of this Zone left them, so
+// tasksChecked: the task files are as a start of this Zonewiki left them, so
 // this start needn't read them all to file tasks by month and list, write
-// hand-edited files in Zone's format and give a shared task its list. The
+// hand-edited files in Zonewiki's format and give a shared task its list. The
 // mark says that a start did all of that, for a wiki with users or without
-// as it is now, and names the commit the task files were last Zone's at
-// (it follows Zone's own commits of them: noteTaskCommit); and git says
+// as it is now, and names the commit the task files were last Zonewiki's at
+// (it follows Zonewiki's own commits of them: noteTaskCommit); and git says
 // that nothing else wrote a task file since: none differs from what is
 // committed (a file edited by hand, a write whose commit failed), and no
 // commit after the mark's touches one (a commit by hand, one pulled from
@@ -160,7 +160,7 @@ func tasksChecked() bool {
 }
 
 // tasksSetUp: the wiki whose task files this run set up (setUpTasks), so
-// its mark may follow Zone's commits; the commit it moves to next, and the
+// its mark may follow Zonewiki's commits; the commit it moves to next, and the
 // timer that moves it.
 var tasksSetUp struct {
 	sync.Mutex
@@ -172,11 +172,11 @@ var tasksSetUp struct {
 // (once for the commits of a burst).
 var taskMarkDelay = 3 * time.Second
 
-// noteTaskCommit: Zone made the commit sha of these files (as git names
+// noteTaskCommit: Zonewiki made the commit sha of these files (as git names
 // them). When a task file is among them, the mark moves to that commit
-// soon, so that the next start still takes the task files for Zone's own:
-// to Zone's commit, not to wherever the repository is by then, so a commit
-// by someone else after it is still seen. A Zone that stops before that
+// soon, so that the next start still takes the task files for Zonewiki's own:
+// to Zonewiki's commit, not to wherever the repository is by then, so a commit
+// by someone else after it is still seen. A Zonewiki that stops before that
 // reads them all once at its next start.
 func noteTaskCommit(changed []string, sha string) {
 	touches := false

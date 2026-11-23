@@ -15,7 +15,7 @@ var testKeys = Keys{Top: []string{"locale", "noshare", "hosts"}, User: []string{
 func parse(text string) (*File, error) { return Parse("config", text, testKeys) }
 
 func TestParseConfig(t *testing.T) {
-	f, err := parse("\ufeff# Zone\r\nlocale = de-AT\n  # indented comment\nnoshare = #noshare, people/\n\n" +
+	f, err := parse("\ufeff# Zonewiki\r\nlocale = de-AT\n  # indented comment\nnoshare = #noshare, people/\n\n" +
 		"[user alice]\npassword = h=1\nmcp-token=  tok  \n[ user   mary-ann ]\n")
 	if err != nil {
 		t.Fatal(err)
@@ -55,14 +55,14 @@ func TestParseConfig(t *testing.T) {
 }
 
 func TestConfigFileEdits(t *testing.T) {
-	f, _ := parse("# Zone's settings\n# more\n\nlocale = de\n\n# Alice, admin\n[user alice]\npassword = a\n\n" +
+	f, _ := parse("# Zonewiki's settings\n# more\n\nlocale = de\n\n# Alice, admin\n[user alice]\npassword = a\n\n" +
 		"# Bob\n[user bob]\npassword = b\n")
 	f.Set("", "hosts", "x")
 	f.Set("", "locale", "en")
 	f.Set("alice", "mcp-token", "t")
 	f.Set("bob", "password", "b2")
 	f.Set("carol", "password", "c")
-	want := "# Zone's settings\n# more\n\nlocale = en\nhosts = x\n\n# Alice, admin\n[user alice]\npassword = a\n" +
+	want := "# Zonewiki's settings\n# more\n\nlocale = en\nhosts = x\n\n# Alice, admin\n[user alice]\npassword = a\n" +
 		"mcp-token = t\n\n# Bob\n[user bob]\npassword = b2\n\n[user carol]\npassword = c\n"
 	if f.Text() != want {
 		t.Fatalf("set:\n%s\nwant:\n%s", f.Text(), want)
@@ -70,26 +70,26 @@ func TestConfigFileEdits(t *testing.T) {
 	f.RemoveUser("alice")
 	f.RemoveUser("carol")
 	f.RemoveUser("nobody")
-	want = "# Zone's settings\n# more\n\nlocale = en\nhosts = x\n\n# Bob\n[user bob]\npassword = b2\n"
+	want = "# Zonewiki's settings\n# more\n\nlocale = en\nhosts = x\n\n# Bob\n[user bob]\npassword = b2\n"
 	if f.Text() != want {
 		t.Fatalf("remove:\n%s\nwant:\n%s", f.Text(), want)
 	}
-	f, _ = parse("# Zone\n[user a]\npassword = x\n")
-	if f.RemoveUser("a"); f.Text() != "# Zone\n" {
+	f, _ = parse("# Zonewiki\n[user a]\npassword = x\n")
+	if f.RemoveUser("a"); f.Text() != "# Zonewiki\n" {
 		t.Errorf("the file's own comment went: %q", f.Text())
 	}
-	f, _ = parse("# Zone\n\n[user a]\npassword = x\n")
-	if f.Set("", "locale", "de"); f.Text() != "# Zone\nlocale = de\n\n[user a]\npassword = x\n" {
+	f, _ = parse("# Zonewiki\n\n[user a]\npassword = x\n")
+	if f.Set("", "locale", "de"); f.Text() != "# Zonewiki\nlocale = de\n\n[user a]\npassword = x\n" {
 		t.Errorf("before the users: %q", f.Text())
 	}
-	f, _ = parse("# Zone\n[user a]\npassword = x\n")
-	if f.Set("", "locale", "de"); f.Text() != "# Zone\nlocale = de\n\n[user a]\npassword = x\n" {
+	f, _ = parse("# Zonewiki\n[user a]\npassword = x\n")
+	if f.Set("", "locale", "de"); f.Text() != "# Zonewiki\nlocale = de\n\n[user a]\npassword = x\n" {
 		t.Errorf("before the users: %q", f.Text())
 	}
 	// Into a file of comments only: below them.
-	f, _ = parse("# Zone\n\n# end\n")
+	f, _ = parse("# Zonewiki\n\n# end\n")
 	f.Set("", "locale", "de")
-	if f.Text() != "# Zone\nlocale = de\n\n# end\n" {
+	if f.Text() != "# Zonewiki\nlocale = de\n\n# end\n" {
 		t.Errorf("%q", f.Text())
 	}
 }

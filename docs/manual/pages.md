@@ -18,11 +18,11 @@ Some folders are special when your wiki has several users:
 `private/<you>/` holds pages only you see, and `groups/<name>/` holds a group's pages (see [Teams](teams.md)).
 
 Because pages are plain files, you can also edit them in any text editor on disk.
-Zone picks up the change (see [uncommitted changes](history.md#uncommitted-changes)).
+Zonewiki picks up the change (see [uncommitted changes](history.md#uncommitted-changes)).
 
 ## The page view
 
-![A wiki page in Zone: the page in the middle, "On this page" on the left, Backlinks, Linked tasks and Links to on the right](../screenshots/page.png)
+![A wiki page in Zonewiki: the page in the middle, "On this page" on the left, Backlinks, Linked tasks and Links to on the right](../screenshots/page.png)
 
 ### The header and the page menu
 
@@ -128,13 +128,13 @@ On a private page, a red link that would make a shared page is marked 🌐, and 
 ## Renaming a page
 
 Choose **Rename…** in the page's ⋯ menu (or **Rename…** in the editor's toolbar), type the new name and click **Rename**.
-You can type a title like "Garden Shed 2027"; Zone turns it into a name.
+You can type a title like "Garden Shed 2027"; Zonewiki turns it into a name.
 
 Every link to the page follows: wikilinks keep their label, Markdown links keep their style and anchor.
 Links in code are left as written.
 The page's history follows it to its new name.
 
-Zone refuses a name another page already has; nothing is overwritten.
+Zonewiki refuses a name another page already has; nothing is overwritten.
 The home page can't be renamed.
 
 ## Moving a page into a folder
@@ -172,7 +172,7 @@ It's an ordinary page: put on it whatever helps you find your way, such as links
 It can't be renamed or deleted.
 
 With several users, your private home (`private/<you>/index`) and each group's home (`groups/<name>/index`) work the same way.
-Zone makes each the first time you open it.
+Zonewiki makes each the first time you open it.
 
 ## Frontmatter
 
@@ -200,7 +200,7 @@ Dates aren't needed: the page's history knows when it changed.
 ## Uploads and images
 
 To add a file or image to a page, paste it or drag it into the editor, or click **Attach** in the formatting bar.
-Zone uploads it and writes the link for you:
+Zonewiki uploads it and writes the link for you:
 an image as `![name](url)`, which shows the image, any other file as `[name](url)`, a link to download it.
 
 - Files are kept in an `_assets/` folder next to the pages: the wiki's own, or your private folder's or a group's for a page there, so they're seen by the same people as the page.
@@ -211,4 +211,4 @@ Click an image on a page to see it full size.
 Set an image's width with `|` and a number of pixels in its description: `![Shed plan|300](…)`.
 
 An image from another website isn't loaded, so a page can't leak what you read to other sites.
-It shows as a link marked 🖼 instead, unless the person running your Zone allowed that site.
+It shows as a link marked 🖼 instead, unless the person running your Zonewiki allowed that site.

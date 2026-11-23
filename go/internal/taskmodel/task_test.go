@@ -44,8 +44,8 @@ func TestAssignedEventNamesItsUsers(t *testing.T) {
 	}
 }
 
-// A task as the Python Zone wrote it (its key order, 1.0, a key it no
-// longer knows, a field missing) reads into a Task and is written in Zone's
+// A task as the Python Zonewiki wrote it (its key order, 1.0, a key it no
+// longer knows, a field missing) reads into a Task and is written in Zonewiki's
 // order, the unknown keys last (A–Z) and kept; written again, nothing
 // changes.
 func TestTaskFileRoundTrip(t *testing.T) {
@@ -247,7 +247,7 @@ func TestSame(t *testing.T) {
 	}
 }
 
-// A key Zone knows is written once: who made a task (created_by) and who
+// A key Zonewiki knows is written once: who made a task (created_by) and who
 // follows it (followers) are fields, not keys kept as the file had them.
 // (Until 2026-11-16 created_by was both, and a task read from its file was
 // written with the key twice.)

@@ -1,4 +1,4 @@
-"""Help: Zone's manual in the browser (/help), the spec beside it, the
+"""Help: Zonewiki's manual in the browser (/help), the spec beside it, the
 manual in zone_help, and zonewiki manual DIR (docs/spec/routes.md, Help)."""
 
 import html
@@ -81,7 +81,7 @@ def test_headings_are_unique_in_each_page():
 def test_the_contents_and_a_page(client):
     resp = client.get("/help")
     text = resp.data.decode()
-    assert resp.status_code == 200 and "<title>Zone&#39;s manual" in text
+    assert resp.status_code == 200 and "<title>Zonewiki&#39;s manual" in text
     assert 'href="/help/getting-started"' in text   # README's getting-started.md
     assert 'class="help-next" href="/help/getting-started"' in text
     text = client.get("/help/tasks").data.decode()
@@ -102,7 +102,7 @@ def test_screenshots(client):
     for path in ("/help/screenshots/make_screenshots.py", "/help/screenshots/nope.png"):
         assert client.get(path).status_code == 404, path
     resp = client.get("/help/screenshots/..%2f..%2fREADME.md")
-    assert resp.status_code != 200 and b"# Zone" not in resp.data
+    assert resp.status_code != 200 and b"# Zonewiki" not in resp.data
 
 
 @pytest.mark.parametrize("path", ["/help/nope", "/help/README", "/help/spec/nope", "/help/spec/../../README",
@@ -158,7 +158,7 @@ def test_manual_command_writes_fragments(tmp_path):
                          capture_output=True, text=True, timeout=60)
     assert run.returncode == 0, run.stderr
     listed = json.loads((out / "pages.json").read_text())
-    assert listed[0] == {"name": "", "file": "index.html", "title": "Zone's manual", "manual": True}
+    assert listed[0] == {"name": "", "file": "index.html", "title": "Zonewiki's manual", "manual": True}
     files = {e["file"] for e in listed}
     assert {"tasks.html", "spec/index.html", "spec/tasks.html"} <= files
     assert all((out / f).is_file() for f in files)

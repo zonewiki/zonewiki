@@ -1,4 +1,4 @@
-"""Zone on a Unix socket (--addr unix:PATH, A Unix socket in
+"""Zonewiki on a Unix socket (--addr unix:PATH, A Unix socket in
 docs/spec/deployment.md): for a reverse proxy on the same machine, with no
 port. zonewiki health asks over the socket, and a peer there counts as
 localhost, so the proxy's X-Forwarded-For names the client for the throttle.
@@ -37,12 +37,12 @@ class SocketConnection(http.client.HTTPConnection):
 
 @pytest.fixture()
 def zone(wiki_dir, tmp_path, monkeypatch):
-    """Zone with a password, on a socket; returns the socket's path."""
+    """Zonewiki with a password, on a socket; returns the socket's path."""
     monkeypatch.setattr(settings, "PASSWORD", "pw")
     folder = tempfile.mkdtemp(prefix="zone")   # short: a socket's path holds 107 bytes
     server = GoServer(_settings(), tmp_path / "server.log", f"unix:{folder}/zone.sock", _flags())
     try:
-        assert server.host == f"unix:{folder}/zone.sock"   # the line Zone prints names it as --addr does
+        assert server.host == f"unix:{folder}/zone.sock"   # the line Zonewiki prints names it as --addr does
         yield f"{folder}/zone.sock"
     finally:
         server.stop()
@@ -75,7 +75,7 @@ def test_the_proxy_names_the_client(zone):
 @pytest.fixture()
 def held(wiki_dir, tmp_path, monkeypatch):
     """A listening socket this test holds, as systemd holds a socket unit's;
-    returns (the socket, its path, a function that starts Zone on it)."""
+    returns (the socket, its path, a function that starts Zonewiki on it)."""
     monkeypatch.setattr(settings, "PASSWORD", "pw")
     folder = tempfile.mkdtemp(prefix="zone")
     holder = socket.socket(socket.AF_UNIX)
@@ -100,7 +100,7 @@ def held(wiki_dir, tmp_path, monkeypatch):
 
 def get(path, url, timeout=None):
     """The status of a GET over the socket; None when nothing answers within
-    timeout seconds (no Zone is listening: the request waits in the socket)."""
+    timeout seconds (no Zonewiki is listening: the request waits in the socket)."""
     conn = SocketConnection(path)
     conn.timeout = timeout
     try:
@@ -125,12 +125,12 @@ def test_zone_exits_when_nobody_asks_and_the_next_request_waits(held):
     # The healthcheck alone doesn't: it exits, with 0, and leaves the socket.
     until = time.monotonic() + 10
     while server.proc.poll() is None and time.monotonic() < until:
-        # One sent as Zone goes is answered by nobody (it waits in the socket,
+        # One sent as Zonewiki goes is answered by nobody (it waits in the socket,
         # as the request below does): it must not wait for ever.
         assert get(path, "/api/health", timeout=2) in (200, None)
         time.sleep(0.2)
     assert server.proc.wait(10) == 0
-    # A request that comes now waits in the socket, and the next Zone answers it.
+    # A request that comes now waits in the socket, and the next Zonewiki answers it.
     conn = SocketConnection(path)
     conn.request("GET", "/login")
     start()

@@ -19,7 +19,7 @@ Above the list:
 
 | Control | Does |
 |---------|------|
-| **Sort by** | **Recently edited**, **Title A–Z**, **Title Z–A** or **Most linked**. Zone remembers your choice. |
+| **Sort by** | **Recently edited**, **Title A–Z**, **Title Z–A** or **Most linked**. Zonewiki remembers your choice. |
 | **Unlinked only** | Shows only pages no other page links to: good for finding pages that got lost. |
 
 **Changes** and **Deleted Pages** are pinned at the top of the list (see [History and undo](history.md)).

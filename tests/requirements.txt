@@ -1,5 +1,5 @@
 # What the tests need besides Go (the tools image, Containerfile.tools, has
-# both): pytest runs them against Zone's server, Playwright drives Chromium
+# both): pytest runs them against Zonewiki's server, Playwright drives Chromium
 # for the browser tests, werkzeug gives tests/goserver.py's client Flask's
 # test-client interface. Exact versions, the transitive ones too: keep
 # playwright equal to the tools image's tag.

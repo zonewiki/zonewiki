@@ -15,8 +15,8 @@ import (
 	"zonewiki/internal/textsearch"
 )
 
-// The text functions' answers on every string in Zone's tests of 2026-10
-// and some edge cases, recorded then from the Python Zone before it was
+// The text functions' answers on every string in Zonewiki's tests of 2026-10
+// and some edge cases, recorded then from the Python Zonewiki before it was
 // removed: they still give them. The browser's copies of some of them
 // (public/js/mdtext.js) are held to the same file by
 // tests/test_text_parity.py, so the two sides can't drift apart. A

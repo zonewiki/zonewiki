@@ -80,7 +80,7 @@ func TestUsageCountsWhatTheUserHas(t *testing.T) {
 	freshUsage(t)
 	for name, size := range map[string]int{
 		"_assets/photo.png": 100, "_tasks/tasks.json": 10, "private/alice/b.md": 7, ".obsidian/app.json": 2,
-		// Not the user's: git's history, Zone's own folder.
+		// Not the user's: git's history, Zonewiki's own folder.
 		".git/objects/pack/x.pack": 1000, ".zone/index/cache": 5000,
 	} {
 		p := filepath.Join(cfg.Data, filepath.FromSlash(name))

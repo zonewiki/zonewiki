@@ -1,6 +1,6 @@
 """Browser (end-to-end) test harness.
 
-Runs Zone's server, a process per test (tests/goserver.py), and drives it
+Runs Zonewiki's server, a process per test (tests/goserver.py), and drives it
 with headless Chromium via Playwright. Every test gets a fresh temp wiki
 (with a real git repo) and a fresh browser context (clean
 localStorage/sessionStorage).
@@ -158,7 +158,7 @@ def list_page(page, wiki: "Wiki", slug: str, content: str) -> Path:
     private/), with the embed's list settings (view, keep, limit, plan,
     labels, new) when it was made here, and pinned as a pin= in the embed
     says. A list is no longer declared by a page nor pinned by one: pin= in
-    the text means nothing to Zone, it tells this helper what the test
+    the text means nothing to Zonewiki, it tells this helper what the test
     wants. Code is skipped."""
     path = wiki.write(slug, content)
     text = re.sub(r"```.*?```|`[^`\n]*`", "", content, flags=re.S)
@@ -187,10 +187,10 @@ def list_page(page, wiki: "Wiki", slug: str, content: str) -> Path:
 WAIT_MS = 15_000
 expect.set_options(timeout=WAIT_MS)
 
-# Whether the page takes clicks and keys as Zone's code means them: its
+# Whether the page takes clicks and keys as Zonewiki's code means them: its
 # entry module has run (<html data-ready>, public/zonewiki.js) and every
 # task list that started shows its tasks (data-loaded, js/taskdata.js). A
-# page without Zone's script (a download, an error page) is ready as it is;
+# page without Zonewiki's script (a download, an error page) is ready as it is;
 # one still being read is not yet known to be such a page (wait_for_url
 # returns when the address is the new one, before any of the page is there).
 READY_JS = """() => {
@@ -422,7 +422,7 @@ def browser():
 def _new_page(browser, base_url, *, viewport=DESKTOP, color_scheme="light", **context_opts):
     ctx = browser.new_context(base_url=base_url, viewport=viewport, color_scheme=color_scheme,
                               **context_opts)
-    # Zone loads nothing from other hosts (no CDN; highlight.js is vendored).
+    # Zonewiki loads nothing from other hosts (no CDN; highlight.js is vendored).
     # Such a request is blocked, keeping runs offline, and fails the test.
     host = base_url.split("//", 1)[1]
     external = []
@@ -439,7 +439,7 @@ def _new_page(browser, base_url, *, viewport=DESKTOP, color_scheme="light", **co
     page.on("pageerror", lambda exc: errors.append(str(exc)))
     page.js_errors = errors
     page.external_requests = external
-    # Zone's own pages must run under its Content-Security-Policy (script-src
+    # Zonewiki's own pages must run under its Content-Security-Policy (script-src
     # 'self': no inline scripts or handlers). Chromium reports a blocked one
     # on the console; a test that blocks one on purpose clears the list.
     violations = []

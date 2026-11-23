@@ -1,9 +1,9 @@
 # Rendering
 
-Part of Zone's spec (see `AGENTS.md` for the index).
+Part of Zonewiki's spec (see `AGENTS.md` for the index).
 
-How a page looks and what its markdown can say, first: the page view (its header, menu, copy links, folding, printing), Zone's markdown (raw HTML, autolinks, callouts, images), wikilinks, task references, frontmatter, math and diagrams, sortable tables, and a page's version history.
-How it is built comes after: how a page is rendered on the server (goldmark and Zone's rules, heading ids, templates) and the browser's code (Client code).
+How a page looks and what its markdown can say, first: the page view (its header, menu, copy links, folding, printing), Zonewiki's markdown (raw HTML, autolinks, callouts, images), wikilinks, task references, frontmatter, math and diagrams, sortable tables, and a page's version history.
+How it is built comes after: how a page is rendered on the server (goldmark and Zonewiki's rules, heading ids, templates) and the browser's code (Client code).
 
 ## The page view
 
@@ -14,7 +14,7 @@ How it is built comes after: how a page is rendered on the server (goldmark and 
 The HTML shell includes: the notice line across the top when the settings file has one (The notice in `docs/spec/users.md`), status badges, breadcrumb (with the module switcher), page header (title, Edit, the ⋯ page menu), content area, backlinks, the action bar, and the search/shortcut/new-note modals.
 There is no nav bar (see Modules in `docs/spec/navigation.md`).
 
-The shared shell renders the product brand as `Zone` (page titles, the switcher's accessible name), with a small green inline SVG logo, the open frame (`site-logo` in `templates/partials/icons.html`) on the breadcrumb's Wiki link.
+The shared shell renders the product brand as `Zonewiki` (page titles, the switcher's accessible name), with a small green inline SVG logo, the open frame (`site-logo` in `templates/partials/icons.html`) on the breadcrumb's Wiki link.
 
 ### Page header
 
@@ -86,16 +86,16 @@ The chevron hangs in the margin left of the heading from 800px wide (the copy-li
 ### Print and PDF
 
 A page is printed, or saved as a PDF, by the browser: **Print…** in the page's ⋯ menu opens the browser's print dialog, where a printer prints it and "Save as PDF" (the destination, in Chrome, Edge, Firefox and Safari alike) makes the file; Ctrl+P does the same.
-Zone makes no PDF itself: no renderer on the server, and the file looks as the page does.
+Zonewiki makes no PDF itself: no renderer on the server, and the file looks as the page does.
 
 - **What is on the paper** (`@media print` at the end of `style.css`): the page alone, its title, tags, "Last changed", the tldr (shown, not behind its switch) and the text, at the paper's width (`@page` margins 18mm and 16mm).
-  Not Zone around it: the breadcrumb, the top row and the phone's bar, the side columns, Edit and ⋯, the section ✎ and task chips, what links to the page, the build string; a task list embed shows its tasks without its tabs, toolbar and menus.
+  Not Zonewiki around it: the breadcrumb, the top row and the phone's bar, the side columns, Edit and ⋯, the section ✎ and task chips, what links to the page, the build string; a task list embed shows its tasks without its tabs, toolbar and menus.
   The sheet's border and padding go (the paper is the sheet).
 - **Always light**: the dark variables and dark rules are for screens (`@media screen and (prefers-color-scheme: dark)`), and code is highlighted with the light theme (`media="print, …"` on its stylesheet in `layout.html`), so a dark screen prints dark ink on white.
 - **Page breaks**: none right after a heading; code blocks, quotes, callouts, images, diagrams and table rows are kept whole where they fit; code wraps instead of being cut off where the screen would scroll.
 - **Folded sections** print unfolded (`beforeprint`, see Folding sections).
 - **Print…** (`printPage` in `js/pagemenu.js`) does two things Ctrl+P can't:
-  the tab's title is the page's title while the dialog is open, so the file is named "Garden plan.pdf", not "Garden plan — Zone.pdf";
+  the tab's title is the page's title while the dialog is open, so the file is named "Garden plan.pdf", not "Garden plan — Zonewiki.pdf";
   and on a dark screen the Mermaid diagrams are drawn again in the light theme first (`diagramsForPaper` in `js/figures.js`), and in the dark one after (`afterprint`).
 
 ### Table of Contents
@@ -104,16 +104,16 @@ A page's contents are listed by the side column on big screens ("On this page", 
 The `[[toc]]` directive, a box of the same links inside the text, was removed in 2026-10 as unused next to it; a `[[toc]]` left in a page is an ordinary wikilink now (to a page named toc).
 The TOC ignores `##` lines inside fences.
 
-## Markdown in Zone
+## Markdown in Zonewiki
 
-Pages are markdown as goldmark reads it (GFM), with Zone's additions: the sections below, and wikilinks, task references, frontmatter, math and diagrams in their own sections.
+Pages are markdown as goldmark reads it (GFM), with Zonewiki's additions: the sections below, and wikilinks, task references, frontmatter, math and diagrams in their own sections.
 
 ### Raw HTML
 
-Raw HTML in a page is rendered as written (goldmark's `WithUnsafe`), but no script in it runs: the Content-Security-Policy allows only Zone's own script files (Scripts in pages don't run, `docs/spec/security.md`);
-nor does a form, an iframe's `srcdoc` or a link's `ping` (No form in a page posts to Zone either, there), and an `<iframe>` shows an upload but no view of Zone's (Framing, there).
-Form controls, `<meta>`, `<base>`, `<link>` and `<script>` in it show as text (`defuseHTML`: a form in a page could post to Zone as the viewer; a `<script type="application/json">` would be data Zone's own scripts read).
-Its ids and names get `user-content-` in front (`<a name="note">` is `user-content-note`, as on GitHub), so none stands in for one of Zone's elements;
+Raw HTML in a page is rendered as written (goldmark's `WithUnsafe`), but no script in it runs: the Content-Security-Policy allows only Zonewiki's own script files (Scripts in pages don't run, `docs/spec/security.md`);
+nor does a form, an iframe's `srcdoc` or a link's `ping` (No form in a page posts to Zonewiki either, there), and an `<iframe>` shows an upload but no view of Zonewiki's (Framing, there).
+Form controls, `<meta>`, `<base>`, `<link>` and `<script>` in it show as text (`defuseHTML`: a form in a page could post to Zonewiki as the viewer; a `<script type="application/json">` would be data Zonewiki's own scripts read).
+Its ids and names get `user-content-` in front (`<a name="note">` is `user-content-note`, as on GitHub), so none stands in for one of Zonewiki's elements;
 a link to it works as written (`[see](#note)`: `hashTarget` in `js/util.js` finds it, and `js/page.js` scrolls there), and an SVG's `url(#g)` is pointed at its gradient's new id too;
 a page's own `<style>` selects such an element as `#user-content-…`.
 
@@ -124,12 +124,12 @@ a page's own `<style>` selects such an element as `#user-content-…`.
   It covers text the editor's paste prompt never saw: files edited on disk, an unnamed paste, a URL inside pasted text.
 - **External links open in a new tab**: a link to another site (http/https, not the host the request came in on) gets `target="_blank" rel="noopener noreferrer"` (`zoneTransformer.external`, on the parsed document, so autolinks too);
   `js/taskutil.js` does the same for links in task titles (`extAttrs`).
-  Zone's own links, `mailto:` and a full URL to Zone itself stay in the tab.
+  Zonewiki's own links, `mailto:` and a full URL to Zonewiki itself stay in the tab.
 
 ### Callouts
 
 **Callouts** (GitHub/Obsidian syntax, `alertTransformer`): a blockquote starting with `[!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]` or `[!CAUTION]` renders as `<div class="markdown-alert markdown-alert-<kind>">` with a title line.
-Styled in `style.css`: GitHub's kinds in Zone's palette (slate, the accent green, plum, ochre, brick), a `--alert` variable per kind, dark variants.
+Styled in `style.css`: GitHub's kinds in Zonewiki's palette (slate, the accent green, plum, ochre, brick), a `--alert` variable per kind, dark variants.
 Custom titles (`> [!TIP] My title`) are not supported; that stays a plain quote.
 
 ### Image sizing
@@ -151,7 +151,7 @@ See Description in `docs/spec/tasks.md`.
 
 ### Since the Go server (2026-10)
 
-Zone rendered with markdown-it until the server moved to Go; goldmark renders differently where no Zone feature depends on it, and nothing a page relies on changed (checkboxes, callouts, heading ids, ✎ and ☑ chips, image widths, external links, task-date chips render as before).
+Zonewiki rendered with markdown-it until the server moved to Go; goldmark renders differently where no Zonewiki feature depends on it, and nothing a page relies on changed (checkboxes, callouts, heading ids, ✎ and ☑ chips, image widths, external links, task-date chips render as before).
 What reads differently:
 
 - Footnote markers read `1`, not `[1]`; ids are `fn:1`, not `fn1`.
@@ -232,7 +232,7 @@ Unknown id: a red dashed `task <id>?` (`.task-ref-missing`).
 A reference alone in a list item makes that `<li class="task-ref-item">`, a checklist row without the chip's box.
 
 A completed recurring task stands for its series: the reference follows `spawned_from` to the current occurrence, so ticking it and reloading shows the next one.
-That link is Zone's own: a task restored or imported keeps `spawned_from` only when it comes back as Zone had it (the undo of its delete; Who made a change in `docs/spec/users.md`), so nobody makes a reference to a closed task stand for a task of theirs.
+That link is Zonewiki's own: a task restored or imported keeps `spawned_from` only when it comes back as Zonewiki had it (the undo of its delete; Who made a change in `docs/spec/users.md`), so nobody makes a reference to a closed task stand for a task of theirs.
 
 ### Ticking a chip
 
@@ -341,7 +341,7 @@ It uses a small negative top margin (`margin: -1.1rem 0 1.5rem`) to sit close un
 
 #### Last changed
 
-What git says of the page for that line (`lastChanged` in `go/views.go`: changes not committed, or the last commit's day and time, shown as "3 days ago" in Zone's own words) is kept per page while neither the page's file nor the repository changed (`changeStamp`: the file's time and size, and those of `.git/logs/HEAD` and `.git/index`, which Zone's commits write and so do a commit, pull or checkout in a terminal),
+What git says of the page for that line (`lastChanged` in `go/views.go`: changes not committed, or the last commit's day and time, shown as "3 days ago" in Zonewiki's own words) is kept per page while neither the page's file nor the repository changed (`changeStamp`: the file's time and size, and those of `.git/logs/HEAD` and `.git/index`, which Zonewiki's commits write and so do a commit, pull or checkout in a terminal),
 so a view of a page seen before starts no git process;
 a repository without a reflog is asked at every view.
 
@@ -365,7 +365,7 @@ The open text sets only its top and bottom margins: from 1320px the side columns
 
 Both render in the browser from vendored copies (`public/vendor/katex/`, `public/vendor/mermaid/`; see Dependencies in `AGENTS.md`), nothing from other hosts.
 `js/figures.js` (`renderFigures`) loads a library the first time a page has something for it,
-so a page without math or diagrams loads neither (Mermaid is 5.5 MB, 1.5 MB as it is sent: `/public/vendor/` scripts and styles go gzipped to a browser that takes it, gzipped once and kept in memory, and with `Cache-Control: public, max-age=86400`, since they change only with an update of Zone;
+so a page without math or diagrams loads neither (Mermaid is 5.5 MB, 1.5 MB as it is sent: `/public/vendor/` scripts and styles go gzipped to a browser that takes it, gzipped once and kept in memory, and with `Cache-Control: public, max-age=86400`, since they change only with an update of Zonewiki;
 `servePublic`).
 It runs on the page view (the article and the side TOC), the editor's preview, presentation slides, the search dialog's preview, and task descriptions and comments (in the live list after each draw, from its caches, so a library that failed to load is tried again then).
 Without the library (an error, offline before the first load) the source shows as written.
@@ -407,7 +407,7 @@ The source-side text functions agree with the parser:
 ### Diagrams
 
 **Diagrams** (Mermaid): a ` ```mermaid ` fence becomes `<div class="mermaid-diagram">` with the SVG (`securityLevel: 'strict'`: no scripts or click handlers from a diagram's text), in Mermaid's `dark` theme when the browser prefers dark.
-A label's HTML (`<b>`, `<br>`) stays, but not what makes or submits a form, a refresh or a frame, nor ids and names: Mermaid cleans labels with DOMPurify's defaults, which keep form controls, so `js/figures.js` gives it its own list (`dompurifyConfig`, which a diagram's `%%{init}%%` can't change: `secure`) and takes those out of the drawn SVG before it goes into the page (`defuseDiagram`; No form in a page posts to Zone in `docs/spec/security.md`).
+A label's HTML (`<b>`, `<br>`) stays, but not what makes or submits a form, a refresh or a frame, nor ids and names: Mermaid cleans labels with DOMPurify's defaults, which keep form controls, so `js/figures.js` gives it its own list (`dompurifyConfig`, which a diagram's `%%{init}%%` can't change: `secure`) and takes those out of the drawn SVG before it goes into the page (`defuseDiagram`; No form in a page posts to Zonewiki in `docs/spec/security.md`).
 A diagram that doesn't parse keeps its source, with a `.mermaid-error` line under it (`Diagram: <Mermaid's message>`).
 The SVGs are kept per source and theme (the last 50), so the editor's preview, redrawn as you type, doesn't flash the source.
 
@@ -436,7 +436,7 @@ Every save of a page is a git commit, so each page has a history of versions, an
   On startup, `gitSetup()` initializes a git repository in `ZONE_DATA` (if there is no `.git` yet; an ordinary one with a working tree, the wiki's files), writes an empty `.gitignore` when there is none, and commits all existing files.
 - `cfg.GitEnabled` (git on the `PATH`) — all git paths are no-ops when git is absent (graceful degradation).
 - Every write operation (Done/save, create, rename, delete, restore, upload) calls `gitCommit()` (a rename or move through `movePage()`, with the pages and task files whose links changed) to stage and commit the change: only those paths (`git commit -- paths`),
-  so what else is staged (a `git add` by hand) stays out of Zone's commit.
+  so what else is staged (a `git add` by hand) stays out of Zonewiki's commit.
 - **Auto-save (`/api/save`) is the exception** — it writes the file to disk but does not create a git commit.
 - Assets are tracked like pages — a `git push` backs up everything.
 - A commit that fails (a stale `index.lock`, a refusing hook) is logged and reported (an upload's too, since 2026-11: `storeUpload` returned nothing of it): the route answers 500 (Commit file and Commit all with `{"error": …}`), an MCP tool with a tool error, "the change is written but not committed";
@@ -444,7 +444,7 @@ Every save of a page is a git commit, so each page has a history of versions, an
   A commit that has to come first (text not yet in git, `keepPending`; another user's draft) and fails stops the write, so that text is never lost.
 - Pages are written atomically (a temp file renamed into place, the file's permissions kept), and writes to pages run one at a time (`pagesMu`, from the reads a write decides on to its commit: two writes at once, say an assistant's `append_to_page` and a ticked checkbox, both keep their change).
 - SHA values are validated with `shaRE` (`^[0-9a-f]{7,40}$`) before use.
-- Git's own maintenance runs in the foreground and Zone packs the repository itself, in the background: Packing the repository in `docs/spec/deployment.md`.
+- Git's own maintenance runs in the foreground and Zonewiki packs the repository itself, in the background: Packing the repository in `docs/spec/deployment.md`.
 - Git calls time out after `gitTimeout` (60s, `runGit`): a hung git counts as failed (exit code 124).
 
 ### How a page write is made
@@ -470,7 +470,7 @@ History is in the page view's ⋯ menu (and the breadcrumb of a revision or diff
 **`/history/<slug>`** lists the page's saved versions,
 newest first,
 one row each (`.hist-list`): date and time,
-what the save did in words (`versionLabel`, of the message as `commitWhat` gives it, an assistant's without its `(MCP)`: Zone's own commit messages read alike, so "Update p" → Edited, "Rename a to b" → Renamed from “a” or, on a page whose link was updated, Link updated, "Restore p to <sha>" → Restored the version of <date>, also Created/Deleted/Imported;
+what the save did in words (`versionLabel`, of the message as `commitWhat` gives it, an assistant's without its `(MCP)`: Zonewiki's own commit messages read alike, so "Update p" → Edited, "Rename a to b" → Renamed from “a” or, on a page whose link was updated, Link updated, "Restore p to <sha>" → Restored the version of <date>, also Created/Deleted/Imported;
 other messages as written), who made it (with users) and, for an assistant's, through which ("alice through Claude"; "alice through an assistant" for a token's, or without a name: Which assistant in `docs/spec/mcp.md`), and the lines added/removed (`--numstat`).
 The row opens that version; the page as it is now is marked **Current** and opens the page itself (`isCurrent`: the newest commit equals the file on disk; with edits not committed yet a "Now · Not committed yet" row is the current one instead).
 **Changes** opens the diff.
@@ -591,7 +591,7 @@ It asks first, saying how many, by which assistant and from when to when; the re
 `viewPage` (`go/routes.go`) reads `<slug>.md`, `renderMd()` (`go/render.go`) converts it to HTML with goldmark (`go/markdown.go`), and `page(…, "view.html", …)` renders it into the page (see Templates).
 A path with a slug in it is built with `pathURL()`, which percent-encodes it, so a file named with a quote, `#` or space still gets a working link that is safe in an attribute.
 
-One goldmark set up with Zone's rules is built per kind (block, inline) and reused from a pool (`mdRenderer` in `go/markdown.go`), bound to one render's `Env` at a time;
+One goldmark set up with Zonewiki's rules is built per kind (block, inline) and reused from a pool (`mdRenderer` in `go/markdown.go`), bound to one render's `Env` at a time;
 how headings carry their ids is the renderer's (`Env.HeadingIDs`: `id` on a page, `data-pid` in the search preview, none in task descriptions and comments), not a rewrite of its output.
 
 ### Heading ids
@@ -601,7 +601,7 @@ what is no letter, digit, `_`, `-` or space goes, then the ends are trimmed, so 
 
 ### Section headings and HTML post-processing
 
-Zone's additions to goldmark's output work on the parsed document,
+Zonewiki's additions to goldmark's output work on the parsed document,
 not by regexes over the HTML (`go/markdown.go`):
 
 - the `heading` render function wraps each `##`/`###` directly in the page (not one in a quote, a list or a footnote: `sectionHeading`) in `.section-header` with its ✎ link when `renderMd` gets `EditSlug` (the page view;
@@ -615,7 +615,7 @@ not by regexes over the HTML (`go/markdown.go`):
 
 Every view is a Go `html/template` in `go/templates` (embedded in the binary) that fills the blocks of `layout.html` (head, the dialogs the client code opens, the status badges, top actions and action bar), rendered by `page(w, rq, status, template, title, …)` (`go/views.go`).
 Templates escape by context; their functions (`funcs`) include `url` (`pathURL`) and `dict` (a template's arguments).
-HTML that Zone built itself is passed as `template.HTML` (rendered markdown, an excerpt with `<mark>`s), anything else is escaped.
+HTML that Zonewiki built itself is passed as `template.HTML` (rendered markdown, an excerpt with `<mark>`s), anything else is escaped.
 Reusable parts are named templates in `templates/partials/` (`page.html`: the ⋯ menu and dialogs, link sections, side columns, meta row; `history.html`; `modules.html`; `icons.html`), which Go code renders with `macro(name, data)` (the breadcrumb, the task list embed).
 Markdown-level fragments (task chips, ☑ chips) stay in `go/render.go`.
 
@@ -627,7 +627,7 @@ They share code by `import`, not through `window`:
 
 | Module | Does |
 |---|---|
-| `js/forms.js` | Imported first: a submit only from a form where Zone puts one (`submitAllowed`: not from a closed `<dialog>`, nor from a form in rendered text, `[data-rendered]`, but Zone's own task lists'; A click submits only a form Zone put there in `docs/spec/security.md`) |
+| `js/forms.js` | Imported first: a submit only from a form where Zonewiki puts one (`submitAllowed`: not from a closed `<dialog>`, nor from a form in rendered text, `[data-rendered]`, but Zonewiki's own task lists'; A click submits only a form Zonewiki put there in `docs/spec/security.md`) |
 | `js/util.js` | Small shared helpers: `he`, `localDate`, `pasteUrlAsLink`, `continueList`, `showToast`, `putTask`, `hashTarget`, … |
 | `js/mdtext.js` | The text functions the browser shares with the server (Shared text functions, below) |
 | `js/completion.js` | `linkAutocomplete`: `[[`, `[[task:` and `[text](` completion (editor and the task app's task fields) |

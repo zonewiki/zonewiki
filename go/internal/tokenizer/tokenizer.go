@@ -1,7 +1,7 @@
-// The tokenizer of Zone's embedding model (jina-embeddings-v2-base-de) in
+// The tokenizer of Zonewiki's embedding model (jina-embeddings-v2-base-de) in
 // Go: what Hugging Face's `tokenizers` does with its tokenizer.json, which
 // is a byte-level BPE (GPT-2's), no normalizer, RoBERTa's <s> … </s>
-// around the text, at most maxLen tokens (Load's; Zone's maxTokens, 512).
+// around the text, at most maxLen tokens (Load's; Zonewiki's maxTokens, 512).
 // Only what this model uses is here; Load refuses a tokenizer.json that
 // wants more.
 package tokenizer

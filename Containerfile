@@ -1,4 +1,4 @@
-# Zone's image: the server (one Go binary, with the browser code and the docs
+# Zonewiki's image: the server (one Go binary, with the browser code and the docs
 # it serves built in), and with ZONE_SEMANTIC_SEARCH=on the model and
 # onnxruntime that run semantic search. Three stages, so a change to the code
 # rebuilds neither the model layer nor the toolchain's.
@@ -12,7 +12,7 @@ ARG UBUNTU=ubuntu:26.04@sha256:065aa8626841f16057b78b027b464cd59c4fac36c204c72dc
 
 # ── Build: the server from go/ ───────────────────────────────────────────────
 # With cgo (a C compiler): semantic search loads onnxruntime with dlopen, so
-# the binary links only libc either way. Zone's own files (zonefiles.go at the
+# the binary links only libc either way. Zonewiki's own files (zonefiles.go at the
 # repository's root: the browser code, the docs, the licenses) are built in.
 FROM ${UBUNTU} AS build
 RUN apt-get update && \
@@ -44,7 +44,7 @@ ENV PATH=/usr/local/go/bin:$PATH GOTOOLCHAIN=local CGO_ENABLED=1
 
 WORKDIR /src/go
 # The modules first (go.sum checks them), so a code change doesn't fetch them
-# again; with the root's go.mod, the module of Zone's own files, which
+# again; with the root's go.mod, the module of Zonewiki's own files, which
 # go/go.mod takes from ../.
 COPY go.mod /src/
 COPY go/go.mod go/go.sum ./
@@ -61,7 +61,7 @@ RUN go build -trimpath -ldflags="-s -w" -o /zonewiki .
 # ── Semantic search: onnxruntime and the model (opt-in) ─────────────────────
 # With ZONE_SEMANTIC_SEARCH=on in .env, compose.build.yaml passes it here and both
 # are baked into the image, so the first search doesn't wait for a download
-# and Zone works offline. Without it, the folders stay empty. Pinned and
+# and Zonewiki works offline. Without it, the folders stay empty. Pinned and
 # checked against their SHA-256: onnxruntime's GitHub release (the sums of
 # its files), the model's files at a fixed revision (go/embed.go has the
 # same names and sums; tests/test_image.py checks they agree).
@@ -114,7 +114,7 @@ RUN apt-get update && \
       git tzdata ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
-# onnxruntime where the loader finds it, and the model where Zone looks.
+# onnxruntime where the loader finds it, and the model where Zonewiki looks.
 COPY --from=semantic /opt/onnxruntime/ /usr/local/lib/
 COPY --from=semantic /opt/zonewiki-model/ /opt/zonewiki-model/
 RUN ldconfig
@@ -128,12 +128,12 @@ COPY LICENSE THIRD_PARTY_LICENSES ./
 COPY --from=semantic /opt/onnxruntime-licenses/ licenses/onnxruntime/
 COPY --from=build /zonewiki ./zonewiki
 
-# The build ("<hash> <commit date>") shown next to Zone's version, passed in by
+# The build ("<hash> <commit date>") shown next to Zonewiki's version, passed in by
 # run.sh (through compose.build.yaml): the image has no .git to read it from. Last, so a new commit only rebuilds this layer.
 ARG ZONE_BUILD=unknown
 ENV ZONE_BUILD=$ZONE_BUILD
 
-# The compose files run Zone as the host user's UID (any UID, maybe without
+# The compose files run Zonewiki as the host user's UID (any UID, maybe without
 # an account here): git gets a HOME it can use.
 ENV HOME=/tmp
 

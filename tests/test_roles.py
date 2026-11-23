@@ -78,7 +78,7 @@ def wiki(client, git_wiki_dir, monkeypatch):
 
 
 def shared_state(wiki):
-    """Every file of the wiki, hers too, but Zone's state and git's."""
+    """Every file of the wiki, hers too, but Zonewiki's state and git's."""
     return {p.relative_to(wiki).as_posix(): p.read_bytes() for p in wiki.rglob("*")
             if p.is_file() and not p.relative_to(wiki).as_posix().startswith((".git/", ".zone/"))}
 

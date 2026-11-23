@@ -18,7 +18,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // ── Anchors of a page's raw HTML ──────────────────────────────────────────────
 
 // An id or name a page's raw HTML gives has "user-content-" in front
-// (go/markdown.go defuseHTML: so it can't stand in for one of Zone's
+// (go/markdown.go defuseHTML: so it can't stand in for one of Zonewiki's
 // elements), so for #note the browser finds no element and stays where it is:
 // this goes there instead, on opening the page and when a link changes the
 // hash (fold.js has unfolded its section by then).

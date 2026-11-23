@@ -166,7 +166,7 @@ func createTask(user asker, data jsonObj, message string) (*Task, error) {
 	defer taskFiles.Unlock()
 	t := newTask()
 	// id: the id its dialog made up, so that the files pasted there before
-	// it was saved are its files (taskUploadPlace). One of Zone's form, that
+	// it was saved are its files (taskUploadPlace). One of Zonewiki's form, that
 	// no task has, and whose folder, if it has one, is user's: the files
 	// they pasted (seesTaskFiles), not another's nor a deleted task's.
 	if data.Has("id") && !data.Null("id") {
@@ -175,7 +175,7 @@ func createTask(user asker, data jsonObj, message string) (*Task, error) {
 			return nil, err
 		}
 		if !uuid4RE.MatchString(id) {
-			return nil, refuse("id must be a new task's id as Zone makes them (a version 4 UUID); leave it out")
+			return nil, refuse("id must be a new task's id as Zonewiki makes them (a version 4 UUID); leave it out")
 		}
 		_, err = os.Stat(filepath.Join(cfg.Data, filepath.FromSlash(taskFilesDir), id))
 		if taskFiles.IDsLocked()[id] || err == nil && !seesTaskFiles(user, id) {
@@ -564,7 +564,7 @@ func followersSeen(t *Task) []string {
 }
 
 // assignedOpen: how many open shared tasks each name is assigned, read
-// from the file (the user commands have no running Zone).
+// from the file (the user commands have no running Zonewiki).
 func assignedOpen() map[string]int {
 	n := map[string]int{}
 	for _, t := range taskFiles.OpenOf("") {
@@ -728,7 +728,7 @@ func changeTaskFields(user asker, t *Task, data jsonObj) (named []string, err er
 }
 
 // sentBack: an undo sends the old history back with the old fields: of
-// the entries Zone has had for the task (knownHistory). Who made it is
+// the entries Zonewiki has had for the task (knownHistory). Who made it is
 // the task's created_by, which no history sent changes.
 func sentBack(user asker, t *Task, data jsonObj) {
 	if data.Has("history") {
@@ -960,7 +960,7 @@ func noteBrought(user string, ids []string) {
 // mayDeleteTask: user may delete the task t for good: without users
 // anyone; a task of their own (a private one, or one they made, which is
 // also what takes back a task just made: the editor's Make task); an admin
-// any; and what they imported, while Zone runs (the import's undo). A task
+// any; and what they imported, while Zonewiki runs (the import's undo). A task
 // someone else made is closed (Won't do), not deleted: others have seen it.
 func mayDeleteTask(user asker, t *Task) bool {
 	s := settings()
@@ -1074,7 +1074,7 @@ func placeTasks(active []*Task, moves []taskMove) {
 
 // placeUnplaced gives each task of active that has no place in the manual
 // order (no sort_order: a task from a file edited by hand, an import, an
-// older Zone; a new one is placed when it is made) the place it is shown
+// older Zonewiki; a new one is placed when it is made) the place it is shown
 // at: above every placed task, newest first, as the views list them
 // (TasksCore.byOpenOrder, which reverses the list first, so of two made at
 // the same moment the later in the file comes first). So a move, or a

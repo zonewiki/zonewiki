@@ -1,5 +1,5 @@
 // Package gitrepo runs git in a repository: one process a call, under a
-// time limit and a context, its output as text. What Zone asks of git, and
+// time limit and a context, its output as text. What Zonewiki asks of git, and
 // what it makes of the answers, is the server's (go/gitstore.go).
 package gitrepo
 
@@ -24,12 +24,12 @@ import (
 const TimedOut = 124
 
 // git (2.47+) starts its automatic maintenance after a commit as a detached
-// background process. In the container Zone is PID 1 and never reaps that
+// background process. In the container Zonewiki is PID 1 and never reaps that
 // orphan, so every commit left a zombie process behind until the PID limit
 // was reached and nothing could start any more. Not detached, git runs the
 // (usually trivial) maintenance itself and reaps its own children.
 //
-// Every path Zone hands git is a file's name, never a pattern: a page may be
+// Every path Zonewiki hands git is a file's name, never a pattern: a page may be
 // called anything ("*", "p?", ":(glob)**/x"), and read as a pathspec such a
 // name would match other files, another user's private pages among them
 // (git show <sha> -- '*.md'). So git takes all pathspecs literally
@@ -64,7 +64,7 @@ func (r Repo) Pack(ctx context.Context, timeout time.Duration) Result {
 // to it, with the paths each one changed (Bloom filters; their version 2,
 // which hashes names beyond ASCII right), as a layer of its own (--split:
 // it costs what is new, and git joins the layers as they grow). git's own
-// maintenance would write it (gc), but Zone turns that off (baseEnv), so
+// maintenance would write it (gc), but Zonewiki turns that off (baseEnv), so
 // without this no wiki has one, and a log of one path (a page's history,
 // its latest change, whether a name was ever used) reads and compares every
 // commit of the history: measured 2026-11-19 on 200,000 commits, 0.4 to
@@ -185,8 +185,8 @@ func (r Repo) Drop(packs []string) {
 const tempsStale = 24 * time.Hour
 
 // removeStaleTemps removes the packs git was writing when it was stopped (a
-// Join out of time, a Zone that ended): git leaves them where they are, as
-// large as they got, and nothing else of Zone's would take them away.
+// Join out of time, a Zonewiki that ended): git leaves them where they are, as
+// large as they got, and nothing else of Zonewiki's would take them away.
 func (r Repo) removeStaleTemps() {
 	entries, _ := os.ReadDir(r.packDir())
 	for _, e := range entries {

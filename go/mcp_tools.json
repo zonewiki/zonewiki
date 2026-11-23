@@ -259,8 +259,8 @@
  },
  {
   "name": "zone_help",
-  "title": "Zone's documentation",
-  "description": "Search Zone's own docs for how Zone works: features, markdown syntax ([[tasks: …]] options, callouts, wikilinks), the editor, search syntax, shortcuts, settings, setup, assistants. Not the user's notes (search_wiki). With query, the best passages, the manual's first; with topic (and heading), that doc or one section; with neither, the topics. The manual (manual/…) is for users, the spec for developers: answer in what the user types or clicks, no function or file names, and link the manual's page (/help/tasks for manual/tasks).",
+  "title": "Zonewiki's documentation",
+  "description": "Search Zonewiki's own docs for how Zonewiki works: features, markdown syntax ([[tasks: …]] options, callouts, wikilinks), the editor, search syntax, shortcuts, settings, setup, assistants. Not the user's notes (search_wiki). With query, the best passages, the manual's first; with topic (and heading), that doc or one section; with neither, the topics. The manual (manual/…) is for users, the spec for developers: answer in what the user types or clicks, no function or file names, and link the manual's page (/help/tasks for manual/tasks).",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -363,7 +363,7 @@
     "note": {
      "type": "boolean",
      "default": false,
-     "description": "Make a new note: slug is then just its name, in any words ('Alex prep'), and Zone puts the date and time in front."
+     "description": "Make a new note: slug is then just its name, in any words ('Alex prep'), and Zonewiki puts the date and time in front."
     },
     "summary": {
      "type": "string",
@@ -970,7 +970,7 @@
     },
     "due": {
      "type": "string",
-     "description": "Deadline: YYYY-MM-DD, or today, tomorrow, a weekday (mon…sun: the next one) or +3d/+2w, which Zone resolves with its own date; empty to clear. A date the user gives the task ('tomorrow', 'by Friday', 'on the 3rd') goes here, not in start."
+     "description": "Deadline: YYYY-MM-DD, or today, tomorrow, a weekday (mon…sun: the next one) or +3d/+2w, which Zonewiki resolves with its own date; empty to clear. A date the user gives the task ('tomorrow', 'by Friday', 'on the 3rd') goes here, not in start."
     },
     "start": {
      "type": "string",

@@ -55,7 +55,7 @@ func TestDiffLines(t *testing.T) {
 }
 
 // Regression: git (2.47+) detached its auto-maintenance after each commit;
-// with Zone as the container's PID 1 nobody reaped it, and zombies piled
+// with Zonewiki as the container's PID 1 nobody reaped it, and zombies piled
 // up to the PID limit.
 func TestGitDoesNotDetach(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
@@ -67,7 +67,7 @@ func TestGitDoesNotDetach(t *testing.T) {
 			t.Errorf("%s: %q", key, r.Stdout)
 		}
 	}
-	// Nor does a commit pack: Zone does, between commits (packSoon).
+	// Nor does a commit pack: Zonewiki does, between commits (packSoon).
 	for key, want := range map[string]string{"gc.auto": "0", "maintenance.auto": "false"} {
 		if r := runGit("config", "--get", key); strings.TrimSpace(r.Stdout) != want {
 			t.Errorf("%s: %q, want %s", key, r.Stdout, want)
@@ -107,7 +107,7 @@ func gitObjects(t *testing.T) (loose, packs int) {
 	return loose, packs
 }
 
-// Commits leave loose objects; every packEvery commits Zone packs them in
+// Commits leave loose objects; every packEvery commits Zonewiki packs them in
 // the background, one pack at a time (a commit that comes while one runs
 // starts no second, and is not forgotten), and at the start when many are
 // loose. The loose objects go only while no commit runs. The history is
@@ -427,7 +427,7 @@ func TestLogRecordsStartAfterANul(t *testing.T) {
 }
 
 // A page view asks git about a page once, and again only after the page's
-// file or the repository changed: Zone's own commit, a change on disk, a
+// file or the repository changed: Zonewiki's own commit, a change on disk, a
 // commit made in a terminal.
 func TestLastChangedAsksGitOnce(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
@@ -452,7 +452,7 @@ func TestLastChangedAsksGitOnce(t *testing.T) {
 	gitCommit("", "Add p", path)
 	changed, commit, asked := view()
 	if changed == nil || commit != nil || asked != 1 || changed.Date != now().Format("2006-01-02") || changed.Rel != "just now" {
-		t.Fatalf("after Zone's commit: %+v %v, asked %d", changed, commit, asked)
+		t.Fatalf("after Zonewiki's commit: %+v %v, asked %d", changed, commit, asked)
 	}
 	for range 3 {
 		if _, commit, asked := view(); commit != nil || asked != 0 {
@@ -466,7 +466,7 @@ func TestLastChangedAsksGitOnce(t *testing.T) {
 	if _, commit, asked := view(); commit == nil || asked != 1 {
 		t.Errorf("after a change on disk: %v, asked %d", commit, asked)
 	}
-	// A commit made in a terminal, not by Zone.
+	// A commit made in a terminal, not by Zonewiki.
 	if r := runGit("commit", "-q", "-m", "by hand", "--", "p.md"); r.Code != 0 {
 		t.Fatal(r.Stderr)
 	}
@@ -487,8 +487,8 @@ func TestLastChangedAsksGitOnce(t *testing.T) {
 	}
 }
 
-// Before Zone exits idle, a draft is committed in the name of who wrote it:
-// only memory knows, and the next Zone couldn't say.
+// Before Zonewiki exits idle, a draft is committed in the name of who wrote it:
+// only memory knows, and the next Zonewiki couldn't say.
 func TestCommitDrafts(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("no git")
@@ -525,7 +525,7 @@ func writeTestPage(t *testing.T, rel string) {
 }
 
 // A wiki whose history has users' commits but no settings file lost its
-// users (a clone of its remote): Zone won't start on it, open.
+// users (a clone of its remote): Zonewiki won't start on it, open.
 func TestMissingUsers(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("no git")
@@ -535,7 +535,7 @@ func TestMissingUsers(t *testing.T) {
 	cfg.GitEnabled = true
 	gitSetup()
 	writeTestPage(t, "p.md")
-	gitCommit("", "By Zone", filepath.Join(cfg.Data, "p.md"))
+	gitCommit("", "By Zonewiki", filepath.Join(cfg.Data, "p.md"))
 	if err := missingUsers(); err != nil {
 		t.Errorf("no users ever: %v", err)
 	}
@@ -584,7 +584,7 @@ func TestNoDeltaForUploads(t *testing.T) {
 }
 
 // gitWrites: helpers that change the test wiki's pages and commit each
-// change, as Zone's page writes do (rel: a file's path in the wiki).
+// change, as Zonewiki's page writes do (rel: a file's path in the wiki).
 type gitWrites struct{ t *testing.T }
 
 func (g gitWrites) at(rel string) string { return filepath.Join(cfg.Data, filepath.FromSlash(rel)) }
@@ -771,7 +771,7 @@ func TestDeletedPagesReadWhatIsNew(t *testing.T) {
 	}
 }
 
-// Zone writes the commit-graph, with the paths each commit changed, when it
+// Zonewiki writes the commit-graph, with the paths each commit changed, when it
 // packs, and at the start for a wiki that has none (git's own maintenance,
 // which would write it, is off): a log of one path asks its filters.
 func TestTheCommitGraphIsWritten(t *testing.T) {
@@ -802,7 +802,7 @@ func TestTheCommitGraphIsWritten(t *testing.T) {
 
 // A wiki folder inside another repository's working tree gets a
 // repository of its own only where the outer one ignores the folder (a
-// home folder kept in git for its dotfiles); otherwise Zone refuses to
+// home folder kept in git for its dotfiles); otherwise Zonewiki refuses to
 // start, and says how to go on. A folder that is a repository already is
 // the wiki's wherever it lies, and a folder in no repository is made one.
 func TestAWikiInsideAnotherRepository(t *testing.T) {
@@ -871,15 +871,27 @@ func TestAWikiInsideAnotherRepository(t *testing.T) {
 		t.Error("a*/x passed for ab/x, which is ignored")
 	}
 
-	// A repository already (made by hand, or by Zone before): the wiki's, wherever it lies.
+	// A repository already (made by hand, or by Zonewiki before): the wiki's, wherever it lies.
 	_ = os.Remove(filepath.Join(outer, ".gitignore"))
 	git(notes, "init", "-q")
 	if err := start(notes); err != nil {
 		t.Fatalf("an existing repository refused: %v", err)
 	}
 
-	// The outer repository's own top is no folder inside it: Zone goes on with it.
+	// The outer repository's own top is no folder inside it: Zonewiki goes on with it.
 	if err := start(outer); err != nil {
 		t.Fatalf("the repository's top refused: %v", err)
+	}
+}
+
+// TestZonewikisOwnCommitsShowNoName: Zonewiki's own commits show no author,
+// under its name now and under "Zone", the name older wikis' commits carry.
+func TestZonewikisOwnCommitsShowNoName(t *testing.T) {
+	testWiki(t, nil)
+	withUsers(t, "alice")
+	for name, want := range map[string]string{"Zonewiki": "", "Zone": "", "alice": "alice"} {
+		if got := commitAuthor(name); got != want {
+			t.Errorf("commitAuthor(%q) = %q, want %q", name, got, want)
+		}
 	}
 }

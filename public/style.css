@@ -1,6 +1,6 @@
 /* ── Fonts ─────────────────────────────────────────────────────────────────── */
 
-/* The headings' serif, shipped with Zone (public/vendor/source-serif), so
+/* The headings' serif, shipped with Zonewiki (public/vendor/source-serif), so
    they look the same on every system and nothing loads from other hosts.
    One variable file per subset; a page with only Latin text loads one. */
 @font-face {
@@ -22,7 +22,7 @@
 
 /* ── Variables ─────────────────────────────────────────────────────────────── */
 
-/* Zone's look, shared with zonewiki.com and Zone CP's pages: warm paper and
+/* Zonewiki's look, shared with zonewiki.com and Zonewiki CP's pages: warm paper and
    ink, a deep green accent, serif headings over a system sans. */
 :root {
   --bg:           #f6f4ee;
@@ -708,9 +708,9 @@ main {
   margin: 1rem 0;
 }
 
-/* Callouts: "> [!NOTE]" etc. GitHub's five kinds and meanings, in Zone's
+/* Callouts: "> [!NOTE]" etc. GitHub's five kinds and meanings, in Zonewiki's
    palette: slate, the accent green, plum, ochre and brick (the warning and
-   danger colours of Zone CP's pages). Each type sets --alert, which tints
+   danger colours of Zonewiki CP's pages). Each type sets --alert, which tints
    the bar, background and title. */
 .page-content .markdown-alert {
   --alert: #3d6a8e;
@@ -1737,7 +1737,7 @@ kbd {
 .user-remove-body { margin-top: .4rem; max-width: 22rem; font-size: .9rem; }
 .users-done, .users-error { padding: .5rem .75rem; border-radius: 6px; }
 .users-done { background: var(--code-bg); }
-.users-error { background: #fbeeee; color: #a33232; }   /* Zone CP's danger colours */
+.users-error { background: #fbeeee; color: #a33232; }   /* Zonewiki CP's danger colours */
 @media screen and (prefers-color-scheme: dark) { .users-error { background: #2f1c1c; color: #ec9a9a; } }
 .users-help { font-size: .85rem; }
 .users-link { display: block; padding: .5rem; background: var(--code-bg); border-radius: 6px; word-break: break-all; user-select: all; }
@@ -2301,7 +2301,7 @@ body.editor-page main {
 
 .diff-view { font-size: .8rem; line-height: 1.5; overflow-x: auto; padding: 1rem; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; }
 .diff-view span { display: block; white-space: pre; }
-/* Put in green, taken out brick, in Zone's palette. */
+/* Put in green, taken out brick, in Zonewiki's palette. */
 .diff-add  { color: #2e7048; background: #edf5ef; }
 .diff-del  { color: #a33232; background: #fbeeee; }
 .diff-hunk { color: var(--muted); font-weight: 600; }
@@ -2680,7 +2680,7 @@ a.external-image::before { content: "🖼 "; }
 /* ── Print ─────────────────────────────────────────────────────────────────── */
 /* A page on paper, and in the PDF the browser's print dialog saves (Export
    as PDF… in the page's ⋯ menu): the page alone, its title, tags, date and
-   text, without Zone around it (the top row, the side columns, buttons,
+   text, without Zonewiki around it (the top row, the side columns, buttons,
    what links to it). Always light: the dark variables are for screens. */
 @page { margin: 18mm 16mm; }
 @media print {

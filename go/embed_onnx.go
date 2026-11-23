@@ -4,7 +4,7 @@
 // which loads libonnxruntime.so with dlopen when semantic search first
 // embeds: the binary itself links only libc, and an image without the
 // library runs with keyword search only. The vectors are bit for bit those
-// the Python Zone's fastembed made, so its cache stays valid.
+// the Python Zonewiki's fastembed made, so its cache stays valid.
 package main
 
 import (

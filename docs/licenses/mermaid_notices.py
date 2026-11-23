@@ -25,11 +25,11 @@ BUNDLE = VENDOR / "mermaid.min.js"
 OUT = VENDOR / "THIRD_PARTY_LICENSES"
 LICENSE_FILE = re.compile(r"package/(licen[cs]e|copying|notice)[^/]*$", re.I)
 LICENSE_IN_README = {"fastdom"}
-# The bundle compiles elkjs. Zone, under the AGPL, takes it under its secondary
+# The bundle compiles elkjs. Zonewiki, under the AGPL, takes it under its secondary
 # license, GPL-3.0-or-later (COPYING.GPL-3.0 next to the notices), and both licenses
 # ask for a way to get the source of what is distributed compiled.
 SOURCE_NOTES = {
-    "elkjs": "Zone distributes it under GPL-3.0-or-later (see COPYING.GPL-3.0 next to this\n"
+    "elkjs": "Zonewiki distributes it under GPL-3.0-or-later (see COPYING.GPL-3.0 next to this\n"
              "file), in compiled form. Its source: https://github.com/kieler/elkjs\n"
              "(tag {version}), and the Eclipse Layout Kernel it is compiled from:\n"
              "https://github.com/eclipse/elk",

