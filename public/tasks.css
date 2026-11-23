@@ -153,6 +153,22 @@
 .lists-rail-item:hover, .lists-rail-item:focus-visible { background: var(--btn-bg); color: var(--fg); text-decoration: none; }
 .lists-rail-item[aria-current] { font-weight: 600; background: color-mix(in srgb, var(--fg) 8%, var(--btn-bg)); }
 .lists-rail-item[hidden], .lists-rail-head[hidden] { display: none; }
+/* A small icon before every name, so the column reads as a list of places
+   at a glance: a view its own (a person for My tasks, a bell for Updates, a
+   tray for the Inbox, a stack for All tasks), a list the list icon its chip
+   has (--list-icon, below). Drawn as masks in the text's colour, quiet
+   until the line is the current one. */
+.lists-rail-item::before {
+  content: ""; flex: none; width: 14px; height: 14px; margin-right: .15rem;
+  background: currentColor; opacity: .5;
+  -webkit-mask: var(--rail-icon, var(--list-icon)) center / contain no-repeat;
+  mask: var(--rail-icon, var(--list-icon)) center / contain no-repeat;
+}
+.lists-rail-item:hover::before, .lists-rail-item[aria-current]::before { opacity: .8; }
+.lists-rail-item[data-place="mine"] { --rail-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='8' cy='5.25' r='2.5'/%3E%3Cpath d='M3 13.5c0-2.6 2.2-4.25 5-4.25s5 1.65 5 4.25'/%3E%3C/svg%3E"); }
+.lists-rail-item[data-place="updates"] { --rail-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4.5 11V7.5a3.5 3.5 0 0 1 7 0V11l1 1.5h-9z'/%3E%3Cpath d='M6.75 14.25a1.4 1.4 0 0 0 2.5 0'/%3E%3C/svg%3E"); }
+.lists-rail-item[data-place="inbox"] { --rail-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.5 9.5 4.5 3.5h7l2 6v3h-11z'/%3E%3Cpath d='M2.5 9.5h3.2a2.3 2.3 0 0 0 4.6 0h3.2'/%3E%3C/svg%3E"); }
+.lists-rail-all { --rail-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 2.5 13.5 5.25 8 8 2.5 5.25z'/%3E%3Cpath d='M2.5 8 8 10.75 13.5 8'/%3E%3Cpath d='M2.5 10.75 8 13.5l5.5-2.75'/%3E%3C/svg%3E"); }
 .lists-rail-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lists-rail-mark { display: inline-flex; flex: none; color: var(--muted); opacity: .7; }
 .lists-rail-mark svg { width: 11px; height: 11px; }

@@ -1674,6 +1674,9 @@ In three groups, from the top:
 The current view's line is shaded.
 It keeps one rhythm: every line as high, the same room before each group and heading, a heading small, light and spaced, close to the lists it names;
 the names start in one line, with no pin (the heading says it), and a list's lock or people after its name (the Inbox, always yours, has none there).
+**Every line starts with a small icon**, so the column reads as places at a glance: a person for My tasks, a bell for Updates, a tray for the Inbox, a stack for All tasks, and for every list the list icon its chip has (A list on screen);
+in the text's colour and faint, stronger on the current line and under the mouse (masks in CSS, `.lists-rail-item::before`, `--rail-icon`; nothing in the HTML).
+The row of pills has none: a pill is its name.
 My tasks, Updates, the Inbox and the pins carry the pills' counts, kept current with them (`js/chrome.js` refreshes `.lists-rail-place` by `data-place` too); the other lists none, as under More.
 The pins can be dragged up and down with the mouse, for who may pin, as the pills can (Dragging the pills).
 A list new to this browser has "new" beside its name there as under More, and counts as seen once the column has shown it (More then gets no dot).

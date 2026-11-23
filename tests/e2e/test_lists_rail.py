@@ -40,6 +40,18 @@ def test_the_lists_are_the_left_column_on_a_big_screen(new_page, wiki):
     # than a list's name.
     names = [b for b in (box_of(n) for n in rail_names(page).all())]
     assert len({round(b["x"]) for b in names}) == 1, names
+    # A small icon before every name: a view its own, every list the list's.
+    icon = lambda sel: rail.locator(sel).evaluate(
+        "el => { const s = getComputedStyle(el, '::before');"
+        " return [s.maskImage || s.webkitMaskImage, parseFloat(s.width), parseFloat(s.height)]; }")
+    icons = {sel: icon(sel) for sel in ('[data-place="mine"]', '[data-place="inbox"]', ".lists-rail-all",
+                                        '[data-place="list:shop"]', '[data-place="list:work"]')}
+    assert all(mask.startswith('url("data:image/svg+xml') and w == h and 10 <= w <= 16 for mask, w, h in icons.values()), icons
+    masks = [mask for mask, _, _ in icons.values()]
+    assert len(set(masks[:4])) == 4 and masks[3] == masks[4], masks
+    for item, name in zip(rail.locator(".lists-rail-item").all(), names):
+        left = box_of(item)["x"] + item.evaluate("el => parseFloat(getComputedStyle(el).paddingLeft)")
+        assert name["x"] - left >= 13, (name, left)
     lines = [box_of(i)["height"] for i in rail.locator(".lists-rail-item").all()]
     assert len({round(h) for h in lines}) == 1, lines
     heads = rail.locator(".lists-rail-head")
