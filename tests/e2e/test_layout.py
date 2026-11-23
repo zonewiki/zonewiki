@@ -398,6 +398,15 @@ def test_trail_drops_its_oldest_pages_where_the_window_is_not_wide(new_page, wik
     crumbs = pg.locator(".breadcrumb > .trail-link, .breadcrumb > span:not([class])")
     expect(pg.locator(".breadcrumb.trail-ready")).to_have_count(1)
     expect(pg.locator(".breadcrumb > .trail-link.trail-off").first).to_be_attached()
+    # The row is read once it has settled. The uncommitted badge comes with a
+    # request of its own (js/git.js), some time after the trail is ready, and
+    # takes its room from the row; the trail fits itself again in the frame
+    # after (its ResizeObserver). Read in between, the names are the ones
+    # from before, squeezed into the room from after: so the badge first,
+    # then the page standing still (still: its requests drawn, and the
+    # frames after), as box_of does for every other measure.
+    expect(pg.locator("#uncommitted-badge")).to_be_visible()
+    still(pg)
     row = crumbs.evaluate_all(shown)
     # The page itself and the latest before it, each readable: whole, or at least 72px of it.
     assert [r[0] for r in row][-1] == "Compost heap" and 2 <= len(row) < 6, row

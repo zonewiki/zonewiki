@@ -95,6 +95,8 @@ Without Playwright installed they skip, so plain `pytest tests/` is unaffected.
   It never returns `None`: a list drawn again by a late answer replaces its cards, and a card found before and measured after had no box, which a busy machine met as `'NoneType' object is not subscriptable`; an element that isn't shown fails in `box_of`, by its name.
   `box_of(locator, moving=True)` measures at once, for a test that looks while something moves, or that stopped the page's clock or holds a request back (`still` would wait for what the test stopped).
   A pointer is put where a thing is, so the same holds before a `hover()` on what CSS shows only under the pointer: `still(page)` first.
+  And before a size read in the page itself (`clientWidth`, `scrollWidth` in an `evaluate`), which `box_of` doesn't see: `still(page)` first.
+  What fits itself to its room does so a frame after the room changed (the breadcrumb's trail, by a `ResizeObserver`, when the uncommitted badge arrives), and a size read in between is the old layout in the new room.
 - A view opened is there: `open_tab(page, view)` returns once the view has what it asked the server for (it settles).
   Completed loads after its link's click and draws the list again; `data-loaded` is from the page's load and says nothing of it.
   A test that looks between two steps of a gesture that a timer ends (the open card closing 400 ms after a press on another) stops the page's clock meanwhile (`page.clock.pause_at`, then `resume`), or a slow machine runs the timer out between the looks.
