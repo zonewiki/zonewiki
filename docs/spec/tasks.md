@@ -1779,7 +1779,7 @@ A new task created out of view only gets the notice.
 
 #### A list's backlog
 
-Under a shared list's heading (with users), **N unassigned** (`.tasks-unassigned`; `tasksPageView.Unassigned`; its tooltip "The tasks of this list that no one has: take one with a, Enter") links to the list filtered by `@none` (`/tasks?list=<ref>&assignee=none`): the open tasks no one has, a former assignee's included.
+Under a shared list's heading (with users), **N unassigned** (`.tasks-unassigned`; `tasksPageView.Unassigned`; its tooltip "The tasks of this list that no one has: take one with a, Enter") links to the list's Open tab filtered by `@none` (`/tasks?list=<ref>&view=open&assignee=none`, the Open tab as this browser tab last showed it, else Plan): all the open tasks no one has, a former assignee's included, not only those Today shows.
 A list left out of My tasks says so there too ("Left out of My tasks", a link).
 
 ## A task's files

@@ -171,8 +171,9 @@ def test_the_move_dialog_files_inbox_tasks_assigned_to_you(alice):
 
 
 def test_a_shared_list_says_how_many_of_its_tasks_no_one_has(alice):
-    """Under a shared list's heading: "N unassigned", a link to the list
-    filtered by @none. Not on a private list, whose tasks have no assignee."""
+    """Under a shared list's heading: "N unassigned", a link to the list's
+    Open tab filtered by @none, from Today too (which shows only some of
+    them). Not on a private list, whose tasks have no assignee."""
     make_list(alice, "own", private=True)
     new(alice, "Free one", list="team")
     new(alice, "Free two", list="team")
@@ -183,12 +184,14 @@ def test_a_shared_list_says_how_many_of_its_tasks_no_one_has(alice):
     facts = alice.locator(".tasks-list-facts")
     expect(facts).to_have_text("2 unassigned.")
     link = facts.locator("a.tasks-unassigned")
-    expect(link).to_have_attribute("href", "/tasks?list=team&assignee=none")
+    expect(link).to_have_attribute("href", "/tasks?list=team&view=open&assignee=none")
     expect(alice.locator(".task-item")).to_have_count(4)
+    alice.locator("#tasks-tabs [data-view='focus']").click()
+    expect(alice.locator("#tasks-tabs [aria-selected='true']")).to_have_text(["Today"])
     link.click()
-    alice.wait_for_url(re.compile(r"/tasks\?list=team&assignee=none$"))
+    alice.wait_for_url(re.compile(r"/tasks\?list=team&view=open&assignee=none$"))
     expect(alice.locator("h1")).to_have_text("List: team")
-    alice.locator("#tasks-tabs [data-view='open']").click()
+    expect(alice.locator("#tasks-tabs [aria-selected='true']")).to_have_text(["Open"])
     titles = alice.locator(".task-item .task-title")
     expect(titles).to_have_count(2)
     assert sorted(titles.all_text_contents()) == ["Free one", "Free two"]

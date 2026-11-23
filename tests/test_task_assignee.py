@@ -762,13 +762,13 @@ class TestASharedTaskIsInAList:
 
     def test_a_shared_lists_backlog_is_counted_on_its_page(self, alice, wiki_dir):
         """The tasks of a shared list that no one has: "N unassigned" under
-        its heading, a link to them."""
+        its heading, a link to them on the Open tab."""
         assert "tasks-unassigned" not in alice.get("/tasks?list=team", headers=HOST).get_data(as_text=True)
         for title, who in (("A", "alice"), ("B", "bob"), ("N1", None), ("N2", None)):
             new(alice, title=title, **({"assignee": who} if who else {}))
         html = alice.get("/tasks?list=team", headers=HOST).get_data(as_text=True)
         link = html.split('class="tasks-unassigned"', 1)[0].rsplit("<a ", 1)[1] + html.split('class="tasks-unassigned"', 1)[1].split("</a>", 1)[0]
-        assert 'href="/tasks?list=team&amp;assignee=none"' in link and link.endswith(">2 unassigned")
+        assert 'href="/tasks?list=team&amp;view=open&amp;assignee=none"' in link and link.endswith(">2 unassigned")
         assert sorted(t["title"] for t in alice.get("/api/tasks/export?list=team&assignee=none", headers=HOST).get_json()["tasks"]) == ["N1", "N2"]
         # A private list has no backlog: its tasks are its user's.
         make_list(alice, "own", private=True, headers=HOST)

@@ -147,7 +147,7 @@
 {{- /* The Inbox: what it is for. */}}
 {{- if .Inbox}}<p class="tasks-list-home tasks-inbox-line">{{if .InboxPrivate}}New tasks land here, and only you see them. Move one to a list to file it; in a shared list everyone sees it.{{else}}New tasks land here, in no list. Move one to a list to file it.{{end}}</p>{{end}}
 {{- /* A list: its backlog (a shared list's tasks no one has), and that it is left out of My tasks. */}}
-{{- if or .Unassigned .LeftOut}}<p class="tasks-list-home tasks-list-facts">{{with .Unassigned}}<a href="/tasks?list={{$.List.Ref}}&amp;assignee=none" class="tasks-unassigned" title="The tasks of this list that no one has: take one with a, Enter">{{.}} unassigned</a>{{if $.LeftOut}} · {{end}}{{end}}{{if .LeftOut}}Left out of <a href="/tasks?mine=1">My tasks</a>{{end}}.</p>{{end -}}
+{{- if or .Unassigned .LeftOut}}<p class="tasks-list-home tasks-list-facts">{{with .Unassigned}}<a href="/tasks?list={{$.List.Ref}}&amp;view=open&amp;assignee=none" class="tasks-unassigned" title="The tasks of this list that no one has: take one with a, Enter">{{.}} unassigned</a>{{if $.LeftOut}} · {{end}}{{end}}{{if .LeftOut}}Left out of <a href="/tasks?mine=1">My tasks</a>{{end}}.</p>{{end -}}
 {{.TasksHTML}}</article>
 </div>
 {{- end}}
