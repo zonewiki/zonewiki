@@ -210,8 +210,8 @@ const editTagAc = editTagsInput && attachTagAc(editTagsInput, {
 // has it (struck through) until it is taken off or replaced. A private
 // task is its user's own: the field shows their name there, as a chip
 // without × (drawYours; no name is kept with the task), and another name
-// asks for a shared list (askForList), since a task for someone else is
-// shared work.
+// asks for a shared list in the List field (askForList), since a task for
+// someone else is shared work.
 const assigneeInput = document.getElementById('task-edit-assignee' + app.sfx);
 const assigneeField = document.getElementById('task-edit-assignee-field' + app.sfx);
 const cleanName = v => v.trim().replace(/^@/, '').toLowerCase();
@@ -252,7 +252,8 @@ function drawYours() {
   const box = assigneeInput.parentNode;
   box.querySelector('.tag-chip-yours')?.remove();
   const yours = !!people.me && app.editPrivate() && !assigneeChip.words().length;
-  assigneeInput.placeholder = yours ? '' : 'No one';
+  // "No one" is what an empty field says, not what stands beside a name.
+  assigneeInput.placeholder = yours || assigneeChip.words().length ? '' : 'No one';
   if (!yours) return;
   const chip = document.createElement('span');
   chip.className = 'tag-chip tag-chip-locked tag-chip-yours';
@@ -272,13 +273,14 @@ function editAssignee() {
   return userNamed(typed) || undefined;
 }
 // A private task is its user's alone, and a task for someone else is
-// shared work: with another name in Assignee a line asks for a shared list
-// and offers them, the one this browser last made a task in first, and only
-// those the person named sees (sharedChoices, askForList: under the title
-// of a new task, under the fields of one being edited). None is chosen for
-// the user: until 2026-11 the List field moved to the last used one by
-// itself, and a task went where nobody had looked. Save without one asks
-// for it.
+// shared work: with another name in Assignee the List field asks for a
+// shared list (askForList): it is marked, a line says why (under the title
+// of a new task, under the fields of one being edited), and only the lists
+// the person named sees can be chosen in it. The field is the one place a
+// list is chosen: the line offered the lists as buttons of its own until
+// 2026-11, a second picker beside it. None is chosen for the user either:
+// before that the List field moved to the last used one by itself, and a
+// task went where nobody had looked. Save without one asks for it.
 // The title's @name of a new task assigns only in the user's Inbox that
 // nobody chose a list for (autoInbox: with users, for as long as the List
 // field holds what the dialog put there or what the title's #list says):
@@ -287,18 +289,6 @@ function editAssignee() {
 let autoInbox = false;
 let autoSetting = false;   // the List field set by the dialog (the title's #list): no choice of the user's
 app.listSelect?.addEventListener('change', () => { if (!autoSetting) autoInbox = false; });
-const LAST_SHARED = 'zone-tasks-shared-list';
-function sharedChoices(who = '') {
-  const shared = app.listChoices.filter(l => !l.private).map(l => l.ref)
-    .filter(r => !people.users?.has(who) || app.assignableIn(r).has(who));
-  let last = '';
-  try { last = localStorage.getItem(LAST_SHARED) || ''; } catch (_) {}
-  return shared.includes(last) ? [last, ...shared.filter(r => r !== last)] : shared;
-}
-function rememberShared(ref) {
-  if (!ref || app.isPrivateList(ref)) return;
-  try { localStorage.setItem(LAST_SHARED, ref); } catch (_) {}
-}
 // Someone else is named on the task: the chip, a name being typed, the
 // title's @name. Yourself doesn't count: a task in your Inbox is yours
 // already, and stays there without a question (Save sends no assignee).
@@ -571,12 +561,14 @@ function fillLists(task, ref) {
   // With users the Inbox is its user's alone: no place for a shared task.
   inbox.disabled = app.inboxPrivate && shared;
   if (inbox.disabled) inbox.title = 'A shared task stays shared';
+  if (inbox.disabled) inbox.dataset.off = '1';
   const options = [inbox];
   for (const l of app.listChoices) {
     const twin = l.ref.startsWith('shared/');
     const o = new Option((l.private ? '🔒 ' : '') + app.listName(l.ref) + (twin ? ' (shared)' : ''), l.ref);
     o.disabled = l.private && shared;
     if (o.disabled) o.title = 'A shared task stays shared';
+    if (o.disabled) o.dataset.off = '1';     // whatever the assignee (askForList)
     options.push(o);
   }
   options.push(new Option('New list…', NEW_LIST));
@@ -612,7 +604,7 @@ function openNewList() {
       <input type="text" id="task-new-list-name" autocomplete="off" spellcheck="false" required
              aria-label="The list's name" placeholder="Its name, e.g. shop">
       ${canPrivate ? `<label class="promote-check"${shared ? ' title="A shared task stays shared"' : ''}>` +
-        `<input type="checkbox" id="task-new-list-private"${shared ? ' disabled' : app.editPrivate() ? ' checked' : ''}> Private: only you see it and its tasks</label>` : ''}
+        `<input type="checkbox" id="task-new-list-private"${shared ? ' disabled' : app.editPrivate() && !assignedNow() ? ' checked' : ''}> Private: only you see it and its tasks</label>` : ''}
       <p class="rename-error" hidden></p>
       <div class="modal-actions">
         <button type="submit" class="btn btn-primary" id="task-new-list-create">Create</button>
@@ -689,9 +681,10 @@ function syncListNote() {
   // A private task with someone else's name on it: it needs a shared list.
   const needsList = !isNew && users && isPrivate && assignedNow();
   app.listNote.classList.toggle('task-edit-target-warn', needsList);
+  if (!isNew) askForList(needsList);
   if (needsList) {
     app.listNote.hidden = false;
-    askForList(app.listNote);
+    app.listNote.textContent = needsListText();
     return;
   }
   const group = app.listGroup(app.listSelect?.value || '');
@@ -715,6 +708,7 @@ function syncTarget() {
   if (!targetEl) return;
   const isNew = !document.getElementById('task-edit-id' + app.sfx).value && !batchTitles;
   targetEl.hidden = !isNew;
+  if (batchTitles) askForList(false);   // several titles: each says its own
   if (!isNew) return;
   const q = quickParse();
   const ref = q && quickList(q).list || app.listSelect?.value || '';
@@ -731,36 +725,34 @@ function syncTarget() {
   // assignee.)
   const needsList = app.isPrivateList(ref) && assignedNow();
   targetEl.classList.toggle('task-edit-target-warn', needsList);
-  if (needsList) askForList(targetEl);
+  if (needsList) targetEl.textContent = needsListText();
+  askForList(needsList);
 }
-// The line that asks for a shared list, in el: the shared lists to pick
-// from as buttons, the last used one first, and only those the person named
-// sees (a group's list is its members'); nothing is chosen for the user
-// (sharedChoices). More than a few: the rest are in the List field, as
-// New list… is.
-const SHARED_SHOWN = 6;
-function askForList(el) {
-  const refs = sharedChoices(namedNow());
-  el.textContent = refs.length ? 'A task for someone else needs a shared list: '
-    : 'A task for someone else needs a shared list: choose one in List.';
-  for (const r of refs.slice(0, SHARED_SHOWN)) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'task-edit-target-list';
-    btn.dataset.list = r;
-    btn.textContent = app.listName(r);
-    el.append(btn, ' ');
+// What the line says while the task needs a shared list: for whom, when
+// the name is a user's (a name half typed is "someone else").
+function needsListText() {
+  const who = namedNow();
+  return `A task for ${people.users?.has(who) ? who : 'someone else'} needs a shared list: choose one in List.`;
+}
+// The List field asks for a shared list (on), or no longer does: it is
+// marked, and only the lists the person named sees can be chosen in it:
+// not the Inbox nor a private list, nor a group's list they are none of
+// (the server would refuse the name there). New list… stays, and the list
+// the field has stays what it says. Nothing is chosen for the user.
+function askForList(on) {
+  const sel = app.listSelect;
+  if (!sel) return;
+  if (on) showField('list', true);   // also in a wiki without a list: New list… makes one
+  fieldEl('list')?.classList.toggle('task-prop-warn', on);
+  const who = namedNow(), user = people.users?.has(who);
+  for (const o of sel.options) {
+    if (o.value === NEW_LIST || o.dataset.off) continue;
+    const why = !on ? '' : app.isPrivateList(o.value) ? 'Only you see it: a task for someone else needs a shared list'
+      : user && !app.assignableIn(o.value).has(who) ? `${who} isn’t in the group ${app.listGroup(o.value)}, whose list it is` : '';
+    o.disabled = !!why;
+    o.title = why;
   }
-  if (refs.length > SHARED_SHOWN) el.append('or another in List.');
-  showField('list', true);   // also in a wiki without a list: New list… makes one
 }
-for (const el of [targetEl, app.listNote]) el?.addEventListener('click', e => {
-  const btn = e.target.closest('.task-edit-target-list');
-  if (!btn || !app.listSelect) return;
-  app.listSelect.value = btn.dataset.list;
-  app.listSelect.dispatchEvent(new Event('change'));   // the user's choice
-  (el === targetEl ? app.titleInput : assigneeInput).focus();
-});
 app.listSelect?.addEventListener('change', syncTarget);
 app.listSelect?.addEventListener('change', () => syncQuickPreview());
 app.titleInput.addEventListener('input', titleChanged);
@@ -1291,7 +1283,6 @@ app.form.addEventListener('submit', async e => {
     app.listSelect.reportValidity();
     return;
   }
-  if (!id) rememberShared(data.list);
   const created = onCreated;
   if (id) {
     // Only what was changed here; nothing changed, nothing written. When

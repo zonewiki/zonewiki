@@ -2790,10 +2790,11 @@ def test_c_t_makes_a_private_task_in_the_users_inbox(page, wiki, monkeypatch):
 def test_a_name_on_a_new_inbox_task_asks_for_a_shared_list(page, wiki, monkeypatch):
     # The Inbox is its user's alone and a task for someone is shared work:
     # naming someone on a new task nobody chose a list for asks for a shared
-    # list and offers them, the one this browser last made a task in first.
-    # None is chosen for the user (the List field moved by itself once, and
-    # a task went where nobody had looked). With none to offer, the dialog
-    # says so and Save asks for a list.
+    # list, in the List field: it is marked, the line under the title says
+    # why, and only shared lists can be chosen in it. None is chosen for the
+    # user (the List field moved by itself once, and a task went where nobody
+    # had looked), and the line has no picker of its own (it had the lists as
+    # buttons once, a second one beside the field). Save asks for a list.
     monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "token"), "bob": ("pw", "t2")})
     page.request.post("/login", form={"username": "alice", "password": "pw"})
     make_list(page, "own", private=True, pin=True)        # a private list, pinned first: no place for it either
@@ -2801,25 +2802,31 @@ def test_a_name_on_a_new_inbox_task_asks_for_a_shared_list(page, wiki, monkeypat
     page.goto("/page/garden")
     modal = page.locator(".task-edit-modal[open]")
     lists = modal.locator("select[id^=task-edit-list]")
+    field = modal.locator("[data-field=list]")
     target = modal.locator(".task-edit-target")
-    offered = target.locator(".task-edit-target-list")
     title = modal.locator("[id^=task-edit-title]")
-    warn = re.compile(r"\btask-edit-target-warn\b")
+    warn, marked = re.compile(r"\btask-edit-target-warn\b"), re.compile(r"\btask-prop-warn\b")
+    asks = "A task for bob needs a shared list: choose one in List."
+    to_choose = "el => [...el.options].filter(o => !o.disabled).map(o => o.textContent)"
 
     def c_t():
         page.keyboard.press("c")
         page.keyboard.press("t")
         expect(lists).to_have_value("")
 
-    # No shared list: the line under the title says what is missing, and Save refuses.
+    # No shared list: the line under the title says what is missing, the
+    # field it speaks of is there and marked, and Save refuses.
     c_t()
     title.fill("Ask about the loan @bob")
     expect(lists).to_have_value("")
-    expect(target).to_have_text("A task for someone else needs a shared list: choose one in List.")
+    expect(target).to_have_text(asks)
     expect(target).to_have_class(warn)
-    expect(offered).to_have_count(0)
+    expect(target.locator("button")).to_have_count(0)     # the field is where a list is chosen
     assert target.evaluate("el => getComputedStyle(el).color") == "rgb(180, 83, 9)"     # a warning, not the muted line
-    expect(lists).to_be_visible()                         # the field it speaks of is there
+    expect(lists).to_be_visible()
+    expect(field).to_have_class(marked)
+    assert field.evaluate("el => getComputedStyle(el).borderTopColor") == "rgb(180, 83, 9)"
+    assert lists.evaluate(to_choose) == ["New list…"]     # her Inbox and her own list are no place for it
     modal.locator("button[type=submit]").click()
     expect(modal).to_be_visible()
     assert lists.evaluate("el => el.validationMessage") == "A task for someone else needs a shared list"
@@ -2827,34 +2834,43 @@ def test_a_name_on_a_new_inbox_task_asks_for_a_shared_list(page, wiki, monkeypat
     title.fill("Ask about the loan")                      # the name gone: her Inbox will do
     expect(target).to_have_text("Adds to your Inbox: only you see it.")
     expect(target).not_to_have_class(warn)
+    expect(field).not_to_have_class(marked)
+    assert lists.evaluate(to_choose) == ["🔒 Inbox", "🔒 own", "New list…"]
     # The same for a name in the Assignee field, which is there with her own.
     expect(modal.locator(".task-field-assignee .tag-chip-label")).to_have_text(["@alice"])
     modal.locator("input[name=assignee]").fill("bob")
+    expect(target).to_have_text(asks)
+    expect(field).to_have_class(marked)
+    modal.locator("input[name=assignee]").fill("bo")      # half a name: someone, not yet who
     expect(target).to_have_text("A task for someone else needs a shared list: choose one in List.")
     modal.locator("input[name=assignee]").fill("")
     expect(target).to_have_text("Adds to your Inbox: only you see it.")
+    expect(field).not_to_have_class(marked)
     page.keyboard.press("Escape")
 
-    # One shared list: it is offered, not taken; Save without it still asks.
-    make_list(page, "team")
+    # Shared lists: they are what the field lets her choose, A–Z, and none is
+    # taken for her; Save without one still asks.
+    for name in ("team", "board", "zoo"):
+        make_list(page, name)
     page.goto("/page/garden")
     c_t()
     title.fill("Ask about the loan @bob")
-    expect(offered).to_have_text(["team"])
+    expect(target).to_have_text(asks)
+    expect(field).to_have_class(marked)
+    assert lists.evaluate(to_choose) == ["board", "team", "zoo", "New list…"]
     expect(lists).to_have_value("")                       # nothing chosen for her
-    expect(target).to_have_class(warn)
     modal.locator("button[type=submit]").click()
     expect(modal).to_be_visible()
     assert lists.evaluate("el => el.validationMessage") == "A task for someone else needs a shared list"
     title.fill("Ask about the loan")                      # without the name there is nothing to ask
-    expect(offered).to_have_count(0)
     expect(target).to_have_text("Adds to your Inbox: only you see it.")
+    expect(field).not_to_have_class(marked)
     title.fill("Ask about the loan @bob")
-    offered.first.click()                                 # choosing it is choosing it in the List field
-    expect(lists).to_have_value("team")
+    lists.select_option("team")
     expect(target).to_have_text("Adds to the list team: everyone sees it.")
     expect(target).not_to_have_class(warn)
-    expect(title).to_be_focused()
+    expect(field).not_to_have_class(marked)
+    assert lists.evaluate(to_choose) == ["🔒 Inbox", "board", "🔒 own", "team", "zoo", "New list…"]
     title.fill("Ask about the loan")                      # chosen by hand: it stays, whatever the title says
     expect(lists).to_have_value("team")
     title.fill("Ask about the loan @bob")
@@ -2863,35 +2879,12 @@ def test_a_name_on_a_new_inbox_task_asks_for_a_shared_list(page, wiki, monkeypat
     wait_for_field(page, "Ask about the loan", "assignee", "bob")
     task = task_by_title(page, "Ask about the loan")
     assert task["private"] is False and task["list"] == "team"
-
-    # Several shared lists: the one the last task went to comes first, then A–Z.
-    make_list(page, "board")
-    make_list(page, "zoo")
-    page.goto("/page/garden")
-    assert page.evaluate("localStorage.getItem('zone-tasks-shared-list')") == "team"
+    # No list is remembered for the next one: the field starts in her Inbox again.
+    assert page.evaluate("localStorage.getItem('zone-tasks-shared-list')") is None
     c_t()
-    title.fill("Send the minutes @bob")
-    expect(offered).to_have_text(["team", "board", "zoo"])
+    title.fill("Book the room @bob")
     expect(lists).to_have_value("")
-    offered.nth(1).click()
-    expect(lists).to_have_value("board")
-    modal.locator("button[type=submit]").click()
-    expect(modal).to_be_hidden()
-    wait_for_field(page, "Send the minutes", "list", "board")
-    c_t()
-    title.fill("Book the room @bob")
-    expect(offered).to_have_text(["board", "team", "zoo"])   # remembered
-    page.keyboard.press("Escape")
-    page.evaluate("localStorage.removeItem('zone-tasks-shared-list')")
-    page.reload()
-    c_t()
-    title.fill("Book the room @bob")
-    expect(offered).to_have_text(["board", "team", "zoo"])   # none remembered: A–Z
-    lists.select_option("team")                           # the List field does the same
-    expect(target).to_have_text("Adds to the list team: everyone sees it.")
-    modal.locator("button[type=submit]").click()
-    wait_for_field(page, "Book the room", "assignee", "bob")
-    assert task_by_title(page, "Book the room")["list"] == "team"
+    expect(field).to_have_class(marked)
 
 
 def test_a_new_tasks_fields_follow_its_title(page, wiki, monkeypatch):
@@ -2980,8 +2973,7 @@ def test_a_name_typed_before_the_users_are_known_still_counts(page, wiki, monkey
         route.continue_()
     expect(modal.locator("[id^=task-edit-quick]")).to_have_text("@bob")
     expect(modal.locator("[id^=task-edit-assignee-field] .tag-chip-label")).to_have_text(["@bob"])
-    modal.locator(".task-edit-target-list", has_text="team").click()
-    expect(lists).to_have_value("team")
+    lists.select_option("team")
     expect(modal.locator(".task-edit-target")).to_have_text("Adds to the list team: everyone sees it.")
     modal.locator("button[type=submit]").click()
     wait_for_field(page, "Ask about the loan", "assignee", "bob")

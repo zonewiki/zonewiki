@@ -1409,7 +1409,7 @@ A task for someone else is shared work, and they have to see it: so the name alo
 
 | Door | It asks for the list |
 |------|----------------------|
-| The dialog's **Assignee** field | in a line under the fields (under the title of a new task): "A task for someone else needs a shared list:" and the lists as buttons; Save waits for one |
+| The dialog's **Assignee** field | in the dialog's **List** field, which is marked and lets only shared lists be chosen; a line says why ("A task for bob needs a shared list: choose one in List."), and Save waits for one |
 | **Assign…**, **a**, a drop on someone's section By person | in the move dialog, opened next: "Give 1 task to bob: choose a shared list" |
 | An assistant, the API | `list` with `share` in the same write as `assignee`; the name alone is refused, saying so |
 
@@ -1424,11 +1424,11 @@ Shared by you, a task gets your name unless the write names someone (Sharing a t
 ### In the dialog
 
 `js/taskmodal.js`: the **Assignee** field, after Tags, on every task.
-On a shared task it holds who has it (empty: "No one"); on a private one your name, as a chip without × (`drawYours`, `.tag-chip-yours`; its tooltip: "A private task is yours. Name someone else to give it away: it then goes to a shared list").
+On a shared task it holds who has it (empty: "No one", which goes once a name is there); on a private one your name, as a chip without × (`drawYours`, `.tag-chip-yours`; its tooltip: "A private task is yours. Name someone else to give it away: it then goes to a shared list").
 Type `@` (everyone, yourself first) or the start of a name; Tab or Enter completes it to a chip, and another name replaces it; the chip's × or Backspace takes it off.
 `me` is yourself.
 A name that is no user who can be assigned is not saved: the dialog stays open and the field says so.
-On a private task another name asks for a shared list (`askForList`): the line under the fields turns into the question, with the shared lists that person sees as buttons (`#task-edit-list-note`, `.task-edit-target-warn`; under the title of a new task, Where a new task goes in `docs/spec/tasks.md`), and Save without one says so on the List field.
+On a private task another name asks for a shared list (`askForList`): the List field is marked (`.task-prop-warn`) and lets only the shared lists that person sees be chosen, the line under the fields says why ("A task for bob needs a shared list: choose one in List."; `#task-edit-list-note`, `.task-edit-target-warn`; under the title of a new task, Where a new task goes in `docs/spec/tasks.md`), and Save without one says so on the List field.
 With the list chosen the line says who will see the task and that it can't be made private again ("Everyone who uses the wiki will see and change this task. …", for a group's list "The members of the group hiring will see and change this task. …"), and Save sends the list, `share` and the name together.
 The name taken off, or your own typed, the task is yours again and nothing is asked; a task taken back to a private list before Save loses your name as one it keeps.
 A new task starts with the one user the filter names (`@anna` or `@me`; `filterDefaultAssignee`), as it starts with the filter's tags.

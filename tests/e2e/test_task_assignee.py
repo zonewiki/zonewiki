@@ -93,6 +93,7 @@ def test_the_modal_assigns_with_completion(alice):
     alice.keyboard.press("Tab")
     expect(modal.locator(".task-field-assignee .tag-chip-label")).to_have_text(["@bob"])
     expect(field).to_have_value("")
+    expect(field).to_have_attribute("placeholder", "")         # not "No one" beside a name
     modal.get_by_role("button", name="Save").click()
     wait_for_assignee(alice, "Call Sam", "bob")
     expect(card(alice, "Call Sam").locator(".task-assignee")).to_have_text("@bob")
@@ -104,6 +105,7 @@ def test_the_modal_assigns_with_completion(alice):
     expect(modal.locator(".task-field-assignee .tag-chip-label")).to_have_text(["@alice"])
     modal.locator(".task-field-assignee .tag-chip-x").click()
     expect(modal.locator(".task-field-assignee .tag-chip")).to_have_count(0)
+    expect(modal.locator("#task-edit-assignee")).to_have_attribute("placeholder", "No one")
     modal.get_by_role("button", name="Save").click()
     wait_for_assignee(alice, "Call Sam", None)
     expect(card(alice, "Call Sam").locator(".task-assignee")).to_have_count(0)
@@ -149,9 +151,8 @@ def test_a_new_task_s_title_assigns(alice):
     expect(modal.locator(".task-field-assignee .tag-chip-label")).to_have_text(["@bob"])   # the field follows the title
     expect(lists).to_have_value("")                # nothing chosen for her
     target, note = modal.locator("#task-edit-target"), modal.locator("#task-edit-list-note")
-    expect(target.locator(".task-edit-target-list")).to_have_text(["team"])
-    target.locator(".task-edit-target-list").click()
-    expect(lists).to_have_value("team")
+    expect(target).to_have_text("A task for bob needs a shared list: choose one in List.")
+    lists.select_option("team")
     expect(target).to_have_text("Adds to the list team: everyone sees it.")
     expect(note).to_be_hidden()                  # a new task: the line under the title says who sees it
     expect(modal.locator("#task-edit-assignee")).to_be_visible()   # in a shared list: who has it shows
@@ -239,7 +240,7 @@ def test_the_filter_takes_names_me_and_none(alice, wiki):
     modal = alice.locator("#task-edit-modal")
     expect(modal.locator(".task-field-assignee .tag-chip-label")).to_have_text(["@bob"])
     modal.locator("#task-edit-title").fill("Another for Bob")
-    modal.locator(".task-edit-target-list", has_text="team").click()   # a task for someone: which shared list
+    modal.locator("#task-edit-list").select_option("team")     # a task for someone: which shared list
     modal.get_by_role("button", name="Save").click()
     wait_for_assignee(alice, "Another for Bob", "bob")
     assert task(alice, "Another for Bob")["list"] == "team"      # out of her Inbox: a task for someone is shared
@@ -943,9 +944,9 @@ def test_a_private_task_is_yours_and_assign_gives_it_away_with_a_shared_list(ali
 
 def test_the_dialog_of_a_private_task_names_you_and_another_name_asks_for_a_shared_list(page, wiki, monkeypatch):
     """The Assignee field of a private task holds its user's name, with no ×;
-    someone else's asks for a shared list under the fields, offering those
-    that person sees (not a group's they are none of), and Save waits for
-    one."""
+    someone else's asks for a shared list: the List field is marked, the line
+    under the fields says why, only the lists that person sees can be chosen
+    (not a group's they are none of), and Save waits for one."""
     monkeypatch.setattr(settings, "USERS", {name: ("pw", "") for name in ("alice", "bob", "carol")})
     monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"role": "admin", "groups": "hiring"}, "carol": {"groups": "hiring"}})
     page.request.post("/login", form={"username": "alice", "password": "pw"})
@@ -957,7 +958,11 @@ def test_the_dialog_of_a_private_task_names_you_and_another_name_asks_for_a_shar
     modal = open_edit(page, "Ask Sam")
     field, lists, note = modal.locator("#task-edit-assignee"), modal.locator("#task-edit-list"), modal.locator("#task-edit-list-note")
     chips = modal.locator(".task-field-assignee .tag-chip-label")
-    warn = re.compile(r"\btask-edit-target-warn\b")
+    warn, marked = re.compile(r"\btask-edit-target-warn\b"), re.compile(r"\btask-prop-warn\b")
+    box = modal.locator("[data-field=list]")
+    to_choose = "el => [...el.options].filter(o => !o.disabled).map(o => o.textContent)"
+    everything = ["🔒 Inbox", "hiring", "team", "New list…"]
+    assert lists.evaluate(to_choose) == everything
     expect(chips).to_have_text(["@alice"])
     expect(modal.locator(".task-field-assignee .tag-chip-x")).to_have_count(0)
     expect(modal.locator(".task-field-assignee .tag-chip")).to_have_attribute(
@@ -972,30 +977,38 @@ def test_the_dialog_of_a_private_task_names_you_and_another_name_asks_for_a_shar
     field.press("Backspace")
     expect(chips).to_have_text(["@alice"])
     expect(note).to_have_text("Private: only you see this task.")
-    # Bob: the lists he sees are offered, and Save waits for one.
+    # Bob: the List field asks, with the lists he sees, and Save waits for one.
     field.fill("bob")
     page.keyboard.press("Enter")
     expect(chips).to_have_text(["@bob"])
-    expect(note).to_have_text("A task for someone else needs a shared list: team")
+    expect(note).to_have_text("A task for bob needs a shared list: choose one in List.")
     expect(note).to_have_class(warn)
+    expect(note.locator("button")).to_have_count(0)        # the field is where a list is chosen
+    expect(box).to_have_class(marked)
+    assert lists.evaluate(to_choose) == ["team", "New list…"]      # not her Inbox, not the group's he isn't in
+    assert lists.locator("option", has_text="hiring").get_attribute("title") == "bob isn’t in the group hiring, whose list it is"
+    expect(lists).to_have_value("")                         # nothing chosen for her
     modal.get_by_role("button", name="Save").click()
     expect(modal).to_be_visible()
     assert lists.evaluate("el => el.validationMessage") == "A task for someone else needs a shared list"
     assert task(page, "Ask Sam")["private"] is True
-    # Carol is in the group: its list is offered for her too.
+    # Carol is in the group: its list is hers to be given a task in too.
     field.fill("carol")
     page.keyboard.press("Enter")
-    expect(note.locator(".task-edit-target-list")).to_have_text(["hiring", "team"])
+    expect(note).to_have_text("A task for carol needs a shared list: choose one in List.")
+    assert lists.evaluate(to_choose) == ["hiring", "team", "New list…"]
     # The name taken off: hers again, and nothing to ask.
     modal.locator(".task-field-assignee .tag-chip-x").click()
     expect(chips).to_have_text(["@alice"])
     expect(note).to_have_text("Private: only you see this task.")
     expect(note).not_to_have_class(warn)
+    expect(box).not_to_have_class(marked)
+    assert lists.evaluate(to_choose) == everything
     # Bob again, and the list: it is shared there and his.
     field.fill("bob")
     page.keyboard.press("Enter")
-    note.locator(".task-edit-target-list", has_text="team").click()
-    expect(lists).to_have_value("team")
+    lists.select_option("team")
+    expect(box).not_to_have_class(marked)
     expect(chips).to_have_text(["@bob"])                    # her name isn't put over his
     expect(note).to_have_text("Everyone who uses the wiki will see and change this task. It can’t be made private again.")
     modal.get_by_role("button", name="Save").click()

@@ -265,7 +265,7 @@ When you share one of your own tasks, Zonewiki assigns it to you, so it stays in
 
 A private task (in your Inbox or a private list) is yours: **Assignee** shows your name, and it can't be no one's.
 To give it to someone else, name them as you would on any task: in **Assignee**, with **Assign…**, or by dragging the card onto their section.
-Zonewiki then asks which shared list the task goes to, offering the lists that person sees.
+Zonewiki then asks which shared list the task goes to: in the dialog the **List** field is marked and offers the shared lists that person sees; after **Assign…** or a drag a list of them opens.
 Choose one, and the task is shared there and theirs.
 Everyone who sees that list sees the task from then on, and it can't be made private again; **Cancel** leaves it yours.
 A task whose assignee has left (or lost access to the list) shows the name struck through and counts as no one's.

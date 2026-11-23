@@ -1741,13 +1741,15 @@ The edit dialog of a new task says it under the title (`.task-edit-target`, `syn
 It follows the List field, and a `#word` in the title that names a list (Quick-add: `#shop` puts the task in the list shop, the first such word; the others are tags).
 Hidden when editing a task and for several titles at once.
 
-**A task for someone else needs a shared list** (with users; `askForList`, `sharedChoices`): a private task is yours alone, so on a new task in the Inbox or a private list, naming someone else (the Assignee field; the title's `@name` and a view's `assignee=` while the task is in the Inbox that nobody chose a list for, `autoInbox`) turns the line into a question: "A task for someone else needs a shared list:" and the shared lists that person sees, each a button (`.task-edit-target-list`), the one this browser last made a task in first (`localStorage` `zone-tasks-shared-list`), then A–Z; past six it says "or another in List.".
-A task being edited asks the same under its fields (A private task is yours in `docs/spec/users.md`).
-A click on one is choosing it in the List field.
-**Nothing is chosen for you**: a task goes where somebody looked.
+**A task for someone else needs a shared list** (with users; `askForList`): a private task is yours alone, so on a new task in the Inbox or a private list, naming someone else (the Assignee field; the title's `@name` and a view's `assignee=` while the task is in the Inbox that nobody chose a list for, `autoInbox`) makes the List field ask for one.
+The line says why, in the warning's colour: "A task for bob needs a shared list: choose one in List." ("someone else" while the name is half typed).
+**The List field is where the list is chosen**: it is marked in the same colour (`.task-prop-warn`), shown if it wasn't, and only the lists that person sees can be chosen in it: the Inbox and your private lists are off, and a group's list they are none of (its tooltip says so: "bob isn't in the group hiring, whose list it is"); **New list…** stays, and makes a shared one unless you tick Private.
+The line has no picker of its own (it had the lists as buttons until 2026-11: a second one beside the field).
+A task being edited asks the same, the line under its fields (A private task is yours in `docs/spec/users.md`).
+**Nothing is chosen for you**: a task goes where somebody looked, and no list is remembered from the last task.
 Taking the name away takes the question away.
 **Your own name asks nothing**: a task in your Inbox is yours as it is (a view's `assignee=me`, the title's `@me`), so it stays there, private, and is saved without an assignee.
-With no shared list the line reads "A task for someone else needs a shared list: choose one in List." (New list… in it makes one), and Save without one says so on the List field.
+With no shared list the field has New list… alone to choose, which makes one, and Save without a shared list says so on the List field ("A task for someone else needs a shared list").
 An assistant's `create_task` for someone else with no shared list is refused, naming the shared lists; `POST /api/tasks` likewise answers 400 ("A private task is yours: to give it to bob, put it in a shared list in the same write (list, with share)").
 With the user's own name both make the task in the Inbox, theirs, with no name kept.
 
