@@ -25,7 +25,7 @@ New to Zonewiki? Start with [Getting started](getting-started.md).
 
 ## Your Zonewiki
 
-- [Your data](your-data.md): plain files, git, backups and leaving
+- [Your data](your-data.md): plain files, git, backups, moving and leaving
 - [Running Zonewiki yourself](self-hosting.md): installing, settings, opening it up safely
 
 The full rules for each feature, written for whoever builds Zonewiki, are in [the spec](../spec/).

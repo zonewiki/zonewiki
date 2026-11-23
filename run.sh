@@ -188,7 +188,7 @@ build_image() {
 needs_checkout() {
   if [[ -z "$CHECKOUT" ]]; then
     echo "./run.sh $1 needs a checkout of Zonewiki (git clone https://github.com/zonewiki/zonewiki);" \
-         "beside compose.yaml alone, run.sh runs the prebuilt image: up, down, logs, update, user, group, config." >&2
+         "beside compose.yaml alone, run.sh runs the prebuilt image: up, down, logs, update, user, group, config, export, import." >&2
     exit 1
   fi
 }
@@ -480,11 +480,33 @@ case "${1:-up}" in
       -e "ZONE_SEMANTIC_SEARCH=$semantic" -- \
       /app/zonewiki eval "/wiki-data/$file" "${@:3}"
     ;;
-  user|group|config)
+  user|group|config|export|import)
     # The settings file's commands (zonewiki user …, zonewiki group …, zonewiki config …; see
     # docs/spec/users.md), in a one-off container of the app's image, with
     # .env and the wiki as up gives them, so the file is written as Zonewiki's
     # user and import sees .env. A running Zonewiki takes the change itself.
+    #
+    # export and import (zonewiki export, zonewiki import; Moving a wiki in
+    # docs/spec/deployment.md) run the same way. The container sees the
+    # wiki's folder and nothing else of this machine, so the archive goes
+    # through stdout and stdin: ./run.sh export > wiki.tar.gz,
+    # ./run.sh import < wiki.tar.gz (its options before the <).
+    case "$1" in
+      export)
+        if [[ -t 1 ]]; then
+          echo "./run.sh export writes the wiki's archive to stdout: ./run.sh export > wiki.tar.gz" >&2
+          exit 1
+        fi
+        set -- export --output - "${@:2}"
+        ;;
+      import)
+        if [[ -t 0 ]]; then
+          echo "./run.sh import reads a wiki's archive from stdin: ./run.sh import < wiki.tar.gz" >&2
+          exit 1
+        fi
+        set -- import "${@:2}" -
+        ;;
+    esac
     needs_wiki
     # In a checkout, the image as up builds it, its output only when the
     # build fails; the prebuilt image compose run pulls if it isn't here.
@@ -498,12 +520,13 @@ case "${1:-up}" in
       fi
       rm -f "$log"
     fi
+    # No terminal for an export either: one would change the archive's bytes.
     tty=()
-    [[ -t 0 ]] || tty=(-T)
+    [[ -t 0 && "$1" != export ]] || tty=(-T)
     compose run --rm --no-deps "${tty[@]}" zonewiki /app/zonewiki "$@"
     ;;
   *)
-    echo "Usage: $0 [up|down|logs|update|user|group|config|build|test|e2e|flaky|bench|retrieval|binaries|leaks|screenshots|eval]"
+    echo "Usage: $0 [up|down|logs|update|user|group|config|export|import|build|test|e2e|flaky|bench|retrieval|binaries|leaks|screenshots|eval]"
     echo "In a checkout, Zonewiki's image is built from it; beside compose.yaml alone, the prebuilt image runs."
     echo "  up     - start Zonewiki (default); in a checkout, build its image first"
     echo "  down   - stop Zonewiki"
@@ -513,6 +536,8 @@ case "${1:-up}" in
     echo "  group includes NAME [+G] [-G], group owners NAME [+U] [-U], group list - groups made of groups and a group's owners, in the wiki's settings file"
     echo "  config check|set|unset|passwd|token - the wiki's settings file: check it, set a key, the password"
     echo "                and MCP token without users"
+    echo "  export > FILE - write the whole wiki to one file, with its history and its users, to move it to another Zonewiki"
+    echo "  import < FILE - make the wiki from such a file, in an empty wiki folder (--users-only, --max-size SIZE before the <)"
     echo "Only in a checkout:"
     echo "  build  - build the container image only"
     echo "  test   - gofmt, go vet, go test -race and the unit/API tests in the tools image (extra args go to pytest)"

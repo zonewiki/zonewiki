@@ -426,6 +426,25 @@ def test_user_and_config_run_zonewiki_in_a_one_off_container(sandbox, tmp_path):
     assert r.returncode == 1 and "No wiki at" in r.stderr
 
 
+def test_export_and_import_pass_the_archive_through_stdout_and_stdin(sandbox, tmp_path):
+    """./run.sh export > FILE and ./run.sh import < FILE: the container sees
+    the wiki's folder alone, so the archive goes through the pipes, never
+    through a terminal, and an import's options come before the -."""
+    repo, env, log = sandbox
+    wiki = tmp_path / "wiki"
+    wiki.mkdir()
+    (repo / ".env").write_text(f"ZONE_DATA={wiki}\n")
+    for args, sent in ((["export"], "export --output -"),
+                       (["import"], "import -"),
+                       (["import", "--users-only", "--max-size", "1GB"], "import --users-only --max-size 1GB -")):
+        r = subprocess.run(["./run.sh", *args], cwd=repo, env=env, capture_output=True, text=True,
+                           stdin=subprocess.DEVNULL)
+        assert r.returncode == 0, r.stderr
+        call = [l for l in _engine_calls(log, "compose") if " run " in l][-1]
+        assert call.endswith("run --rm --no-deps -T zonewiki /app/zonewiki " + sent)
+        assert r.stdout == ""   # nothing of run.sh's own in the archive
+
+
 def test_the_default_wiki_is_zonewiki_in_the_home_folder(sandbox, tmp_path):
     repo, env, log = sandbox
     env["HOME"] = str(tmp_path / "home")

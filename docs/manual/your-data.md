@@ -133,6 +133,44 @@ The details are in [Backups](../spec/deployment.md#backups).
 
 Treat every backup as you treat the wiki: it holds every user's private pages, and a copy of the folder holds the password hashes too.
 
+## Moving to another Zonewiki
+
+A wiki moves in one file: from your computer to a server or a NAS, to the hosted Zonewiki, or from there to a Zonewiki of your own.
+The file holds the pages, uploads and tasks with all their history, and the users, who sign in afterwards with the password they had.
+
+Where the wiki is now, write the file; Zonewiki may keep running:
+
+```bash
+./run.sh export > my-wiki.tar.gz
+```
+
+On the hosted Zonewiki, the file is **Download** under **Export** on your account page.
+
+Where the wiki goes, the wiki folder must be empty and Zonewiki stopped:
+
+```bash
+./run.sh import < my-wiki.tar.gz
+./run.sh up
+```
+
+On the hosted Zonewiki, open **Bring a wiki you have** under **Create your wiki** on your account page, and pick the file.
+The user name and password you give there are yours in the moved wiki: a user of that name gets the password, otherwise you are added to its users.
+
+Afterwards:
+
+- Everyone signs in again.
+- An assistant that was connected by signing in is connected again, at the new address; one with a token needs only the new address.
+- Set the names the wiki is opened by, if it has any: `./run.sh config set hosts wiki.example.org` ([Running Zonewiki yourself](self-hosting.md)).
+- Open invite and reset links are void: make new ones.
+
+Two things to know before:
+
+- Only saved text moves. The export tells you if pages hold changes that aren't in the history yet: open them, choose **Done**, and export again.
+- The file is as private as the wiki. It holds every user's private pages and the hashes of their passwords.
+
+With the binary alone the commands are `zonewiki export` and `zonewiki import FILE`.
+All of it is in [Moving a wiki](../spec/deployment.md#moving-a-wiki).
+
 ## Exporting tasks
 
 Tasks are already files, but to hand a list to someone or move it to another wiki, export it:
@@ -175,6 +213,8 @@ Stop it, and the folder is still there: your pages as Markdown, your uploads, yo
 - Read the history with `git log` or any git tool.
 - `[[wikilinks]]` are understood by many Markdown tools; elsewhere they read as plain text.
 - The tasks are JSON, which a script turns into whatever the next tool imports.
+
+From the hosted Zonewiki you get that folder as a file, **Download** under **Export** on your account page: unpack it, and it is the same.
 
 Coming back works the same way: point Zonewiki at the folder again.
 You can also point Zonewiki at a folder of Markdown notes you already have; it makes the folder a git repository if it isn't one and adds a home page.

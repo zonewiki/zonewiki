@@ -40,7 +40,7 @@ What each file and folder of the repository is for.
 ├── .github/ISSUE_TEMPLATE/    # The same two for GitHub, and config.yml (a security problem goes to a private report)
 ├── go/                     # The server: package main, a file per area; pure code without Zonewiki's state in go/internal/
 │   ├── go.mod, go.sum      # Go modules, exact versions (goldmark, x/text, onnxruntime_go), and zonefiles from ../
-│   ├── server.go           # main: flags, start-up, the routes' mux, the request checks around them; zonewiki eval, zonewiki health, zonewiki manual, zonewiki licenses, zonewiki user, zonewiki group, zonewiki config
+│   ├── server.go           # main: flags, start-up, the routes' mux, the request checks around them; zonewiki eval, zonewiki health, zonewiki manual, zonewiki licenses, zonewiki user, zonewiki group, zonewiki config, zonewiki export, zonewiki import
 │   ├── login.go            # The login gate's routes: /login, /logout
 │   ├── static.go           # public/ served as it is (gzipped, kept by the browser), from the folder or the binary's copy; a file sent with its type
 │   ├── files.go            # Zonewiki's own files: public/ and the docs from a folder on disk (--public, --docs, found from the binary when it is the user's own: ownfolder_*.go) or the binary's copies (zonefiles); zonewiki licenses
@@ -86,6 +86,7 @@ What each file and folder of the repository is for.
 │   ├── tasklists.go        # Task lists: the lists a user sees (taskLists, refs), their pins, My tasks (the home view's rule, mineFilter, and its settings), and the list operations (make, rename, delete, share, pin, settings)
 │   ├── tasksetup.go        # What a start does over the task files (filed by month and list, Zonewiki's format, a shared task in no list into #general), and the mark that lets later starts skip it
 │   ├── wikiformat.go       # The format of the wiki's files, .zone-format at its root (in git): read at start, a newer one refused, written into a new wiki
+│   ├── transfer.go         # zonewiki export (the whole wiki in one file: a clone and the settings file) and zonewiki import (a wiki from such a file, in an empty folder: the history fetched into a repository of its own, the host's settings left out)
 │   ├── tasksapi.go         # The /api/tasks routes
 │   ├── tasksembed.go       # The [[tasks:]] embed: its HTML, its settings dialog, the counts the Tasks links show
 │   ├── tasklogic.go        # What Zonewiki does with tasks beyond keeping them: a series' next occurrence, completing, history, comments, backlinks, [[task:…]] references; taskFiles, the store, wired to the wiki here
@@ -102,6 +103,7 @@ What each file and folder of the repository is for.
 │   ├── internal/mdtext/    # Package mdtext, no globals: markdown source text (frontmatter, fences, code and math masking, headings and anchors, wikilink syntax, the splice of a section's text, checkboxes, slugs)
 │   ├── internal/settingsfile/  # Package settingsfile: the settings file's format ([user …] and [group …] sections; the strict parser, line edits keeping comments, the owner-only write); what its keys mean stays in configfile.go
 │   ├── internal/tokenizer/ # Package tokenizer: the embedding model's tokenizer (byte-level BPE from its tokenizer.json)
+│   ├── internal/wikiarchive/  # Package wikiarchive: the file a whole wiki moves in (a gzipped tar of a clone and the settings file), written, and read as untrusted: only the history's objects and refs and the settings file, as plain files
 │   ├── retrieval.go        # Search and LLM retrieval (BM25 + optional semantic index), the query log
 │   ├── embed.go            # Optional semantic search: section embeddings, the index and its cache, Related pages
 │   ├── embed_onnx.go       # The model on onnxruntime (cgo; embed_nocgo.go: built without cgo, keywords only)

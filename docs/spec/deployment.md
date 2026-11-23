@@ -5,7 +5,7 @@ Part of Zonewiki's spec (see `AGENTS.md` for the index).
 How Zonewiki is built and run: the files that deploy it (`Containerfile`, the compose files, `run.sh`, `.env`), the commands,
 running it without `run.sh` or from source, the release binaries, with the prebuilt image (on a computer, a server or a NAS), CI on Forgejo and GitHub,
 network access (a Unix socket, systemd), mail, phone access, the version string, the home-screen app,
-the data directory (its data format) and its backups, how Zonewiki packs the wiki's git repository, how big a wiki can be, and moving from Zonewiki 1.
+the data directory (its data format) and its backups, moving a wiki to another Zonewiki (export and import), how Zonewiki packs the wiki's git repository, how big a wiki can be, and moving from Zonewiki 1.
 
 ## Files
 
@@ -193,6 +193,8 @@ edited by hand or with `./run.sh user …`/`./run.sh group …`/`./run.sh config
 | `./run.sh user …` | The users in the wiki's settings file (`zonewiki user`) |
 | `./run.sh group …` | Groups made of groups and a group's owners (`zonewiki group`) |
 | `./run.sh config …` | The wiki's settings file (`zonewiki config`) |
+| `./run.sh export > FILE` | The whole wiki in one file, to move it to another Zonewiki (`zonewiki export`; Moving a wiki, below) |
+| `./run.sh import < FILE` | The wiki from such a file, into an empty wiki folder (`zonewiki import`; its options before the `<`) |
 | `./run.sh build` | Checkout only: build the container image only (`compose build`) |
 | `./run.sh test` | gofmt, go vet, go test -race, then the unit/API tests, in the tools image |
 | `./run.sh e2e` | The browser tests and the tasks-core.js (Node) tests, in the tools image |
@@ -740,7 +742,9 @@ Inside the container it is always mounted at `/wiki-data`.
 ### A new wiki
 
 A folder is a wiki when it has a `.zone-format`,
-or a `.zone/secret_key`, which only a start writes: a wiki an older Zonewiki served, from before the format file, starts as it did and gets the file (The data format, below).
+or a `.zone/secret_key`, which only a start writes: a wiki an older Zonewiki served, from before the format file, starts as it did and gets the file (The data format, below);
+or a `.zone/imported`, which `zonewiki import` leaves: a wiki of that age moved here (Moving a wiki, below).
+A folder with a `.zone-import/` holds an import that didn't finish, and Zonewiki doesn't start there (`unfinishedImport`).
 A start on one that isn't makes it one: a home page, `_assets/`, `.zone/`, `.zone-format`, and, with git, a repository whose first commit holds its files as they are.
 An empty folder (or one with only `.zone/`, which the commands write before a first start, `_assets/`, and an empty repository's `.git`) is made a wiki without asking.
 A folder that holds files is made one only with `--init` or `ZONE_INIT=1` (`newWikiError`):
@@ -786,6 +790,7 @@ Zonewiki's own state, none of it in git (`.git/info/exclude` has `/.zone/*`, `ex
 - `index/` — search's files: `pages.idx` and `sections.idx` (the BM25 indexes), `tasks/<hash>.gob` (each closed tasks' archive's search docs) and `embeddings.json` (the semantic search cache) (`docs/spec/search.md`)
 - `queries.jsonl` — the query log, only with `query-log = yes`
 - `tasks-checked` — the mark that a start has checked the task files, so later starts skip it while git says they haven't changed (Storage in `docs/spec/tasks.md`)
+- `imported` — a line `zonewiki import` leaves, with its date and version: the folder is a wiki that was moved here (Moving a wiki, below)
 
 ### The data format
 
@@ -848,6 +853,112 @@ Zonewiki writes each file whole (a reader never sees half of one), but a copy ta
   Lost, `seen/` shows each user the tasks' news again, `drafts/` loses only a text left in a conflict, `unsaved-files.json` the files pasted in a dialog not saved yet to their uploader (no one opens them), and `queries.jsonl` is a log.
 - **Restoring**: put the folder back where `ZONE_DATA` points and start Zonewiki;
   the files must belong to the user Zonewiki runs as, and `.zone/config` and `secret_key` should stay readable by it alone (0600: Zonewiki warns in its log when others may read the settings file).
+
+## Moving a wiki
+
+A wiki moves from one Zonewiki to another in one file: from a computer to a server, from a NAS to the hosted Zonewiki, or back.
+`zonewiki export` writes the file, `zonewiki import` makes a wiki from it.
+What moves is everything in the wiki's history (pages, uploads, tasks, lists) and its users, who sign in as before; a backup is the folder itself (Backups, above).
+
+```bash
+./run.sh export > my-wiki.tar.gz              # on the machine the wiki is on; Zonewiki may be running
+./run.sh import < my-wiki.tar.gz              # on the other one: into an empty wiki folder, Zonewiki stopped
+./run.sh config set hosts wiki.example.org    # the names it is opened by there, if any
+./run.sh up
+```
+
+With the binary: `zonewiki export --output my-wiki.tar.gz` and `ZONE_DATA=/srv/wiki zonewiki import my-wiki.tar.gz`.
+The hosted Zonewiki writes the same file (its account page's export) and takes one when a wiki is set up there.
+
+| Command | What it does |
+|---------|--------------|
+| `zonewiki export` | Writes `zonewiki-YYYY-MM-DD.tar.gz` in the current folder |
+| `zonewiki export --output FILE` | Writes FILE; `-` is stdout, which is what `./run.sh export` uses |
+| `zonewiki export --work FOLDER` | Puts the export together in FOLDER, not beside FILE (for stdout: not in the wiki's `.zone/`) |
+| `zonewiki import FILE` | Makes the wiki in `ZONE_DATA` from FILE; `-` is stdin, which is what `./run.sh import` uses |
+| `zonewiki import --max-size SIZE FILE` | Refuses a wiki that would take more than SIZE on disk (`1GB`), its history and its files |
+| `zonewiki import --users-only FILE` | Of the settings file, takes the users, the groups, `locale`, `date-format` and `noshare` only |
+| `zonewiki import --work FOLDER FILE` | Unpacks the archive in FOLDER, not in `ZONE_DATA` |
+
+An import's options come before the file.
+
+### What an export holds
+
+The file is a gzipped tar with one folder, `wiki/`:
+
+- a clone of the wiki's git repository, with its files checked out: every commit, the branch that is checked out, the tags; no remote;
+- `wiki/.zone/config`, the settings file, when the wiki has one: the settings, the users, their roles and groups, and the hashes of passwords and MCP tokens.
+
+So it holds every user's private pages and the password hashes, and is as confidential as the wiki: the command says so, and writes the file for its owner alone (0600).
+An export doesn't write over a file that is there.
+
+Unpacked, it is a wiki's folder: whoever leaves Zonewiki has the pages as files and the history as a git repository.
+
+### What stays behind
+
+| Not in the file | So, where the wiki moves to |
+|---|---|
+| `.zone/secret_key`, `signed-out` | everyone signs in again, with the password they had |
+| `.zone/grants` | an assistant connected by signing in connects again (the address changes anyway); a static MCP token works as before |
+| `.zone/links` | open invite and reset links don't work |
+| `.zone/index/` | search's indexes are built again when first needed |
+| `.zone/seen/`, `drafts/`, `removed-users`, `queries.jsonl` | the tasks' news shows again; a text left in a conflict is gone; a removed user's name is still not a stranger's to sign up with where a private folder, a commit or a task names it (Sign-up in `docs/spec/users.md`) |
+| What isn't committed | lost: see Text that is not committed, below |
+| The host's settings: `hosts`, `base-url`, `git-remote`, `trusted-proxies`, `storage-max` | set them again where they are needed (`zonewiki config set`); the import names the ones it left out |
+
+### Text that is not committed
+
+An export holds what is in git.
+Zonewiki commits a page's text at Done or at the page's next change, so an auto-save not followed by either, and a file edited on disk, are in no commit yet.
+The export counts such files and names the first ones on stderr (`2 files hold changes that aren't committed yet, and those changes aren't in the export: …`), and writes the archive all the same.
+Open and save what should come along, then export again.
+
+### Where an import puts the wiki
+
+Into `ZONE_DATA`, which must be empty, or not there yet (the import makes the folder; the folder it is in must exist).
+A folder that holds anything is refused, the fresh wiki a first start made included: an import makes a whole wiki and never adds to one.
+Empty the folder, or point `ZONE_DATA` at a new one.
+
+The import says what came: how many pages, the format, the users, and the settings it left in the file.
+Then start Zonewiki: it brings a wiki of an older format up to date as it does at any start (The data format, above), and makes the folder's `_assets/`, the session key and the indexes.
+A wiki in a format newer than this Zonewiki knows is refused, with the newer Zonewiki as the way to go.
+
+Nothing is committed by an import: the history is the archive's, to the commit.
+
+### How an export is made
+
+`exportMain` in `go/transfer.go`.
+It clones the repository as a git client fetches it (`git clone --no-local`), not by copying its files, which Zonewiki packs and prunes while it runs (Packing the repository, below): so an export is whole whatever the server does meanwhile, and takes none of its locks.
+The clone has `core.symlinks=false`, so a link in the history is a file that names its target; its `origin`, which would name the folder the wiki was in, is removed.
+The settings file is copied in as it is; Zonewiki writes it whole, by a rename, so the copy is never half a file.
+The archive is written by Zonewiki itself (`internal/wikiarchive`), files and folders only, to a temporary file renamed into place.
+The clone is made in a folder beside the output (for stdout in the wiki's `.zone/`, which the container can write and git ignores; `--work` names another) and removed afterwards, also when the command is stopped.
+
+### How an import is made
+
+`importMain` in `go/transfer.go`.
+An archive is untrusted input: the hosted Zonewiki imports what its customers upload (An imported archive in `docs/spec/security.md`).
+So nothing of it is used as it is:
+
+1. **Unpack** (`wikiarchive.Read`), into `.zone-import/` in `ZONE_DATA`:
+   only the repository's history (`.git/HEAD`, `.git/packed-refs`, `.git/objects/`, `.git/refs/`) and `.zone/config` are written out, as plain files.
+   The repository's `config`, its `hooks/`, its `info/`, `objects/info/alternates` and the whole work tree are passed by.
+   An entry that isn't a file or a folder where one of those should be (a link, a device), a name with `..`, a leading `/`, a backslash or a control character, anything beside `wiki/`, a file twice: the archive is refused.
+2. **Fetch the history** into a repository made here (`git init`, then `git fetch` of all branches and tags, with `transfer.fsckObjects`): what git reads and runs is this repository's config, never the archive's.
+3. **Check out** the branch the archive had checked out, with `core.symlinks=false`.
+   With `--max-size`, the files' sizes are asked of the history first (`git ls-tree -l`): a small history can hold files far bigger than itself.
+4. **Check the format** (`.zone-format`): a newer one is refused.
+5. **Take the settings file** through the same parser and checks a start uses (`importedSettings`); one Zonewiki wouldn't start with is refused, with the line.
+   The host's keys (`hostKeys` in `go/configfile.go`) are taken out; with `--users-only` every key but the users, the groups and `usersOnlyKeys`.
+   It is written 0600.
+6. **Move into place**: the wiki's entries are renamed up into `ZONE_DATA`, `.git` last, and `.zone-import/` is removed after that.
+
+A failure before step 6 leaves `ZONE_DATA` empty again.
+`.zone-import/` is there from the first step to the last, so a folder that holds it holds an import that didn't finish (killed, or out of room while moving):
+Zonewiki doesn't start there (`unfinishedImport`), and the next import empties the folder and starts over.
+
+The import leaves `.zone/imported`, a line with its date and version.
+It makes the folder a wiki for the next start though it may have no `.zone-format` (an archive of a wiki from before that file): A new wiki, above.
 
 ## Packing the repository
 

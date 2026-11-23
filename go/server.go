@@ -46,6 +46,9 @@ Commands:
                              enable, invite, reset, remove, list)
   group COMMAND              the wiki's groups: what one includes, its owners (includes, owners, list)
   config COMMAND             the wiki's settings file .zone/config (check, set, unset, passwd, token)
+  export [--output FILE]     write the whole wiki to one file, with its history and its users, to
+                             move it to another Zonewiki
+  import FILE                make the wiki from such a file, in an empty ZONE_DATA
   eval [--k N] [--new] FILE  measure search_wiki's retrieval against the questions in FILE
   health [ADDR]              whether a Zonewiki running here answers (the container's healthcheck)
   manual DIR                 write the manual and the spec to DIR as HTML fragments, for a website
@@ -145,6 +148,10 @@ func main() {
 			code := configMain(os.Args[2:], environ, os.Stdin, os.Stdout, os.Stderr)
 			restore()
 			os.Exit(code)
+		case "export":
+			os.Exit(exportMain(os.Args[2:], environ, os.Stdout, os.Stderr))
+		case "import":
+			os.Exit(importMain(os.Args[2:], environ, os.Stdin, os.Stdout, os.Stderr))
 		}
 	}
 	flag.Parse()
@@ -157,6 +164,9 @@ func main() {
 	// Before Zonewiki writes anything in the wiki's folder (.zone/, _assets/):
 	// a folder it won't use is left as it was.
 	if err := wikiFolderError(); err != nil {
+		fatal(err)
+	}
+	if err := unfinishedImport(); err != nil {
 		fatal(err)
 	}
 	if err := newWikiError(); err != nil {

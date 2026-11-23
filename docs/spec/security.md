@@ -787,6 +787,28 @@ Whether a regex matches, fails or takes long tells what it read, so `grep_wiki`'
 A failure while matching is said without git's words (`grep_wiki` in `docs/spec/mcp.md`).
 `replace_in_pages` reads only the pages its asker may write.
 
+### An imported archive
+
+`zonewiki import` makes a wiki from a file anyone may have made: the hosted Zonewiki imports what its customers upload (Moving a wiki in `docs/spec/deployment.md`).
+A git repository says what git runs (hooks, `core.fsmonitor`, filters, aliases) and where else it reads (alternates), and a tar says where its files go (names, links).
+So the import uses neither as it comes:
+
+- **Of the archive, only the history and the settings file are written out**: the repository's objects and refs, and `.zone/config`.
+  Its git config, hooks, attributes, alternates and work tree are never unpacked (`wikiarchive.Read`).
+- **Only files and folders**: a link or a device where one of those should be, a name that leads out of the archive (`..`, a leading `/`), a backslash or a control character in a name, a file named twice, refuse the whole archive.
+- **The history is fetched** into a repository the import makes, with git checking every object (`transfer.fsckObjects`); the files are checked out of that, links in the history as plain files (`core.symlinks=false`).
+  So no hook of the archive's runs, at the import or at any commit Zonewiki makes afterwards, and nothing in the wiki's folder points out of it.
+- **A size is kept**: with `--max-size`, unpacking stops past it, and the files a history would check out are counted before they are, so neither a tar nor a compressed history fills the disk.
+- **The settings file** goes through the parser and the checks a start uses; one that fails them is refused.
+  The settings that are a host's are left out, and with `--users-only` all but the users, the groups and how the wiki reads:
+  an archive can't say which hosts the wiki answers to, what its pages may load, who may sign up, or that it has no login.
+  What it does say is who its users and admins are, with their password hashes: an imported wiki is its archive's maker's, as it would be had they made it there.
+- **Nothing of the archive's `.zone/` but the settings file** is taken: no session key (which would let its maker sign sessions), no OAuth grants, no links.
+
+An export is as confidential as the wiki it came from: it holds every user's private pages and the password hashes, whoever runs the command (the wiki's folder is theirs to read anyway).
+There is no export or import in the browser or over MCP.
+Tests: `tests/test_transfer.py`, `go/internal/wikiarchive/wikiarchive_test.go`.
+
 ## Throttling
 
 Wrong passwords and wrong MCP tokens are throttled per client, and counted for each account a try was for (`Throttle`, in memory).

@@ -36,8 +36,12 @@ var formatRE = regexp.MustCompile(`^[0-9]{1,9}$`)
 // readWikiFormat: the format the wiki's files are in; 0 for a wiki without
 // .zone-format (a new one), which a start notes as this Zonewiki's
 // (noteWikiFormat). An error for a file that says anything but a number.
-func readWikiFormat() (int, error) {
-	b, err := os.ReadFile(formatPath())
+func readWikiFormat() (int, error) { return readFormatFile(formatPath()) }
+
+// readFormatFile: readWikiFormat of the file at path (an import reads the
+// one of the wiki it is putting together: transfer.go).
+func readFormatFile(path string) (int, error) {
+	b, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return 0, nil
 	}

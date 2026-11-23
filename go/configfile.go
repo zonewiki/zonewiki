@@ -52,6 +52,18 @@ var configKeys = []string{"password", "mcp-token", "hosts", "base-url", "git-rem
 	"date-format", "query-log", "semantic-min-score", "trusted-proxies", "upload-max", "storage-max",
 	"external-content", "notice", "no-login", "mcp-oauth", "signup-domains", "signup-role", "signup-approval"}
 
+// hostKeys: the settings that say where a wiki runs, not what it is: its
+// names, its proxies, its room, its remote. An import leaves them in the
+// archive (transfer.go): the host a wiki moves to has its own.
+var hostKeys = []string{"hosts", "base-url", "git-remote", "trusted-proxies", "storage-max"}
+
+// usersOnlyKeys: the settings an import with --users-only still takes,
+// besides the users and the groups: how the wiki reads, which whoever runs
+// it lets its people choose. Every other one changes what the host allows
+// (what pages may load, who may sign up, whether there is a login), and is
+// the host's to set.
+var usersOnlyKeys = []string{"noshare", "locale", "date-format"}
+
 // userKeys: the keys of a [user …] section.
 var userKeys = []string{"password", "mcp-token", "role", "disabled", "email", "pending", "groups", "shared"}
 

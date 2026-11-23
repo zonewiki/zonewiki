@@ -198,6 +198,7 @@ Prefer an API test when the behaviour shows through a route, a Go test when it d
 | `go/internal/textsearch/search_test.go` | search.md | BM25, stemming, fuzzy, query syntax, excerpts, an index's views and layers |
 | `go/internal/textsearch/difflib_test.go`, `indexfile_test.go` | search.md | Typo matching's bounds; the mapped index file, bad files, `MergeIndex` |
 | `go/internal/tokenizer/tokenizer_test.go` | search.md | The embedding model's tokenizer |
+| `go/internal/wikiarchive/wikiarchive_test.go` | deployment.md, security.md | A wiki's archive: written and read back, what a reader refuses (names that lead out, links, devices, a file twice, no repository), what it passes by, the size |
 
 ### API (`tests/`)
 
@@ -244,6 +245,7 @@ Prefer an API test when the behaviour shows through a route, a Go test when it d
 | `tests/test_tasks_embed.py` | tasks.md | The `[[tasks:]]` embed, the row of lists, the Inbox's pill, the tasks a page brings |
 | `tests/test_tasks_export.py` | tasks.md | Export and Import tasks… |
 | `tests/test_tasks_settings.py` | tasks.md | The task app's settings dialog and its route |
+| `tests/test_transfer.py` | deployment.md, security.md | `zonewiki export` and `zonewiki import`: a wiki moved with its history and users (who sign in, private pages still private), the settings left behind, `--users-only`, `--max-size`, formats newer and older, an archive's hooks, git config, work tree and links not used, an import that didn't finish |
 | `tests/test_users.py` | users.md | Users: sign-in, tokens, commit authors, drafts, disabled users, the private home, Make shared |
 | `tests/test_tasks_core.py` (Node) | tasks.md | `public/tasks-core.js`: dates, filter, order, `@` words, the case files |
 | `tests/test_text_parity.py` (Node) | rendering.md | Guard (above) |

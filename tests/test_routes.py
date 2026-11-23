@@ -2812,13 +2812,14 @@ class TestUsage:
         assert r.returncode == 0, r.stderr
         out = r.stdout + r.stderr
         for word in ("Usage: zonewiki", "user COMMAND", "config COMMAND", "eval ", "health ", "licenses ", "version ",
+                     "export [--output FILE]", "import FILE",
                      "ZONE_DATA", "ZONE_ALLOW_REMOTE", "ZONE_SEMANTIC_SEARCH",
                      "--addr ADDRESS", "--public FOLDER", "--docs FOLDER", "--semantic-test JSON",
                      "(default :5080)"):
             assert word in out, word
         assert not re.search(r"^ +-[a-z]", out, re.M)   # flags shown with two dashes
 
-    @pytest.mark.parametrize("command", ["user", "config", "eval", "health", "licenses"])
+    @pytest.mark.parametrize("command", ["user", "config", "eval", "health", "licenses", "export", "import"])
     @pytest.mark.parametrize("arg", ["--help", "-h"])
     def test_command(self, command, arg):
         r = self._run(command, arg)

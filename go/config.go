@@ -236,6 +236,9 @@ func newWikiError() error {
 	if _, err := os.Lstat(filepath.Join(stateDirIn(cfg.Data), "secret_key")); err == nil {
 		return nil // an older Zonewiki started here
 	}
+	if _, err := os.Lstat(filepath.Join(stateDirIn(cfg.Data), importedName)); err == nil {
+		return nil // zonewiki import made it, from an archive of before .zone-format
+	}
 	entries, err := os.ReadDir(cfg.Data)
 	if err != nil {
 		return nil // what can't be read fails where it is read

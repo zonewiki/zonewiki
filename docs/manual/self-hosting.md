@@ -403,6 +403,8 @@ The version is shown in the shortcuts list (press `?`).
 | `./run.sh user remove NAME` | Remove a user; their private pages stay on disk |
 | `./run.sh user list` | The users, their roles and who has a token |
 | `./run.sh group list` | The groups and who is in each |
+| `./run.sh export > FILE` | The whole wiki in one file, to move it ([Moving to another Zonewiki](your-data.md#moving-to-another-zonewiki)) |
+| `./run.sh import < FILE` | The wiki from such a file, into an empty wiki folder |
 
 A running Zonewiki takes each change within a second.
 All of them are in [Commands](../spec/users.md#commands).

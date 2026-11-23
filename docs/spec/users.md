@@ -206,6 +206,9 @@ A plain token in the file is an error.
 The file is kept out of git, as all of `.zone/` is (the session key, caches, the query log): `.git/info/exclude` has `/.zone/*` (`excludeState`, also before a new wiki's first commit).
 Zonewiki never shows it either (The settings file is never shown in `docs/spec/security.md`): `canSeePath` is false for `.zone/` for everyone, so history, the uncommitted list, Commit all and the MCP tools leave it (and a commit of nothing else) out, and `safePath` refuses it to every page route and MCP tool.
 
+A wiki still moves with its users: `zonewiki export` puts the file beside the history in its archive, and `zonewiki import` takes it from there, so everyone signs in where the wiki moves to with the password they had.
+The keys that are a host's (`hosts`, `base-url`, `git-remote`, `trusted-proxies`, `storage-max`) stay in the archive, and with `--users-only` every key but the users, the groups, `locale`, `date-format` and `noshare` (Moving a wiki in `docs/spec/deployment.md`).
+
 **Account data stays out of git**: the file holds the users,
 their password and token hashes,
 roles,
