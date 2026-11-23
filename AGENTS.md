@@ -181,6 +181,10 @@ Flags are written with two dashes everywhere (`--addr :8080`, `user add NAME --m
 **Always add tests as part of the same change** — whenever a new feature is implemented or a bug is fixed, add tests covering the new behavior (and, for bugs, a regression test that fails without the fix).
 A feature or fix is not complete until it has test coverage.
 
+**Do not accept flaky tests** — a test that fails once and passes when run again has failed: the suite is not green because a second run was.
+Don't merge, publish or deploy on it, whatever code the test is about and whether or not the change touches it.
+Find why it fails now and then (`./run.sh flaky [N] -k <test>` runs it N times on a busy machine) and fix the test or the code first, or stop and say so.
+
 ```bash
 ./run.sh test                         # gofmt, go vet, go test -race, then the unit/API tests (pytest over HTTP), in the tools image
 ./run.sh test tests/test_mcp.py -n 0  # one module, in one process
