@@ -499,7 +499,7 @@ func TestLoadConfig(t *testing.T) {
 }
 
 func TestVersionIsSemver(t *testing.T) {
-	if !regexp.MustCompile(`^\d+\.\d+\.\d+$`).MatchString(version) {
+	if !regexp.MustCompile(`^\d+\.\d+\.\d+(-dev)?$`).MatchString(version) {
 		t.Errorf("version %q", version)
 	}
 }

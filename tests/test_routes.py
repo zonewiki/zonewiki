@@ -2833,7 +2833,7 @@ class TestUsage:
         # The version and the build, as the start-up line names them, without a wiki.
         r = self._run(arg)
         assert r.returncode == 0, r.stderr
-        assert re.fullmatch(r"Zonewiki \d+\.\d+\.\d+ \(.+\)\n", r.stdout), r.stdout
+        assert re.fullmatch(r"Zonewiki \d+\.\d+\.\d+(-dev)? \(.+\)\n", r.stdout), r.stdout
         assert r.stderr == ""
 
     def test_licenses(self):

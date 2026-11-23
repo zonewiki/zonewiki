@@ -307,7 +307,7 @@ Each `v*` tag's GitHub release carries Zonewiki as one file per platform, for a 
 
 How to use one is in the manual (With the binary in `docs/manual/self-hosting.md`): download, `chmod +x`, run, open `http://localhost:5080`.
 
-A tag is the version the binary says: `v0.5.0` for `const version = "0.5.0"` in `go/config.go`.
+A tag is the version the binary says: `v0.5.0` for `const version = "0.5.0"` in `go/config.go` (so the tagged commit is the one without `-dev`).
 CI's test job fails a `v*` tag that isn't (`./run.sh test`, from `GITHUB_REF`), and with it nothing of the tag is released: the image, the binaries and Forgejo's push to GitHub wait for the checks.
 
 ### What a release binary is
@@ -683,8 +683,10 @@ iOS Safari ignores the setting.
 
 Zonewiki's version is a semver constant, `version` in `go/config.go`, bumped by hand.
 Zonewiki is an alpha, so its version starts with 0:
-a release that changes something people rely on (how tasks are stored, the settings file's keys, the MCP tools, URLs) raises the minor number,
-a release of fixes the patch number.
+a release with a new feature, or one that changes something people rely on (how tasks are stored, the settings file's keys, the MCP tools, URLs), raises the minor number,
+a release of fixes only the patch number, so `0.5.x` is `0.5.0` and its fixes.
+Between releases the version carries `-dev` and names the next release (`0.6.0-dev`), so a build from a commit after a tag never says it is the tagged release.
+The release commit drops the suffix and gets the tag; the commit after it starts the next `-dev`.
 1.0 will promise that a newer Zonewiki takes an older wiki over by itself (a step for each change of The data format, below) and that the MCP tools and settings don't break without notice.
 (The numbers 1.0 to 2.0 in the history from before Zonewiki was published were never released.)
 Next to it the build is shown: the commit it was built from plus that commit's date, e.g. `c28ec9e 2026-09-26 19:22`, with ` +dirty` when `go/` or `public/` had uncommitted changes

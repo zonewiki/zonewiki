@@ -19,8 +19,11 @@ import (
 const appName = "Zonewiki"
 
 // Zonewiki's version (semver), bumped by hand when a change is worth a number:
-// before 1.0 the minor one when something people rely on changes, the patch for fixes.
-const version = "0.5.0"
+// before 1.0 the minor one for a new feature or when something people rely on changes,
+// the patch for fixes. Between releases it carries "-dev" and names the next one
+// ("0.6.0-dev"); the release commit drops the suffix and gets the tag, the next commit
+// starts the next "-dev".
+const version = "0.6.0-dev"
 
 // Where this version's source is, linked from the shortcuts dialog. The AGPL has
 // whoever runs a changed Zonewiki for others offer them its source: a fork changes this.

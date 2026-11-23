@@ -3,6 +3,9 @@ code, and the layering that keeps a code change from refetching the model."""
 
 import hashlib
 import re
+import subprocess
+
+import pytest
 
 from tests.settings import REPO
 
@@ -234,7 +237,7 @@ def test_a_tag_releases_the_binaries():
     tests = run_sh[run_sh.index("\n  test)\n"):run_sh.index("\n  bench)\n")]
     assert 'grep -qxF "const version = \\"${GITHUB_REF#refs/tags/v}\\"" go/config.go' in tests
     assert tests.index("refs/tags/v*)") < tests.index("build_image")
-    assert re.search(r'^const version = "\d+\.\d+\.\d+"$', (REPO / "go" / "config.go").read_text(encoding="utf-8"), re.M)
+    assert re.search(r'^const version = "\d+\.\d+\.\d+(-dev)?"$', (REPO / "go" / "config.go").read_text(encoding="utf-8"), re.M)
     for workflow in (ci, (REPO / ".forgejo" / "workflows" / "ci.yml").read_text(encoding="utf-8")):
         assert "check: [test, e2e, leaks]" in workflow
     binaries = run_sh[run_sh.index("\n  binaries)\n"):]
@@ -245,6 +248,23 @@ def test_a_tag_releases_the_binaries():
     assert "cp LICENSE THIRD_PARTY_LICENSES dist/" in binaries
     assert "sha256sum zonewiki-* LICENSE THIRD_PARTY_LICENSES > SHA256SUMS" in binaries
     assert "/dist/" in (REPO / ".gitignore").read_text(encoding="utf-8").splitlines()
+
+
+def test_the_version_is_not_older_than_the_latest_tag():
+    # Between releases the version names the next one with "-dev" (Version in
+    # docs/spec/deployment.md), so a build after a tag never says it is the tag.
+    # Skipped where the checkout has no tags (a CI clone, an export).
+    config = (REPO / "go" / "config.go").read_text(encoding="utf-8")
+    version = re.search(r'^const version = "(\d+)\.(\d+)\.(\d+)(-dev)?"$', config, re.M)
+    assert version, "const version is major.minor.patch, with -dev between releases"
+    tags = subprocess.run(["git", "-C", str(REPO), "tag", "--list", "v[0-9]*"], capture_output=True, text=True)
+    latest = [tuple(map(int, t[1:].split("."))) for t in tags.stdout.split() if re.fullmatch(r"v\d+\.\d+\.\d+", t)]
+    if not latest:
+        pytest.skip("no release tags in this checkout")
+    now = tuple(map(int, version.groups()[:3]))
+    newest = max(latest)
+    # The tagged commit has the plain number; every later one is above it, with -dev.
+    assert now > newest or now == newest and not version.group(4), f"version {now} is not above the latest tag {newest}"
 
 
 def test_forgejos_runs_go_one_at_a_time():
