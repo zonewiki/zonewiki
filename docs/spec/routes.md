@@ -33,7 +33,7 @@ A file name starting with `_` (`_notes`, `a/_notes`) is still a page.
 | POST   | `/new`                | Create `<slug>.md` and redirect to it; `private=1` or `for=private` (with users): in your private folder; `for=group:<name>`: in the folder of a group you are in |
 | POST   | `/link-new`           | A new page a link on a private page or a group's asks for, made in that folder instead of shared (`linkNewOp`); see below |
 | POST   | `/rename/<slug>`      | Rename a page: moves the file, redirects to new slug; a name in another place is asked first (below) |
-| POST   | `/delete/<slug>`      | Delete a page file; redirects to home. Forbidden for `index`. |
+| POST   | `/delete/<slug>`      | Delete a page file; redirects to the page visited before it (`next`, from the trail), or home. Forbidden for `index`. |
 
 #### Saving silently
 

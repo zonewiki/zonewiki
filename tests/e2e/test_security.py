@@ -6,7 +6,7 @@ import re
 
 from playwright.sync_api import expect
 
-from tests.e2e.conftest import wait_until
+from tests.e2e.conftest import wait_ready, wait_until
 
 ATTACKS = (
     "<script>window.pwned = 'script'</script>\n\n"
@@ -301,10 +301,14 @@ def test_a_click_submits_only_a_form_zone_put_there(page, wiki):
     # from its menu.
     page.locator("#tasks-no-list button[type=submit]").click()
     expect(page).to_have_url(re.compile(r"/tasks\?list=shopping"))
+    # The list's page in the trail before it is left (its address comes
+    # before its script): Delete goes back to the page visited before, and
+    # which that was mustn't depend on how fast the machine is.
+    wait_ready(page)
     page.goto("/page/plans")
     page.evaluate("() => document.querySelector('article.page-content style').remove()")
     page.locator(".page-menu-btn").first.click()
     page.locator("#page-menu [data-action=delete]").click()
     page.locator("#page-delete-dialog .btn-danger").click()
-    expect(page).to_have_url(re.compile(r"/page/index$"))
+    expect(page).to_have_url(re.compile(r"/tasks\?list=shopping$"))
     assert not (wiki.root / "plans.md").exists()
