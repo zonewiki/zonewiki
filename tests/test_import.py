@@ -133,7 +133,7 @@ def test_a_viewer_neither_sees_the_form_nor_uploads(client, wiki):
     (b"just some text, no zip", "not a zip of notes"),
     (notes_zip({"vault/pic.png": b"png"}), "no markdown notes"),
     (b"", "Choose the zip file"),
-])
+], ids=["a-name-leading-out", "not-a-zip", "no-notes", "no-file"])
 def test_a_refused_zip_leaves_nothing_waiting(client, wiki, zip_bytes, words):
     sign_in(client, "alice")
     resp = upload(client, zip_bytes)

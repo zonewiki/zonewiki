@@ -115,10 +115,12 @@ def notes_zip(files: dict | None = None) -> bytes:
         files = {"My Vault/Garden.md": "# Garden\n\nSee [[Roses]] and ![[pic.png]].\n",
                  "My Vault/Roses.md": "Red ones.\n", "My Vault/pic.png": b"\x89PNG\r\n\x1a\n",
                  "My Vault/.obsidian/app.json": "{}"}
+    # A fixed date, not the time it is made: the same files are the same
+    # bytes, as a test's parameters must be on every xdist worker.
     out = io.BytesIO()
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
         for name, data in files.items():
-            z.writestr(name, data)
+            z.writestr(zipfile.ZipInfo(name, date_time=(2026, 1, 1, 0, 0, 0)), data, zipfile.ZIP_DEFLATED)
     return out.getvalue()
 
 
