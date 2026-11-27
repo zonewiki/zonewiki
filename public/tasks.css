@@ -1037,6 +1037,21 @@ body:has(.tasks-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
 .task-menu button:hover, .task-menu button:focus-visible,
 .page-menu button:hover, .page-menu button:focus-visible { background: var(--code-bg); outline: none; }
 .task-menu button.danger, .page-menu button.danger { color: var(--link-missing); }
+/* A task's menu: a line between its groups, and the start dates as one row
+   of small buttons under one label (room for the four of them). */
+.task-menu { max-width: 22rem; }
+.task-menu-sep { border: 0; border-top: 1px solid var(--border); margin: .25rem .3rem; height: 0; }
+.task-menu-row { display: flex; align-items: center; flex-wrap: wrap; gap: .25rem; padding: .15rem .3rem .15rem .6rem; }
+.task-menu-row-label { margin-right: auto; padding-right: .5rem; font-size: .85rem; }
+.task-menu .task-menu-row button {
+  width: auto; padding: .2rem .45rem; border: 1px solid var(--border); white-space: nowrap;
+}
+/* The key that does the same, at the row's right, where there is a keyboard
+   (no part of the button's name: the alternative text is empty). */
+@media (hover: hover) and (pointer: fine) {
+  .task-menu button[data-key] { display: flex; justify-content: space-between; align-items: baseline; gap: 1.5rem; }
+  .task-menu button[data-key]::after { content: attr(data-key) / ""; color: var(--muted); font-size: .75rem; }
+}
 
 /* Touch devices: no hover, fat fingers. The ⋯ menu carries won't-do/skip, so
    the small hover-era icons go; everything tappable gets a real target. */
@@ -1079,6 +1094,9 @@ body:has(.tasks-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
     display: inline-flex; align-items: center; min-height: 2.25rem; padding: 0 .75rem; font-size: .8rem;
   }
   .task-menu button, .page-menu button, .page-menu a { padding: .7rem .8rem; font-size: 1rem; }
+  .task-menu-row { padding: .3rem .2rem .3rem .8rem; }
+  .task-menu-row-label { font-size: 1rem; padding-right: .3rem; }
+  .task-menu .task-menu-row button { padding: .5rem .45rem; font-size: .95rem; }
   /* iOS Safari zooms the page on focusing a field under 16px */
   /* (element-qualified so it outranks the later .task-field input rules) */
   dialog.task-edit-modal :is(input, textarea, select, .date-trigger),

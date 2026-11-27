@@ -101,11 +101,33 @@ def test_hover_icons_hidden_menu_button_is_a_real_target(phone):
 def test_menu_is_a_bottom_sheet_with_context_items(phone):
     menu = open_menu(phone, "Weekly review")
     items = menu.get_by_role("menuitem")
-    expect(items).to_have_text(["Edit…", "Start today", "Start tomorrow", "Pick start date…",
-                                "Skip this occurrence", "Importance…", "Move to list…", "Won't do", "Copy link", "Select several"])
+    expect(items).to_have_text(["Edit…", "Copy link", "Today", "Tomorrow", "Pick…",
+                                "Importance…", "Move to list…", "Skip this occurrence", "Won't do"])
     box = box_of(menu)
     assert box["x"] == 0 and abs(box["y"] + box["height"] - 844) < 1, box
     assert box["width"] == 390
+    # Its groups: the task, its start, where it is, what ends it.
+    expect(menu.locator(".task-menu-sep")).to_have_count(3)
+    assert menu.evaluate("m => [...m.children].slice(1).map(c => c.matches('hr') ? '-' : c.matches('.task-menu-row') ? 'row' : c.textContent)") == [
+        "Edit…", "Copy link", "-", "row", "-", "Importance…", "Move to list…", "-", "Skip this occurrence", "Won't do"]
+    # The start dates are one line, each a finger's size, inside the sheet.
+    row = menu.locator(".task-menu-row")
+    expect(row.locator(".task-menu-row-label")).to_have_text("Start")
+    boxes = [box_of(b) for b in row.get_by_role("menuitem").all()]
+    assert len({b["y"] for b in boxes}) == 1, boxes
+    assert all(b["height"] >= 36 and b["x"] >= 0 and b["x"] + b["width"] <= 390 for b in boxes), boxes
+    # A task with a start date has Unplan there too, still on that line.
+    phone.touchscreen.tap(200, 100)
+    row = open_menu(phone, "Water plants").locator(".task-menu-row")
+    expect(row.get_by_role("menuitem")).to_have_text(["Today", "Tomorrow", "Pick…", "Unplan"])
+    boxes = [box_of(b) for b in row.get_by_role("menuitem").all()]
+    assert len({b["y"] for b in boxes}) == 1 and boxes[-1]["x"] + boxes[-1]["width"] <= 390, boxes
+    # On a narrow phone too.
+    phone.set_viewport_size({"width": 360, "height": 800})
+    boxes = [box_of(b) for b in row.get_by_role("menuitem").all()]
+    assert len({b["y"] for b in boxes}) == 1 and boxes[-1]["x"] + boxes[-1]["width"] <= 360, boxes
+    phone.set_viewport_size({"width": 390, "height": 844})
+    menu = phone.locator(".task-menu")
     # Tapping outside (the backdrop) closes it without doing anything.
     phone.touchscreen.tap(200, 100)
     expect(menu).to_have_count(0)
@@ -146,24 +168,25 @@ def test_completed_task_menu(phone):
     phone.reload()
     open_tab(phone, "closed")
     menu = open_menu(phone, "Water plants")
-    expect(menu.get_by_role("menuitem")).to_have_text(["Edit…", "Reopen", "Copy link", "Select several", "Delete for good…"])
+    expect(menu.get_by_role("menuitem")).to_have_text(["Edit…", "Copy link", "Reopen", "Delete for good…"])
+    expect(menu.locator(".task-menu-sep")).to_have_count(1)
     menu.get_by_role("menuitem", name="Reopen").tap()
     wait_until(phone, lambda: "Water plants" in tasks_by_title(phone))
 
 
 
-# ── Selection mode (⋯ → Select several) ──────────────────────────────────────
+# ── Selection mode (a long press) ────────────────────────────────────────────
 
 
 @pytest.fixture()
 def selecting(new_page, wiki):
     """A phone tasks on Open (newest first: Saw, Glue, Nuts, Bolts) in
-    selection mode, started from Saw's ⋯ menu."""
+    selection mode, started by a long press on Saw."""
     pg = new_page(**TOUCH_PHONE)
     for title in ("Bolts", "Nuts", "Glue", "Saw"):
         pg.request.post("/api/tasks", data={"title": title})
     pg.goto("/tasks?view=open&group=none")
-    open_menu(pg, "Saw").get_by_role("menuitem", name="Select several").tap()
+    touch_drag(pg, card(pg, "Saw"), card(pg, "Saw"))
     expect(pg.locator(".tasks-app")).to_contain_class("tasks-selecting")
     return pg
 
@@ -203,7 +226,8 @@ def test_select_mode_bar_fits_every_action(selecting, wiki):
     for t in tasks_by_title(pg).values():
         pg.request.put(f"/api/tasks/{t['id']}", data={"start_date": date.today().isoformat()})
     pg.reload()
-    open_menu(pg, "Saw").get_by_role("menuitem", name="Select several").tap()
+    touch_drag(pg, card(pg, "Saw"), card(pg, "Saw"))
+    expect(pg.locator(".tasks-app")).to_contain_class("tasks-selecting")
     bar = pg.locator("#task-selbar")
     pg.locator("#task-selbar [data-sel='all']").tap()
     buttons = bar.locator(".tasks-selbar-actions .btn")
@@ -291,7 +315,7 @@ def test_desktop_click_selects_does_not_edit(page, wiki):
 def test_desktop_menu_popover_and_keyboard(page, wiki):
     # With a mouse ⋯ is always shown; right-click (or the menu key, or
     # Shift+F10 on the selected card) opens the menu as a popover too.
-    page.request.post("/api/tasks", data={"title": "Water plants"})
+    page.request.post("/api/tasks", data={"title": "Water plants", "start_date": day(3)})
     wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
     page.goto("/page/tasks?view=open&group=none")
     page.mouse.move(0, 0)
@@ -304,8 +328,30 @@ def test_desktop_menu_popover_and_keyboard(page, wiki):
     mb = box_of(menu)
     assert abs(mb["x"] - (tb["x"] + 5)) < 6 and mb["width"] < 400
     expect(menu.get_by_role("menuitem").first).to_be_focused()
+    # A key that does the same is named beside the row, and is no part of its name.
+    after = "b => getComputedStyle(b, '::after').content"
+    assert '"Enter"' in menu.get_by_role("menuitem", name="Edit…", exact=True).evaluate(after)
+    assert '"Del"' in menu.get_by_role("menuitem", name="Won't do", exact=True).evaluate(after)
+    assert menu.get_by_role("menuitem", name="Copy link", exact=True).evaluate(after) == "none"
+    # Down and up go line by line, the start dates being one line; right and left along it.
+    page.keyboard.press("ArrowDown")
+    expect(menu.get_by_role("menuitem", name="Copy link")).to_be_focused()
     page.keyboard.press("ArrowDown")
     expect(menu.get_by_role("menuitem", name="Start today")).to_be_focused()
+    page.keyboard.press("ArrowRight")
+    expect(menu.get_by_role("menuitem", name="Start tomorrow")).to_be_focused()
+    page.keyboard.press("ArrowDown")
+    expect(menu.get_by_role("menuitem", name="Importance…")).to_be_focused()
+    page.keyboard.press("ArrowUp")
+    expect(menu.get_by_role("menuitem", name="Start today")).to_be_focused()
+    page.keyboard.press("ArrowLeft")
+    expect(menu.get_by_role("menuitem", name="Unplan")).to_be_focused()
+    page.keyboard.press("ArrowRight")
+    expect(menu.get_by_role("menuitem", name="Start today")).to_have_attribute("title", "Start today (f)")
+    # The row, Unplan included, and its label fit the popover: nothing wraps or sticks out.
+    expect(menu.locator(".task-menu-row").get_by_role("menuitem")).to_have_text(["Today", "Tomorrow", "Pick…", "Unplan"])
+    row, mbox = box_of(menu.locator(".task-menu-row")), box_of(menu)
+    assert row["x"] >= mbox["x"] and row["x"] + row["width"] <= mbox["x"] + mbox["width"] and row["height"] < 40, (row, mbox)
     page.keyboard.press("Enter")
     expect(menu).to_have_count(0)
     expect(page.locator("#task-edit-modal")).to_be_hidden()   # tasks keys stayed out

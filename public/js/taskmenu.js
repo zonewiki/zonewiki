@@ -31,15 +31,11 @@ function openTaskMenu(id, anchor, at) {
   closeTaskMenu();
   if (app.inSelection(id)) {
     const allDone = st.tasks.filter(t => st.selectedIds.has(t.id)).every(t => t.closed_at);
-    const items = [
-      ['tag', 'Tag…'],
-      ['list', 'Move to list…'],
-      people.users && ['assign', 'Assign…'],
-      !allDone && ['today', 'Start today'],
-      app.anyPlanned() && ['unplan', 'Unplan'],
-      ['done', allDone ? 'Reopen' : 'Done'],
-      !allDone && ['wontdo', "Won't do"],
-    ].filter(Boolean);
+    const items = grouped([
+      [['tag', 'Tag…', '', 't'], ['list', 'Move to list…', '', 'm'], people.users && ['assign', 'Assign…', '', 'a']],
+      [!allDone && ['today', 'Start today', '', 'f'], app.anyPlanned() && ['unplan', 'Unplan', '', '0']],
+      [['done', allDone ? 'Reopen' : 'Done', '', 'Space'], !allDone && ['wontdo', "Won't do", '', 'Del']],
+    ]);
     showMenu(`${st.selectedIds.size} tasks`, items, action => app.runSelectionAction(action), anchor, at);
     return;
   }
@@ -53,30 +49,35 @@ function openTaskMenu(id, anchor, at) {
     ((task.followers || []).includes(people.me) ? ['unfollow', 'Unfollow'] : ['follow', 'Follow']);
   const mayDelete = document.body.dataset.users !== '1' || document.body.dataset.admin === '1' ||
     task.private || !task.created_by || task.created_by === people.me;
-  const items = task.closed_at ? [
-    ['edit', 'Edit…'],
-    ['reopen', 'Reopen'],
-    follow,
-    ['copylink', 'Copy link'],
-    ['select', 'Select several'],
-    mayDelete && ['delete', 'Delete for good…'],
-  ].filter(Boolean) : [
-    ['edit', 'Edit…'],
-    ['today', 'Start today'],
-    ['tomorrow', 'Start tomorrow'],
-    ['pick', 'Pick start date…'],
-    task.start_date && ['unplan', 'Unplan'],
-    task.recurrence && ['skip', 'Skip this occurrence'],
-    ['importance', 'Importance…'],
-    ['list', 'Move to list…'],
-    // With users: who has it (a private one is its user's, and goes to
-    // someone else with a shared list).
-    document.body.dataset.users === '1' && ['assign', 'Assign…'],
-    follow,
-    ['wontdo', "Won't do"],
-    ['copylink', 'Copy link'],
-    ['select', 'Select several'],
-  ].filter(Boolean);
+  // Groups, the same ones in the same order on every task, so a row is
+  // found by its place: the task itself, when it starts (one row), where it
+  // is and whose, and what ends it.
+  const users = document.body.dataset.users === '1';
+  const open = !task.closed_at;
+  const items = grouped([
+    [['edit', 'Edit…', '', 'Enter'], ['copylink', 'Copy link']],
+    [open && { row: 'Start', items: [
+      ['today', 'Today', 'Start today', 'f'],
+      ['tomorrow', 'Tomorrow', 'Start tomorrow', 'F'],
+      ['pick', 'Pick…', 'Pick start date…'],
+      task.start_date && ['unplan', 'Unplan', 'Unplan', '0'],
+    ].filter(Boolean) }],
+    [
+      open && ['importance', 'Importance…', '', 'i'],
+      open && ['list', 'Move to list…', '', 'm'],
+      // With users: who has it (a private one is its user's, and goes to
+      // someone else with a shared list).
+      open && users && ['assign', 'Assign…', '', 'a'],
+      follow,
+    ],
+    open ? [
+      task.recurrence && ['skip', 'Skip this occurrence'],
+      ['wontdo', "Won't do", '', 'Del'],
+    ] : [
+      ['reopen', 'Reopen'],
+      mayDelete && ['delete', 'Delete for good…'],
+    ],
+  ]);
   showMenu(plainTitle(task.title), items, action => runTaskAction(task, action, anchor), anchor, at);
 }
 
@@ -93,16 +94,36 @@ function headerTasksMenu(btn) {
   showMenu(title, items, id => { app.unfoldFor(id); app.setSelected(id); }, btn);
 }
 
-// The menu itself: `items` are [action, label, class?]; `run(action)`.
+// A menu's rows from its groups: what is not there dropped, a separator
+// ('-') between the groups that are left.
+function grouped(groups) {
+  return groups.map(g => g.filter(Boolean)).filter(g => g.length)
+    .flatMap((g, i) => i ? ['-', ...g] : g);
+}
+
+// The menu itself: `items` are [action, label, class?, key?] (key: the
+// keyboard shortcut that does the same, shown beside the label where there
+// is a keyboard), '-' for a line between two groups, or { row, items } for
+// several small buttons on one line under one label ([action, label, name,
+// key?]: name is the button's full name, "Start today" for Today).
+// `run(action)`.
 function showMenu(title, items, run, anchor, at) {
   const backdrop = document.createElement('div');
   backdrop.className = 'task-menu-backdrop';
   const el = document.createElement('div');
   el.className = 'task-menu';
   el.setAttribute('role', 'menu');
-  el.innerHTML = `<div class="task-menu-title">${esc(title)}</div>` + items.map(([key, label, cls]) =>
-    `<button type="button" role="menuitem" data-action="${key}"${cls ? ` class="${cls}"` : ''}>${label}</button>`
-  ).join('');
+  el.innerHTML = `<div class="task-menu-title">${esc(title)}</div>` + items.map(item => {
+    if (item === '-') return '<hr class="task-menu-sep">';
+    if (item.row) {
+      return `<div class="task-menu-row" role="group" aria-label="${esc(item.row)}"><span class="task-menu-row-label">${esc(item.row)}</span>` +
+        item.items.map(([key, label, name, hint]) =>
+          `<button type="button" role="menuitem" data-action="${key}" aria-label="${esc(name)}" title="${esc(name + (hint ? ` (${hint})` : ''))}">${label}</button>`
+        ).join('') + '</div>';
+    }
+    const [key, label, cls, hint] = item;
+    return `<button type="button" role="menuitem" data-action="${key}"${cls ? ` class="${cls}"` : ''}${hint ? ` data-key="${esc(hint)}"` : ''}>${label}</button>`;
+  }).join('');
   document.body.append(backdrop, el);
 
   // Desktop popover: under the button, right-aligned, flipped up if needed.
@@ -117,10 +138,20 @@ function showMenu(title, items, run, anchor, at) {
   const onKey = e => {
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeTaskMenu(); }
     else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      // Down and up go from line to line (a row of buttons is one line, entered at its first).
       e.preventDefault(); e.stopPropagation();
-      const btns = [...el.querySelectorAll('button')];
+      const lines = [...el.querySelectorAll(':scope > button, :scope > .task-menu-row')];
+      const i = lines.indexOf(document.activeElement.closest('.task-menu-row') || document.activeElement);
+      const next = lines[(i + (e.key === 'ArrowDown' ? 1 : -1) + lines.length) % lines.length];
+      (next.matches('button') ? next : next.querySelector('button')).focus();
+    } else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+      // Right and left along a row of buttons.
+      const row = document.activeElement.closest('.task-menu-row');
+      if (!row || !el.contains(row)) return;
+      e.preventDefault(); e.stopPropagation();
+      const btns = [...row.querySelectorAll('button')];
       const i = btns.indexOf(document.activeElement);
-      btns[(i + (e.key === 'ArrowDown' ? 1 : -1) + btns.length) % btns.length].focus();
+      btns[(i + (e.key === 'ArrowRight' ? 1 : -1) + btns.length) % btns.length].focus();
     }
   };
   document.addEventListener('keydown', onKey, true);
@@ -163,7 +194,6 @@ function runTaskAction(task, action, anchor) {
       app.updateTask(id, { completed: false });
       app.showUndo('Task reopened', () => app.completeTasks([id], true));
       break;
-    case 'select':   app.enterSelectMode(id); break;
     case 'delete':
       // No undo: it asks first. The task leaves its file; git keeps what it was.
       if (!confirm(`Delete “${plainTitle(task.title)}” for good? It can't be brought back here.`)) break;

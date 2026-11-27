@@ -24,7 +24,7 @@ const { st } = app;
 // A direction with nothing to do doesn't move the card. Both come with an
 // undo toast (startOn). Drags work only where touchDrop is set.
 // A long press let go without moving (10px) starts selection mode with
-// that card, as ⋯ → Select several does; where nothing drags, the press
+// that card; where nothing drags, the press
 // only holds the card for that (holdCard), and moving drops the hold.
 const LONG_PRESS_MS = 350;
 st.touchDrop = null;

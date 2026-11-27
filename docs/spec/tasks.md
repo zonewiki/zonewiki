@@ -831,25 +831,35 @@ An undo leaves no trace in the task's history (History).
 
 Every card has a ⋯ button (`.task-menu-btn`, always shown, three dots drawn as an SVG (`MORE_ICON`) so they sit on the line's centre in any font).
 **Right-click** on a card opens the menu too (`openTaskMenu(id, anchor, {x, y})` at the pointer, selecting the card; a link in the card keeps the browser's menu), and from the keyboard the menu key or **Shift+F10** on the selected card.
-A popover with ↑/↓/Enter/Esc on desktop (tasks shortcuts suspended while open), a bottom sheet at ≤640px.
+A popover on desktop (tasks shortcuts suspended while open), a bottom sheet at ≤640px.
 
-| Item | On | Does |
-|------|----|------|
-| Edit… | every task | The edit dialog |
-| Start today, Start tomorrow, Pick start date… | an open task | The start date (A start after the deadline) |
-| Unplan | an open task with a start date | Clears it |
-| Skip this occurrence | an open recurring task | Won't do and Skip |
-| Importance… | an open task | High, Normal, Low in the menu's place, the task's own ticked (Importance) |
-| Move to list… | an open task | The move dialog |
-| Assign… | with users, an open task | Assigning tasks in `docs/spec/users.md`; a private task is yours, and for someone else asks for a shared list |
-| Follow / Unfollow | with users, a shared task | Following a task |
-| Won't do | an open task | Won't do and Skip |
-| Reopen | a closed task | Opens it again |
-| Copy link | every task | A task's link |
-| Select several | every task | Selection mode (Touch) |
-| Delete for good… | a closed task you may delete | Deleting a task for good |
+Its rows are in groups with a line between them, the same groups in the same order on every task, so a row is found by its place and not by reading down the menu:
 
-On a card in a selection of several the menu offers the selection's actions instead (The selection bar).
+| Group | Item | On | Does |
+|-------|------|----|------|
+| The task | Edit… | every task | The edit dialog |
+| | Copy link | every task | A task's link |
+| Start | Today, Tomorrow, Pick… | an open task | The start date (A start after the deadline) |
+| | Unplan | an open task with a start date | Clears it |
+| Where it is, and whose | Importance… | an open task | High, Normal, Low in the menu's place, the task's own ticked (Importance) |
+| | Move to list… | an open task | The move dialog |
+| | Assign… | with users, an open task | Assigning tasks in `docs/spec/users.md`; a private task is yours, and for someone else asks for a shared list |
+| | Follow / Unfollow | with users, a shared task | Following a task |
+| What ends it | Skip this occurrence | an open recurring task | Won't do and Skip |
+| | Won't do | an open task | Won't do and Skip |
+| | Reopen | a closed task | Opens it again |
+| | Delete for good… | a closed task you may delete | Deleting a task for good |
+
+**Start** is one row: the word, then its dates as small buttons side by side (named Start today, Start tomorrow, Pick start date… and Unplan for a screen reader and in their tooltips).
+A group none of whose items is there has no line either (a closed task's menu has no Start).
+
+Where there is a keyboard (a mouse's pointer, hover), a row whose action has a key shows it at its right, dimmed: Enter, **i**, **m**, **a**, Del; the start buttons name theirs in the tooltip (**f**, **F**, **0**).
+**↑**/**↓** go from line to line, the Start row being one line entered at Today, **←**/**→** along that row, **Enter** picks, **Esc** closes.
+
+How it is built: `openTaskMenu` in `js/taskmenu.js` gives `showMenu` its groups (`grouped` drops what isn't there and puts a `'-'` between the rest); a row of buttons is `{ row, items }`, a key the fourth of an item (`data-key`, drawn by CSS with an empty alternative text, so it is no part of the button's name).
+The menu has no entry for selecting several tasks: that is Shift+click and Ctrl/Cmd+click with a mouse and a long press on a phone (Selecting several tasks).
+
+On a card in a selection of several the menu offers the selection's actions instead (The selection bar), grouped the same way: Tag…, Move to list…, Assign…; Start today, Unplan; Done (or Reopen), Won't do.
 
 ### Completing a task
 
@@ -933,7 +943,7 @@ A click (mouse) selects one task (`selectedId`, `selectedIds`, `anchorId`);
 **Esc** clears it (an expanded task collapses first).
 A re-render keeps the selected tasks still shown.
 On several selected tasks **Space** completes (or reopens) them all, **Delete** closes the open ones undone (won't do), **t**/**T** open the bulk tag dialog, and **Ctrl+Shift+↑/↓** moves them.
-On a phone a long press, or ⋯ → Select several, starts selection mode (Touch).
+On a phone a long press starts selection mode (Touch).
 
 ### The selection bar
 
@@ -1889,7 +1899,7 @@ and cards that can be dragged can't be text-selected, nor give iOS's long-press 
 
 ### Selection mode
 
-On a phone, there being no Shift or Ctrl, a **long press** on a card let go without moving, or ⋯ → **Select several** (which works with a mouse too), starts selection mode (`selectMode`, `.tasks-selecting`) with that card selected, and shows the selection bar even with one task or none ("Tap tasks to select", the actions disabled).
+On a phone, there being no Shift or Ctrl, a **long press** on a card let go without moving starts selection mode (`selectMode`, `.tasks-selecting`) with that card selected, and shows the selection bar even with one task or none ("Tap tasks to select", the actions disabled).
 A tap or click anywhere on a card adds or drops it and does nothing else (a capture-phase click handler on the list: the checkbox doesn't complete, links don't open, no editor, no expanding); each card's checkbox becomes a round mark, filled with a tick on selected cards, and ⋯ is hidden.
 No long-press drags, swipes or mouse drags while it lasts.
 
@@ -1960,6 +1970,7 @@ Under `(pointer: coarse)` cards have `touch-action: pan-y`; `.tasks-list` has `o
 | In a suggestion list: **↑**/**↓**, **Tab**/**Enter**, **Esc** | Pick, take, close (Tag completion) |
 | In a chip field: **Backspace** at its start | Remove the last chip (Tag chips) |
 | In a menu or a list dialog: **↑**/**↓**, **Enter**, **Esc** | Go through the rows, pick, close |
+| In a task's ⋯ menu, on the Start row: **←**/**→** | Along its buttons |
 | In the edit modal: **Ctrl+Enter** or **Ctrl+S** (**Cmd** on a Mac) | Save the task (Ctrl+Enter in the comment field saves the comment) |
 | In the edit modal: **Alt+C** | Go to the comment field (a task already made) |
 | In the edit modal: **F2** | Switch the description between Edit and Preview |
