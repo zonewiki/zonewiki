@@ -317,3 +317,22 @@ func TestReplaceLinesLeavesCodeAlone(t *testing.T) {
 		t.Errorf("pyPattern: %q", got)
 	}
 }
+
+// mcpKnows names the methods handleMCP answers, no more and no fewer: a
+// later version's probe of one it doesn't is refused by it (laterVersion).
+func TestMCPKnowsWhatItAnswers(t *testing.T) {
+	testWiki(t, nil)
+	call := func(string, jsonObj) ([]toolContent, error) { return textContent("ok"), nil }
+	for _, method := range []string{"initialize", "ping", "tools/list", "tools/call", "server/discover",
+		"resources/list", "prompts/list", "subscriptions/listen", "logging/setLevel", "completion/complete"} {
+		msg := `{"jsonrpc":"2.0","id":1,"method":"` + method + `","params":{"name":"zone_help","arguments":{}}}`
+		reply, err := handleMCP(json.RawMessage(msg), asker{}, call)
+		if err != nil {
+			t.Fatal(err)
+		}
+		notFound := reply.Error != nil && reply.Error.Code == -32601
+		if notFound == mcpKnows(method) {
+			t.Errorf("%s: method not found %v, mcpKnows %v", method, notFound, mcpKnows(method))
+		}
+	}
+}

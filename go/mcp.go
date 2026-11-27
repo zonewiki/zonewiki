@@ -142,6 +142,39 @@ func knownTool(name string) bool {
 	return false
 }
 
+// mcpKnows: the JSON-RPC methods handleMCP answers (a test holds the two
+// together).
+func mcpKnows(method string) bool {
+	switch method {
+	case "initialize", "ping", "tools/list", "tools/call":
+		return true
+	}
+	return false
+}
+
+// laterVersion: a request whose MCP-Protocol-Version header names a version
+// Zonewiki doesn't speak, for a method it doesn't know: the probe of a client
+// of a later version (server/discover of 2026-07-28, which has no
+// initialize). The answer is a 400 with an error of no later version's
+// kind, which tells such a client to begin with initialize (its backward
+// compatibility); the versions from 2025-06-18 on want a 400 for a version
+// not spoken anyway. A method Zonewiki knows is answered as ever: it needs
+// no session. initialize sets its version in its body.
+func laterVersion(r *http.Request, body []byte) (*rpcResponse, bool) {
+	v := r.Header.Get("MCP-Protocol-Version")
+	if v == "" || slices.Contains(protocolVersions, v) {
+		return nil, false
+	}
+	msg, ok := jsonobj.Parse(body)
+	method, _ := jsonobj.As[string](msg["method"])
+	id, hasID := msg["id"]
+	if !ok || !hasID || method == "" || mcpKnows(method) {
+		return nil, false
+	}
+	return rpcError(id, -32000, "Bad Request: this server speaks MCP "+strings.Join(protocolVersions, ", ")+
+		", not "+v+": begin with initialize"), true
+}
+
 // handleMCP answers one JSON-RPC message. Notifications and responses (no
 // id, or no method) get nil: the transport answers those with 202 and no
 // body. callTool runs a tool, its error a toolError for the model; any
@@ -357,6 +390,10 @@ func mcpEndpoint(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, http.StatusOK, replies)
+		return
+	}
+	if refusal, later := laterVersion(r, body); later {
+		writeJSON(w, http.StatusBadRequest, refusal)
 		return
 	}
 	reply, err := handleMCP(body, user, call)

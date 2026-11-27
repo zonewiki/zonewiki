@@ -133,6 +133,25 @@ class TestEndpoint:
         assert client.get("/mcp", headers={**HOST, **AUTH}).status_code == 405
         assert client.delete("/mcp", headers={**HOST, **AUTH}).status_code == 405
 
+    def test_a_later_versions_probe_is_told_to_initialize(self, client):
+        """A client of MCP 2026-07-28, which has no initialize, probes with
+        server/discover: a 400 whose error is none of that version's has it
+        fall back to initialize."""
+        later = {"MCP-Protocol-Version": "2026-07-28", "Mcp-Method": "server/discover"}
+        resp = rpc(client, "server/discover", {}, headers=later)
+        assert resp.status_code == 400 and resp.get_json()["id"] == 1
+        error = resp.get_json()["error"]
+        assert error["code"] == -32000 and "begin with initialize" in error["message"]
+        assert "2025-11-25" in error["message"] and "not 2026-07-28" in error["message"]
+        resp = rpc(client, "initialize", {"protocolVersion": "2025-11-25", "capabilities": {}},
+                   headers={"MCP-Protocol-Version": "2026-07-28"})
+        assert resp.status_code == 200 and resp.get_json()["result"]["protocolVersion"] == "2025-11-25"
+        assert rpc(client, "tools/list", headers=later).status_code == 200   # what Zonewiki knows needs no session
+        # In a version it speaks, or without the header, an unknown method is as ever.
+        for headers in ({}, {"MCP-Protocol-Version": "2025-11-25"}):
+            resp = rpc(client, "server/discover", {}, headers=headers)
+            assert resp.status_code == 200 and resp.get_json()["error"]["code"] == -32601
+
     def test_cross_site_post_refused(self, client):
         resp = client.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "ping"},
                            headers={**HOST, **AUTH, "Origin": "https://evil.example"})

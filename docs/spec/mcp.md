@@ -733,6 +733,9 @@ route `mcpEndpoint`,
 tools in `go/mcp*.go` (those that read in `mcptools.go`, that write pages in `mcpwrite.go` and `mcpreplace.go`, the task tools in `mcptasks.go`, guides in `mcpguides.go`),
 each with what it writes in one table (`mcpToolTable`: nothing, tasks, or pages, which puts it under `pagesMu`; a tool that writes is refused to a viewer and to a connection that only reads; a test holds the table against each definition's `readOnlyHint`, so a new writing tool can't be left out).
 MCP's Streamable HTTP transport, reduced to what tools need: each POST carries one message (or a batch) and is answered with plain JSON; notifications get 202; no event stream (GET → 405), no sessions.
+A request whose `MCP-Protocol-Version` header names a version Zonewiki doesn't speak (not in `protocolVersions`), for a method it doesn't answer (`mcpKnows`), is a **400** with the JSON-RPC error `-32000` "Bad Request: this server speaks MCP 2025-11-25, …, not 2026-07-28: begin with initialize" (`laterVersion`).
+That is the probe of a client of MCP 2026-07-28, which has no `initialize`: it calls `server/discover` first, and a 400 whose error is none of 2026-07-28's has it fall back to `initialize` (that version's backward compatibility, which ChatGPT's client is reported to follow).
+A method Zonewiki answers is answered whatever the header says, since it needs no session, and `initialize` takes its version from its body; without the header an unknown method is a `-32601` as ever.
 A batch holds at most 20 messages (`mcpBatchMost`; more is a 400, `-32600`): its calls run one after another in one request, a grep for up to its timeout and a write holding the page lock, so one POST can't queue thousands of them.
 
 ### The instructions
