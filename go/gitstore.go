@@ -945,6 +945,74 @@ func lastCommitsOf(rel string, n int) []string {
 	return strings.Fields(runGit("log", "-n", strconv.Itoa(n), "--format=%H", "--", rel).Stdout)
 }
 
+// fileHistory: the commits that changed each file since a commit, as
+// lastCommitsOf asks them file by file, in one git log: an undo of an
+// import asks for thousands of files, a git process each otherwise.
+type fileHistory map[string][]string
+
+// historySince: for every file, the commits from oldest (it included) to
+// HEAD that changed it, newest first. A file's lastCommitsOf(rel, n) is
+// its first n here as long as every commit asked about is in the range;
+// ok false when the range holds a merge, which a log limited to a path
+// simplifies and a plain one doesn't: then ask file by file (of).
+func historySince(oldest string) (fileHistory, bool) {
+	args := []string{"log", "-z", "--name-only", "--no-renames", "--format=%x1e%H %P", "HEAD"}
+	if parent := runGit("rev-parse", "--verify", "-q", oldest+"^"); parent.Code == 0 {
+		args = append(args, "--not", strings.TrimSpace(parent.Stdout))
+	}
+	r := runGit(args...)
+	if r.Code != 0 {
+		return nil, false
+	}
+	h := fileHistory{}
+	for _, record := range logRecords(r.Stdout) {
+		head := strings.Fields(record.head)
+		if len(head) == 0 {
+			continue
+		}
+		if len(head) > 2 {
+			return nil, false // a merge
+		}
+		for _, name := range record.fields {
+			if name != "" {
+				h[name] = append(h[name], head[0])
+			}
+		}
+	}
+	return h, true
+}
+
+// of: the last n commits that changed rel, as lastCommitsOf gives them;
+// a nil history asks git.
+func (h fileHistory) of(rel string, n int) []string {
+	if h == nil {
+		return lastCommitsOf(rel, n)
+	}
+	last := h[rel]
+	return last[:min(n, len(last))]
+}
+
+// oldestCommit: of commits on HEAD's line, the one furthest from HEAD.
+func oldestCommit(shas []string) string {
+	oldest, far := "", -1
+	for _, sha := range shas {
+		if n, err := strconv.Atoi(strings.TrimSpace(runGit("rev-list", "--count", sha+"..HEAD").Stdout)); err == nil && n > far {
+			oldest, far = sha, n
+		}
+	}
+	return oldest
+}
+
+// uncommittedSet: the files (relative to the wiki) git status calls
+// changed, in one call, as isUncommitted asks for one file.
+func uncommittedSet() map[string]bool {
+	set := map[string]bool{}
+	for _, f := range gitUncommittedFiles() {
+		set[f.Filepath] = true
+	}
+	return set
+}
+
 // recentCommits: the wiki's latest commits as Changes asks them whether
 // something was changed again (undoOffers): files, for each file they
 // changed, those of them that did, newest first; tasks, the tasks each

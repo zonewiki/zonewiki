@@ -608,6 +608,8 @@ No mail goes out for a task given back to someone by an undo.
   The page's History restores any version instead; a task's text is in git.
 
 Changes shows the buttons from what the list knows (`undoOffers`: the kinds of files, who may write (or upload there), the wiki's latest 1,000 commits for "changed again", `undoWindow`; for tasks the commits' Task trailers, no task file read: a change of tasks is offered when it names every task it changed, the reader sees each, and no later commit among those names one of them or changed one of its task files without naming all it changed); the operation checks again, exactly, so an offer that no longer holds is refused and said ("Not undone. garden was changed again since …", "Not undone. The task “Mow” was changed again since …").
+For more than 20 files (`undoBatch`; an import is thousands) it asks git once, not a file at a time: one `git log --name-only` from the oldest change undone to HEAD for what changed each file since (`historySince`), one `git status` for what isn't committed (`uncommittedSet`); a merge in that range makes it ask file by file, as a log limited to a path reads merges otherwise.
+An import of 5,000 notes is undone in about a second so (`tests/bench_import.py`), against 13 s a file at a time.
 
 #### Uploads undone
 

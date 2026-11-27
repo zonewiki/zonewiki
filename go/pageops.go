@@ -1222,6 +1222,11 @@ func undoChangesOp(user asker, versions []string, suffix string, check func(slug
 	var steps []step
 	var grows int64 // what the uploads written back add to the wiki
 	done := &undone{}
+	shas := make([]string, len(commits))
+	for i, c := range commits {
+		shas[i] = c.sha
+	}
+	history, dirty := undoLookups(shas, len(files))
 	for _, rel := range files {
 		slug, path := strings.TrimSuffix(rel, ".md"), filepath.Join(cfg.Data, rel)
 		p, isUpload := uploads[rel]
@@ -1233,7 +1238,7 @@ func undoChangesOp(user asker, versions []string, suffix string, check func(slug
 			}
 		}
 		ours := how[rel]
-		last := lastCommitsOf(rel, len(ours))
+		last := history.of(rel, len(ours))
 		for _, sha := range last {
 			if _, is := ours[sha]; !is {
 				return nil, refuseAs(refusedConflict, slug+" was changed again since: undoing would take that along. Its history has every version.")
@@ -1242,7 +1247,7 @@ func undoChangesOp(user asker, versions []string, suffix string, check func(slug
 		if len(last) != len(ours) {
 			return nil, refuseAs(refusedConflict, slug+": its history doesn't hold these changes anymore.")
 		}
-		if isUncommitted(path) {
+		if dirty.has(rel, path) {
 			if isUpload {
 				return nil, refuseAs(refusedConflict, rel+" was changed on disk and that isn't committed yet: undoing would take that along.")
 			}
@@ -1365,11 +1370,12 @@ func undoChangesOp(user asker, versions []string, suffix string, check func(slug
 		// uploaded meanwhile isn't overwritten.
 		uploadMu.Lock()
 		defer uploadMu.Unlock()
+		history, dirty := undoLookups(shas, len(done.filesBack)+len(done.filesGone))
 		for _, s := range steps {
 			if s.upload == "" {
 				continue
 			}
-			if last := lastCommitsOf(s.upload, 1); len(last) != 1 || last[0] != s.newest || isUncommitted(s.path) {
+			if last := history.of(s.upload, 1); len(last) != 1 || last[0] != s.newest || dirty.has(s.upload, s.path) {
 				return nil, refuseAs(refusedConflict, s.upload+" was changed again since: undoing would take that along. Its history has every version.")
 			}
 		}
@@ -1394,6 +1400,38 @@ func undoChangesOp(user asker, versions []string, suffix string, check func(slug
 		return done, taskFiles.WriteBothLocked(user, tw.active, tw.closed, message+suffix, paths...)
 	}
 	return done, notCommitted(gitCommit(user.Name, message+suffix, paths...))
+}
+
+// undoBatch: from how many files on an undo asks git about all of them at
+// once (historySince, uncommittedSet) rather than file by file: an import
+// undone is thousands of files, two git processes each; an old change of
+// a few files would have its log read from it to HEAD for nothing.
+const undoBatch = 20
+
+// undoLookups: how undoChangesOp asks, for files of the changes shas,
+// what changed each since and whether it holds what isn't committed: at
+// once for more than undoBatch files, else file by file (nil history,
+// nil set).
+func undoLookups(shas []string, files int) (fileHistory, uncommitted) {
+	if files <= undoBatch {
+		return nil, nil
+	}
+	history, ok := historySince(oldestCommit(shas))
+	if !ok {
+		history = nil
+	}
+	return history, uncommittedSet()
+}
+
+// uncommitted: the files git status calls changed (uncommittedSet); nil
+// asks git for each (isUncommitted).
+type uncommitted map[string]bool
+
+func (u uncommitted) has(rel, path string) bool {
+	if u == nil {
+		return isUncommitted(path)
+	}
+	return u[rel]
 }
 
 // keepPending: before a write that replaces or removes the page at path,

@@ -488,6 +488,61 @@ def test_an_undo_of_many_pages_names_a_few(client, wiki_dir):
     assert all((wiki_dir / f"p{i:02d}.md").exists() for i in range(25))
 
 
+def test_an_undo_of_many_files_refuses_as_one_of_few(client, wiki_dir):
+    """More than twenty files are asked about in one git log and one git
+    status (undoLookups): a page changed again since, or holding what
+    isn't committed, still refuses the undo, and a page changed before the
+    change doesn't."""
+    (wiki_dir / "p00.md").write_text("# Before\n")
+    git(wiki_dir, "add", "-A")
+    git(wiki_dir, "commit", "-qm", "Before")
+    for i in range(25):
+        (wiki_dir / f"p{i:02d}.md").write_text(f"# P{i}\n")
+    git(wiki_dir, "add", "-A")
+    git(wiki_dir, "commit", "-qm", "Many pages")
+    sha = git(wiki_dir, "rev-parse", "HEAD").strip()
+    (wiki_dir / "other.md").write_text("# Other\n")                      # a later change elsewhere
+    git(wiki_dir, "add", "-A")
+    git(wiki_dir, "commit", "-qm", "Other")
+    (wiki_dir / "p07.md").write_text("# Changed\n")
+    git(wiki_dir, "commit", "-qam", "Change p07")
+    resp = client.post("/changes/undo", data={"sha": sha}, headers=HOST)
+    assert "undo_error=p07+was+changed+again+since" in resp.headers["Location"], resp.headers["Location"]
+    git(wiki_dir, "revert", "--no-edit", "HEAD")                         # p07 as the change left it, by a commit
+    resp = client.post("/changes/undo", data={"sha": sha}, headers=HOST)
+    assert "undo_error=p07+was+changed+again+since" in resp.headers["Location"]   # still changed since
+    git(wiki_dir, "reset", "-q", "--hard", "HEAD~2")                     # the change of p07 gone from history
+    (wiki_dir / "p11.md").write_text("# On disk\n")
+    resp = client.post("/changes/undo", data={"sha": sha}, headers=HOST)
+    assert "undo_error=p11+has+changes+not+committed+yet" in resp.headers["Location"], resp.headers["Location"]
+    git(wiki_dir, "checkout", "--", "p11.md")
+    resp = client.post("/changes/undo", data={"sha": sha}, headers=HOST)
+    assert "undone=" in resp.headers["Location"], resp.headers["Location"]
+    assert (wiki_dir / "p00.md").read_text() == "# Before\n" and not (wiki_dir / "p24.md").exists()
+    assert (wiki_dir / "other.md").exists()
+
+
+def test_a_merge_makes_an_undo_of_many_files_ask_file_by_file(client, wiki_dir):
+    """A merge in the range (a history pulled from elsewhere) makes the
+    undo ask file by file, as a log limited to a path reads merges."""
+    for i in range(25):
+        (wiki_dir / f"p{i:02d}.md").write_text(f"# P{i}\n")
+    git(wiki_dir, "add", "-A")
+    git(wiki_dir, "commit", "-qm", "Many pages")
+    sha = git(wiki_dir, "rev-parse", "HEAD").strip()
+    git(wiki_dir, "checkout", "-q", "-b", "side")
+    (wiki_dir / "p03.md").write_text("# Side\n")
+    git(wiki_dir, "commit", "-qam", "Side")
+    git(wiki_dir, "checkout", "-q", "-")
+    (wiki_dir / "other.md").write_text("# Other\n")
+    git(wiki_dir, "add", "-A")
+    git(wiki_dir, "commit", "-qm", "Other")
+    git(wiki_dir, "merge", "-q", "--no-ff", "--no-edit", "side")
+    resp = client.post("/changes/undo", data={"sha": sha}, headers=HOST)
+    assert "undo_error=p03+was+changed+again+since" in resp.headers["Location"], resp.headers["Location"]
+    assert (wiki_dir / "p03.md").read_text() == "# Side\n"
+
+
 def test_an_upload_is_offered_undo_and_said(client, wiki_dir):
     """An upload's change is undone as a page's (undoChangesOp): offered on
     its row, and said by its path, from the browser and to an assistant."""
