@@ -44,8 +44,13 @@ func packedLen(k, m int) int {
 
 // newPacked: a packed k×m matrix of zeros, for setRows to fill.
 func newPacked(k, m int) packed {
+	return newPackedIn(func(n int) []float32 { return make([]float32, n) }, k, m)
+}
+
+// newPackedIn: newPacked with its floats from alloc (zeroed).
+func newPackedIn(alloc func(int) []float32, k, m int) packed {
 	pw, panels := panelsFor(m)
-	return packed{k: k, m: m, pw: pw, panels: panels, data: make([]float32, panels*k*pw)}
+	return packed{k: k, m: m, pw: pw, panels: panels, data: alloc(panels * k * pw)}
 }
 
 // setRows: B's rows p0..p0+n are src's, m floats each, ld apart.

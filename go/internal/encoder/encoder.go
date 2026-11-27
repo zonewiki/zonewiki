@@ -5,6 +5,7 @@
 package encoder
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -32,6 +33,12 @@ type layer struct {
 // Model: the weights, read-only once loaded, so Hidden may run on several
 // goroutines at once.
 type Model struct {
+	// mem holds the big weights outside Go's heap (arena.go): the garbage
+	// collector lets a heap grow to twice what is live in it, and 0.64 GB
+	// of weights there would let as much garbage pile up beside them.
+	mem    arena
+	closed bool
+
 	dim, heads, ff int
 	vocab          int
 	eps            float32
@@ -64,8 +71,26 @@ func Load(path string) (*Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	src := &tensorReader{r: f}
 	m := &Model{heads: 12, eps: 1e-12}
+	if err := m.load(g, &tensorReader{r: f}); err != nil {
+		m.Close()
+		return nil, err
+	}
+	return m, nil
+}
+
+// Close gives the model's memory back. The model must not be in use, and
+// can't be used after. A server that keeps its model never calls it.
+func (m *Model) Close() {
+	m.closed = true
+	m.word, m.layers = nil, nil
+	m.mem.free()
+}
+
+// load fills the model from the file's graph and its tensors. The big
+// ones (the word embeddings, the layers' matrices) go into m.mem, outside
+// the garbage collector's heap.
+func (m *Model) load(g *graph, src *tensorReader) error {
 	vec := func(name string, n int) ([]float32, error) {
 		t := g.weights[name]
 		if t == nil || t.dtype != 1 || t.count() != n {
@@ -76,19 +101,20 @@ func Load(path string) (*Model, error) {
 	}
 	word := g.weights["embeddings.word_embeddings.weight"]
 	if word == nil || len(word.dims) != 2 || word.dtype != 1 {
-		return nil, fmt.Errorf("encoder: no word embeddings")
+		return fmt.Errorf("encoder: no word embeddings")
 	}
 	m.vocab, m.dim = word.dims[0], word.dims[1]
-	if m.word, err = vec(word.name, m.vocab*m.dim); err != nil {
-		return nil, err
+	m.word = m.mem.floats(m.vocab * m.dim)
+	if err := src.read(word, m.word, 0); err != nil {
+		return err
 	}
 	typ, err := vec("embeddings.token_type_embeddings.weight", 2*m.dim)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	m.typ0 = typ[:m.dim]
 	if m.embLN, err = loadNorm(vec, "embeddings.LayerNorm", m.dim); err != nil {
-		return nil, err
+		return err
 	}
 
 	// The MatMul weights have no names of their own (onnx::MatMul_1704):
@@ -113,7 +139,7 @@ func Load(path string) (*Model, error) {
 		nlayers = max(nlayers, l+1)
 	}
 	if nlayers == 0 {
-		return nil, fmt.Errorf("encoder: no layers")
+		return fmt.Errorf("encoder: no layers")
 	}
 	lin := func(l int, role, bias string, in, out int) (linear, error) {
 		w := mats[key{l, role}]
@@ -121,7 +147,7 @@ func Load(path string) (*Model, error) {
 			return linear{}, fmt.Errorf("encoder: layer %d %s: missing or not %d×%d", l, role, in, out)
 		}
 		// Packed some rows at a time, as they come from the file.
-		r := linear{w: newPacked(in, out), in: in, out: out}
+		r := linear{w: newPackedIn(m.mem.floats, in, out), in: in, out: out}
 		block := max(1, (1<<18)/out)
 		rows := make([]float32, block*out)
 		for p := 0; p < in; p += block {
@@ -165,16 +191,16 @@ func Load(path string) (*Model, error) {
 		}
 		for _, s := range steps {
 			if err := s(); err != nil {
-				return nil, err
+				return err
 			}
 		}
 		m.layers = append(m.layers, L)
 	}
 	if d%m.heads != 0 {
-		return nil, fmt.Errorf("encoder: %d dimensions for %d heads", d, m.heads)
+		return fmt.Errorf("encoder: %d dimensions for %d heads", d, m.heads)
 	}
 	m.slopes = alibiSlopes(m.heads)
-	return m, nil
+	return nil
 }
 
 func loadNorm(vec func(string, int) ([]float32, error), prefix string, d int) (norm, error) {
@@ -235,6 +261,9 @@ const batchTokens = 2048
 // them (for short texts that, not the arithmetic, is what costs); each
 // attends to its own tokens only, so none needs padding or a mask.
 func (m *Model) HiddenBatch(texts [][]int) ([][]float32, error) {
+	if m.closed {
+		return nil, errors.New("encoder: the model is closed")
+	}
 	out := make([][]float32, len(texts))
 	for i := 0; i < len(texts); {
 		j, tokens := i, 0
@@ -257,8 +286,15 @@ func (m *Model) HiddenBatch(texts [][]int) ([][]float32, error) {
 	return out, nil
 }
 
-// forward: the texts' hidden states, one after another.
+// forward: the texts' hidden states, one after another. The working
+// memory is a workspace's, kept for the next batch.
 func (m *Model) forward(texts [][]int) ([]float32, error) {
+	ws := workspaces.Get().(*workspace)
+	defer workspaces.Put(ws)
+	return m.forwardIn(texts, ws)
+}
+
+func (m *Model) forwardIn(texts [][]int, ws *workspace) ([]float32, error) {
 	d := m.dim
 	starts := make([]int, len(texts)+1)
 	for i, t := range texts {
@@ -280,10 +316,10 @@ func (m *Model) forward(texts [][]int) ([]float32, error) {
 		}
 	}
 	layerNorm(x, n, d, m.embLN, m.eps)
-	q, k, v := make([]float32, n*d), make([]float32, n*d), make([]float32, n*d)
-	ctx, tmp := make([]float32, n*d), make([]float32, n*d)
-	h, g := make([]float32, n*2*m.ff), make([]float32, n*m.ff)
-	at := m.newAttention(starts)
+	q, k, v := ws.floats(wsQ, n*d), ws.floats(wsK, n*d), ws.floats(wsV, n*d)
+	ctx, tmp := ws.floats(wsCtx, n*d), ws.floats(wsTmp, n*d)
+	h, g := ws.floats(wsH, n*2*m.ff), ws.floats(wsG, n*m.ff)
+	at := m.newAttention(starts, ws)
 	for li := range m.layers {
 		L := &m.layers[li]
 		product(q, x, n, &L.q.w)

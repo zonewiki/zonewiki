@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
-	"os"
 	"testing"
 )
 
@@ -193,14 +192,7 @@ func TestAlibiSlopes(t *testing.T) {
 // BenchmarkHidden: one text of n tokens through the model
 // (ZONE_ENCODER_MODEL=model.onnx).
 func BenchmarkHidden(b *testing.B) {
-	path := os.Getenv("ZONE_ENCODER_MODEL")
-	if path == "" {
-		b.Skip("ZONE_ENCODER_MODEL not set")
-	}
-	m, err := Load(path)
-	if err != nil {
-		b.Fatal(err)
-	}
+	m := testModel(b)
 	r := rand.New(rand.NewSource(4))
 	for _, n := range []int{16, 219, 512} {
 		ids := make([]int, n)
@@ -220,14 +212,7 @@ func BenchmarkHidden(b *testing.B) {
 // A text's hidden state is the same in a batch as alone, whatever it is
 // batched with (ZONE_ENCODER_MODEL=model.onnx).
 func TestBatchIsEachAlone(t *testing.T) {
-	path := os.Getenv("ZONE_ENCODER_MODEL")
-	if path == "" {
-		t.Skip("ZONE_ENCODER_MODEL not set")
-	}
-	m, err := Load(path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	m := testModel(t)
 	r := rand.New(rand.NewSource(6))
 	var texts [][]int
 	for _, n := range []int{1, 3, 40, 17, 512, 2, 33, 600, 64} {
@@ -256,14 +241,7 @@ func TestBatchIsEachAlone(t *testing.T) {
 
 // BenchmarkBatch: 64 texts of 31 tokens, the sample wiki's average.
 func BenchmarkBatch(b *testing.B) {
-	path := os.Getenv("ZONE_ENCODER_MODEL")
-	if path == "" {
-		b.Skip("ZONE_ENCODER_MODEL not set")
-	}
-	m, err := Load(path)
-	if err != nil {
-		b.Fatal(err)
-	}
+	m := testModel(b)
 	r := rand.New(rand.NewSource(7))
 	texts := make([][]int, 64)
 	for i := range texts {

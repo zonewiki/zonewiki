@@ -386,7 +386,7 @@ That stage copies nothing from the repo, so its layer is rebuilt only when the m
 Without the container (a binary you built or downloaded) the model goes to `~/.cache/zonewiki/`, downloaded on first use (`downloadModel`, the same hashes); nothing else is needed.
 A bad setting or a failing model (its files missing and not to be had, say) is logged (`[semantic] …`) and search falls back to keywords.
 
-The model takes about 0.7 GB of memory once it is loaded (when the wiki is first embedded or searched), and up to about 1 GB more while it embeds a batch of long texts, which Go gives back afterwards.
+The model takes about 0.7 GB of memory once it is loaded (when the wiki is first embedded or searched), and up to about 0.4 GB more while it embeds a batch of long texts, which Go gives back afterwards.
 
 ### The model
 
@@ -415,10 +415,13 @@ No runtime or library is loaded and nothing is linked: the binary is built witho
   `./run.sh test` runs the package's tests both ways.
 - **A product** `c = a·B` has `B` (a layer's weights, packed once when loaded; a head's keys and values, packed per layer) laid out in the order the kernel reads it (`packed`, `gemm` in `matmul.go`),
   and is cut into jobs for all CPUs (`product`).
+- **Memory**: the weights (0.64 GB) are outside Go's heap, in memory mapped from the system (`arena_mmap.go`, on Linux and macOS; in the heap elsewhere),
+  since the garbage collector lets a heap grow to twice what is live in it: with the weights there, as much garbage again could pile up beside them, from whatever the server does.
+  A forward pass's working memory (up to about 170 MB) is a `workspace`'s, kept for the next batch in a pool that lets go of it when the server is idle (`workspace.go`).
 - **A batch's texts** go through the linear layers together, at most 2048 tokens at a time (`batchTokens`), and each attends to its own tokens only (`attention.go`),
   so no text is padded to another's length and a batch's result is each text's alone, bit for bit.
 
-Go's `simd` package may change with a Go release, since it is an experiment: the package's tests (the kernels against plain loops, `exp` and GELU against `math`'s, a batch against each text alone) and the retrieval floor say whether an update kept the vectors.
+Go's `simd` package may change with a Go release, since it is an experiment: the package's tests (the kernels against plain loops, `exp` and GELU against `math`'s, a batch against each text alone, a pass in a workspace left full of NaN) and the retrieval floor say whether an update kept the vectors.
 Where its speed and memory were measured is the commits' messages (`git log go/internal/encoder`).
 
 ### Chunks

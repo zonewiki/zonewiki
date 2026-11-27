@@ -29,7 +29,7 @@ type attentionJob struct{ text, hd, i0, i1 int }
 // attentionBlock: the rows of a job, at most.
 const attentionBlock = 32
 
-func (m *Model) newAttention(starts []int) *attention {
+func (m *Model) newAttention(starts []int, ws *workspace) *attention {
 	dh := m.dim / m.heads
 	at := &attention{m: m, starts: starts}
 	texts := len(starts) - 1
@@ -47,9 +47,9 @@ func (m *Model) newAttention(starts []int) *attention {
 			}
 		}
 	}
-	at.kt, at.v, at.scores = make([]float32, kt), make([]float32, v), make([]float32, sc)
+	at.kt, at.v, at.scores = ws.floats(wsKeys, kt), ws.floats(wsValues, v), ws.floats(wsScores, sc)
 	span := 2*at.nmax - 1
-	at.alibi = make([]float32, m.heads*span)
+	at.alibi = ws.floats(wsAlibi, m.heads*span)
 	for hd := 0; hd < m.heads; hd++ {
 		for i := 0; i < span; i++ {
 			dist := i - (at.nmax - 1)
