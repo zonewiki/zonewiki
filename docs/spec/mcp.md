@@ -109,6 +109,31 @@ An ordinary new password (Change password, `zonewiki user passwd`) leaves them, 
 A client that doesn't call `/oauth/revoke` when its user disconnects it leaves its connection in Zonewiki: End ends it.
 Tested against real clients so far: Claude.
 
+#### What ChatGPT is expected to send
+
+**Expected, not yet observed**: ChatGPT (a custom MCP server in developer mode, on the web) has not been connected to Zonewiki yet.
+This is what OpenAI's documentation and others' reports say it sends, as read on 2026-11-27 (OpenAI's Apps SDK page Authentication, its help article Developer mode and MCP apps in ChatGPT, the MCP spec 2026-07-28, issues of other MCP servers).
+The first connect with the OAuth log on (below) confirms or corrects each row; this section is then rewritten as observed.
+
+| Step | Expected from ChatGPT | Zonewiki's answer |
+|------|-----------------------|-------------------|
+| Who can | Custom MCP servers on the web, created by an admin or owner on Business; writing tools on Business and Enterprise/Edu, reading only on Pro | — |
+| First call | `POST /mcp` without a token, `User-Agent: openai-mcp/1.0.0`, no `Origin` | `401`, `WWW-Authenticate: Bearer resource_metadata="…/.well-known/oauth-protected-resource/mcp", scope="mcp"` |
+| Metadata | `GET` (perhaps `HEAD` first) of the resource metadata, then `/.well-known/oauth-authorization-server`; perhaps `/.well-known/openid-configuration` or `/.well-known/oauth-authorization-server/mcp` | the two documents (`HEAD` too); `404` for the others |
+| Registration | Dynamic client registration, since Zonewiki offers no CIMD (which ChatGPT prefers where offered); a public client, perhaps with `application_type` | `201`, a client id holding the name and redirect URIs, no secret |
+| Redirect URI | `https://chatgpt.com/connector_platform_oauth_redirect`, as Zonewiki sends `iss` in every authorization response and says so (`authorization_response_iss_parameter_supported`); else `https://chatgpt.com/connector/oauth/<callback id>` | either is https: registered, and taken |
+| Authorize | `response_type=code`, `code_challenge_method=S256`, `state`, `resource=https://<wiki>/mcp`, `scope=mcp` (taken from the 401) | The question; after Allow, `code`, `state` and `iss` |
+| Token | `authorization_code` with `code_verifier`, `redirect_uri`, `resource` and `client_id`, no secret; `User-Agent: openai-connectors-oauth/1.0` reported | An access token for an hour and a refresh token |
+| MCP | With the token: `server/discover` with `MCP-Protocol-Version: 2026-07-28`; on a 400, `initialize` with 2025-11-25, then `tools/list`, perhaps `resources/list` | `400` "begin with initialize" (Protocol, under How it works), then as for any client; `resources/list` is a `-32601` |
+| Refresh | `refresh_token` after the hour, perhaps without `resource` | A new pair |
+
+Open points the log answers:
+
+- **The refresh.** OpenAI's help asks a provider to advertise `offline_access` for refresh tokens; Zonewiki doesn't, and gives every connection a refresh token all the same (others report ChatGPT doesn't ask for it).
+  If ChatGPT asks to sign in again after an hour, look for a `refresh_token` call in the log.
+- **A refresh token used twice.** Others report ChatGPT refreshing twice at once, or retrying a refresh whose answer it lost; Zonewiki ends the connection then (a refresh token works once), and the log shows two `refresh_token` calls a moment apart, the second answered `invalid_grant`.
+- **An `Origin` on a server-side call** would be refused (403, the Origin check); none is expected.
+
 #### The OAuth log
 
 For a client that doesn't connect, whoever runs the wiki can see what it sent and what Zonewiki answered: `oauth-log = yes` in the settings file writes a line to Zonewiki's log for each request of a connect.
