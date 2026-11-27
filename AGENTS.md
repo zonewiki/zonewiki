@@ -52,6 +52,7 @@ and the rule as it is now, not how it was measured: measurements and test result
 
 `docs/manual/` is Zonewiki's manual, for users: `README.md` is its contents and fixes the reading order, one file per area (getting started, pages, writing, history, notes, tasks, search, getting around, teams, assistants, the wiki guide, your data, importing notes, running Zonewiki yourself).
 It is in the browser at `/help` (Help in `docs/spec/routes.md`), in `zone_help`, and on zonewiki.com (`zonewiki manual DIR` writes it out as HTML).
+The site's copy is a build of main's manual, made apart from this repository: a change here shows there only once the site is rebuilt from it.
 It is written like the spec, a sentence a line, with headings unique in a file, but for a person in a browser: what to click or type and what happens, the words on the screen in **bold**, no function or file names of the code, only what is built.
 A page stays readable in a few minutes; the full rules are a link away (`../spec/tasks.md#views`).
 Links are written for the files (`tasks.md#lists`, `../screenshots/page.png`), and `tests/test_help.py` fails for one that leads nowhere, a heading renamed included.
