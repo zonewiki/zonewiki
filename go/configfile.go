@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"maps"
 	"net/netip"
+	"net/url"
 	"os"
 	"slices"
 	"strconv"
@@ -44,18 +45,34 @@ func configName() string { return stateDirName + "/config" }
 // every page, cut short on a phone (the whole of it in its title).
 const noticeMax = 200
 
+// legalLink: whether the imprint or privacy setting names a place a link can
+// lead: an http(s) address with a host, or a path in the wiki (/page/imprint).
+// Nothing else (javascript:, //host, a space or control character), though
+// the template would defuse it: the file says at once that the link is wrong.
+func legalLink(link string) bool {
+	if len(link) > 500 || strings.ContainsFunc(link, func(r rune) bool { return r <= ' ' || r == 0x7f || r == '\\' }) {
+		return false
+	}
+	if strings.HasPrefix(link, "/") {
+		return !strings.HasPrefix(link, "//")
+	}
+	u, err := url.Parse(link)
+	return err == nil && (u.Scheme == "https" || u.Scheme == "http") && u.Host != "" && u.User == nil
+}
+
 func configPath() string { return statePath("config") }
 
 // configKeys: the keys outside a [user …] section, in the order `zonewiki
 // config check` shows them.
 var configKeys = []string{"password", "mcp-token", "hosts", "base-url", "git-remote", "noshare", "locale",
 	"date-format", "query-log", "semantic-min-score", "trusted-proxies", "upload-max", "storage-max",
-	"external-content", "notice", "no-login", "mcp-oauth", "signup-domains", "signup-role", "signup-approval"}
+	"external-content", "notice", "imprint", "privacy", "no-login", "mcp-oauth", "signup-domains", "signup-role", "signup-approval"}
 
 // hostKeys: the settings that say where a wiki runs, not what it is: its
-// names, its proxies, its room, its remote. An import leaves them in the
-// archive (transfer.go): the host a wiki moves to has its own.
-var hostKeys = []string{"hosts", "base-url", "git-remote", "trusted-proxies", "storage-max"}
+// names, its proxies, its room, its remote, who answers for it. An import
+// leaves them in the archive (transfer.go): the host a wiki moves to has
+// its own.
+var hostKeys = []string{"hosts", "base-url", "git-remote", "trusted-proxies", "storage-max", "imprint", "privacy"}
 
 // usersOnlyKeys: the settings an import with --users-only still takes,
 // besides the users and the groups: how the wiki reads, which whoever runs
@@ -139,6 +156,7 @@ type Settings struct {
 	StorageMax       int64          // what the wiki may hold in bytes (storage.go); 0: no limit
 	External         []string       // the hosts pages may load images, media and frames from (security.go: externalRE); "*": any
 	Notice           string         // a line every page shows at the top, for everyone (layout.html); "": none
+	Imprint, Privacy string         // where the wiki's imprint and privacy policy are (legalLink), shown to whoever isn't signed in; "": none
 	NoLogin          bool           // no login on purpose, though other devices reach Zonewiki: no first-run page (setup.go)
 	SignupDomains    []string       // the mail domains sign-up takes (signup.go), lowercase; none: any
 	SignupRole       string         // the role an account made by sign-up gets: roleViewer (default) or roleEditor
@@ -238,6 +256,16 @@ func loadSettings(f *settingsfile.File) (*Settings, error) {
 	notice, where, _ := get("notice")
 	if s.Notice = strings.TrimSpace(notice); utf8.RuneCountInString(s.Notice) > noticeMax {
 		return nil, fmt.Errorf("%s… is %d characters: a notice is one line of at most %d.", where, utf8.RuneCountInString(s.Notice), noticeMax)
+	}
+	for _, l := range []struct {
+		key string
+		to  *string
+	}{{"imprint", &s.Imprint}, {"privacy", &s.Privacy}} {
+		link, where, _ := get(l.key)
+		if *l.to = strings.TrimSpace(link); *l.to != "" && !legalLink(*l.to) {
+			return nil, fmt.Errorf("%s%s isn't a link. Use an address like https://example.org/%s, or a path in the wiki like /page/%s.",
+				where, *l.to, l.key, l.key)
+		}
 	}
 	dateFormat, where, _ := get("date-format")
 	if s.DateFormat = strings.ToLower(dateFormat); s.DateFormat != "" && s.DateFormat != "iso" {
@@ -778,6 +806,7 @@ func settingsChange(old, s *Settings) string {
 		{"upload-max", old.UploadMax != s.UploadMax}, {"storage-max", old.StorageMax != s.StorageMax},
 		{"external-content", !slices.Equal(old.External, s.External)},
 		{"notice", old.Notice != s.Notice},
+		{"imprint", old.Imprint != s.Imprint}, {"privacy", old.Privacy != s.Privacy},
 		{"no-login", old.NoLogin != s.NoLogin},
 		{"signup-domains", !slices.Equal(old.SignupDomains, s.SignupDomains)},
 		{"signup-role", old.SignupRole != s.SignupRole}, {"signup-approval", old.SignupApproval != s.SignupApproval},

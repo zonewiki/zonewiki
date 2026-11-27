@@ -125,6 +125,14 @@
   {{- if .Shell.ShowActions}}{{template "top_actions" .Shell}}{{end}}
   {{- block "body" .}}{{end}}
   </main>
+  {{- /* The imprint and privacy settings (docs/spec/users.md): who runs this
+      wiki, for whoever isn't signed in. */}}
+  {{- if or .Shell.Imprint .Shell.Privacy}}
+  <footer class="wiki-legal">
+    {{- with .Shell.Imprint}}<a href="{{.}}" rel="noopener">Imprint</a>{{end}}
+    {{- with .Shell.Privacy}}<a href="{{.}}" rel="noopener">Privacy</a>{{end -}}
+  </footer>
+  {{- end}}
   {{- if .Shell.ShowActions}}{{template "action_bar" .Shell}}{{end}}
   {{- /* Version and the commit it was built from, quietly in the corner; the
       full build (commit date, +dirty) on hover and in the ? modal. */}}

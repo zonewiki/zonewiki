@@ -1927,6 +1927,16 @@ body.has-notice { --notice-h: 2rem; padding-top: var(--notice-h); }
 }
 @media print { .wiki-notice { display: none; } body.has-notice { padding-top: 0; } }
 
+/* The imprint and privacy settings' links (layout.html), under the page,
+   for whoever isn't signed in. */
+.wiki-legal {
+  display: flex; justify-content: center; gap: 1.25rem;
+  margin: 3rem 0 0; padding: 0 1rem 1.5rem; font-size: .85rem;
+}
+.wiki-legal a { color: var(--muted); }
+.wiki-legal a:hover { color: var(--link); }
+@media print { .wiki-legal { display: none; } }
+
 .top-badges {
   position: fixed;
   top: calc(.6rem + var(--notice-h));

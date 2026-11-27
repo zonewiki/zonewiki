@@ -225,6 +225,7 @@ A running Zonewiki then keeps the settings it had and says so in its log; a Zone
 | `storage-max` | `.zone/config` | How much the wiki may hold (default: no limit) |
 | `external-content` | `.zone/config` | Sites pages may show images and frames from: `upload.wikimedia.org` |
 | `trusted-proxies` | `.zone/config` | A reverse proxy's address, when it isn't on the same machine |
+| `imprint`, `privacy` | `.zone/config` | Links to your imprint and privacy policy under the page, for whoever isn't signed in: `https://example.org/imprint` ([The imprint and privacy links](../spec/users.md#the-imprint-and-privacy-links)) |
 | `notice` | `.zone/config` | A line across the top of every page, for everyone: `Down for maintenance tonight at 22:00` ([The notice](../spec/users.md#the-notice)) |
 
 Every environment setting is in `.env.example` with a comment (`ZONE_PORT` is the compose file's alone).
@@ -366,6 +367,14 @@ ZONE_PUBLIC=view
 ```bash
 # With the binary
 ZONE_PUBLIC=view ./zonewiki
+```
+
+A wiki that strangers read usually has to say who runs it.
+Write your imprint and privacy policy (a page of the wiki will do) and name them, and **Imprint** and **Privacy** show under every page for whoever isn't signed in:
+
+```bash
+./zonewiki config set imprint /page/imprint
+./zonewiki config set privacy https://example.org/privacy
 ```
 
 ## Updating Zonewiki

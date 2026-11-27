@@ -175,7 +175,7 @@ With rootless podman, keep-id (`compose.podman.yaml`) runs Zonewiki as the host 
 ### .zone/config
 
 The wiki's own settings and its users
-(a password, MCP tokens, `hosts`, `base-url`, `git-remote`, `noshare`, `locale`, `date-format`, `query-log`, `semantic-min-score`, `trusted-proxies`, `upload-max`, `storage-max`, `external-content`, `notice`, `no-login`, `mcp-oauth`, `signup-domains`, `signup-role`, `signup-approval`),
+(a password, MCP tokens, `hosts`, `base-url`, `git-remote`, `noshare`, `locale`, `date-format`, `query-log`, `semantic-min-score`, `trusted-proxies`, `upload-max`, `storage-max`, `external-content`, `notice`, `imprint`, `privacy`, `no-login`, `mcp-oauth`, `signup-domains`, `signup-role`, `signup-approval`),
 in the wiki,
 kept out of git (it holds the users: back it up with the data folder),
 reloaded when it changes,
@@ -923,7 +923,7 @@ Unpacked, it is a wiki's folder: whoever leaves Zonewiki has the pages as files 
 | `.zone/usage/` | the Usage page counts from nothing |
 | `.zone/seen/`, `watch/`, `drafts/`, `removed-users`, `queries.jsonl` | the tasks' news shows again; nobody watches a page until they watch it again; a text left in a conflict is gone; a removed user's name is still not a stranger's to sign up with where a private folder, a commit or a task names it (Sign-up in `docs/spec/users.md`) |
 | What isn't committed | lost: see Text that is not committed, below |
-| The host's settings: `hosts`, `base-url`, `git-remote`, `trusted-proxies`, `storage-max` | set them again where they are needed (`zonewiki config set`); the import names the ones it left out |
+| The host's settings: `hosts`, `base-url`, `git-remote`, `trusted-proxies`, `storage-max`, `imprint`, `privacy` | set them again where they are needed (`zonewiki config set`); the import names the ones it left out |
 
 ### Text that is not committed
 

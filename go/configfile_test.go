@@ -883,6 +883,37 @@ func TestTheNotice(t *testing.T) {
 	}
 }
 
+// imprint, privacy: an http(s) address or a path in the wiki, trimmed;
+// anything else is an error that names the line, and a change is named.
+func TestTheLegalLinks(t *testing.T) {
+	s, err := loadSettings(mustParse(t, "imprint =  https://example.org/imprint.html \nprivacy = /page/privacy\n"))
+	if err != nil || s.Imprint != "https://example.org/imprint.html" || s.Privacy != "/page/privacy" {
+		t.Fatalf("%q, %q, %v", s.Imprint, s.Privacy, err)
+	}
+	none, _ := loadSettings(mustParse(t, ""))
+	if none.Imprint != "" || none.Privacy != "" {
+		t.Errorf("none: %q, %q", none.Imprint, none.Privacy)
+	}
+	if got := settingsChange(none, s); got != "Change settings: imprint, privacy" {
+		t.Errorf("change: %q", got)
+	}
+	for _, bad := range []string{"javascript:alert(1)", "//example.org/imprint", "example.org/imprint",
+		"mailto:a@example.org", "https://", "https://user:pw@example.org/", "https://example.org/a b",
+		"/page/a\\b", "https://example.org/" + strings.Repeat("a", 500)} {
+		for _, key := range []string{"imprint", "privacy"} {
+			_, err := loadSettings(mustParse(t, "\n"+key+" = "+bad+"\n"))
+			if err == nil || !strings.Contains(err.Error(), "line 2: "+key+" = ") || !strings.Contains(err.Error(), "isn't a link") {
+				t.Errorf("%s = %s: %v", key, bad, err)
+			}
+		}
+	}
+	for _, key := range []string{"imprint", "privacy"} {
+		if !slices.Contains(hostKeys, key) {
+			t.Errorf("%s is the host's: an import leaves it out", key)
+		}
+	}
+}
+
 func TestRolesInTheFile(t *testing.T) {
 	hash := hashPassword("p")
 	f, err := parseConfig("[user a]\npassword = " + hash + "\nrole = Admin\n\n[user b]\npassword = " + hash +

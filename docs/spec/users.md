@@ -87,6 +87,8 @@ Edit it by hand or with the commands (Commands, below); a running Zonewiki takes
 | `upload-max` | The biggest upload (`Settings.uploadMax`, Request bodies in `docs/spec/security.md`) | a size (`25MB`; Sizes, below) | 100 MB |
 | `external-content` | Hosts a page may load images, media and frames from (A page loads nothing from other hosts, `docs/spec/security.md`) | host names (`upload.wikimedia.org, *.example.org`); `*`: any | none: only Zonewiki itself |
 | `notice` | A line across the top of every page, for everyone (The notice, below) | text, one line, at most 200 characters | none |
+| `imprint` | Where the wiki's imprint is: a link under the page, for whoever isn't signed in (The imprint and privacy links, below) | an address (`https://example.org/imprint`) or a path in the wiki (`/page/imprint`) | none |
+| `privacy` | Where its privacy policy is, beside it | as `imprint` | none |
 | `no-login` | The wiki has no login on purpose, though other devices reach it, so Zonewiki shows no first-run page (First run, `docs/spec/security.md`) | `yes`/`no` (as `query-log`) | no |
 | `mcp-oauth` | `no`: assistants connect with a static token only, not by signing in through the browser (Connecting with OAuth, `docs/spec/mcp.md`) | `yes`/`no` (as `query-log`) | yes, with a login |
 | `storage-max` | How much the wiki may hold: past it, nothing new is made (Storage limit, below) | a size (`5GB`) | no limit |
@@ -110,6 +112,28 @@ The line is ink on paper turned round (`.wiki-notice`), fixed at the top; what e
 On a narrow screen a long one is cut short with "…", the whole of it in its title; it isn't printed.
 It is in the layout (`pageShell.Notice`, `layout.html`), so every view has it and none can leave it out.
 Tests: `tests/test_notice.py`, `tests/e2e/test_notice.py`, `TestTheNotice` in `go/configfile_test.go`.
+
+### The imprint and privacy links
+
+`imprint` and `privacy` say where the wiki's imprint and its privacy policy are, and put the links **Imprint** and **Privacy** under the page for whoever isn't signed in:
+on the login page (and sign-up, an invite, a password reset), for a public wiki's visitor, and on every page of a wiki without a login.
+They are for a wiki that strangers reach, where the law wants them to find who runs it: a public wiki, a hosted one, a demo.
+Whoever is signed in sees neither, and the editor has none.
+
+```bash
+zonewiki config set imprint https://example.org/imprint.html
+zonewiki config set privacy https://example.org/privacy.html
+zonewiki config unset privacy
+```
+
+Each is an `http(s)` address, or a path in the wiki that starts with `/` (`/page/imprint`, for a public wiki whose imprint is a page of it; a wiki with a login shows a stranger no page, so there it must be an address).
+Anything else (another scheme, `//host`, a name and password, a space, more than 500 characters) is an error that names the line (`legalLink`).
+One alone shows one link.
+Zonewiki writes neither text: the pages are their operator's to write.
+
+They are the host's settings, as `hosts` is: an import leaves them in the archive (`hostKeys`), since the host a wiki moves to answers for it now.
+The links are in the layout (`pageShell.Imprint`, `Privacy`, `layout.html`; `.wiki-legal`), set where nobody is signed in (`page()`), and aren't printed.
+Tests: `tests/test_legal.py`, `tests/e2e/test_legal.py`, `TestTheLegalLinks` in `go/configfile_test.go`.
 
 ### A user's keys
 
@@ -207,7 +231,7 @@ The file is kept out of git, as all of `.zone/` is (the session key, caches, the
 Zonewiki never shows it either (The settings file is never shown in `docs/spec/security.md`): `canSeePath` is false for `.zone/` for everyone, so history, the uncommitted list, Commit all and the MCP tools leave it (and a commit of nothing else) out, and `safePath` refuses it to every page route and MCP tool.
 
 A wiki still moves with its users: `zonewiki export` puts the file beside the history in its archive, and `zonewiki import` takes it from there, so everyone signs in where the wiki moves to with the password they had.
-The keys that are a host's (`hosts`, `base-url`, `git-remote`, `trusted-proxies`, `storage-max`) stay in the archive, and with `--users-only` every key but the users, the groups, `locale`, `date-format` and `noshare` (Moving a wiki in `docs/spec/deployment.md`).
+The keys that are a host's (`hosts`, `base-url`, `git-remote`, `trusted-proxies`, `storage-max`, `imprint`, `privacy`) stay in the archive, and with `--users-only` every key but the users, the groups, `locale`, `date-format` and `noshare` (Moving a wiki in `docs/spec/deployment.md`).
 
 **Account data stays out of git**: the file holds the users,
 their password and token hashes,

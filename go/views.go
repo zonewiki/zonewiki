@@ -401,6 +401,7 @@ type pageShell struct {
 	Locale, DateFormat string
 	SignOut            bool   // signed in, so Sign out is offered
 	Notice             string // the notice setting: a line at the top of every page, for everyone
+	Imprint, Privacy   string // the imprint and privacy settings' links, for whoever isn't signed in; "" for the signed in and in the editor
 	ChangePassword     bool   // signed in, and the password is theirs to change (no shared account's)
 	SetLogin           string // the wiki asks for no login: where the menu's Set a login leads (setLoginHref)
 	// Settings: the settings pages as tabs (settingsTabs): the menu's
@@ -445,6 +446,9 @@ func page(w http.ResponseWriter, rq *Req, status int, name, title string, o shel
 		// Only signed in: the login page has no one to sign out.
 		SignOut: s.authOn() && isSignedIn(rq.r), ChangePassword: mayChangePassword(rq), SetLogin: setLoginHref(), User: rq.user.Name, Users: s.Users != nil, Admin: s.isAdmin(rq.user.Name),
 		Viewer: s.isViewer(rq.user.Name), Notice: s.Notice,
+	}
+	if !o.editor && !isSignedIn(rq.r) {
+		sh.Imprint, sh.Privacy = s.Imprint, s.Privacy
 	}
 	if rq.user.Name == visitor {
 		// No name, nothing of users (private pages, assignees), nothing to
