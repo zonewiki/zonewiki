@@ -321,11 +321,11 @@ func mcpEndpoint(w http.ResponseWriter, r *http.Request) {
 	if s := settings(); oauthOn(s) {
 		challenge = `Bearer resource_metadata="` + resourceMetaURL(s, r) + `", scope="` + oauthScope + `"`
 	} else if !mcpOn() {
-		msg := "MCP is off: make a token at /assistant in the browser (or with ./run.sh config token) and send it as " +
-			"'Authorization: Bearer <token>'"
+		msg := "MCP is off: make a token at /assistant in the browser (or on the host: zonewiki config token, " +
+			"with run.sh ./run.sh config token) and send it as 'Authorization: Bearer <token>'"
 		if settings().Users != nil {
-			msg = "MCP is off: a user makes their token at /assistant in the browser (or ./run.sh user token NAME) and sends it as " +
-				"'Authorization: Bearer <token>'"
+			msg = "MCP is off: a user makes their token at /assistant in the browser (or on the host: zonewiki user token NAME, " +
+				"with run.sh ./run.sh user token NAME) and sends it as 'Authorization: Bearer <token>'"
 		}
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": msg})
 		return

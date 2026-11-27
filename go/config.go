@@ -202,6 +202,13 @@ func defaultData(getenv func(string) string) (string, error) {
 	data := filepath.Join(home, defaultDataName)
 	if st, err := os.Stat(data); err == nil {
 		if !st.IsDir() {
+			if isExecutable(st) {
+				// The downloaded binary, named zonewiki in the home folder
+				// (where a server's download lands): it has the folder's name.
+				return "", fmt.Errorf("ZONE_DATA isn't set, and its default %s is this program itself: "+
+					"the wiki's default folder has its name. Move the program to another folder "+
+					"(such as ~/bin), or set ZONE_DATA to your wiki's folder.", data)
+			}
 			return "", fmt.Errorf("ZONE_DATA isn't set, and its default %s is a file, not a folder. "+
 				"Set ZONE_DATA to your wiki's folder.", data)
 		}
@@ -213,6 +220,26 @@ func defaultData(getenv func(string) string) (string, error) {
 	}
 	logf("ZONE_DATA isn't set: made a new wiki at %s", data)
 	return data, nil
+}
+
+// isExecutable: the file is the running program (os.Executable), the one a
+// start without ZONE_DATA most likely finds where its wiki would be.
+func isExecutable(st os.FileInfo) bool {
+	exe, err := os.Executable()
+	if err != nil {
+		return false
+	}
+	est, err := os.Stat(exe)
+	return err == nil && os.SameFile(st, est)
+}
+
+// isSourceCheckout: the folder is a checkout of Zonewiki's own repository,
+// cloned where the wiki is looked for: ~/zonewiki, the default wiki and
+// the name git clone gives it.
+func isSourceCheckout(dir string) bool {
+	_, err1 := os.Lstat(filepath.Join(dir, "zonefiles.go"))
+	_, err2 := os.Lstat(filepath.Join(dir, "go", "go.mod"))
+	return err1 == nil && err2 == nil
 }
 
 // newWikiError: why Zonewiki doesn't make the wiki's folder a wiki without
@@ -228,7 +255,9 @@ func defaultData(getenv func(string) string) (string, error) {
 // from before .zone-format is one too: only a start writes the session key
 // (.zone/secret_key, secretKey), so a folder with one has been served by
 // Zonewiki, and noteWikiFormat gives it the file. Asked at start before
-// Zonewiki writes anything in the folder.
+// Zonewiki writes anything in the folder. Zonewiki's own checkout (git clone
+// in the home folder makes ~/zonewiki, the default wiki) is told apart:
+// --init is never what it wants.
 func newWikiError() error {
 	if cfg.Init {
 		return nil
@@ -259,6 +288,11 @@ func newWikiError() error {
 	}
 	if len(names) == 0 {
 		return nil
+	}
+	if isSourceCheckout(cfg.Data) {
+		return fmt.Errorf("%s is Zonewiki's source code (a checkout of its repository), not a wiki. "+
+			"Set ZONE_DATA to your wiki's folder, an empty one for a new wiki; "+
+			"~/zonewiki is the wiki's default, so clone Zonewiki under another name.", cfg.Data)
 	}
 	shown := strings.Join(names[:min(len(names), 3)], ", ")
 	if len(names) > 3 {

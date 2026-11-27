@@ -254,11 +254,15 @@ With Go 1.27 or newer and git:
 go/zonewiki                          # the wiki in ~/zonewiki; ZONE_DATA=/path/to/wiki go/zonewiki for another
 ```
 
+A checkout named `zonewiki` in the home folder (what `git clone` there makes) is `~/zonewiki`, the default wiki: Zonewiki refuses it (A new wiki, below), so clone under another name or set `ZONE_DATA`.
 In Windows PowerShell: `cd go; go build -o zonewiki.exe .; cd ..`, then `$env:ZONE_DATA="$HOME\zonewiki"; go\zonewiki.exe`.
-For semantic search at full speed, build with Go's vector arithmetic, `GOEXPERIMENT=simd go build -o zonewiki .` (an experiment of Go 1.27, which the images and the release binaries are built with); a plain build embeds many times slower (Running the model in `docs/spec/search.md`).
+For semantic search at full speed, build with Go's vector arithmetic, `(cd go && GOEXPERIMENT=simd go build -o zonewiki .)` (an experiment of Go 1.27, which the images and the release binaries are built with); a plain build embeds many times slower (Running the model in `docs/spec/search.md`).
+It needs Go 1.27 itself: an older `go` that fetches 1.27 for the plain build (`GOTOOLCHAIN=auto`) fails on the unknown experiment before it switches (seen with 1.24).
+At the repository's root, `go build` builds the package of Zonewiki's built-in files instead, and writes an archive named `zonewiki` that doesn't run.
 It listens on localhost only: a port alone in `--addr` (`:5080`, the default; `:5081`) is `127.0.0.1`'s unless `ZONE_ALLOW_REMOTE` is set, which opens it on every interface (`listenAddr` in `go/server.go`).
 An address with a host is taken as written (`--addr 0.0.0.0:5080`), and asks for a login first, as `ZONE_ALLOW_REMOTE` does (First run in `docs/spec/security.md`).
-A port another program has stops Zonewiki with what to do (`portTaken` in `go/server.go`): the default is not 5000, which a Mac's AirPlay Receiver and a Synology's DSM use, but another program may have 5080 too: `--addr :5081`.
+A port another program has stops Zonewiki with what to do (`portTaken` in `go/server.go`): the default is not 5000, which a Mac's AirPlay Receiver and a Synology's DSM use, but another program may have 5080 too, most often a Zonewiki started before: `--addr :5081`.
+The message asks whether a Zonewiki runs already, and names AirPlay Receiver only for port 5000.
 `zonewiki --help` lists the flags, the commands (`user`, `group`, `config`, `eval`, `health`, `manual`, `licenses`; each takes `--help` too) and the environment.
 `zonewiki version` (or `--version`) prints the version and the build, as the start-up line does (`Zonewiki 0.5.0 (c28ec9e 2026-09-26 19:22)`), without a wiki.
 
@@ -789,7 +793,8 @@ A folder that `ZONE_DATA` names must exist: neither `run.sh up` nor Zonewiki cre
 Zonewiki started with `ZONE_DATA` unset (or empty), as the binary is on a desktop, takes `~/zonewiki` (`defaultData` in `go/config.go`: `$HOME/zonewiki`),
 and makes that one folder at the first start, saying so in its log ("ZONE_DATA isn't set: made a new wiki at …");
 the commands (`zonewiki user …`, `config …`) do the same, so a password can be set before the first start.
-It makes nothing else: without a home folder, or with a file at `~/zonewiki`, it exits and says to set `ZONE_DATA`.
+It makes nothing else: without a home folder, or with a file at `~/zonewiki`, it exits and says to set `ZONE_DATA`;
+when that file is the running binary itself (downloaded into the home folder and named `zonewiki`, as the README's steps name it), it says so, and to move the binary to another folder (`isExecutable`).
 At start it prints where to open it and where the wiki is, under the line it listens on:
 `Open http://localhost:5080 in a browser. The wiki is /home/anna/zonewiki`
 (`base-url` when it is set; no such line on a socket or behind compose, whose port mapping Zonewiki doesn't know: `ZONE_BIND` set).
@@ -816,6 +821,8 @@ That is what a folder of Markdown notes wants once, and what a mistyped `ZONE_DA
 After the first start the folder is a wiki, so `ZONE_INIT` may stay set.
 A `.git` doesn't make a folder a wiki: a project's checkout and a home folder kept in git have one, and Zonewiki would commit its home page and its changes into that repository.
 So notes kept in git already need `--init` once too; the wiki's history then goes on from theirs.
+Zonewiki's own checkout (a `zonefiles.go` and a `go/go.mod`; `isSourceCheckout`) is told apart, since `git clone` in the home folder makes `~/zonewiki`, the default wiki:
+the message says the folder is Zonewiki's source code, not a wiki, and to set `ZONE_DATA` or clone under another name, without offering `--init`.
 The check runs at start before Zonewiki writes anything in the folder, after the one for a folder inside another repository (Layout, below).
 
 ### Layout

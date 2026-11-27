@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -437,6 +438,15 @@ func TestPortTaken(t *testing.T) {
 	_, err = listen(ln.Addr().String())
 	if err == nil || !strings.Contains(portTaken(err).Error(), "zonewiki --addr :5081") {
 		t.Errorf("%v", portTaken(err))
+	}
+	// AirPlay Receiver is named for 5000 alone, which it has on a Mac.
+	if strings.Contains(portTaken(err).Error(), "AirPlay") {
+		t.Errorf("AirPlay named for port %s: %v", ln.Addr(), portTaken(err))
+	}
+	at5000 := &net.OpError{Op: "listen", Net: "tcp", Addr: &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 5000},
+		Err: os.NewSyscallError("bind", syscall.EADDRINUSE)}
+	if !strings.Contains(portTaken(at5000).Error(), "AirPlay Receiver has 5000") {
+		t.Errorf("port 5000: %v", portTaken(at5000))
 	}
 	if other := os.ErrNotExist; portTaken(other) != other {
 		t.Error("another error changed")

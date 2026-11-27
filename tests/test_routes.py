@@ -8,6 +8,7 @@ import io
 import json
 import os
 import re
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -2809,6 +2810,36 @@ class TestVersion:
         assert r.returncode != 0
         assert f"no wiki at {tmp_path / 'nowhere'}" in r.stderr
         assert not (tmp_path / "nowhere").exists() and not (tmp_path / "zonewiki").exists()
+
+    def test_the_binary_where_the_default_wiki_goes_says_so(self, tmp_path):
+        # The binary downloaded into the home folder and named zonewiki, as
+        # the README's steps name it, is where the default wiki would be:
+        # the message says it is the program, and to move it.
+        home = Path(os.path.realpath(tmp_path))
+        exe = home / "zonewiki"
+        shutil.copy2(binary(), exe)
+        env = {k: v for k, v in os.environ.items() if not k.startswith("ZONE_")}
+        env["HOME"] = str(home)
+        r = subprocess.run([str(exe), "--addr", "127.0.0.1:0"], env=env, capture_output=True, text=True, timeout=60)
+        assert r.returncode != 0
+        assert f"its default {exe} is this program itself" in r.stderr and "Move the program" in r.stderr
+        assert exe.is_file()
+
+    def test_zonewikis_own_checkout_is_no_wiki(self, tmp_path):
+        # git clone in the home folder makes ~/zonewiki, the default wiki:
+        # refused untouched, saying what the folder is, without offering
+        # --init, which would commit the wiki into the checkout.
+        home = Path(os.path.realpath(tmp_path))
+        checkout = home / "zonewiki"
+        (checkout / "go").mkdir(parents=True)
+        (checkout / "go" / "go.mod").write_text("module zonewiki\n", encoding="utf-8")
+        (checkout / "zonefiles.go").write_text("package zonefiles\n", encoding="utf-8")
+        (checkout / "README.md").write_text("# Zonewiki\n", encoding="utf-8")
+        r = self._start(None, home)
+        assert r.returncode != 0
+        assert f"{checkout} is Zonewiki's source code" in r.stderr and "clone Zonewiki under another name" in r.stderr
+        assert "--init" not in r.stderr
+        assert sorted(p.name for p in checkout.iterdir()) == ["README.md", "go", "zonefiles.go"]
 
     def test_refuses_a_folder_inside_another_repository_untouched(self, tmp_path):
         # A ZONE_DATA naming a folder of a checkout: Zonewiki doesn't start, and

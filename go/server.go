@@ -316,13 +316,19 @@ func openURL(ln net.Listener, baseURL string) string {
 }
 
 // portTaken: a listen error, with what to do when another program has the
-// port: on a Mac, AirPlay Receiver listens on 5000, which is why Zonewiki's default is not.
+// port: often a Zonewiki started before, in another terminal; on 5000, a
+// Mac's AirPlay Receiver, which is why Zonewiki's default is not 5000.
 func portTaken(err error) error {
-	if errors.Is(err, syscall.EADDRINUSE) {
-		return fmt.Errorf("%w. Another program has that port (on a Mac, AirPlay Receiver has 5000): "+
-			"start Zonewiki on another one, as zonewiki --addr :5081", err)
+	if !errors.Is(err, syscall.EADDRINUSE) {
+		return err
 	}
-	return err
+	who := "a Zonewiki started before?"
+	var op *net.OpError
+	if errors.As(err, &op) && op.Addr != nil && strings.HasSuffix(op.Addr.String(), ":5000") {
+		who = "on a Mac, AirPlay Receiver has 5000"
+	}
+	return fmt.Errorf("%w. Another program has that port (%s): "+
+		"start Zonewiki on another one, as zonewiki --addr :5081", err, who)
 }
 
 // socketPrefix: an --addr that names a Unix socket's path, not a TCP address.
