@@ -445,3 +445,25 @@ def test_checkbox_after_inline_code_at_a_lines_start(page, wiki):
     expect(boxes).to_have_count(1)
     boxes.first.click()
     expect(page.locator("#editor-textarea")).to_have_value(text.replace("- [ ]", "- [x]"))
+
+
+def test_did_you_mean_points_the_link_at_the_page_of_that_name(page, wiki):
+    """A missing link whose name is a page's elsewhere: its editor asks Did
+    you mean; Link to points the link there and opens that page, and no
+    page is made under the missing name. Write a new page dismisses it."""
+    wiki.write("journal/foo", "# Foo\n")
+    wiki.write("plans", "# Plans\n\nSee [[Foo]].\n")
+    wiki.git("add", "-A")
+    wiki.git("commit", "-qm", "seed")
+    page.goto("/page/plans")
+    page.locator("a.wikilink-missing", has_text="Foo").click()
+    page.wait_for_url("**/edit/foo?on=plans")
+    banner = page.locator("#same-name-banner")
+    expect(banner).to_contain_text("Did you mean journal/foo?")
+    banner.get_by_role("button", name="Write a new page").click()
+    expect(banner).to_have_count(0)
+    page.reload()
+    page.locator("#same-name-banner").get_by_role("button", name="Link to journal/foo").click()
+    page.wait_for_url("**/page/journal/foo")
+    assert wiki.read("plans") == "# Plans\n\nSee [[journal/foo|Foo]].\n"
+    assert not (wiki.root / "foo.md").exists()

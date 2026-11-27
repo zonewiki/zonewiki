@@ -261,12 +261,37 @@ func linkNewOp(user asker, on, slug string) (target string, err error) {
 	if !canWrite(user, target) {
 		return "", notWritable(user, target, "No page "+strconv.Quote(target))
 	}
-	_, _, _, err = changePageOp(user, on, "Link to "+target+" on", "", func(old string) (string, error) {
-		// The link keeps its words: [[Garden]] reads Garden, not the folder's path.
+	return target, pointLinksOp(user, on, slug, target)
+}
+
+// relinkOp: the missing page slug, opened from a link on the page on, was
+// meant to be target, a page of the same name user sees elsewhere
+// (sameNamePages: the editor's Did you mean). Every link to slug on that
+// page points at target from now (one commit).
+func relinkOp(rq *Req, on, slug, target string) error {
+	on, slug, target = mdtext.ToSlug(on), mdtext.ToSlug(slug), mdtext.ToSlug(target)
+	if on == "" || slug == "" || !canSee(rq.user, on) {
+		return refuseAs(refusedNotFound, "No page "+strconv.Quote(on))
+	}
+	if p := safePath(slug); p == "" || exists(p) || !slices.Contains(sameNamePages(rq, slug, maxSameName), target) {
+		return refuse("“" + target + "” isn't a page of the name “" + slug + "” was looking for")
+	}
+	return pointLinksOp(rq.user, on, slug, target)
+}
+
+// maxSameName: how many pages of a missing page's name the editor offers.
+const maxSameName = 5
+
+// pointLinksOp: every link to slug on the page on points at target from now,
+// in one commit "Link to <target> on <on>". A link keeps its words:
+// [[Garden]] reads Garden, not the new path. Refused when on has no link
+// to slug.
+func pointLinksOp(user asker, on, slug, target string) error {
+	_, _, _, err := changePageOp(user, on, "Link to "+target+" on", "", func(old string) (string, error) {
 		masked, stash := mdtext.MaskCode(old)
 		masked = mdtext.WikilinkRE.ReplaceAllStringFunc(masked, func(m string) string {
 			l := parseWikilink(m)
-			if page := strings.TrimSpace(l.page); !l.hasLabel && !l.hasSection && page != slug && mdtext.ToSlug(page) == slug {
+			if page := strings.TrimSpace(l.page); !l.hasLabel && !l.hasSection && mdtext.ToSlug(page) == slug {
 				l.label, l.hasLabel = page, true
 				return l.String()
 			}
@@ -278,7 +303,7 @@ func linkNewOp(user asker, on, slug string) (target string, err error) {
 		}
 		return text, nil
 	})
-	return target, err
+	return err
 }
 
 // writeDraft writes the editor's text to the page (current: what it holds,

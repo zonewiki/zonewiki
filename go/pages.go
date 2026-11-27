@@ -389,6 +389,23 @@ func allSlugs() []string {
 	return out
 }
 
+// sameNamePages: the pages rq's user sees (and sharing mode shows) whose
+// last part is slug's, slug itself aside: what a link to the missing page
+// slug may have meant ([[foo]] for journal/foo, [[old/foo]] for new/foo).
+// Links are paths from the root and never resolve by a name alone, so this
+// only helps to fix one (the editor's Did you mean). At most limit, by slug.
+func sameNamePages(rq *Req, slug string, limit int) []string {
+	name := path.Base(slug)
+	var out []string
+	for _, p := range rq.pageFiles() {
+		if p.Slug != slug && path.Base(p.Slug) == name && !hiddenPage(rq, p.Slug) {
+			out = append(out, p.Slug)
+		}
+	}
+	sort.Strings(out)
+	return out[:min(limit, len(out))]
+}
+
 func slugSet() map[string]bool {
 	out := map[string]bool{}
 	for _, p := range iterPages() {

@@ -19,7 +19,8 @@ import (
 // [[Page#Section]], [[#Section]] as links; to a missing page with class
 // wikilink-missing, to a page hidden in sharing mode as its label only.
 // slugs: the wiki's pages (nil: listed now). from: the page the text is on
-// ("" for none, a task's notes): on one of the user's own private pages, or
+// ("" for none, a task's notes): a link to a missing page carries it as
+// ?on=, for the editor's Did you mean (relinkOp); on one of the user's own private pages, or
 // a page of a group, a link to a missing page that would be shared is marked
 // (wikilink-shared-new) and carries ?from=private or ?from=group:<name>, so
 // the editor it opens warns that the new page is shared and offers it in
@@ -57,10 +58,14 @@ func wikilinker(rq *Req, slugs map[string]bool, from string) func(inner string) 
 		target, source := placeOf(slug), placeOf(from)
 		if !slugs[slug] {
 			css += " wikilink-missing"
+			// on: the page the link is on, so the new page's editor can offer
+			// pages of its name elsewhere (relinkOp), or to make it in the
+			// page's own folder (linkNewOp), and point this link there.
+			if from != "" {
+				query = "?on=" + url.QueryEscape(from)
+			}
 			if from != "" && !source.shared() && target.shared() {
 				css += " wikilink-shared-new"
-				// on: the page the link is on, so the new page's editor can offer
-				// to make it there and point this link at it (linkNewOp).
 				query, title = "?from="+newFrom(source)+"&amp;on="+url.QueryEscape(from), ` title="Creates a shared page"`
 			}
 		} else if from != "" && !source.within(target) {

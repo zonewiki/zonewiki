@@ -301,6 +301,10 @@ if (textarea && previewPane) {
   // banner says so, and Keep shared dismisses it.
   const sharedBanner = document.getElementById('shared-new-banner');
   sharedBanner?.querySelector('#shared-new-keep').addEventListener('click', () => sharedBanner.remove());
+  // A new page from a link, with pages of its name elsewhere: Write a new
+  // page dismisses the Did you mean.
+  const sameNameBanner = document.getElementById('same-name-banner');
+  sameNameBanner?.querySelector('#same-name-new').addEventListener('click', () => sameNameBanner.remove());
 
   // After Done's conflict: what an auto-save is told (who, and the lines
   // with markers), for the banner; null if it saved after all (the file

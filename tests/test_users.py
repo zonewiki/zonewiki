@@ -565,7 +565,7 @@ class TestSharedNewPage:
         assert f'<a href="/page/garden?from=private{on}#beds" class="wikilink wikilink-missing wikilink-shared-new"' in body
         # an existing page, a new private page, another user's: nothing to warn of
         assert '<a href="/page/plans" class="wikilink">Plans</a>' in body
-        assert 'href="/page/private/alice/later" class="wikilink wikilink-missing">' in body
+        assert 'href="/page/private/alice/later?on=private%2Falice%2Fdiary" class="wikilink wikilink-missing">' in body
         assert body.count("wikilink-shared-new") == 2
 
     def test_a_shared_page_marks_nothing(self, alice):
@@ -625,6 +625,26 @@ class TestSharedNewPage:
             assert "shared-new-banner" not in alice.get(url, headers=HOST).data.decode(), url
         (git_wiki_dir / "private/alice/garden.md").write_text("# Mine\n")
         assert "shared-new-banner" not in alice.get("/edit/garden?from=private", headers=HOST).data.decode()
+
+    def test_did_you_mean_offers_only_what_the_user_sees(self, alice, git_wiki_dir):
+        """A missing link's editor offers pages of its name elsewhere (Did
+        you mean): her private garden to her, from her diary and from the
+        shared plans; to bob never, and he can't point a link at it."""
+        (git_wiki_dir / "private/alice/garden.md").write_text("# Mine\n")
+        for on in ("private/alice/diary", "plans"):
+            body = alice.get(f"/edit/garden?on={on}", headers=HOST).data.decode()
+            assert 'name="target" value="private/alice/garden"' in body, on
+        login(alice, "bob", "bob-pw")
+        bob = alice
+        body = bob.get("/edit/garden?on=plans", headers=HOST).data.decode()
+        assert "same-name-banner" not in body and "private/alice/garden" not in body
+        resp = bob.post("/relink", data={"slug": "garden", "on": "plans", "target": "private/alice/garden"}, headers=HOST)
+        nothing = bob.post("/relink", data={"slug": "garden", "on": "plans", "target": "private/alice/nothing"}, headers=HOST)
+        assert resp.status_code == nothing.status_code == 400 and resp.data == nothing.data.replace(b"nothing", b"garden")
+        assert (git_wiki_dir / "plans.md").read_text() == "# Plans\n\n[[Garden]]\n"
+        # Her page, by way of the link on it: not his to change.
+        assert bob.post("/relink", data={"slug": "garden", "on": "private/alice/diary", "target": "garden"},
+                        headers=HOST).status_code == 404
 
     def test_the_editor_does_not_warn_without_users(self, client, wiki_dir):
         assert "shared-new-banner" not in client.get("/edit/garden?from=private", headers=HOST).data.decode()

@@ -8,6 +8,16 @@
     {{.BreadcrumbHTML}}
     {{- /* A new page from a link on a private page, or a group's, would be
         shared: say so, and say how to make it there (js/editor.js dismisses the note). */}}
+    {{- /* A new page from a link, with pages of its name elsewhere: one click
+        points the link at one of them (POST /relink) and opens it. */}}
+    {{- if .SameName}}
+    <div class="shared-new-banner" id="same-name-banner" role="note">
+      <span>Did you mean {{range $i, $s := .SameName}}{{if $i}}, {{end}}<code>{{$s}}</code>{{end}}? The link points at <code>{{.Slug}}</code>, which isn't there.</span>
+      <form method="post" action="/relink" class="conflict-actions"><input type="hidden" name="slug" value="{{.Slug}}"><input type="hidden" name="on" value="{{.LinkOn}}">
+        {{- range .SameName}}<button type="submit" class="btn btn-small btn-primary" name="target" value="{{.}}">Link to {{.}}</button>{{end -}}
+        <button type="button" class="btn btn-small" id="same-name-new">Write a new page</button></form>
+    </div>
+    {{- end}}
     {{- if .PrivateOffer}}
     <div class="shared-new-banner" id="shared-new-banner" role="note">
       {{- if .OfferOn}}

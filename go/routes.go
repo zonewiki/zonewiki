@@ -46,6 +46,7 @@ func pageRoutes(mux *http.ServeMux) {
 	})
 	mux.HandleFunc("POST /new", writesPages(createPage))
 	mux.HandleFunc("POST /link-new", writesPages(linkNew))
+	mux.HandleFunc("POST /relink", writesPages(relink))
 	mux.HandleFunc("POST /rename/{slug...}", writesPages(renamePage))
 	mux.HandleFunc("POST /promote/{slug...}", writesPages(promotePage))
 	mux.HandleFunc("POST /append/{slug...}", writesPages(appendPage))
@@ -169,12 +170,18 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 				Date: date, BreadcrumbHTML: buildBreadcrumb(rq, slug, title, "", "")})
 			return
 		}
-		to := pathURL("edit", slug)
+		// The page the link was on (wikilinker): its editor offers pages of the
+		// name elsewhere, and if it was private or a group's, to make it there.
+		var query []string
 		if from := r.URL.Query().Get("from"); newFromRE.MatchString(from) {
-			to += "?from=" + from // the link was on a private page, or a group's (wikilinker)
-			if on := r.URL.Query().Get("on"); on != "" {
-				to += "&on=" + url.QueryEscape(on)
-			}
+			query = append(query, "from="+from)
+		}
+		if on := r.URL.Query().Get("on"); on != "" && on == mdtext.ToSlug(on) {
+			query = append(query, "on="+url.QueryEscape(on))
+		}
+		to := pathURL("edit", slug)
+		if len(query) > 0 {
+			to += "?" + strings.Join(query, "&")
 		}
 		http.Redirect(w, r, to, http.StatusFound)
 		return
@@ -297,10 +304,12 @@ type editView struct {
 	CanRename, CanDelete        bool
 	Git                         bool
 	RenameError, RenameName     string
-	RenameAsk                   string // a rename to other readers, asked first: what it would do (the form then confirms that name)
-	PrivateOffer                string // a new shared page from a private one, or a group's: the slug in that folder to link instead
-	OfferGroup                  string // the group whose folder PrivateOffer is in ("": the user's own)
-	OfferOn                     string // the page whose link led here, when Make it … can point that link at PrivateOffer ("": the note only says how)
+	RenameAsk                   string   // a rename to other readers, asked first: what it would do (the form then confirms that name)
+	PrivateOffer                string   // a new shared page from a private one, or a group's: the slug in that folder to link instead
+	OfferGroup                  string   // the group whose folder PrivateOffer is in ("": the user's own)
+	OfferOn                     string   // the page whose link led here, when Make it … can point that link at PrivateOffer ("": the note only says how)
+	SameName                    []string // a new page opened from a link on LinkOn: the pages of its name elsewhere it may have meant (Did you mean)
+	LinkOn                      string   // the page whose link to this missing one SameName's buttons re-point
 	LeftDraft                   *leftDraftView
 	Paste                       *pasteHintView // after Move to wiki (pasteHint)
 	TaskLists                   []string       // the lists there are, for the Task list dialog
@@ -414,6 +423,17 @@ func editPage(w http.ResponseWriter, r *http.Request) {
 			offerOn = on
 		}
 	}
+	// A new page from a link on a page they may change: pages of its name
+	// elsewhere, one of which the link may have meant (Did you mean).
+	var sameName []string
+	linkOn := q.Get("on")
+	if isNew && !hasSection && linkOn != "" && linkOn == mdtext.ToSlug(linkOn) && canWrite(rq.user, linkOn) {
+		if p := safePath(linkOn); p != "" {
+			if text, err := readText(p); err == nil && pageLinkTargets(text, linkOn)[slug] {
+				sameName = sameNamePages(rq, slug, maxSameName)
+			}
+		}
+	}
 	extra := crumb{"Edit", ""}
 	if hasSection {
 		extra = crumb{"§ " + strconv.Itoa(section), ""}
@@ -424,7 +444,7 @@ func editPage(w http.ResponseWriter, r *http.Request) {
 		// A visitor (a public wiki) edits and makes pages, and moves none.
 		CanRename: editable && !isProtected(slug) && rq.user.Name != visitor, CanDelete: editable && !isProtected(slug) && rq.user.Name != visitor,
 		Git: cfg.GitEnabled, RenameError: q.Get("rename_error"), RenameName: q.Get("rename_name"), RenameAsk: q.Get("rename_ask"), LeftDraft: left,
-		PrivateOffer: privateOffer, OfferGroup: offerGroup, OfferOn: offerOn, Paste: pasteHint(rq, q.Get("paste"), q.Get("copied") == "1"),
+		PrivateOffer: privateOffer, OfferGroup: offerGroup, OfferOn: offerOn, SameName: sameName, LinkOn: linkOn, Paste: pasteHint(rq, q.Get("paste"), q.Get("copied") == "1"),
 		TaskLists:      slices.Sorted(maps.Keys(rq.taskLists())),
 		BreadcrumbHTML: buildBreadcrumb(rq, slug, title, "", "", extra),
 		TasksHTML:      editorTasksHTML(rq, slug)})
@@ -506,6 +526,18 @@ func linkNew(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, pathURL("edit", target), http.StatusSeeOther)
+}
+
+// relink: POST /relink: the editor of the missing page slug, opened from a
+// link on the page on, offered target, a page of that name elsewhere (Did
+// you mean): the link on on points there (relinkOp), and target is shown.
+func relink(w http.ResponseWriter, r *http.Request) {
+	target := r.PostFormValue("target")
+	if err := relinkOp(newReq(r), r.PostFormValue("on"), r.PostFormValue("slug"), target); err != nil && !writtenAnyway(err) {
+		pageFailed(w, r, err)
+		return
+	}
+	http.Redirect(w, r, pathURL("page", mdtext.ToSlug(target)), http.StatusSeeOther)
 }
 
 func savePage(w http.ResponseWriter, r *http.Request) {

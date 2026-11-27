@@ -1120,6 +1120,7 @@ WRITES = [
     ("POST /api/save/{slug...}", "POST", f"/api/save/{DIARY}", {"data": {"content": "# Bob was here\n"}}),
     ("POST /new", "POST", "/new", {"data": {"slug": "private/alice/bobs"}}),
     ("POST /link-new", "POST", "/link-new", {"data": {"slug": "garden", "on": DIARY}}),     # a link on her page pointed elsewhere
+    ("POST /relink", "POST", "/relink", {"data": {"slug": "garden", "on": DIARY, "target": "x/garden"}}),   # likewise
     ("POST /rename/{slug...}", "POST", f"/rename/{DIARY}", {"data": {"new_name": "stolen"}}),
     ("POST /tasks/rename", "POST", "/tasks/rename", {"data": {"tag": "secretlist", "new_name": "stolen"}}),
     # New list…: a list named as alice's private one, and one aimed at her folder.

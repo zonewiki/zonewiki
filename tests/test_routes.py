@@ -628,6 +628,70 @@ class TestEditPageGet:
         assert 'id="mobile-preview-btn"' in text
 
 
+class TestDidYouMean:
+    """A link to a missing page whose name is a page's elsewhere ([[foo]]
+    for journal/foo): the editor it opens offers that page, and one click
+    points the link at it (POST /relink). Links stay paths from the root:
+    nothing resolves by a name alone."""
+
+    @pytest.fixture()
+    def wiki(self, git_wiki_dir):
+        write_page(git_wiki_dir, "journal/foo", "# Foo\n")
+        write_page(git_wiki_dir, "plans", "# Plans\n\n[[Foo]] and [[foo#Beds]] and `[[foo]]` and [[Foo|the foo]] and [[bar]]\n")
+        subprocess.run(["git", "add", "-A"], cwd=git_wiki_dir, check=True, env=settings.GIT_ENV)
+        subprocess.run(["git", "commit", "-qm", "Pages"], cwd=git_wiki_dir, check=True, env=settings.GIT_ENV)
+        return git_wiki_dir
+
+    def test_a_missing_link_names_the_page_it_is_on(self, client, wiki):
+        body = client.get("/page/plans", headers=HOST).data.decode()
+        assert '<a href="/page/foo?on=plans" class="wikilink wikilink-missing">Foo</a>' in body
+        assert 'href="/page/foo?on=plans#beds"' in body
+        resp = client.get("/page/foo?on=plans", headers=HOST)
+        assert resp.status_code == 302 and resp.headers["Location"] == "/edit/foo?on=plans"
+        assert client.get("/page/foo?on=..%2Fx", headers=HOST).headers["Location"] == "/edit/foo"   # not a slug: dropped
+
+    def test_the_editor_offers_the_page_of_that_name(self, client, wiki):
+        body = client.get("/edit/foo?on=plans", headers=HOST).data.decode()
+        assert 'id="same-name-banner"' in body and "<code>journal/foo</code>" in body
+        assert 'action="/relink"' in body and 'name="target" value="journal/foo"' in body
+        # No page it came from, a page without that link, a page that isn't there: nothing offered.
+        for url in ("/edit/foo", "/edit/foo?on=index", "/edit/foo?on=nowhere", "/edit/bar?on=plans", "/edit/journal/foo?on=plans"):
+            assert "same-name-banner" not in client.get(url, headers=HOST).data.decode(), url
+
+    def test_several_pages_of_the_name_are_each_offered(self, client, wiki):
+        write_page(wiki, "archive/foo", "# Old foo\n")
+        body = client.get("/edit/foo?on=plans", headers=HOST).data.decode()
+        assert 'value="archive/foo"' in body and 'value="journal/foo"' in body
+        assert body.index('value="archive/foo"') < body.index('value="journal/foo"')
+
+    def test_relink_points_every_link_there_and_opens_it(self, client, wiki):
+        resp = client.post("/relink", data={"slug": "foo", "on": "plans", "target": "journal/foo"}, headers=HOST)
+        assert resp.status_code == 303 and resp.headers["Location"] == "/page/journal/foo"
+        text = (wiki / "plans.md").read_text()
+        # The words stay; a section and a label are kept; code isn't a link.
+        assert text == ("# Plans\n\n[[journal/foo|Foo]] and [[journal/foo#Beds]] and `[[foo]]` and "
+                        "[[journal/foo|the foo]] and [[bar]]\n"), text
+        log = subprocess.run(["git", "log", "-1", "--format=%s"], cwd=wiki, capture_output=True, text=True,
+                             env=settings.GIT_ENV).stdout.strip()
+        assert log == "Link to journal/foo on plans"
+        assert not (wiki / "foo.md").exists()
+        # Done: no link to point any more, so it is refused and nothing is written.
+        again = client.post("/relink", data={"slug": "foo", "on": "plans", "target": "journal/foo"}, headers=HOST)
+        assert again.status_code == 400 and (wiki / "plans.md").read_text() == text
+
+    def test_relink_only_to_a_page_of_that_name(self, client, wiki):
+        write_page(wiki, "other", "# Other\n")
+        before = (wiki / "plans.md").read_text()
+        for target in ("other", "journal/nope", "foo"):
+            resp = client.post("/relink", data={"slug": "foo", "on": "plans", "target": target}, headers=HOST)
+            assert resp.status_code == 400, target
+        # A page that is there isn't missing: its links aren't moved.
+        write_page(wiki, "bar", "# Bar\n")
+        write_page(wiki, "x/bar", "# Bar too\n")
+        assert client.post("/relink", data={"slug": "bar", "on": "plans", "target": "x/bar"}, headers=HOST).status_code == 400
+        assert (wiki / "plans.md").read_text() == before
+
+
 # ===========================================================================
 # save_page POST (/edit/<slug>)
 # ===========================================================================

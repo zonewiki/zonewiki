@@ -127,6 +127,11 @@ A link to a page that doesn't exist yet is shown in red.
 Clicking it opens the editor so you can write the page right away.
 Red links are a to-do list for your wiki: pages someone thought should exist.
 
+A link names a page by its whole path from the top of the wiki, so `[[Garden shed]]` doesn't find `projects/garden-shed`.
+When a page of that name is somewhere else, the editor asks **Did you mean `projects/garden-shed`?**:
+**Link to projects/garden-shed** points the link there (it keeps its words) and opens that page, and **Write a new page** writes the new one instead.
+The full rules: [Missing pages](../spec/rendering.md#missing-pages).
+
 ### Links between private and shared pages
 
 With several users, a link only works for people who can see its target.

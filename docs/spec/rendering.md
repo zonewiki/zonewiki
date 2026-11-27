@@ -197,6 +197,19 @@ If the target page does not exist, the link is rendered with the CSS class `wiki
 Clicking a missing wikilink redirects to `/edit/<slug>` so the page can be created immediately.
 (With users, on a private page a link to a new page that would be shared is marked and warns in the editor: see Private pages in `docs/spec/users.md`.)
 
+#### Did you mean
+
+A link is a path from the root and never resolves by a page's name alone, so `[[foo]]` is missing though `journal/foo` is there.
+The editor helps to fix it instead:
+a missing link on a page carries that page (`?on=<slug>`, `wikilinker` in `go/render.go`, kept by the redirect to `/edit/<slug>?on=<slug>`),
+and when you may change that page and it links to the missing one, the editor of the new page lists the pages whose last part is the missing one's (`sameNamePages` in `go/pages.go`: only pages you see, and sharing mode shows; at most five, by path):
+**Did you mean `journal/foo`?** with a **Link to journal/foo** button for each, and **Write a new page** (just dismisses it, not remembered).
+**Link to …** (`POST /relink` with `slug`, `on` and `target`; `relinkOp` in `go/pageops.go`) points every link to the missing page on that page at the one chosen, in one commit "Link to journal/foo on <page>", and opens it.
+A link keeps its words (`[[Foo]]` becomes `[[journal/foo|Foo]]`; a label stays), code is left alone, and nothing is made under the missing name.
+It is refused (nothing written) when the target isn't a page of that name you see, the missing page is there after all, or the page has no such link.
+The missing page `[[old/foo]]` is offered `new/foo` alike, since only the last part counts.
+`check_links` names such a page first among its guesses (`docs/spec/mcp.md`).
+
 ### Wikilinks in code
 
 Code is exempt: wikilinks in code (and math, and raw HTML) are the parser's, so they stay as written.

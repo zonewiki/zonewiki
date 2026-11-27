@@ -32,6 +32,7 @@ A file name starting with `_` (`_notes`, `a/_notes`) is still a page.
 | GET    | `/new`                | A form for a new page's name and, with users, whom it is for (New page on a group's home and on the private home lead here; `for=group:<name>` or `for=private`: where For starts) |
 | POST   | `/new`                | Create `<slug>.md` and redirect to it; `private=1` or `for=private` (with users): in your private folder; `for=group:<name>`: in the folder of a group you are in |
 | POST   | `/link-new`           | A new page a link on a private page or a group's asks for, made in that folder instead of shared (`linkNewOp`); see below |
+| POST   | `/relink`             | A missing page's link pointed at a page of its name elsewhere, the editor's Did you mean (`relinkOp`); see below |
 | POST   | `/rename/<slug>`      | Rename a page: moves the file, redirects to new slug; a name in another place is asked first (below) |
 | POST   | `/delete/<slug>`      | Delete a page file; redirects to the page visited before it (`next`, from the trail), or home. Forbidden for `index`. |
 
@@ -50,6 +51,11 @@ It returns 200 `{ file_hash }`, or 409 `{ error: "page_changed" }` when the line
 
 `POST /link-new` takes `slug` (the new page) and `on` (the page the link is on).
 It points the link there and redirects to the editor of the page in the folder.
+
+#### A missing page's link pointed elsewhere
+
+`POST /relink` takes `slug` (the missing page), `on` (the page the link is on) and `target` (a page of the same last part the asker sees).
+It points every link to `slug` on `on` at `target` and redirects to `target`'s page (Did you mean in `docs/spec/rendering.md`).
 
 #### Renaming into another place
 

@@ -160,6 +160,22 @@ class TestTextNotInGit:
         assert "+## Idea" in shown and "+Changed on disk." not in shown
 
 
+def test_relink_keeps_what_the_page_held(client, wiki):
+    """Did you mean (POST /relink, the browser's only: no tool points one
+    missing link) on a page with text not in git: that text gets its own
+    commit first, the relink's holds only the link."""
+    commit(wiki, "journal/foo", "# Foo\n")
+    commit(wiki, "plans", "# Plans\n\n[[foo]]\n")
+    write_page(wiki, "plans", "# Plans\n\n[[foo]]\n\nChanged on disk.\n")
+    resp = client.post("/relink", data={"slug": "foo", "on": "plans", "target": "journal/foo"}, headers=HOST)
+    assert resp.status_code == 303
+    assert (wiki / "plans.md").read_text() == "# Plans\n\n[[journal/foo|foo]]\n\nChanged on disk.\n"
+    assert subjects(wiki)[:2] == ["Link to journal/foo on plans", "Save plans"]
+    shown = git(wiki, "show", "--format=", "HEAD")
+    assert "+[[journal/foo|foo]]" in shown and "+Changed on disk." not in shown
+    assert git(wiki, "status", "--porcelain") == ""
+
+
 @pytest.mark.parametrize("door", DOORS)
 class TestRefused:
     """What neither door does; the wiki is left as it was."""
