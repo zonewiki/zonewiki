@@ -23,7 +23,7 @@ const appName = "Zonewiki"
 // the patch for fixes. Between releases it carries "-dev" and names the next one
 // ("0.6.0-dev"); the release commit drops the suffix and gets the tag, the next commit
 // starts the next "-dev".
-const version = "0.6.0-dev"
+const version = "0.6.0"
 
 // Where this version's source is, linked from the shortcuts dialog. The AGPL has
 // whoever runs a changed Zonewiki for others offer them its source: a fork changes this.
