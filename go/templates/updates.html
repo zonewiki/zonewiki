@@ -1,0 +1,21 @@
+{{- /* /updates: Updates (updates.go; Updates in docs/spec/navigation.md):
+    what is new for whoever is signed in, a section a kind. Tasks: the task
+    app in its Updates mode, as a page embeds it (the cards, what happened on
+    each, Mark read). Mark all read is the page's, beside its heading:
+    js/taskrender.js shows it while a task has news and marks them read. */ -}}
+{{define "body"}}
+{{.BreadcrumbHTML}}
+<div class="sheet updates-page">
+<header class="page-header"><h1>Updates</h1>
+{{- if .Write}}<div class="page-header-actions"><button type="button" class="btn" id="updates-read-btn" title="Mark every update as read" hidden>Mark all read</button></div>{{end -}}
+</header>
+<article class="page-content">
+<p class="tasks-list-home tasks-updates-line">What is new for you. Opening something marks it read.</p>
+<section class="updates-section updates-tasks" aria-labelledby="updates-tasks-h">
+<h2 id="updates-tasks-h">Tasks</h2>
+<p class="updates-section-line">What others did on your tasks: one given to you, a comment, a mention, one closed.</p>
+{{.TasksHTML}}
+</section>
+</article>
+</div>
+{{end}}

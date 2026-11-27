@@ -1423,6 +1423,7 @@ EXEMPT = {
     # the caller's own mail address, no page; an admin's: a user's address (test_email.py)
     "GET /notifications", "POST /notifications", "POST /email", "POST /email/resend", "GET /email/confirm/{token}", "POST /email/confirm/{token}",
     "POST /admin/users/{name}/email",
+    "GET /updates",                 # the caller's own news: its tasks are the task app's, asked of /api/tasks?updates=1 (above)
     "GET /usage",                   # counts of the wiki's use, for admins: numbers and user names, no page (test_usage.py)
     # OAuth: the caller's own connections, no page (test_oauth.py)
     "GET /.well-known/oauth-protected-resource", "GET /.well-known/oauth-protected-resource/mcp",
@@ -1587,7 +1588,7 @@ def test_a_new_task_that_names_no_list_goes_to_its_makers_inbox(bob, wiki, named
     # Nobody else sees them, whatever they ask for.
     sign_in(bob, "alice")
     for url in ("/api/tasks", "/api/tasks/export?list=inbox", "/api/tasks/export?mine=1", "/tasks?list=inbox", "/tasks",
-                "/api/tasks?updates=1", "/tasks?updates=1"):
+                "/api/tasks?updates=1", "/updates"):
         seen = bob.get(url, headers=HOST).get_data(as_text=True)
         assert "Call the bank" not in seen and "Renew the passport" not in seen, url
     assert "Call the bank" not in mcp(bob, "search_tasks", token="alice-token", query="bank passport")

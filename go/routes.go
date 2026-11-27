@@ -965,8 +965,7 @@ func apiPagesList(w http.ResponseWriter, r *http.Request) {
 
 // tasksPage: /tasks, every task; with ?list= that list (by its ref), with
 // its settings, ?list=none the tasks in no list; with ?mine=1 My tasks,
-// the user's home view (mineFilter); with ?updates=1 Updates, the tasks
-// with news for the user (updatesFor); with ?tag= every task, filtered by the tag (tasks.js
+// the user's home view (mineFilter); with ?tag= every task, filtered by the tag (tasks.js
 // reads it). Every link to "the tasks" goes here; [[tasks: …]] embeds are
 // for views on ordinary pages.
 func tasksPage(w http.ResponseWriter, r *http.Request) {
@@ -977,7 +976,7 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 	var list *ListInfo
 	var sections []linkSection
 	var chip template.HTML
-	mine, inbox, updates := false, false, false
+	mine, inbox := false, false
 	missing := ""
 	crumbs := []crumb{{"Tasks", ""}}
 	// The breadcrumb's key names the view for the navigation trail; no page has it.
@@ -1017,19 +1016,12 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 		crumbs = []crumb{{"Tasks", "/tasks"}, {"My tasks", ""}}
 		mine = true
 	case q.Get("updates") != "":
-		// ?updates=1: Updates, the tasks with news for the user; for who
-		// has none to be told (without users, in sharing mode) /tasks.
-		if !rq.hasUpdates() {
-			http.Redirect(w, r, "/tasks", http.StatusFound)
-			return
-		}
-		params, place, title, heading, key = updatesParams, updatesPlace, "Updates", "Updates", updatesHref
-		crumbs = []crumb{{"Tasks", "/tasks"}, {"Updates", ""}}
-		updates = true
+		// ?updates=1: where Updates was, a view of the tasks until it became
+		// a page of its own (updates.go), which sends who has none on.
+		http.Redirect(w, r, updatesHref, http.StatusFound)
+		return
 	}
-	// Updates is looked into, not worked in: the Tasks links keep going to
-	// the view before it.
-	if place != "" && !updates {
+	if place != "" {
 		rq.tasksPlace = place
 		rememberTasksPlace(w, r, place)
 	}
@@ -1052,16 +1044,9 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 	v := &tasksPageView{Heading: heading, Missing: missing,
 		Menu: !rq.sharing && (missing == "" || mayWriteTasks(rq.who()) == nil), Write: mayWriteTasks(rq.who()) == nil, Users: privateFolder(rq.user) != "",
 		Mine: mine, MineAssigns: mine && mineAssigns(rq.who()), Inbox: inbox, InboxPrivate: inbox && inboxOwner(rq.who()) != "",
-		Updates: updates,
-		Groups:  groupsFor(rq.who()), NewListName: q.Get("newlist_name"), NewListError: q.Get("newlist_error"), NewListFor: forValue(q.Get("newlist_for")),
+		Groups: groupsFor(rq.who()), NewListName: q.Get("newlist_name"), NewListError: q.Get("newlist_error"), NewListFor: forValue(q.Get("newlist_for")),
 		Places: places, More: more, TasksHTML: htmlOf(tasksHTML), LinkSections: sections,
 		BreadcrumbHTML: breadcrumb(rq, crumbs, key, true, title, chip)}
-	// The line that leads to Updates: on My tasks, and on /tasks in a wiki
-	// without lists (no switcher, so no pill of Updates): what the Tasks
-	// links open.
-	if (mine || place == "all" && more == nil) && rq.hasUpdates() {
-		v.UpdatesNote, v.UpdatesHref, v.NewCount = true, updatesHref, rq.taskCounts().New
-	}
 	if mine {
 		v.LeftOutLists = rq.leftOutLinks()
 		if v.MineAssigns {
@@ -1323,7 +1308,6 @@ func pinListRoute(w http.ResponseWriter, r *http.Request) {
 // Mine: the view is My tasks (MineAssigns: assignment counts in it for
 // this user, mineAssigns), LeftOutLists: the lists left out of it; Inbox:
 // the view is the Inbox (InboxPrivate: the user's own, with users);
-// Updates: the view is Updates;
 // Unassigned: a shared list's open tasks that no one has (with users);
 // LeftOut: the list is left out of the user's My tasks; DeleteToGeneral: a
 // deleted shared list's tasks go to #general when no list is named;
@@ -1355,10 +1339,6 @@ type tasksPageView struct {
 	ForConfirm                bool // the dialog is back to ask: Save again goes on (confirm)
 	Members, Groups           []string
 	Mine, MineAssigns         bool
-	Updates                   bool // the view is Updates: Mark all read beside the heading
-	UpdatesNote               bool // the line that leads to Updates ("2 updates for you →"), shown while NewCount tasks have news
-	UpdatesHref               string
-	NewCount                  int
 	NewListName, NewListError string
 	NewListFor                string // what New list…'s For starts with ("group:dev"), the dialog open (?newlist_for=@dev: New list on a group's entry of Groups)
 	Places                    []TaskPlace

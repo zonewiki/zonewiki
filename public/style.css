@@ -159,7 +159,7 @@ body {
 /* The pill's margin and fixed width, the chip's and the user button's when
    they are there: fixed widths, so the row's width doesn't depend on the font. */
 main {
-  --top-actions-w: calc(8.75rem + var(--top-sharing-w, 0rem) + var(--top-user-w, 0rem));
+  --top-actions-w: calc(8.75rem + var(--top-sharing-w, 0rem) + var(--top-updates-w, 0rem) + var(--top-user-w, 0rem));
 }
 main:has(> .top-actions .top-sharing) { --top-sharing-w: 6.25rem; }
 .top-actions {
@@ -176,15 +176,20 @@ main:has(> .top-actions .top-sharing) { --top-sharing-w: 6.25rem; }
   margin-left: auto; padding: .05rem .3rem; border: 1px solid var(--border); border-radius: 4px;
   background: var(--code-bg); font-family: inherit; font-size: .7rem; color: var(--muted);
 }
-.top-actions button {
+.top-actions button, .top-actions a.top-updates {
   display: flex; align-items: center; justify-content: center;
   width: 2.25rem; height: 2.25rem; padding: 0;
   border: 1px solid transparent; border-radius: 8px;
   background: none; color: var(--muted); cursor: pointer;
   transition: color .15s, background-color .15s;
 }
-.top-actions button:hover { color: var(--fg); background: var(--btn-bg); }
-.top-actions button:focus-visible { outline: 2px solid var(--link); outline-offset: 1px; }
+.top-actions button:hover, .top-actions a.top-updates:hover { color: var(--fg); background: var(--btn-bg); }
+.top-actions button:focus-visible, .top-actions a.top-updates:focus-visible { outline: 2px solid var(--link); outline-offset: 1px; }
+/* Updates: a bell after the pill, with how many things are new on its corner. */
+main:has(> .top-actions .top-updates) { --top-updates-w: 2.75rem; }
+.top-actions a.top-updates { position: relative; margin-left: .25rem; text-decoration: none; }
+.top-actions a.top-updates[aria-current] { color: var(--fg); background: var(--btn-bg); }
+.top-updates-count { position: absolute; top: -.1rem; right: -.2rem; box-shadow: 0 0 0 2px var(--bg); }
 /* The menu's button, after the pill (2.25rem and a gap): with users a round
    initial (the user button), without three lines. */
 main:has(> .top-actions .top-user) { --top-user-w: 2.6rem; }
@@ -2770,7 +2775,7 @@ main > .sheet > h2.changes-day {
      desktop's). The uncommitted count sits left of it on the same row, and
      the breadcrumb keeps the room of both free, so nothing moves when the
      count comes. */
-  main { --top-actions-w: var(--top-user-w, 0rem); }
+  main { --top-actions-w: calc(var(--top-updates-w, 0rem) + var(--top-user-w, 0rem)); }
   main:has(> .top-actions .top-user) { --top-user-w: 2.25rem; }
   main:has(> .top-actions .top-signin) { --top-actions-w: 5.25rem; }
   body main:has(> .top-actions) { padding-top: .75rem; }
@@ -2974,3 +2979,8 @@ a.external-image::before { content: "🖼 "; }
   .page-content pre, .page-content pre code { white-space: pre-wrap; overflow-wrap: anywhere; overflow: visible; }
   .page-content a { text-decoration: none; }
 }
+
+/* Updates (templates/updates.html): a section a kind of news. */
+.updates-section { margin-top: 1.5rem; }
+.updates-section > h2 { margin: 0 0 .15rem; font-size: 1.1rem; }
+.updates-section-line { margin: 0 0 .6rem; font-size: .85rem; color: var(--muted); }

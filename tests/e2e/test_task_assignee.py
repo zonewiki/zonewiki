@@ -570,15 +570,17 @@ def test_notifications_turn_the_mails_on(page, wiki, monkeypatch):
 
 
 def test_the_tasks_link_says_that_something_is_new_for_you(alice):
-    # bob gives alice a task with no date: the Tasks link counts it as new,
-    # on any page, and no longer once she has touched it.
+    # bob gives alice a task with no date: the top bar's bell counts it as
+    # new, on any page, and no longer once she has touched it. The Tasks link
+    # says what is due, not the news.
     alice.request.post("/login", form={"username": "bob", "password": "pw"})
     new(alice, "From bob", assignee="alice")
     alice.request.post("/login", form={"username": "alice", "password": "pw"})
     alice.goto("/")
-    badge = alice.locator('.module-link[data-module="tasks"] .module-new').first
+    badge = alice.locator(".top-updates-count")
     expect(badge).to_have_text("1")
-    expect(alice.locator('.module-link[data-module="tasks"]').first).to_have_attribute("title", "Tasks: 1 update for you")
+    expect(alice.locator('.module-link[data-module="tasks"]').first).to_have_attribute("title", "Tasks")
+    expect(alice.locator('.module-link[data-module="tasks"] .module-new').first).to_be_hidden()
     # On the Tasks page Updates' pill has it (My tasks' counts what is due
     # alone), and it goes when she sets a date, without a reload.
     alice.goto("/tasks?mine=1&view=open&group=none")
@@ -588,7 +590,7 @@ def test_the_tasks_link_says_that_something_is_new_for_you(alice):
     card(alice, "From bob").locator(".task-title").click()
     alice.keyboard.press("f")                        # starts today: hers now
     expect(pill).to_be_hidden()
-    expect(alice.locator('.module-link[data-module="tasks"] .module-new').first).to_be_hidden()
+    expect(alice.locator(".top-updates-count")).to_be_hidden()
 
 
 def test_opening_a_task_given_to_you_takes_the_new_away(alice):
@@ -600,7 +602,7 @@ def test_opening_a_task_given_to_you_takes_the_new_away(alice):
     new(alice, "Plain", assignee="alice")
     alice.request.post("/login", form={"username": "alice", "password": "pw"})
     alice.goto("/tasks?mine=1&view=open&group=none")
-    badge = alice.locator('.module-link[data-module="tasks"] .module-new').first
+    badge = alice.locator(".top-updates-count")
     expect(badge).to_have_text("2")
     # Its details opened: seen.
     card(alice, "With notes").locator(".task-has-notes").click()
@@ -708,15 +710,18 @@ def test_a_task_given_to_you_is_in_updates_and_stays_there_when_read(alice, new_
     bob.request.post("/login", form={"username": "bob", "password": "pw"})
     assert bob.request.post("/api/tasks", data={"title": "From bob", "list": "team", "assignee": "alice"}).ok
     new(alice, "Own, today", assignee="alice", start_date=date.today().isoformat())
-    alice.goto("/tasks?updates=1")
+    alice.goto("/tasks?updates=1")                  # where Updates was: it is a page of its own now
+    expect(alice).to_have_url(re.compile(r"/updates$"))
     expect(alice.locator(".page-header h1")).to_have_text("Updates")
-    expect(alice.locator('.tasks-place[data-place="updates"]')).to_have_attribute("aria-current", "page")
+    expect(alice.locator(".top-updates")).to_have_attribute("aria-current", "page")
+    expect(alice.locator(".updates-tasks h2")).to_have_text("Tasks")
+    expect(alice.locator(".tasks-places")).to_have_count(0)        # no switcher: it is not a view of Tasks
     for gone in ("#tasks-tabs", "#task-add-btn", "#task-closed-link", "#task-cut"):
         expect(alice.locator(gone)).to_be_hidden()
     expect(alice.locator(".task-item .task-title")).to_have_text(["From bob"])     # her own task is no news
     expect(alice.locator(".task-item.task-update[draggable]")).to_have_count(0)    # nothing is ranked there
     expect(card(alice, "From bob").locator(".task-news-what")).to_have_text("bob gave it to you")
-    pill = alice.locator('.tasks-place[data-place="updates"] .module-new')
+    pill = alice.locator(".top-updates-count")
     expect(pill).to_have_text("1")
     # Opened: read, and still there.
     open_edit(alice, "From bob")
@@ -734,7 +739,7 @@ def test_a_task_given_to_you_is_in_updates_and_stays_there_when_read(alice, new_
     expect(alice.locator(".updates-heading")).to_have_count(0)
     # The Tasks links keep going to the view before Updates.
     alice.goto("/tasks?list=team")
-    alice.goto("/tasks?updates=1")
+    alice.goto("/updates")
     alice.goto("/page/index")
     expect(alice.locator(".breadcrumb .module-link[data-module=tasks]")).to_have_attribute("href", "/tasks?list=team")
 
@@ -816,14 +821,16 @@ def test_updates_show_what_happened_on_your_tasks(alice, new_page):
     bob.request.post("/login", form={"username": "bob", "password": "pw"})
     assert bob.request.post(f"/api/tasks/{t['id']}/comments", data={"text": "Need the contract first"}).ok
     assert bob.request.put(f"/api/tasks/{other['id']}", data={"completed": True}).ok
-    # Not hers to do: My tasks has neither, and a line that leads to Updates.
+    # Not hers to do: My tasks has neither. The bell says there are two, and
+    # leads to Updates; so does Updates in the list switcher.
     alice.goto("/tasks?mine=1")
     expect(alice.locator(".tasks-app[data-loaded]")).to_be_visible()
     expect(alice.locator(".task-item")).to_have_count(0)
-    note = alice.locator(".tasks-updates-note")
-    expect(note).to_have_text("2 updates for you →")
-    note.locator("a").click()
-    expect(alice).to_have_url(re.compile(r"/tasks\?updates=1$"))
+    expect(alice.locator(".top-updates-count")).to_have_text("2")
+    expect(alice.locator('.tasks-place[data-place="updates"]')).to_have_attribute("href", "/updates")
+    expect(alice.locator('.tasks-place[data-place="updates"] .module-new')).to_have_text("2")
+    alice.locator(".top-updates").click()
+    expect(alice).to_have_url(re.compile(r"/updates$"))
     expect(alice.locator(".task-item.task-update")).to_have_count(2)
     expect(card(alice, "For bob").locator(".task-news-what")).to_have_text("bob commented")
     expect(card(alice, "Also for bob").locator(".task-news-what")).to_have_text("bob closed it")   # a closed task too
@@ -839,7 +846,7 @@ def test_updates_show_what_happened_on_your_tasks(alice, new_page):
     expect(card(alice, "For bob").locator(".task-news-what")).to_have_text("bob commented twice")
     expect(card(alice, "For bob").locator(".task-news-comment")).to_have_text("Got it, *starting* now")
     expect(card(alice, "For bob").locator(".task-news-when")).to_be_visible()
-    dot =alice.locator('.module-link[data-module="tasks"] .module-new').first
+    dot = alice.locator(".top-updates-count")
     expect(dot).to_have_text("2")
     # Mark read on a card: that one is read, and stays.
     card(alice, "For bob").locator(".task-read-btn").click()
@@ -852,7 +859,6 @@ def test_updates_show_what_happened_on_your_tasks(alice, new_page):
     expect(alice.locator(".task-item.task-read")).to_have_count(2)
     expect(button).to_be_hidden()
     expect(dot).to_be_hidden()
-    expect(alice.locator('.tasks-place[data-place="updates"] .module-new')).to_be_hidden()
 
 
 def test_the_closed_view_shows_a_page_and_asks_for_more(alice):
@@ -1097,29 +1103,27 @@ def test_the_tasks_link_has_one_number_and_a_dot(alice):
     link = alice.locator(".breadcrumb .module-link[data-module=tasks]")
     expect(link.locator(".module-due")).to_have_text("1")
     expect(link.locator(".module-focus")).to_be_hidden()
-    dot = link.locator(".module-new")
-    expect(dot).to_be_visible()
-    box = box_of(dot)
-    assert box["width"] <= 10 and box["height"] <= 10          # a dot, no number
-    expect(link).to_have_attribute("title", re.compile(r"1 update for you"))
+    # The news is not the Tasks link's: the bell beside the search has it, with its number.
+    expect(link.locator(".module-new")).to_be_hidden()
+    expect(link).to_have_attribute("title", "Tasks: 1 for today · 1 due today")
+    expect(alice.locator(".top-updates-count")).to_have_text("1")
 
 
-def test_my_tasks_says_that_there_are_updates(alice):
-    """Updates are listed in Updates; My tasks says that there are some, on
-    each of its tabs, and leads there; a list's view has no such line."""
+def test_the_bell_is_on_every_page_and_follows_what_is_read(alice):
+    """Updates are listed on Updates; the top bar's bell says how many there
+    are, on every page, and follows without a reload."""
     alice.request.post("/login", form={"username": "bob", "password": "pw"})
     new(alice, "From bob", assignee="alice")
     alice.request.post("/login", form={"username": "alice", "password": "pw"})
-    for view in ("today", "open&group=none"):
-        alice.goto("/tasks?mine=1&view=" + view)
-        expect(alice.locator(".tasks-updates-note")).to_have_text("1 update for you →")
-    # Read where it is, the line goes without a reload.
+    for where in ("/", "/tasks?mine=1&view=today", "/changes", "/tasks?mine=1&view=open&group=none"):
+        alice.goto(where)
+        expect(alice.locator(".top-updates-count")).to_have_text("1")
+        expect(alice.locator(".top-updates")).to_have_attribute("href", "/updates")
+    # Read where it is, the number goes without a reload.
     card(alice, "From bob").locator(".task-title").click()
     alice.keyboard.press("f")                        # starts today: hers now
-    expect(alice.locator(".tasks-updates-note")).to_be_hidden()
-    alice.goto("/tasks?list=team&view=open&group=none")
-    expect(card(alice, "From bob")).to_be_visible()
-    expect(alice.locator(".tasks-updates-note")).to_have_count(0)      # a list's view has none
+    expect(alice.locator(".top-updates-count")).to_be_hidden()
+    expect(alice.locator(".top-updates")).to_be_visible()             # the bell stays
 
 
 def test_today_is_open_with_a_filter_and_groups_as_open_does(alice):
@@ -1354,10 +1358,10 @@ def test_follow_a_task_and_its_news_is_under_updates(alice, new_page):
     alice.goto("/tasks?mine=1")
     expect(alice.locator(".tasks-app[data-loaded]")).to_be_visible()
     expect(card(alice, "Bob's work")).to_have_count(0)                  # still not hers to do
-    alice.goto("/tasks?updates=1")
+    alice.goto("/updates")
     expect(alice.locator(".task-item.task-update .task-title")).to_have_text(["Bob's work"])
     expect(card(alice, "Bob's work").locator(".task-news-what")).to_have_text("bob commented")
-    expect(alice.locator('.module-link[data-module="tasks"] .module-new').first).to_have_text("1")
+    expect(alice.locator(".top-updates-count")).to_have_text("1")
     # Its dialog says who follows, and unfollows: saved at once.
     modal = open_edit(alice, "Bob's work")
     expect(modal.locator("#task-edit-followers")).to_have_text("👁 Followed by you")

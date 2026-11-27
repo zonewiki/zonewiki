@@ -195,13 +195,18 @@ func tasksRoutes(mux *http.ServeMux) {
 			writeJSON(w, http.StatusOK, struct {
 				TaskCounts
 				Watched int `json:"watched,omitempty"`
-			}{taskCounts(rq), rq.watchCount()})
+				Updates int `json:"updates,omitempty"`
+			}{taskCounts(rq), rq.watchCount(), rq.updatesCount()})
 			return
 		}
 		c := taskCounts(rq)
 		out := map[string]any{"count": c.Count, "overdue": c.Overdue, "today": c.Today, "focus": c.Focus, "places": rq.placeCounts()}
 		if c.New > 0 {
 			out["new"] = c.New
+		}
+		// updates: what is new for the user, of every kind: the top bar's bell.
+		if n := rq.updatesCount(); n > 0 {
+			out["updates"] = n
 		}
 		if n := rq.watchCount(); n > 0 {
 			out["watched"] = n

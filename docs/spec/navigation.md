@@ -163,7 +163,7 @@ Its counts are of My tasks (Counts, below).
 
 **Once you switched lists it comes back to the one you were on.**
 Open a list from the list switcher, go to the wiki, click Tasks: you are on that list again, not on My tasks.
-The link goes to the view of the list switcher `/tasks` showed last in this browser — My tasks, the Inbox, a list or All tasks, without the tab or filter it had; not Updates, which is looked into and left — on every page, the phone's tab bar and **g t** too; the `/tasks` page's own link already names the view it shows.
+The link goes to the view of the list switcher `/tasks` showed last in this browser — My tasks, the Inbox, a list or All tasks, without the tab or filter it had; never Updates, which is a page of its own — on every page, the phone's tab bar and **g t** too; the `/tasks` page's own link already names the view it shows.
 It goes to My tasks again in a new browser session, and whenever you no longer see that view there: a list deleted or no longer shared with you, one left out in sharing mode.
 A list's address that names no list (`/tasks?list=nosuch`) changes nothing.
 
@@ -312,14 +312,15 @@ They replaced the separate due badge at the top left.
 |-------|-------|------|
 | Due | `.module-due`, orange | tasks due today or overdue |
 | Today | `.module-focus`, muted | tasks in Today (`TasksCore.isFocus`: started, or due today or earlier) |
-| New | `.module-new`, filled in the accent | with users, how many tasks have news for you (`updatesFor`: given to you, commented on, a mention, closed or reopened …; News on your tasks in `docs/spec/tasks.md`), open or recently closed: such a task often has no date and is in neither of the others; they are listed in Updates (`/tasks?updates=1`), whose pill has the number |
+| New | `.module-new`, filled in the accent | with users, how many tasks have news for you (`updatesFor`: given to you, commented on, a mention, closed or reopened …; News on your tasks in `docs/spec/tasks.md`), open or recently closed: such a task often has no date and is in neither of the others. **Not on the Tasks links**: it is the list switcher's Updates pill's, and part of the bell's count (Updates, below) |
 
 `taskCounts()` counts My tasks (`mineFilter`), which is every task in a wiki without lists.
 
 #### How they show
 
-**They show one number and a dot** (CSS, `.module-link .module-focus`, `.module-new`): what is due, and a dot when there is news for you.
-How much is for today, and how many updates, are in the link's tooltip, like "Tasks: 2 updates for you · 5 for today · 1 overdue · 1 due today" (`taskCountsTitle`), and the Today tab says its own.
+**They show one number** (CSS, `.module-link .module-focus`): what is due.
+How much is for today is in the link's tooltip, like "Tasks: 5 for today · 1 overdue · 1 due today" (`taskCountsTitle`), and the Today tab says its own.
+What is new for you is not a count of Tasks: the bell beside the search has it (Updates, below).
 The other counts are still in the page, for the tooltip and the list switcher's pills, which keep their numbers.
 
 #### How they stay current
@@ -348,6 +349,25 @@ On a phone such a view keeps a row of its own for them above its content (the bo
 With users such a view has no Sign out: it is in the menu of the page one comes back to.
 
 ---
+
+## Updates
+
+**Updates** (`/updates`, with users) is the one place that says what is new for you, whatever it is about: a page of its own, outside Tasks.
+
+| | |
+|---|---|
+| The bell | in the top bar, beside the search, on every page and on a phone: `.top-updates`, a link to `/updates` |
+| Its number | how many things are new for you (`updatesCount`), on the bell's corner (`.top-updates-count`); no number when there is nothing, and the bell stays |
+| The page | a section a kind of news, each with a line that says what it holds |
+| **Tasks** | the tasks with news for you: the task app in its Updates mode, embedded as a page embeds a task list, so a card is opened, commented and ticked off as anywhere (Updates in `docs/spec/tasks.md`: what a card says, reading one, a task read) |
+| **Mark all read** | beside the heading, while there is news: everything read at once |
+| Who has it | with users, whoever is signed in, a viewer too; not in sharing mode (what others wrote to you isn't shown), not a visitor. Without it `/updates` goes to the home page and there is no bell |
+
+It is grouped by kind, not one list by time: a kind is read as a whole, as in the morning's mail.
+The list switcher of Tasks keeps its **Updates** entry, which leads here, and `/tasks?updates=1` redirects here.
+
+How: `go/updates.go` (`updatesPage`, `updatesCount`), `templates/updates.html`; the bell is the page shell's (`pageShell.Updates`, `partials/top_actions.html`), and its number comes with the Tasks counts every minute and after a write (`updates` in `GET /api/tasks/due-count`, `refreshDueBadge` in `js/chrome.js`).
+Tests: `test_updates_is_a_page_with_the_tasks_that_have_news` in `tests/test_task_notify.py`, `tests/e2e/test_task_assignee.py`.
 
 ## Watching pages
 

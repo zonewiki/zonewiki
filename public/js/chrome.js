@@ -253,9 +253,8 @@ const tasksLinks = document.querySelectorAll('.module-link[data-module="tasks"]'
 const placesNow = () => document.querySelectorAll('.tasks-place[data-place], .lists-rail-place[data-place]');
 
 // Same as taskCountsTitle in go/views.go.
-function taskCountsTitle({ focus, overdue, today, new: fresh }) {
+function taskCountsTitle({ focus, overdue, today }) {
   const parts = [];
-  if (fresh > 0) parts.push(`${fresh} update${fresh === 1 ? '' : 's'} for you`);
   if (focus > 0) parts.push(`${focus} for today`);
   if (overdue > 0) parts.push(`${overdue} overdue`);
   if (today > 0) parts.push(`${today} due today`);
@@ -305,21 +304,15 @@ export async function refreshDueBadge(poll = false) {
     tasksLinks.forEach(a => {
       showCount(a.querySelector('.module-due'), c.count);
       showCount(a.querySelector('.module-focus'), c.focus);
-      showCount(a.querySelector('.module-new'), c.new || 0);
       a.title = taskCountsTitle(c);
     });
+    // What is new for the user, of every kind: the top bar's bell (Updates).
+    document.querySelectorAll('.top-updates-count').forEach(el => showCount(el, c.updates || 0));
     // The watched pages with news: the menu's entry says how many, its
     // button that there are some.
     const watched = c.watched || 0;
     document.querySelectorAll('.menu-watched .menu-count').forEach(el => showCount(el, watched));
     document.querySelectorAll('.top-user-new').forEach(el => { el.hidden = !watched; });
-    // The line that leads to Updates (My tasks: templates/tasks_page.html).
-    const note = document.querySelector('.tasks-updates-note');
-    if (note) {
-      const n = c.new || 0;
-      note.hidden = !n;
-      if (n) note.firstElementChild.textContent = `${n} update${n === 1 ? '' : 's'} for you →`;
-    }
     places.forEach(a => {
       const p = c.places?.[a.dataset.place];
       showCount(a.querySelector('.module-due'), p ? p.count : 0);

@@ -186,7 +186,7 @@ A **list** is a place a task is in: `shop`, `team`, `garden`.
 A tag sorts tasks; a list holds them.
 A task is in one list and can have any number of tags.
 
-The Tasks page has a row of pills at the top: **My tasks**, in a wiki with users **Updates** ([News about your tasks](#news-about-your-tasks)), **Inbox**, your pinned lists, and **More ▾** with every other list and **All tasks**.
+The Tasks page has a row of pills at the top: **My tasks**, in a wiki with users **Updates** (it opens the Updates page: [News about your tasks](#news-about-your-tasks)), **Inbox**, your pinned lists, and **More ▾** with every other list and **All tasks**.
 The first ones, each with a small icon, are views that are always there; after the thin line come your lists.
 Each pill counts what is due today or overdue there.
 When the pills don't fit on the line, swipe or scroll the row sideways; a faded end shows there are more that way.
@@ -287,12 +287,11 @@ You are told what happens on a task you are assigned, made, or follow: someone g
 
 - **On the card** a mark says what happened: **new**, **anna commented**, **ben closed it**, in every list.
   Opening the task takes the mark away.
-- **Updates**, beside **My tasks** in the row of lists, holds every task with news, the latest first, also the ones that aren't yours to do.
-  Its number is how many there are; in My tasks a line, **2 updates for you →**, leads there.
+- **Updates**, the page behind the **bell** at the top right ([Updates](navigation.md#updates)), holds every task with news, the latest first, also the ones that aren't yours to do.
+  The bell's number is how many things are new; **Updates** in the row of lists leads to the same page.
   Each card there says everything that happened since you last looked, "ben commented twice · anna closed it", and shows the latest comment under it, so you can read most news without opening the task.
 - **Reading one**: open the task, or click **Mark read** on its card in Updates; **Mark all read** beside the heading clears them all.
   A task you have read stays in Updates, dimmed, until you leave the page.
-- **On the Tasks link** a dot says there is news (pointing at it says how many tasks have some).
 - **Follow** in a shared task's ⋯ menu or dialog tells you its news without making it yours to do.
 - **Mentions**: `@name` in a comment or description tells that person, even on a task they have nothing else to do with.
 - **Mail**: Zonewiki mails you about your tasks if you ask it to: a task given to you, a mention, a comment on a task you have, gave or follow.

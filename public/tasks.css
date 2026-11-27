@@ -1190,10 +1190,7 @@ body:has(.tasks-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
 
 
 
-/* There is news: the line that leads to Updates (My tasks; templates/tasks_page.html). */
-.tasks-updates-note { margin: .2rem 0 .6rem; }
-.tasks-updates-note[hidden] { display: none; }
-/* Updates (/tasks?updates=1): news, in no tab and no order: the filter
+/* Updates (/updates: the task app on that page): news, in no tab and no order: the filter
    field alone above the list. A task read since stays, dimmed; Mark read
    sees one without opening it. */
 .tasks-app[data-init-updates] .view-tabs, .tasks-app[data-init-updates] .tasks-cut, .tasks-app[data-init-updates] .tasks-sort, .tasks-app[data-init-updates] .tasks-sort-reset,

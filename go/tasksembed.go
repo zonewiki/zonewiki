@@ -27,7 +27,7 @@ type tasksEmbedView struct {
 	List          string           // the list it shows, as the user names it (a ref); "" none
 	Out           string           // My tasks: the lists left out of it, their refs, "|" between
 	Mine          string           // My tasks (mine=1): "assign" where assignment counts for the user, else "lists"
-	Updates       bool             // Updates (/tasks?updates=1): the tasks with news for the user, in no tab and no order
+	Updates       bool             // Updates (/updates): the tasks with news for the user, in no tab and no order
 	Group         string           // none, day, person, list (tasksGroups) or "": the embed doesn't say
 	Limit         string           // the WIP limit, "" none
 	Labels        []string         // the Open and Focus tabs' names
@@ -90,8 +90,8 @@ func onPage(shown, embed TasksParams) TasksParams {
 }
 
 // paramsScope: which tasks a view with these params shows: My tasks
-// (mine=1: mineScope), Updates (updates=1: updatesScope, /tasks' alone: no
-// embed's), one list's ref, or "" for every task. (Several lists as one
+// (mine=1: mineScope), Updates (updates=1: updatesScope, the Updates page's
+// alone: no embed's), one list's ref, or "" for every task. (Several lists as one
 // are a request's, ?lists=: queryScope.)
 func paramsScope(p TasksParams) string {
 	if isTrue(p.Get("mine")) {
@@ -627,8 +627,8 @@ func (rq *Req) tasksStamp() string {
 	return rq.stamp
 }
 
-// updatesParams: the params of Updates (/tasks?updates=1): its scope, and
-// nothing to set.
+// updatesParams: the params of the task app on Updates (/updates): its
+// scope, and nothing to set.
 var updatesParams = TasksParams{}.With("updates", "1")
 
 // mineScopeParams: params of the scope of My tasks, without its settings
@@ -743,7 +743,7 @@ func (rq *Req) taskPlaces() []TaskPlace {
 	mine.New = 0
 	out := []TaskPlace{{Key: "mine", Label: "My tasks", Title: title, Href: mineHref, Counts: mine}}
 	if rq.hasUpdates() {
-		out = append(out, TaskPlace{Key: updatesPlace, Label: "Updates", Title: "News on your tasks: given to you, commented, mentioned, closed", Href: updatesHref, Counts: updates})
+		out = append(out, TaskPlace{Key: updatesPlace, Label: "Updates", Title: "What is new for you: opens Updates, a page of its own", Href: updatesHref, Counts: updates})
 	}
 	if rq.hasInbox() {
 		p := TaskPlace{Key: inboxRef, Label: "Inbox", Title: "Inbox: new tasks land here", Href: listHref(inboxRef),

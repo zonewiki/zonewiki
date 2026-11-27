@@ -647,6 +647,7 @@ func newHandler() http.Handler {
 	assistantRoutes(mux)
 	passwordRoutes(mux)
 	emailRoutes(mux)
+	updatesRoutes(mux)
 	usageRoutes(mux)
 	oauthRoutes(mux)
 	importRoutes(mux)

@@ -71,7 +71,7 @@ func init() {
 	partials = template.Must(template.New("").Funcs(funcs).ParseFS(templateFS,
 		"templates/layout.html", "templates/partials/*.html"))
 	for _, name := range []string{"login.html", "view.html", "edit.html", "new.html", "notes.html",
-		"hidden.html", "deleted_page.html", "tasks_page.html", "search.html", "history/changes.html", "history/deleted.html",
+		"hidden.html", "deleted_page.html", "tasks_page.html", "updates.html", "search.html", "history/changes.html", "history/deleted.html",
 		"history/diff.html", "history/diff_uncommitted.html", "history/history.html",
 		"history/revision.html", "history/uncommitted.html", "users.html", "admin_wiki.html", "groups.html", "welcome.html", "signup.html", "assistant.html",
 		"password.html", "email.html", "usage.html", "oauth.html", "help.html",
@@ -127,14 +127,11 @@ func diffLines(diff string) []diffLine {
 // see them. Without users one group.
 var modules = [][3]string{{"wiki", "Wiki", "/"}, {"groups", "Groups", "/groups"}, {"private", "Private", "/private"}, {"tasks", "Tasks", "/tasks"}, {"notes", "Notes", "/notes"}}
 
-// taskCountsTitle: the Tasks links' tooltip, "Tasks: 2 updates for you · 5
-// for today · 1 overdue · 1 due today" (js/chrome.js taskCountsTitle builds
-// the same).
+// taskCountsTitle: the Tasks links' tooltip, "Tasks: 5 for today · 1
+// overdue · 1 due today" (js/chrome.js taskCountsTitle builds the same).
+// Not the news: that is Updates', counted on the top bar's bell.
 func taskCountsTitle(c TaskCounts) string {
 	var parts []string
-	if c.New > 0 {
-		parts = append(parts, itoa(c.New)+" update"+map[bool]string{true: "", false: "s"}[c.New == 1]+" for you")
-	}
 	if c.Focus > 0 {
 		parts = append(parts, itoa(c.Focus)+" for today")
 	}
@@ -280,6 +277,7 @@ func moduleLinks(rq *Req) []moduleLink {
 		}
 		if m[0] == "tasks" {
 			counts := rq.taskCounts()
+			counts.New = 0 // the news is Updates', on the top bar's bell
 			link.Counts = &counts
 		}
 		out = append(out, link)
@@ -307,7 +305,7 @@ func currentModule(rq *Req) string {
 		return "notes"
 	case "/groups":
 		return "groups"
-	case "/search", "/login", "/assistant", "/password", "/notifications", "/oauth/authorize":
+	case "/search", "/login", "/assistant", "/password", "/notifications", "/oauth/authorize", "/updates":
 		return ""
 	}
 	if p == "/admin" || strings.HasPrefix(p, "/admin/") { // in no module
@@ -413,9 +411,15 @@ type pageShell struct {
 	Watches     bool   // they can watch pages: the menu has Watched pages
 	Watched     int    // how many watched pages have news for them (watchCount)
 	Changes     bool   // git keeps the wiki's history: the menu has Changes
-	Admin       bool   // they are an admin: the user menu offers Admin
-	Usage       bool   // they see the wiki's usage (seesUsage): the help dialog links to it
-	Viewer      bool   // they are a viewer: nothing to make (no New note, New task)
+	// Updates: they have Updates (hasUpdates): the top bar has its bell,
+	// with UpdatesNew, how many things are new for them (updatesCount);
+	// UpdatesOpen: this view is it.
+	Updates     bool
+	UpdatesNew  int
+	UpdatesOpen bool
+	Admin       bool // they are an admin: the user menu offers Admin
+	Usage       bool // they see the wiki's usage (seesUsage): the help dialog links to it
+	Viewer      bool // they are a viewer: nothing to make (no New note, New task)
 	// Visitor: nobody is signed in, and the wiki is public (access.go): the
 	// wiki's pages alone, no tasks or notes; SignIn: where they sign in, to
 	// come back to this view.
@@ -471,6 +475,9 @@ func page(w http.ResponseWriter, rq *Req, status int, name, title string, o shel
 	if sh.ShowActions {
 		sh.ModuleLinks = moduleLinks(rq)
 		sh.Changes = cfg.GitEnabled
+		if sh.Updates = rq.hasUpdates(); sh.Updates {
+			sh.UpdatesNew, sh.UpdatesOpen = rq.updatesCount(), rq.r != nil && rq.r.URL.Path == updatesHref
+		}
 		if sh.Watches = mayWatch(rq.user) && cfg.GitEnabled; sh.Watches {
 			sh.Watched = rq.watchCount()
 		}

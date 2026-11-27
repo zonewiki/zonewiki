@@ -291,13 +291,10 @@ func inMine(t *Task, out bool, user asker, assigns bool) bool {
 	return !out
 }
 
-// updatesScope: the scope of Updates (/tasks?updates=1): the tasks with
+// updatesScope: the scope of Updates (/updates, updates.go): the tasks with
 // news for the user (newsFor), wherever they are, the closed ones of this
 // month and the last among them (updatesFor). No list's ref, as mineScope.
 const updatesScope = "|updates"
-
-// updatesHref: where Updates is.
-const updatesHref = "/tasks?updates=1"
 
 // hasUpdates: user has an Updates view: with users, anyone who sees tasks
 // (news is what someone else did).

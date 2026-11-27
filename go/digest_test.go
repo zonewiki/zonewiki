@@ -105,7 +105,7 @@ func TestTheMorningsMail(t *testing.T) {
 		"Subject: Zonewiki: 1 update, 1 watched page changed, 1 task due today\n",
 		"Good morning, alice.",
 		"UPDATES ON YOUR TASKS\n\n  Offer for Acme\n  bob commented\n  https://wiki.example.org/tasks?task=" + given.ID + "\n",
-		"All of them: https://wiki.example.org/tasks?updates=1\n",
+		"All of them: https://wiki.example.org/updates\n",
 		"PAGES YOU WATCH\n\n  roadmap, changed by bob\n  https://wiki.example.org/page/roadmap\n",
 		"What changed: https://wiki.example.org/changes?watched=1\n",
 		"DUE TODAY\n\n  Call the bank\n",

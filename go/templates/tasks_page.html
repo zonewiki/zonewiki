@@ -93,9 +93,7 @@
 <a href="/tasks" class="lists-more-item lists-more-all" title="Every task you see, in whatever list"{{if .All}} aria-current="page"{{end}}><span class="lists-more-name">All tasks</span></a>
 </div></details>{{end}}</div></nav>{{end}}
 <header class="page-header"><h1>{{.Heading}}{{with .List}}{{if .Private}} <span class="lock" title="A private list: only you see it and its tasks">🔒</span>{{end}}{{with .Group}} <span class="lock list-for" title="The group {{.}}'s list: only its members see it and its tasks ({{range $i, $m := $.Members}}{{if $i}}, {{end}}{{$m}}{{end}})">👥</span>{{end}}{{end}}{{if .InboxPrivate}} <span class="lock" title="Your Inbox: only you see its tasks">🔒</span>{{end}}</h1>
-{{- if or .Menu .Updates}}<div class="page-header-actions">
-{{- /* Updates: every task with news seen at once (js/taskdata.js shows it while there is one). */}}
-{{- if .Updates}}<button type="button" class="btn" id="updates-read-btn" title="Mark every update as read" hidden>Mark all read</button>{{end}}
+{{- if .Menu}}<div class="page-header-actions">
 {{- if .Menu}}<button type="button" class="btn page-menu-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="page-menu" title="More: settings, new list{{if .List}}, rename, pin, delete{{end}}{{if .Tag}}, rename the tag{{end}}, export, import" aria-label="More actions">⋯</button>{{end}}</div>{{end}}</header>
 {{- if .Menu}}
 <div class="page-menu-backdrop" hidden></div><div class="page-menu" id="page-menu" role="menu" aria-label="Task list actions" hidden>
@@ -146,10 +144,6 @@
 <article class="page-content">
 {{- /* My tasks: what it holds (mineFilter), the lists left out as links (leftOutLinks). */}}
 {{- if .Mine}}<p class="tasks-list-home tasks-mine-line">{{if .MineAssigns}}Your own tasks and what is assigned to you{{else}}Every open task{{end}}{{if .LeftOutLists}}, but the lists left out of it ({{range $i, $l := .LeftOutLists}}{{if $i}}, {{end}}<a href="{{$l.Href}}">{{$l.Label}}</a>{{end}}){{end}}.{{if .Given}} <a href="{{.GivenHref}}" class="tasks-given" title="The open tasks you made that someone else has: not yours to do, so not in My tasks">Given to others: {{.Given}}</a>{{end}}</p>{{end}}
-{{- /* Updates: what it holds, and how a task leaves it. */}}
-{{- if .Updates}}<p class="tasks-list-home tasks-updates-line">What others did on your tasks: one given to you, a comment, a mention, one closed. Opening a task marks it read.</p>{{end}}
-{{- /* There is news: the line that leads to Updates (js/chrome.js keeps its number). */}}
-{{- if .UpdatesNote}}<p class="tasks-updates-note"{{if not .NewCount}} hidden{{end}}><a class="btn btn-sm" href="{{.UpdatesHref}}">{{.NewCount}} update{{if ne .NewCount 1}}s{{end}} for you →</a></p>{{end}}
 {{- /* The Inbox: what it is for. */}}
 {{- if .Inbox}}<p class="tasks-list-home tasks-inbox-line">{{if .InboxPrivate}}New tasks land here, and only you see them. Move one to a list to file it; in a shared list everyone sees it.{{else}}New tasks land here, in no list. Move one to a list to file it.{{end}}</p>{{end}}
 {{- /* A list: its backlog (a shared list's tasks no one has), and that it is left out of My tasks. */}}

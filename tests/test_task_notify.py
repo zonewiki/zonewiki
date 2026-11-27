@@ -206,21 +206,23 @@ def test_the_tasks_links_count_what_is_new_for_you(alice, smtp):
     assert alice.get("/api/tasks/due-count", headers=HOST).get_json() == {"count": 0, "overdue": 0, "today": 0, "focus": 0}
     login(alice, "bob")
     counts = alice.get("/api/tasks/due-count?places=1", headers=HOST).get_json()
-    assert counts["new"] == 1 and counts["count"] == 0 and counts["focus"] == 0
+    assert counts["new"] == 1 and counts["updates"] == 1 and counts["count"] == 0 and counts["focus"] == 0
     # Of the pills Updates' alone has it: news is counted where it is listed.
     assert counts["places"]["updates"] == {"count": 0, "overdue": 0, "today": 0, "focus": 0, "new": 1}
     assert "new" not in counts["places"]["mine"] and "new" not in counts["places"]["inbox"]
     page = alice.get("/page/index", headers=HOST).get_data(as_text=True)
-    assert '<span class="module-new">1</span>' in page and 'title="Tasks: 1 update for you"' in page
+    # On every page the top bar's bell has it; the Tasks links say what is due, not the news.
+    assert '<span class="top-updates-count menu-count">1</span>' in page
+    assert '<span class="module-new">' not in page and 'title="Tasks"' in page and "update for you" not in page
     # Not in the list's own counts (its pill, once pinned).
     assert alice.post("/tasks/pin-list", data={"list": "team", "pin": "1"}, headers=HOST).status_code == 302
     assert "new" not in alice.get("/api/tasks/due-count?places=1", headers=HOST).get_json()["places"]["list:team"]
     # He touches it (a date): no longer new.
     assert alice.put(f"/api/tasks/{task['id']}", json={"due_date": "2031-01-01"}, headers=HOST).status_code == 200
     counts = alice.get("/api/tasks/due-count", headers=HOST).get_json()
-    assert "new" not in counts
+    assert "new" not in counts and "updates" not in counts
     page = alice.get("/page/index", headers=HOST).get_data(as_text=True)
-    assert '<span class="module-new" hidden></span>' in page
+    assert '<span class="top-updates-count menu-count" hidden></span>' in page   # the bell stays, without a number
 
 
 def test_opening_a_task_given_to_you_says_seen(alice, smtp):
@@ -321,54 +323,58 @@ def test_the_count_is_of_every_task_with_news_for_you(alice, smtp):
     assert sum(1 for e in seen["history"] if e["event"] == "seen" and e["by"] == "alice") == 1
 
 
-def test_updates_is_a_view_of_the_tasks_with_news(alice, wiki_dir, smtp):
-    """Updates (/tasks?updates=1; docs/spec/tasks.md, News on your tasks): a
-    view beside My tasks that holds the tasks with news for who looks, and
-    nobody else's; My tasks says that there are some, and holds only what
-    is one's own to do."""
+def test_updates_is_a_page_with_the_tasks_that_have_news(alice, wiki_dir, smtp):
+    """Updates (/updates; Updates in docs/spec/navigation.md): a page of its
+    own, not a view of Tasks, whose Tasks section is the task app with the
+    tasks that have news for who looks, and nobody else's. The top bar's
+    bell leads there from every page, and so does the list switcher."""
     given = new(alice, title="Check the invoice", assignee="bob")
     new(alice, title="Hers", assignee="alice")
     page = lambda url: alice.get(url, headers=HOST).get_data(as_text=True)
     ids = lambda: [t["id"] for t in alice.get("/api/tasks?updates=1", headers=HOST).get_json()]
     assert ids() == []                                                      # she gave it: no news for her
-    html = page("/tasks?updates=1")
+    resp = alice.get("/tasks?updates=1", headers=HOST)                      # where it was
+    assert resp.status_code == 302 and resp.headers["Location"] == "/updates"
+    html = page("/updates")
     assert 'data-init-updates="1"' in html and "<h1>Updates</h1>" in html and "<title>Updates" in html
-    assert 'data-place="updates"' in html and 'id="updates-read-btn"' in html
+    assert '<h2 id="updates-tasks-h">Tasks</h2>' in html and 'id="updates-read-btn"' in html
+    assert 'class="top-updates" href="/updates"' in html and 'aria-current="page">' in html.split('class="top-updates"')[1][:200]
+    assert 'data-place="updates"' not in html and 'class="module-link" data-module="tasks" title="Tasks" aria-current' not in html
     # No settings, no menu of the list's, no tasks of anyone's in the page.
     assert "data-settings-" not in html and 'id="task-more-btn"' not in html
     assert "Check the invoice" not in html and "Hers" not in html
     # The Tasks links don't come back to it: they keep the view before.
     assert 'href="/tasks?mine=1" class="module-link" data-module="tasks"' in page("/page/index")
     mine = page("/tasks?mine=1")
-    assert 'class="tasks-updates-note" hidden' in mine and "data-init-updates" not in mine
-    # bob has it: in his Updates, with the task in the page, and My tasks leads there.
+    assert "tasks-updates-note" not in mine and "data-init-updates" not in mine
+    assert '<a href="/updates" class="tasks-place' in mine                  # the switcher's Updates leads to the page
+    # bob has it: on his Updates, with the task in the page.
     login(alice, "bob")
     assert ids() == [given["id"]]
-    assert "Check the invoice" in page("/tasks?updates=1") and "Hers" not in page("/tasks?updates=1")
-    assert '<p class="tasks-updates-note"><a class="btn btn-sm" href="/tasks?updates=1">1 update for you →</a></p>' in page("/tasks?mine=1")
-    assert "tasks-updates-note" not in page("/tasks?list=team")
+    assert "Check the invoice" in page("/updates") and "Hers" not in page("/updates")
     # dan sees the list and has nothing to do with the task: no news.
     login(alice, "dan")
-    assert ids() == [] and "Check the invoice" not in page("/tasks?updates=1")
+    assert ids() == [] and "Check the invoice" not in page("/updates")
     # An embed doesn't show it: updates=1 on a page is every task.
     write_page(wiki_dir, "desk", "# Desk\n\n[[tasks: updates=1]]\n")
     assert "data-init-updates" not in page("/page/desk") and "Check the invoice" in page("/page/desk")
-    # In sharing mode what others wrote to you isn't shown: no view, no pill.
+    # In sharing mode what others wrote to you isn't shown: no page, no bell, no pill.
     login(alice, "bob")
     alice.set_cookie("zone-sharing", "1")
-    resp = alice.get("/tasks?updates=1", headers=HOST)
-    assert resp.status_code == 302 and resp.headers["Location"] == "/tasks"
-    assert 'data-place="updates"' not in page("/tasks?mine=1") and "tasks-updates-note" not in page("/tasks?mine=1")
+    resp = alice.get("/updates", headers=HOST)
+    assert resp.status_code == 302 and resp.headers["Location"] == "/"
+    assert 'data-place="updates"' not in page("/tasks?mine=1") and "top-updates" not in page("/tasks?mine=1")
 
 
 def test_updates_needs_users(client):
     """Without users nobody gives anyone a task: no Updates, its address
-    goes to /tasks and its scope holds nothing."""
+    goes home, no bell, and its scope holds nothing."""
     assert client.post("/api/tasks", json={"title": "Mine"}).status_code == 201
-    resp = client.get("/tasks?updates=1")
-    assert resp.status_code == 302 and resp.headers["Location"] == "/tasks"
+    resp = client.get("/updates")
+    assert resp.status_code == 302 and resp.headers["Location"] == "/"
     assert client.get("/api/tasks?updates=1").get_json() == []
-    assert 'data-place="updates"' not in client.get("/tasks").get_data(as_text=True)
+    page = client.get("/tasks").get_data(as_text=True)
+    assert 'data-place="updates"' not in page and "top-updates" not in page
 
 
 def test_a_look_is_the_users_not_the_tasks(alice, wiki_dir, smtp):

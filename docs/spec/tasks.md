@@ -1306,9 +1306,10 @@ Who follows is kept in the task (`"followers": ["dan", "alice"]`, in the order t
 
 ### Updates
 
-**Updates** (`/tasks?updates=1`, with users) is where the news is: **every task with news for you** (`updatesFor`, `TasksCore.newsFor`), wherever it is and whatever its dates,
+**Updates** (`/updates`, with users) is where the news is: a page of its own, reached by the bell in the top bar from every page (Updates in `docs/spec/navigation.md`: the page, the bell, its count).
+Its **Tasks** section is the task app in its Updates mode, described here: **every task with news for you** (`updatesFor`, `TasksCore.newsFor`), wherever it is and whatever its dates,
 the ones that aren't yours to do among them: what you gave away (someone commented, it was done), what mentions you, what you follow, a task closed this month or last.
-It is a view beside My tasks, the second entry of the list switcher (The list switcher), with how many tasks have news on its pill;
+It is not a view of Tasks: the list switcher's **Updates**, its second entry, leads to the page, with how many tasks have news on its pill, and `/tasks?updates=1`, where it was, redirects there.
 My tasks and the lists show what is to do, and no news but the mark on a card (The marks and the counts).
 
 What you see and do there:
@@ -1634,7 +1635,7 @@ The view's own actions (`[data-tasks-action]`) are shown and run by `js/tasksett
 Each but the pins is a dialog with a form the server answers (`data-dialog` on the menu item; a refusal comes back with the message in the dialog).
 Not in sharing mode; a viewer's has Export tasks alone (`Menu`, `Write` in `tasksPageView`; none for a name no list has), and the pills don't reorder for them.
 The ⋯ of an embed on a wiki page offers the view's own actions only: List settings…, Export tasks and Import tasks….
-Updates has **Mark all read** beside its heading, before the ⋯ (Updates).
+The Updates page has **Mark all read** beside its heading (Updates).
 
 #### Renaming a list
 
@@ -1750,7 +1751,7 @@ The page gets the lists left out and whether assignment counts (`data-init-out`,
 on the page's white sheet with it, looking as the module switcher at the top of the page does (`.tasks-places-group`: one white capsule with a border, the pills inside it without one, in its type and height, the current one shaded).
 **My tasks is the first pill, with users Updates the second, then the Inbox; a pinned list is a pill; a list that isn't pinned is under More.**
 In order: **My tasks** (above), whenever there is a row;
-**Updates** (`data-place="updates"`; with users, not in sharing mode: `hasUpdates`; tooltip "News on your tasks: given to you, commented, mentioned, closed"; Updates);
+**Updates** (`data-place="updates"`; with users, not in sharing mode: `hasUpdates`; tooltip "What is new for you: opens Updates, a page of its own"; it leads out of Tasks, to `/updates`, and is never the current one; Updates);
 **Inbox** (`data-place="inbox"`; for who has one, `hasInbox`; tooltip "Inbox: new tasks land here", with users "… (only you see it)");
 then **the pinned lists** in their order,
 then **More ▾**.
@@ -1776,7 +1777,7 @@ On a phone (≤640px) the line under the heading that only says what the view is
 #### The counts on the pills
 
 Each pill but More carries **one number: what is due today or overdue** there (a list's own, `countTasks` over the list: everyone's tasks in it); Updates' pill carries how many tasks have news for you, and no other pill counts news (The marks and the counts); the Today count is on the Tasks module links alone, where it is the day's load (`.tasks-place .module-focus` is not shown);
-the current one is shaded (`aria-current`): My tasks on `?mine=1`, Updates on `?updates=1`, the Inbox on `?list=inbox`, the list on `?list=<ref>`, More for a view under it, none for a name no list has.
+the current one is shaded (`aria-current`): My tasks on `?mine=1`, the Inbox on `?list=inbox`, the list on `?list=<ref>`, More for a view under it, none for a name no list has.
 `js/chrome.js` keeps the counts current with the Tasks link's (`refreshDueBadge`: `GET /api/tasks/due-count?places=1` adds `places`, each pill's counts by its key: `list:<ref>`, `mine`, `updates`, `inbox`).
 
 #### More

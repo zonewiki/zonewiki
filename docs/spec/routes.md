@@ -231,6 +231,7 @@ A change users see updates its manual page in the same commit, as it updates the
 
 | Method | Path                  | Description                                     |
 |--------|-----------------------|-------------------------------------------------|
+| GET    | `/updates`            | Updates: what is new for you, a section a kind; its Tasks section is the task app with the tasks that have news (Updates in `docs/spec/navigation.md`); without users, in sharing mode and for a visitor a redirect to `/` |
 | GET    | `/tasks`              | The built-in tasks page (`tasksPage()`): every open task, or a list, the Inbox or My tasks; see The tasks page, below |
 | POST   | `/tasks/rename`       | Rename a task tag (fields `tag`, `new_name`, `merge`; the Rename tag… dialog of `/tasks?tag=<tag>`, Renaming a tag in `docs/spec/tasks.md`); see below |
 | POST   | `/tasks/new-list`     | Make a task list, pinned for who makes it (fields `name`, `for`: empty for everyone, `group:<g>` for a group of theirs, `private`; `pin`: `0` leaves it unpinned); see below |
@@ -251,10 +252,10 @@ Every link to "the tasks" goes here (the Tasks module links without a task list 
 - `?list=inbox` shows the Inbox, the tasks in no list, with users your own (Lists → The Inbox in `docs/spec/tasks.md`; `?list=none` too).
 - A name no list has shows a line that says so.
 - `?mine=1` shows My tasks, your home view, as one task app (Lists → My tasks in `docs/spec/tasks.md`; in a wiki without lists a redirect to `/tasks`).
-- `?updates=1` shows Updates, the tasks with news for you (News on your tasks → Updates in `docs/spec/tasks.md`; without users and in sharing mode a redirect to `/tasks`).
+- `?updates=1` redirects to `/updates`: Updates was a view here until it became a page of its own.
 - `?view=`, `?task=`, `?tag=`, `?search=`, `?new=1` work as for any embed.
 
-The list switcher sits above the heading: My tasks, with users Updates, the Inbox and the pinned lists as pills, the others and All tasks under More; this view's is the current one.
+The list switcher sits above the heading: My tasks, with users Updates (which leads to `/updates`), the Inbox and the pinned lists as pills, the others and All tasks under More; this view's is the current one.
 From 1024px wide it is the page's left column instead, every list a line (The lists in the left column in `docs/spec/tasks.md`).
 The heading reads "All tasks", "My tasks" or "List: <name>".
 
