@@ -114,7 +114,10 @@ Raw HTML in a page is rendered as written (goldmark's `WithUnsafe`), but no scri
 nor does a form, an iframe's `srcdoc` or a link's `ping` (No form in a page posts to Zonewiki either, there), and an `<iframe>` shows an upload but no view of Zonewiki's (Framing, there).
 Form controls, `<meta>`, `<base>`, `<link>` and `<script>` in it show as text (`defuseHTML`: a form in a page could post to Zonewiki as the viewer; a `<script type="application/json">` would be data Zonewiki's own scripts read).
 Its ids and names get `user-content-` in front (`<a name="note">` is `user-content-note`, as on GitHub), so none stands in for one of Zonewiki's elements;
-a link to it works as written (`[see](#note)`: `hashTarget` in `js/util.js` finds it, and `js/page.js` scrolls there), and an SVG's `url(#g)` is pointed at its gradient's new id too;
+a link to it works as written (`[see](#note)`: `hashTarget` in `js/util.js` finds it, and `js/page.js` scrolls there),
+and what in its SVG names an element follows it there, so it finds the page's own and never one of Zonewiki's:
+`url(#g)` in an attribute or a style (`fill`, `stroke`, `clip-path`, `mask`, `filter`, `marker-*`),
+and the `href` or `xlink:href` of an element that uses another (`<use href="#dot">`, `<textPath>`, `<mpath>`, `<feImage>`, a gradient's or pattern's template, an animation's target; `svgRefTagRE`), a `#` written as `&#35;` too;
 a page's own `<style>` selects such an element as `#user-content-…`.
 
 ### Autolinks and external links

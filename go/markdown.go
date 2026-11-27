@@ -681,17 +681,32 @@ var defusedTagRE = regexp.MustCompile(`(?i)<(/?(?:form|input|button|select|texta
 // the task dialog's field would aim its save at another task) and the
 // browser by name (window.x, document.x). So the value gets
 // "user-content-" in front, as GitHub's do; a #link to it finds it all the
-// same (js/util.js hashTarget), and an SVG's url(#…) is pointed there too
-// (urlRefRE). idEndRE: such a name where the raw HTML ends, renamed (what
-// is rendered next may start with its "=").
+// same (js/util.js hashTarget). idEndRE: such a name where the raw HTML
+// ends, renamed (what is rendered next may start with its "=").
+//
+// What in a page names one of its elements by id follows it there, so it
+// finds the page's own and never one of Zonewiki's: an SVG's url(#…)
+// (urlRefRE: fill, stroke, clip-path, mask, filter, marker-*, in an
+// attribute or a <style>), and the href or xlink:href of an SVG element that
+// uses another (svgRefTagRE, svgHrefRE: <use>, <textPath>, <mpath>,
+// <feImage>, a gradient's or pattern's template, an animation's target).
+// Its "#" may be written as a character reference (&#35;), which the
+// browser reads as "#". A link's href (<a href="#note">, an SVG's <a> too)
+// stays: a heading's id has no "user-content-", and hashTarget finds a
+// raw id from the #note.
 var (
-	htmlTagRE = regexp.MustCompile(`<[A-Za-z](?:[^>"']|"[^"]*"|'[^']*')*`)
-	srcdocRE  = regexp.MustCompile(`(?i)srcdoc([\t\n\f\r ]*(?:=|$))`)
-	pingRE    = regexp.MustCompile(`(?i)(^|[^A-Za-z0-9_-])(ping[\t\n\f\r ]*(?:=|$))`)
-	idRE      = regexp.MustCompile(`(?i)(^|[\t\n\f\r /"'])((?:id|name)[\t\n\f\r ]*=[\t\n\f\r ]*["']?)`)
-	idEndRE   = regexp.MustCompile(`(?i)(^|[\t\n\f\r /"'])((?:id|name)[\t\n\f\r ]*)$`)
-	urlRefRE  = regexp.MustCompile(`(?i)(url\([\t\n\f\r ]*["']?#)`)
+	htmlTagRE   = regexp.MustCompile(`<[A-Za-z](?:[^>"']|"[^"]*"|'[^']*')*`)
+	srcdocRE    = regexp.MustCompile(`(?i)srcdoc([\t\n\f\r ]*(?:=|$))`)
+	pingRE      = regexp.MustCompile(`(?i)(^|[^A-Za-z0-9_-])(ping[\t\n\f\r ]*(?:=|$))`)
+	idRE        = regexp.MustCompile(`(?i)(^|[\t\n\f\r /"'])((?:id|name)[\t\n\f\r ]*=[\t\n\f\r ]*["']?)`)
+	idEndRE     = regexp.MustCompile(`(?i)(^|[\t\n\f\r /"'])((?:id|name)[\t\n\f\r ]*)$`)
+	urlRefRE    = regexp.MustCompile(`(?i)(url\([\t\n\f\r ]*["']?[\t\n\f\r ]*)` + hashRef)
+	svgRefTagRE = regexp.MustCompile(`(?i)^<(?:use|textpath|mpath|feimage|lineargradient|radialgradient|pattern|filter|tref|cursor|animate|animatemotion|animatetransform|animatecolor|set|discard)(?:[\t\n\f\r /]|$)`)
+	svgHrefRE   = regexp.MustCompile(`(?i)(^|[\t\n\f\r /"'])((?:xlink:)?href[\t\n\f\r ]*=[\t\n\f\r ]*["']?[\t\n\f\r ]*)` + hashRef)
 )
+
+// hashRef: a "#", or a character reference the browser reads as one.
+const hashRef = `(?:#|&#0*35;?|&#x0*23;?|&num;)`
 
 // styleTagRE: a <style>'s start or end, for Env.NoStyle.
 var styleTagRE = regexp.MustCompile(`(?i)<(/?style(?:[\s/>]|$))`)
@@ -706,13 +721,20 @@ func (r *zoneRenderer) defuse(raw []byte) []byte {
 }
 
 // defuseHTML: raw HTML with defusedTagRE's tags as text, no srcdoc or
-// ping, and its ids and names its own (user-content-…).
+// ping, and its ids and names its own (user-content-…), what names them
+// too.
 func defuseHTML(raw []byte) []byte {
 	raw = srcdocRE.ReplaceAll(raw, []byte("data-defused-srcdoc$1"))
 	raw = pingRE.ReplaceAll(raw, []byte("${1}data-defused-$2"))
 	raw = idRE.ReplaceAll(raw, []byte("${1}${2}user-content-"))
 	raw = idEndRE.ReplaceAll(raw, []byte("${1}data-defused-$2"))
-	raw = urlRefRE.ReplaceAll(raw, []byte("${1}user-content-"))
+	raw = urlRefRE.ReplaceAll(raw, []byte("${1}#user-content-"))
+	raw = htmlTagRE.ReplaceAllFunc(raw, func(tag []byte) []byte {
+		if !svgRefTagRE.Match(tag) {
+			return tag
+		}
+		return svgHrefRE.ReplaceAll(tag, []byte("${1}${2}#user-content-"))
+	})
 	return defusedTagRE.ReplaceAll(raw, []byte("&lt;$1"))
 }
 

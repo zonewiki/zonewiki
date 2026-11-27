@@ -292,6 +292,18 @@ def test_a_pages_headings_stand_in_for_none_of_zones(page, wiki):
     wait_until(page, in_view)
 
 
+def test_a_pages_svg_finds_its_own_parts(page, wiki):
+    # A page's ids have "user-content-" in front, and what in its SVG names
+    # one follows: a <use> draws the page's own symbol (it named an id no
+    # element of the page has, or one of Zonewiki's, and drew nothing).
+    wiki.write("svg", "# Svg\n\n<svg width=\"40\" height=\"20\"><defs>"
+               "<symbol id=\"dot\"><circle cx=\"10\" cy=\"10\" r=\"8\"/></symbol></defs>"
+               "<use id=\"one\" href=\"#dot\"/><use id=\"two\" xlink:href=\"&#35;dot\" x=\"20\"/></svg>\n")
+    page.goto("/page/svg")
+    for use in ("one", "two"):
+        assert page.evaluate(f"document.getElementById('user-content-{use}').getBBox().width") > 0
+
+
 def test_a_click_submits_only_a_form_zone_put_there(page, wiki):
     # A page's own <style> could show the page's closed Delete dialog and lay
     # its button over the whole page, transparent: the reader's next click

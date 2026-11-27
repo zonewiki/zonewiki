@@ -679,6 +679,7 @@ So in a page's raw HTML, and in task descriptions and comments, every `id` and `
 That holds wherever the name stands on its own before `=` (after HTML's whitespace, a `/` or a quote), so not `?id=` in a URL or `data-id=`, as `ping` is found.
 A diagram's labels have none (A diagram makes no form either, above).
 A `#link` to one finds it all the same (`hashTarget` in `js/util.js`).
+What in a page's SVG names an element by id follows it (`url(#…)`, a `<use>`'s `href`; Raw HTML in `docs/spec/rendering.md`), so it finds the page's own and never one of Zonewiki's.
 
 A heading's id, made from its text, is never one of Zonewiki's ids either: `## Modal` would be the new note's dialog to a script, `## Mermaid` would be `window.mermaid`.
 One that would be gets `user-content-` in front too (Heading ids in `docs/spec/rendering.md`).

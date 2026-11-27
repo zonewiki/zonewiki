@@ -247,6 +247,28 @@ func TestRawHTMLIDsAreItsOwn(t *testing.T) {
 	}
 }
 
+// What in a page's SVG names one of its elements finds it with its
+// "user-content-" (TestRawHTMLIDsAreItsOwn), and so never one of Zonewiki's:
+// a <use>'s href and xlink:href, a gradient's template, an animation's
+// target, url(#…) in the attributes and styles that take one, a "#" written
+// as a character reference too. A link's href to #note stays (hashTarget
+// finds it), and so does a URL with more than a fragment.
+func TestSVGReferencesFindThePagesOwn(t *testing.T) {
+	for src, want := range map[string]string{
+		`<svg><symbol id="dot"/><use href="#dot"/><use xlink:href='#dot' x="1"/><USE HREF=#dot /></svg>`: `<svg><symbol id="user-content-dot"/><use href="#user-content-dot"/><use xlink:href='#user-content-dot' x="1"/><USE HREF=#user-content-dot /></svg>`,
+		"<svg><use\nhref = \" #dot\"/></svg>":                                                                                        "<svg><use\nhref = \" #user-content-dot\"/></svg>",
+		`<svg><use href="&#35;dot"/><use href="&#x23;dot"/><use href="&num;dot"/></svg>`:                                             `<svg><use href="#user-content-dot"/><use href="#user-content-dot"/><use href="#user-content-dot"/></svg>`,
+		`<svg><linearGradient id="b" href="#a"/><textPath href="#p">t</textPath><set href="#modal" attributeName="x" to="1"/></svg>`: `<svg><linearGradient id="user-content-b" href="#user-content-a"/><textPath href="#user-content-p">t</textPath><set href="#user-content-modal" attributeName="x" to="1"/></svg>`,
+		`<svg><path marker-end="url(#m)" clip-path="url('#c')" mask="url(&#35;k)" filter="URL( #f)"/></svg>`:                         `<svg><path marker-end="url(#user-content-m)" clip-path="url('#user-content-c')" mask="url(#user-content-k)" filter="URL( #user-content-f)"/></svg>`,
+		`<svg><a href="#note"><text>x</text></a><use href="/x.svg#dot"/></svg> <a href="#note">n</a>`:                                `<svg><a href="#note"><text>x</text></a><use href="/x.svg#dot"/></svg> <a href="#note">n</a>`,
+		`<svg><use data-href="#dot"/></svg>`:                                                                                         `<svg><use data-href="#dot"/></svg>`,
+	} {
+		if got := markdown(src, &Env{}, false); !strings.Contains(got, want) {
+			t.Errorf("%s:\n%s", src, got)
+		}
+	}
+}
+
 // Renders at once each keep their own Env and section numbers, though
 // they share pooled goldmark instances.
 func TestConcurrentRendersKeepTheirEnv(t *testing.T) {
