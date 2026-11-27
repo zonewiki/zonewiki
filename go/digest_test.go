@@ -10,8 +10,8 @@ import (
 )
 
 // digestWiki: a wiki in git with alice, bob (both with an address) and
-// vera (a viewer), a mail server, a shared list team, and the clock at 7:00
-// of today. alice turned the morning's mail on.
+// vera (a viewer), a mail server, a shared list team, and the clock at the
+// last 7:00 there was. alice turned the morning's mail on.
 func digestWiki(t *testing.T) (*fakeSMTP, time.Time) {
 	t.Helper()
 	lastCommitsWiki(t, false)
@@ -25,6 +25,12 @@ func digestWiki(t *testing.T) (*fakeSMTP, time.Time) {
 	set(t, &cfg.Mail, smtp.config("none"))
 	y, m, d := time.Now().Date()
 	morning := time.Date(y, m, d, 7, 0, 0, 0, time.Local)
+	if time.Now().Before(morning) {
+		// The commits these tests make have git's clock, and count as news
+		// only after a watch that began at the tests' own: before 7:00 the
+		// morning is yesterday's.
+		morning = morning.AddDate(0, 0, -1)
+	}
 	clock := morning
 	set(t, &now, func() time.Time { return clock })
 	t.Cleanup(func() {
@@ -350,4 +356,54 @@ func TestAViewersMorningsMail(t *testing.T) {
 	if mails(settings(), "vera", "digest") || exists(watchPath("vera")) {
 		t.Errorf("off: %v, file %v", mails(settings(), "vera", "digest"), exists(watchPath("vera")))
 	}
+}
+
+// The morning's mail names the pages that mention its reader since the
+// last one, above the watched pages, and a mention alone sends it: to a
+// viewer too, whom a page can name. A mention read, or from before the
+// last mail, sends nothing by itself.
+func TestTheMorningsMailHasTheMentions(t *testing.T) {
+	smtp, morning := digestWiki(t)
+	t.Cleanup(func() {
+		watchStore.Lock()
+		watchStore.by = nil
+		watchStore.Unlock()
+	})
+	mailOn(t, "vera", "digest")
+	if err := gitCommit("bob", "Save roadmap", writePageSaying(t, "roadmap.md", "Ask @alice and @vera.")); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"alice", "vera"} {
+		if m := watchesOf(name).Mentions["roadmap"]; m.By != "bob" || m.At == 0 {
+			t.Fatalf("%s isn't told of the mention: %+v", name, watchesOf(name).Mentions)
+		}
+	}
+	since := morning.Add(-24 * time.Hour)
+	d := digestFor("alice", since, morning.Add(time.Minute))
+	if len(d.Mentions) != 1 || !d.worthSending() {
+		t.Fatalf("alice's mail: %+v", d)
+	}
+	subject, body := d.mail(settings())
+	for _, want := range []string{"MENTIONS\n\n  Roadmap\n  bob mentioned you\n  https://wiki.example.org/page/roadmap#:~:text=%40alice\n",
+		"All of them: https://wiki.example.org/updates\n"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the mail lacks %q:\n%s", want, body)
+		}
+	}
+	if subject != "Zonewiki: 1 mention" {
+		t.Errorf("subject %q", subject)
+	}
+	if v := digestFor("vera", since, morning.Add(time.Minute)); len(v.Mentions) != 1 || !v.worthSending() {
+		t.Errorf("a viewer's mail has no mention: %+v", v)
+	}
+	// From before the last mail: counted, and no mail of its own.
+	if d := digestFor("alice", morning.Add(time.Hour), morning.Add(2*time.Hour)); d.worthSending() || d.OlderMentions != 1 {
+		t.Errorf("a mention from before sends a mail, or isn't counted: %+v", d)
+	}
+	// Read: gone.
+	readMention("alice", "roadmap", false)
+	if d := digestFor("alice", since, morning.Add(time.Minute)); d.worthSending() || d.OlderMentions != 0 {
+		t.Errorf("a mention read is in the mail: %+v", d)
+	}
+	_ = smtp
 }

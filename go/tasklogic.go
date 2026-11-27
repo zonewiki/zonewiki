@@ -411,17 +411,10 @@ var mentionRE = regexp.MustCompile(`(?:^|[\s(\[{>,;:])@([a-z0-9][a-z0-9-]*)`)
 // once, in the text's order: users who can be given tasks, not in code.
 func mentionsOf(text string) []string {
 	s := settings()
-	if s.Users == nil || !strings.Contains(text, "@") {
+	if s.Users == nil {
 		return nil
 	}
-	masked, _ := mdtext.MaskCode(text)
-	var out []string
-	for _, m := range mentionRE.FindAllStringSubmatch(strings.ToLower(masked), -1) {
-		if name := m[1]; s.assignable(name) && !slices.Contains(out, name) {
-			out = append(out, name)
-		}
-	}
-	return out
+	return namesIn(text, s.assignable)
 }
 
 // logMentions logs "mentioned" for each user text names that before didn't

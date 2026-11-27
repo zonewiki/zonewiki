@@ -190,6 +190,17 @@ Zonewiki reads Markdown as GitHub does (GitHub Flavored Markdown), plus a few ad
 You don't type task ids: the editor's task completion and **Make a task** write them.
 [Tasks](tasks.md) has all the options of a task list.
 
+### Mentioning someone
+
+In a wiki with users, write `@` and a user's name, such as `@anna`, to tell that person about the page.
+When you choose **Done**, Anna sees it on her **Updates** page, behind the bell at the top right, and gets a mail if she asked for one ([Notifications](teams.md#notifications)).
+The link takes her to the place where her name is.
+
+- She is told once: editing the page again doesn't tell her again.
+- Only someone who can read the page is told, so a name on your private page tells nobody.
+- You can mention a viewer too.
+- Importing notes tells nobody, even where the notes hold names.
+
 ### Callouts
 
 A quote that starts with a marker becomes a coloured box:

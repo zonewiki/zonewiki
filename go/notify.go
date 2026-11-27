@@ -20,17 +20,17 @@ import (
 type assignedBefore map[string]string
 
 // The kinds of mail a user can turn on (Settings, Notifications): a task
-// given to them, a mention of them, a comment on a task they have, gave or
-// follow, and the morning's mail (digest.go: what is new for them, the
+// given to them, a mention of them (in a task, or on a page: mentions.go),
+// a comment on a task they have, gave or follow, and the morning's mail (digest.go: what is new for them, the
 // watched pages that changed, what is due). Those turned on are in their
 // watch file (watched.Mail). None is turned on until they do it.
 var mailKinds = []string{"assigned", "mentioned", "comments", "digest"}
 
 // mailChoices: the kinds of mail user can have, in mailKinds' order: all of
-// them for one a task can be given to; the morning's mail alone for a
-// viewer, whom nothing is given (theirs tells of the pages they watch), but
-// not for an account several people sign in to; none for anyone else (a
-// disabled user, one waiting for approval).
+// them for one a task can be given to; a mention's and the morning's for a
+// viewer, whom nothing is given (theirs tell of pages: one that names
+// them, those they watch), but not for an account several people sign in
+// to; none for anyone else (a disabled user, one waiting for approval).
 func (s *Settings) mailChoices(user string) []string {
 	switch u := s.Users[user]; {
 	case u == nil:
@@ -38,7 +38,7 @@ func (s *Settings) mailChoices(user string) []string {
 	case s.assignable(user):
 		return mailKinds
 	case s.mayViewerDigest(user) && !u.Shared:
-		return []string{"digest"}
+		return []string{"mentioned", "digest"}
 	}
 	return nil
 }
@@ -122,7 +122,7 @@ func tellMentioned(by string, t *Task, named []string, text ...string) {
 	for _, name := range named {
 		if name != by && mails(s, name, "mentioned") && canSeeTask(asUser(name), t) {
 			taskMail(s, name, by+" mentioned you: "+oneLine(t.Title), by+" mentioned you on "+appName+", in this task:", t,
-				strings.Join(text, ""), "when someone mentions you in a task")
+				strings.Join(text, ""), "when someone mentions you")
 		}
 	}
 }

@@ -1375,13 +1375,13 @@ The tab is there where Zonewiki sends mail (the deployment's mail server, `ZONE_
 | Box | Mail | |
 |-----|------|---|
 | a task is given to me | `tellAssigned`: "bob gave you a task: <title>" | several given in one write one mail, "bob gave you N tasks" |
-| someone mentions me (@name) | `tellMentioned`: "bob mentioned you: <title>" | with the text |
+| someone mentions me (@name), on a page or in a task | `tellMentioned`: "bob mentioned you: <title>" | with the text; on a page `pageMentionMail`, with the page's link (Mentions on pages in `docs/spec/navigation.md`) |
 | someone comments on a task I have, gave or follow | `tellComment`: "bob commented: <title>" | with the comment; not to who it mentions, who gets that mail |
 | the day starts: what is new on my tasks, which pages I watch changed, and what is due today | The morning's mail, below | once a morning, and only one that has something |
 
 The first three come with the task's link where Zonewiki knows its address (`base-url`), sent in the background (a write doesn't wait for the mail server; a failure is in Zonewiki's log), never for what you did yourself.
 Each mail's last line says why it was sent and where to turn it off: the Notifications tab, by its link where Zonewiki knows its address (`mailFooter`).
-A viewer, to whom no task is given, has none of the first three.
+A viewer, to whom no task is given, has the mention's alone of these three, for a page that names them.
 
 ### The morning's mail
 
@@ -1392,12 +1392,13 @@ It works beside the other three: who wants one mail a day and no more unticks th
 | Part | Holds |
 |------|-------|
 | **Updates on your tasks** | the tasks whose news came since the last morning's mail, the latest first, each with the line Updates shows ("bob commented twice · anna closed it") and its link; then how many more have news from before, not read yet, and the link to Updates |
+| **Mentions** | the pages that mention you since the last mail and that you haven't opened, the latest first, each with who wrote it and its link; then how many more from before, and the link to Updates |
 | **Pages you watch** | the watched pages changed since the last mail that have news for you, A–Z, each with who changed it and its link; then how many more changed before and aren't looked at yet, and the link to the watched changes (Watching pages in `docs/spec/navigation.md`) |
 | **Due today** | the tasks of My tasks due today |
 | **Overdue** | those due before, the longest first, each with its date |
 
 **A morning with nothing sends nothing.**
-A mail goes out when something is new since the last one (an update, a watched page changed) or a task is due today.
+A mail goes out when something is new since the last one (an update, a mention on a page, a watched page changed) or a task is due today.
 What is only overdue, or was told before and not read, comes along with such a mail but sends none of its own: it would be the same mail every morning.
 
 **It reads nothing for you**: a task or a page is read when you open it, not when a mail named it, so the app shows the same news until you look.
@@ -1410,12 +1411,12 @@ A user whose address is confirmed in the morning, or who turns the mail on then,
 
 #### A viewer's morning's mail
 
-Nothing is given to a viewer, so the other three kinds have nothing to tell them; the morning's mail does: the pages they watch that changed.
-They tick it where anyone does, on the **Notifications** tab of their Settings, which has that one box for them: **pages I watch changed: one mail in the morning**.
-Their mail holds **Pages you watch** alone, never a task (every list counts as a viewer's in My tasks, so what is due would be the whole wiki's), and goes out only on a morning a watched page changed.
+Nothing is given to a viewer, so the mails about tasks have nothing to tell them; the morning's mail does: the pages that mention them, and the pages they watch that changed.
+They tick it where anyone does, on the **Notifications** tab of their Settings: **pages I watch changed, or a page mentions me**.
+Their mail holds **Mentions** and **Pages you watch**, never a task (every list counts as a viewer's in My tasks, so what is due would be the whole wiki's), and goes out only on a morning a watched page changed or a page named them.
 It goes to a confirmed address, as every mail, and not to a viewer who is disabled or waiting for approval.
 
-How: the choice is kept as anyone's (How the choices are kept in `docs/spec/users.md`); `mailChoices` gives a viewer the kind `digest` alone (`mayViewerDigest` in `go/notify.go`).
+How: the choice is kept as anyone's (How the choices are kept in `docs/spec/users.md`); `mailChoices` gives a viewer the kinds `mentioned` and `digest` (`mayViewerDigest` in `go/notify.go`).
 `digestFor` leaves the tasks out for whoever can't be given one.
 
 #### How the morning's mail works

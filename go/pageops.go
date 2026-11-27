@@ -192,6 +192,7 @@ type pagesWrite struct {
 	message string   // the commit's message, its suffix included
 	what    string   // names the pages in "Save <what>", the commit of text kept first
 	also    []string // other files to commit along, written by the caller (an import's uploads)
+	quiet   bool     // who the pages name is told nothing (mentions.go): an import's text was written elsewhere
 }
 
 // writePagesOp writes pages, each new or there already, in one commit:
@@ -252,7 +253,11 @@ func writePagesOp(user asker, w pagesWrite) (kept int, err error) {
 			added(int64(len(p.text)))
 		}
 	}
-	return kept, notCommitted(gitCommit(user.Name, w.message, append(paths, w.also...)...))
+	commit := gitCommit
+	if w.quiet {
+		commit = gitCommitQuiet
+	}
+	return kept, notCommitted(commit(user.Name, w.message, append(paths, w.also...)...))
 }
 
 // setAsideOp: the editor's text mine, which lost to theirs (what the page
@@ -1002,7 +1007,7 @@ func importOp(user asker, folder string, plan *mdimport.Plan, src fs.FS, from, s
 	if len(files) > 0 {
 		message += " and " + counted(len(files), "file", "files")
 	}
-	kept, err = writePagesOp(user, pagesWrite{pages: pages, message: message + " from " + from + suffix, what: to.home, also: written})
+	kept, err = writePagesOp(user, pagesWrite{pages: pages, message: message + " from " + from + suffix, what: to.home, also: written, quiet: true})
 	if err != nil && !writtenAnyway(err) {
 		removeFiles()
 	}

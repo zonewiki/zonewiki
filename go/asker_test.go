@@ -46,6 +46,7 @@ func TestAskersAreMadeInFewPlaces(t *testing.T) {
 		"tellAssigned",     // the assignee: do they see the task, before a mail
 		"tellComment",      // who has or gave the task: do they see it, before a mail
 		"tellMentioned",    // who was mentioned: do they see the task, before a mail
+		"tellMentions",     // who a page names: do they see the page, before a note and a mail
 		"withUser",         // a session's user, or a visitor
 		"mcpAuthorized",    // an MCP token's user: a token is of no connection
 	}

@@ -720,6 +720,7 @@ var viewerWrites = map[string]bool{
 	"POST /email":    true, "POST /email/resend": true, "POST /email/confirm/{token}": true, // their own mail address
 	"POST /watch": true, "POST /watch/read": true, // what they watch and have seen of it: theirs, nothing of the wiki
 	"POST /notifications": true, // which mail they want: kept with their watches
+	"POST /updates/read":  true, // the mentions of them read: kept with their watches
 	// a connection of their own, whose writing tools are refused; the other three carry no session
 	"POST /oauth/authorize": true, "POST /oauth/token": true, "POST /oauth/register": true, "POST /oauth/revoke": true,
 	"POST /assistant/connections/{id}/revoke": true, "POST /assistant/connections/{id}/change": true,

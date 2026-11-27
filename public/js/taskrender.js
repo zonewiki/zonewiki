@@ -542,13 +542,15 @@ function render() {
   wireListHandlers();
 }
 
-// Updates' Mark all read, beside the page's heading (templates/tasks_page.html):
-// there while a task has news, for who may write tasks.
+// Updates' Mark all read, beside the page's heading (templates/updates.html):
+// there while a task has news, for who may write tasks, or a mention on a
+// page is unread (js/updates.js reads those, and says when it did).
 const readAllBtn = app.initUpdates && app.appEl.dataset.writes === '1' ? document.getElementById('updates-read-btn') : null;
 readAllBtn?.addEventListener('click', () => app.markAllSeen());
 function syncReadAll() {
-  if (readAllBtn) readAllBtn.hidden = !app.updatesNow().length;
+  if (readAllBtn) readAllBtn.hidden = !app.updatesNow().length && !document.querySelector('.updates-mention:not(.updates-read)');
 }
+if (readAllBtn) document.addEventListener('zone:updates-read', syncReadAll);
 
 return { htmlOf, render };
 }

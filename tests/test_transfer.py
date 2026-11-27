@@ -543,7 +543,8 @@ class TestWhatUsersKeep:
     def test_watches_looks_and_mail_choices_move(self, source, out, monkeypatch, tmp_path_factory):
         head = git(source, "rev-parse", "HEAD")
         watch = {"watch": {"garden/": 1790000001, "garden/roses": 1790000000},
-                 "seen": {"garden/roses": {"at": 1790000002, "sha": head}}, "mail": ["assigned", "digest"]}
+                 "seen": {"garden/roses": {"at": 1790000002, "sha": head}}, "mail": ["assigned", "digest"],
+                 "mentions": {"garden/roses": {"at": 1790000003, "by": "bob", "sha": head[:7]}}}
         seen = {"0123abcd-0000-4000-8000-000000000000": self.LOOK}
         self.keeps(source, "watch", "alice", watch)
         self.keeps(source, "seen", "alice", seen)
@@ -575,7 +576,10 @@ class TestWhatUsersKeep:
                 "watch": {"ok/page": 5, "folder/": 6, "../../etc/passwd": 5, "a//b": 5, "/abs": 5, "never": -1, "nul\u0000l": 5},
                 "seen": {"ok/page": {"at": 1, "sha": "zz; rm -rf"}, "folder/in": {"at": 2, "sha": "abcdef12"},
                          "unwatched": {"at": 1, "sha": "abcdef12"}},
-                "mail": ["digest", "nonsense", "assigned", "digest"], "admin": True, "extra": {"x": ["y"]}})
+                "mail": ["digest", "nonsense", "assigned", "digest"], "admin": True, "extra": {"x": ["y"]},
+                "mentions": {"ok/page": {"at": 7, "by": "bob", "sha": "abcdef1"}, "../up": {"at": 7, "by": "bob"},
+                             "folder/": {"at": 7, "by": "bob"}, "by/script": {"at": 7, "by": "<b>bob</b>"},
+                             "no/time": {"at": 0, "by": "bob"}, "bad/sha": {"at": 7, "by": "bob", "sha": "$(rm)"}}})
             self.keeps(wiki, "watch", "bob", "{not json")
             self.keeps(wiki, "watch", "mallory", {"watch": {"ok/page": 5}})      # no user of the wiki
             self.keeps(wiki, "seen", "alice", {
@@ -590,7 +594,7 @@ class TestWhatUsersKeep:
         assert r.returncode == 0, r.stderr
         assert self.kept(dest, "watch", "alice") == {
             "watch": {"ok/page": 5, "folder/": 6}, "seen": {"folder/in": {"at": 2, "sha": "abcdef12"}},
-            "mail": ["assigned", "digest"]}
+            "mail": ["assigned", "digest"], "mentions": {"ok/page": {"at": 7, "by": "bob", "sha": "abcdef1"}}}
         assert self.kept(dest, "seen", "alice") == {"cdef0123": self.LOOK, "fedc3210": {"at": "2026-11-20T10:00"}}
         assert sorted(p.name for p in (dest / ".zone" / "watch").iterdir()) == ["alice.json"]
         assert sorted(p.name for p in (dest / ".zone" / "seen").iterdir()) == ["alice.json"]

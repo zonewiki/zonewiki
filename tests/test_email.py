@@ -404,7 +404,9 @@ class TestAViewersMorningsMail:
         login(client, "carol")                                   # a viewer
         body = client.get("/notifications", headers=HOST).get_data(as_text=True)
         assert "<h2>Mail me when</h2>" in body and 'name="mail" value="digest">' in body
-        assert body.count('name="mail"') == 1 and "<legend>Tasks</legend>" not in body   # nothing about tasks
+        # A mention on a page and the morning's mail: nothing about tasks.
+        assert re.findall(r'name="mail" value="(\w+)"', body) == ["mentioned", "digest"] and "<legend>Tasks</legend>" not in body
+        assert "someone mentions me (@name) on a page</span>" in body
         head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=git_wiki_dir, capture_output=True, text=True, env=settings.GIT_ENV).stdout
         resp = client.post("/notifications", data={"mail": ["digest", "assigned"]}, headers=HOST)
         assert resp.status_code == 303 and resp.headers["Location"] == "/notifications?done=saved"

@@ -291,6 +291,9 @@ An assistant's change is marked after its message, `(by alice through Claude)`, 
 Without git, a tool error.
 A page that isn't there (deleted) is named as `read_guides` names a page not yet written (`pageOrSeenSlug`): it asks only that the asker may see it, so a viewer and a connection that only reads read a deleted page's history too; one in a place they don't see is refused as a write there is, saying nothing of whether it was ever there.
 
+Without a `slug` the answer starts with **the pages that mention the user** and that they haven't opened since, each with who wrote it and when ("Pages that mention the user (@bob), not opened by them since: notes/standup (by alice, 2026-11-26 21:40)"), where there are any: what their Updates says (Mentions on pages in `docs/spec/navigation.md`).
+The assistant reading such a page is no look of its user's: the mention stays until they open it.
+
 #### `zone_help`
 
 Zonewiki's own documentation (`go/manual.go`), so the model answers how-to questions about Zonewiki (how to rename a task list's tabs, a setting, the query syntax) from the docs instead of guessing.

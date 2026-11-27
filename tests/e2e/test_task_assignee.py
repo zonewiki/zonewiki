@@ -529,10 +529,11 @@ def test_notifications_turn_the_mails_on(page, wiki, monkeypatch):
     expect(page.locator(".settings-tabs [aria-current=page]")).to_have_text("Notifications")
     expect(page.locator(".email-state")).to_have_text("alice@example.org is confirmed: Zonewiki mails you there.")
     form = page.locator(".notify-form")
-    expect(form.locator("legend")).to_have_text(["Tasks", "Each morning"])
+    expect(form.locator("legend")).to_have_text(["Mentions", "Tasks", "Each morning"])
     expect(form.locator(".notify-check")).to_have_text(
-        ["a task is given to me", "someone mentions me (@name)", "someone comments on a task I have, gave or follow",
-         "the day starts: what is new on my tasks, which pages I watch changed, and what is due today"])
+        ["someone mentions me (@name), on a page or in a task", "a task is given to me",
+         "someone comments on a task I have, gave or follow",
+         "the day starts: what is new on my tasks, which pages mention me, which pages I watch changed, and what is due today"])
     boxes = form.locator("[name=mail]")
     for i in range(4):
         expect(boxes.nth(i)).not_to_be_checked()
@@ -1378,3 +1379,55 @@ def test_follow_a_task_and_its_news_is_under_updates(alice, new_page):
     expect(alice.get_by_role("menuitem", name="Follow", exact=True)).to_have_count(0)
     alice.get_by_role("menuitem", name="Edit…").click()
     expect(alice.locator("#task-edit-follow")).to_be_hidden()
+
+
+def test_updates_has_the_pages_that_mention_you(alice, new_page):
+    """bob writes @alice on a page: the bell counts it, Updates lists it
+    above the tasks, and the row leads to the page, which reads it. Mark
+    all read reads the mentions and the tasks' news together."""
+    bob = new_page()
+    bob.request.post("/login", form={"username": "bob", "password": "pw"})
+    for slug in ("roadmap", "minutes"):
+        assert bob.request.post(f"/edit/{slug}", form={"content": f"# {slug.title()}\n\nAsk @alice about it.\n"}).ok
+    assert bob.request.post("/api/tasks", data={"title": "From bob", "list": "team", "assignee": "alice"}).ok
+    alice.goto("/")
+    expect(alice.locator(".top-updates-count")).to_have_text("3")          # two pages and a task
+    alice.locator(".top-updates").click()
+    expect(alice.locator(".updates-section h2")).to_have_text(["Mentions on pages", "Tasks"])
+    rows = alice.locator(".updates-mention")
+    expect(rows.locator(".updates-mention-page")).to_have_text(["Minutes", "Roadmap"], use_inner_text=True)   # the latest first
+    expect(rows.first.locator(".updates-mention-what")).to_have_text("bob mentioned you")
+    expect(alice.locator(".task-item.task-update .task-title")).to_have_text(["From bob"])
+    # A row leads to the page, at the name: opened, it is read.
+    rows.locator(".updates-mention-page", has_text="Roadmap").click()
+    expect(alice).to_have_url(re.compile(r"/page/roadmap"))
+    expect(alice.locator(".top-updates-count")).to_have_text("2")
+    alice.go_back()
+    alice.reload()
+    expect(rows.locator(".updates-mention-page")).to_have_text(["Minutes"])
+    # Mark all read: the mention and the task, both dimmed and still there; the bell is quiet.
+    button = alice.locator("#updates-read-btn")
+    expect(button).to_be_visible()
+    button.click()
+    expect(alice.locator(".updates-mention.updates-read")).to_have_count(1)
+    expect(alice.locator(".task-item.task-read")).to_have_count(1)
+    expect(button).to_be_hidden()
+    expect(alice.locator(".top-updates-count")).to_be_hidden()
+    alice.reload()
+    expect(alice.locator(".updates-mention")).to_have_count(0)
+    expect(alice.locator(".updates-none")).to_contain_text("Nobody mentioned you on a page since you last looked.")
+
+
+def test_a_viewer_reads_the_mentions_of_them(alice, new_page):
+    """carol, a viewer, is named on a page: she has the bell and Updates, and
+    Mark all read is hers though she writes no task."""
+    assert alice.request.post("/edit/handbook", form={"content": "# Handbook\n\n@carol reads this.\n"}).ok
+    carol = new_page()
+    carol.request.post("/login", form={"username": "carol", "password": "pw"})
+    carol.goto("/updates")
+    expect(carol.locator(".updates-mention-page")).to_have_text(["Handbook"])
+    expect(carol.locator(".top-updates-count")).to_have_text("1")
+    carol.locator("#updates-read-btn").click()
+    expect(carol.locator(".updates-mention.updates-read")).to_have_count(1)
+    expect(carol.locator("#updates-read-btn")).to_be_hidden()
+    expect(carol.locator(".top-updates-count")).to_be_hidden()

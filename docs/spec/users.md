@@ -1089,10 +1089,10 @@ The page has your mail address at the top (Mail addresses, below) and under it *
 
 | Under | Box | The mail |
 |-------|-----|----------|
+| **Mentions** | someone mentions me (@name), on a page or in a task | Mentions on pages in `docs/spec/navigation.md`, Mail in `docs/spec/tasks.md` |
 | **Tasks** | a task is given to me | Mail in `docs/spec/tasks.md` |
-| | someone mentions me (@name) | there |
 | | someone comments on a task I have, gave or follow | there |
-| **Each morning** | the day starts: what is new on my tasks, which pages I watch changed, and what is due today | The morning's mail in `docs/spec/tasks.md`: one mail, and only on a morning that has something |
+| **Each morning** | the day starts: what is new on my tasks, which pages mention me, which pages I watch changed, and what is due today | The morning's mail in `docs/spec/tasks.md`: one mail, and only on a morning that has something |
 
 **Save** keeps what is ticked and turns the rest off; the page says "Saved."
 No password is asked again: like watching a page, the choice is yours alone and changes nothing of the wiki.
@@ -1100,17 +1100,17 @@ No password is asked again: like watching a page, the choice is yours alone and 
 | | |
 |---|---|
 | Before your address is confirmed | The boxes are there and can be ticked; the page says "Nothing is sent until you have a confirmed mail address." |
-| A viewer | Has one box, **pages I watch changed: one mail in the morning** (A viewer's morning's mail in `docs/spec/tasks.md`): no task is given to a viewer |
+| A viewer | Has two boxes, both about pages: **someone mentions me (@name) on a page**, and under **Each morning** **pages I watch changed, or a page mentions me** (A viewer's morning's mail in `docs/spec/tasks.md`). No task is given to a viewer |
 | A shared account | Has the boxes of its role, but not a viewer's: several people sign in to it, and its address is the host's to set (Shared accounts, above) |
 | A disabled user, one waiting for approval | No boxes, and no mail |
 | Turning a mail off | Untick it and **Save**; every mail's last line names the page (its link, where the wiki knows its own address: `base-url`) |
 | My tasks' settings, a list's settings | Have nothing about mail: a mail is about you, not about a list |
 
-Not built: a mail for a mention on a page (`@name` is told in tasks only), and choosing per page or per list what is mailed.
+Not built: choosing per page or per list what is mailed.
 
 #### How the choices are kept
 
-`mailKinds` in `go/notify.go` names the kinds (`assigned`, `mentioned`, `comments`, `digest`), and `mailChoices` says which of them a user can have: all four for one a task can be given to, `digest` alone for a viewer who isn't a shared account, none for anyone else.
+`mailKinds` in `go/notify.go` names the kinds (`assigned`, `mentioned`, `comments`, `digest`), and `mailChoices` says which of them a user can have: all four for one a task can be given to, `mentioned` and `digest` for a viewer who isn't a shared account, none for anyone else.
 The kinds turned on are `"mail": ["assigned", "digest"]` in the user's watch file, `.zone/watch/<user>.json`, beside what they watch (Watching pages in `docs/spec/navigation.md`): theirs alone, out of git, the same for a viewer as for an editor (`setMails`; a file with no watch and no mail is removed).
 `mails` is the one question every mail asks before it goes out: the deployment sends mail, the user has a confirmed address, the kind is one of theirs to have, and they turned it on.
 So a viewer made an editor keeps the morning's mail and can tick the others, and an editor made a viewer keeps the morning's mail alone, whatever their file still names.

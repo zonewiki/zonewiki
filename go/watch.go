@@ -8,6 +8,7 @@ package main
 
 import (
 	"encoding/json"
+	"maps"
 	"net/http"
 	"net/url"
 	"os"
@@ -33,6 +34,9 @@ type watched struct {
 	// on Settings, Notifications. Kept here, with what they watch: theirs
 	// alone, no commit, and a viewer's as anyone's.
 	Mail []string `json:"mail,omitempty"`
+	// Mentions: the pages that name the user since they last opened them
+	// (mentions.go), by slug.
+	Mentions map[string]pageMention `json:"mentions,omitempty"`
 }
 
 // seenAt: a commit a user has seen a page up to: its time (unix seconds)
@@ -86,14 +90,18 @@ func loadWatches() {
 			continue
 		}
 		w := &watched{}
-		if json.Unmarshal(raw, w) == nil && (len(w.Watch) > 0 || len(w.Mail) > 0) {
+		if json.Unmarshal(raw, w) == nil && !w.empty() {
 			watchStore.by[user] = w
 		}
 	}
 }
 
+// empty: the file holds nothing: no watch, no mail turned on, no mention.
+func (w watched) empty() bool { return len(w.Watch) == 0 && len(w.Mail) == 0 && len(w.Mentions) == 0 }
+
 func (w watched) clone() watched {
-	out := watched{Watch: make(map[string]int64, len(w.Watch)), Seen: make(map[string]seenAt, len(w.Seen)), Mail: slices.Clone(w.Mail)}
+	out := watched{Watch: make(map[string]int64, len(w.Watch)), Seen: make(map[string]seenAt, len(w.Seen)), Mail: slices.Clone(w.Mail),
+		Mentions: maps.Clone(w.Mentions)}
 	for k, v := range w.Watch {
 		out.Watch[k] = v
 	}
@@ -129,8 +137,8 @@ func watchers() []string {
 }
 
 // changeWatches changes user's watches under the store's lock and writes
-// their file (none for one who watches nothing any more and has no mail
-// turned on). change says
+// their file (none for one who watches nothing any more, has no mail
+// turned on and no mention unread). change says
 // whether it changed anything.
 func changeWatches(user string, change func(w *watched) bool) {
 	path := watchPath(user)
@@ -144,6 +152,9 @@ func changeWatches(user string, change func(w *watched) bool) {
 	if w == nil {
 		w = &watched{Watch: map[string]int64{}}
 	}
+	if w.Watch == nil { // a file with a mail turned on or a mention alone
+		w.Watch = map[string]int64{}
+	}
 	if w.Seen == nil {
 		w.Seen = map[string]seenAt{}
 	}
@@ -156,7 +167,7 @@ func changeWatches(user string, change func(w *watched) bool) {
 		}
 	}
 	var err error
-	if len(w.Watch) == 0 && len(w.Mail) == 0 {
+	if w.empty() {
 		delete(watchStore.by, user)
 		if err = os.Remove(path); os.IsNotExist(err) {
 			err = nil
@@ -378,6 +389,7 @@ func setWatch(user asker, key string, on bool) {
 // diff of its last change): its news is read. Nothing is written for a
 // page without news for them.
 func lookedAt(rq *Req, slug string) {
+	readMention(rq.who().Name, slug, false) // and what named them there
 	c, ok := watchNews(rq)[slug]
 	if !ok {
 		return

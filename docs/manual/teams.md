@@ -33,8 +33,9 @@ Zonewiki mails you only what you ask for, and only at an address you confirmed.
 Where your wiki sends mail, open the user menu, **Settings**, then the **Notifications** tab.
 Under **Mail me when**, tick what you want and click **Save**:
 
-- **Tasks**: a task is given to me, someone mentions me (@name), someone comments on a task I have, gave or follow ([News about your tasks](tasks.md#news-about-your-tasks)).
-- **Each morning**: one mail when the day starts, with what is new on your tasks, which of [the pages you watch](history.md#watching-pages) changed, and what is due today.
+- **Mentions**: someone mentions me (@name), on a page or in a task ([Mentioning someone](writing.md#mentioning-someone)).
+- **Tasks**: a task is given to me, someone comments on a task I have, gave or follow ([News about your tasks](tasks.md#news-about-your-tasks)).
+- **Each morning**: one mail when the day starts, with what is new on your tasks, which pages mention you, which of [the pages you watch](history.md#watching-pages) changed, and what is due today.
   A morning with nothing new sends nothing.
 
 None is on until you tick it, and nothing is sent until you have a mail address you confirmed.
@@ -234,7 +235,7 @@ Each user has a role:
 | viewer | read everything shared, and change nothing, not even private pages or notes |
 
 A viewer sees no Edit button, no Private or Notes, and no New task.
-A viewer can still watch pages, and have a mail each morning of those that changed: **Settings**, **Notifications**.
+A viewer can still watch pages, and have a mail each morning of those that changed, and be told when a page mentions them: **Settings**, **Notifications**.
 Someone who needs notes or tasks of their own should be an editor.
 
 An admin is not a superuser.

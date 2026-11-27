@@ -213,6 +213,18 @@ var commitMu sync.Mutex
 // as written, in the Uncommitted list, and their drafts keep their
 // authors, so a later commit still names them.
 func gitCommit(user, message string, paths ...string) error {
+	return commitPaths(user, message, true, paths...)
+}
+
+// gitCommitQuiet: gitCommit for a write that tells nobody of the names its
+// pages hold (mentions.go): an import brings text written elsewhere.
+func gitCommitQuiet(user, message string, paths ...string) error {
+	return commitPaths(user, message, false, paths...)
+}
+
+// commitPaths: gitCommit; tells: who the commit's pages name anew is told
+// (tellMentions).
+func commitPaths(user, message string, tells bool, paths ...string) error {
 	if !cfg.GitEnabled {
 		// No history: a write still counts as one (usage.go), by its paths.
 		var rels []string
@@ -291,6 +303,12 @@ func gitCommit(user, message string, paths ...string) error {
 		forgetDrafts(rels...)
 		return nil
 	}
+	// Who the pages named before, for who is named anew (mentions.go).
+	var named map[string]string
+	var before []string
+	if tells {
+		named, before, tells = mentionsBefore(user, changed)
+	}
 	args := []string{"--literal-pathspecs", "commit", "-m", message}
 	if user == visitor {
 		user = visitorAuthor // a public wiki's visitor has no name
@@ -307,8 +325,13 @@ func gitCommit(user, message string, paths ...string) error {
 	packSoon()
 	// The commit it made ("[main 3b1b793] Update task"), for the mark of
 	// the task files (tasksetup.go).
+	sha := ""
 	if m := committedRE.FindStringSubmatch(r.Stdout); m != nil {
-		noteTaskCommit(changed, m[1])
+		sha = m[1]
+		noteTaskCommit(changed, sha)
+	}
+	if tells {
+		tellMentions(user, sha, named, before)
 	}
 	return nil
 }

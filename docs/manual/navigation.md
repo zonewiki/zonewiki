@@ -75,7 +75,11 @@ Nothing shows when there's nothing to say.
 ## Updates
 
 In a wiki with users, the **bell** at the top right, beside the search, says how many things are new for you, on every page.
-Click it to open **Updates**, the page that lists them: under **Tasks**, every task with news, such as one given to you, a comment or a mention ([News about your tasks](tasks.md#news-about-your-tasks)).
+Click it to open **Updates**, the page that lists them:
+
+- **Mentions on pages**: the pages where someone wrote your name ([Mentioning someone](writing.md#mentioning-someone)). Click one to go to the place.
+- **Tasks**: every task with news, such as one given to you, a comment or a mention ([News about your tasks](tasks.md#news-about-your-tasks)).
+
 Opening something marks it read, and **Mark all read** beside the heading clears everything.
 
 The Tasks pill goes to **My tasks**: your own tasks, and the shared ones assigned to you.

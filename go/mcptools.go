@@ -462,6 +462,16 @@ func recentChanges(of changesOf, limit int, user asker) string {
 	if len(pending) > 0 {
 		out = append(out, "Not committed yet (edited in the browser or on disk): "+strings.Join(pending, ", "))
 	}
+	// The pages that mention the user and that they haven't opened since
+	// (mentions.go): what their Updates says, for an assistant asked what
+	// is new. Its reading the page is no look of theirs.
+	if mentions := mentionsFor(user); len(mentions) > 0 && under == "" {
+		var named []string
+		for _, m := range mentions {
+			named = append(named, m.Slug+" (by "+m.By+", "+m.At.In(zone()).Format("2006-01-02 15:04")+")")
+		}
+		out = append(out, "Pages that mention the user (@"+user.Name+"), not opened by them since: "+strings.Join(named, ", "))
+	}
 	where, when := underWhere(under), ""
 	switch {
 	case of.Via != "":

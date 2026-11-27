@@ -2984,3 +2984,16 @@ a.external-image::before { content: "🖼 "; }
 .updates-section { margin-top: 1.5rem; }
 .updates-section > h2 { margin: 0 0 .15rem; font-size: 1.1rem; }
 .updates-section-line { margin: 0 0 .6rem; font-size: .85rem; color: var(--muted); }
+.updates-page ul.updates-list { list-style: none; margin: .4rem 0 0; padding: 0; display: flex; flex-direction: column; gap: .35rem; }
+.updates-page li.updates-mention {
+  margin: 0;
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: .15rem .6rem;
+  padding: .5rem .75rem; border: 1px solid var(--border); border-radius: 6px; background: var(--bg);
+}
+.updates-page a.updates-mention-page { font-weight: 600; color: var(--fg); text-decoration: none; }
+.updates-page a.updates-mention-page:hover { text-decoration: underline; }
+.updates-mention-what { font-size: .85rem; color: var(--link); }
+.updates-mention-what strong { font-weight: 600; }
+.updates-mention-when { font-size: .85rem; color: var(--muted); }
+.updates-mention.updates-read { opacity: .55; }
+.updates-mention.updates-read .updates-mention-what { color: var(--muted); }

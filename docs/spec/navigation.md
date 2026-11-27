@@ -359,15 +359,42 @@ With users such a view has no Sign out: it is in the menu of the page one comes 
 | The bell | in the top bar, beside the search, on every page and on a phone: `.top-updates`, a link to `/updates` |
 | Its number | how many things are new for you (`updatesCount`), on the bell's corner (`.top-updates-count`); no number when there is nothing, and the bell stays |
 | The page | a section a kind of news, each with a line that says what it holds |
+| **Mentions on pages** | the pages that name you since you last opened them, the latest first: the page, who wrote it, when. A row leads to the page, at the name (Mentions on pages, below) |
 | **Tasks** | the tasks with news for you: the task app in its Updates mode, embedded as a page embeds a task list, so a card is opened, commented and ticked off as anywhere (Updates in `docs/spec/tasks.md`: what a card says, reading one, a task read) |
-| **Mark all read** | beside the heading, while there is news: everything read at once |
+| **Mark all read** | beside the heading, while there is news: everything read at once, the mentions and the tasks' news. What was read stays where it was, dimmed, until you leave the page |
 | Who has it | with users, whoever is signed in, a viewer too; not in sharing mode (what others wrote to you isn't shown), not a visitor. Without it `/updates` goes to the home page and there is no bell |
 
 It is grouped by kind, not one list by time: a kind is read as a whole, as in the morning's mail.
 The list switcher of Tasks keeps its **Updates** entry, which leads here, and `/tasks?updates=1` redirects here.
 
-How: `go/updates.go` (`updatesPage`, `updatesCount`), `templates/updates.html`; the bell is the page shell's (`pageShell.Updates`, `partials/top_actions.html`), and its number comes with the Tasks counts every minute and after a write (`updates` in `GET /api/tasks/due-count`, `refreshDueBadge` in `js/chrome.js`).
+How: `go/updates.go` (`updatesPage`, `updatesCount`: the tasks with news and the mentions together; `POST /updates/read` reads the mentions, `js/updates.js`), `templates/updates.html`; the bell is the page shell's (`pageShell.Updates`, `partials/top_actions.html`), and its number comes with the Tasks counts every minute and after a write (`updates` in `GET /api/tasks/due-count`, `refreshDueBadge` in `js/chrome.js`).
 Tests: `test_updates_is_a_page_with_the_tasks_that_have_news` in `tests/test_task_notify.py`, `tests/e2e/test_task_assignee.py`.
+
+## Mentions on pages
+
+Write `@name` on a page, and that user is told: on their Updates, with a number on their bell, by mail if they turned that on (**someone mentions me (@name)** on their Notifications tab: Notifications in `docs/spec/users.md`), and in their morning's mail (The morning's mail in `docs/spec/tasks.md`).
+The row and the mail lead to the page, at the name: the browser scrolls there and marks it.
+
+| | |
+|---|---|
+| Who can be named | a user who reads the page, a viewer too; not one who is disabled or waiting for approval, and never yourself |
+| On a private page, in a group's folder | only who sees it is told: nobody but you on your private page, a group's members on its pages. A name of someone who doesn't see the page is text, and says nothing to them or of them |
+| What is a name | `@` and a user's name, at the start of a word; not in code, not the `@` of a mail address (as in a task: Mentions in `docs/spec/tasks.md`) |
+| When it is told | when the page is committed with the name in it: the editor's **Done**, a section's edit, an assistant's write (told as its user's writing). Typing alone tells nobody: an auto-save isn't committed |
+| Once | a name the page had before tells nobody again, however the page changes; taken out and written again, it does |
+| Read | by opening the page, or **Mark all read** on Updates. An assistant reading the page for you is no look of yours |
+| What tells nobody | an import of notes (its text was written elsewhere), a file changed on disk or pushed with git (Zonewiki didn't make the commit), a change of more than 20 pages at once (a folder moved, a tag renamed, a text replaced in many pages), a page that only moves |
+| A page deleted, moved or narrowed since | its mention shows nowhere |
+
+An assistant asked what is new is told too: `history` without a page names the pages that mention its user (`docs/spec/mcp.md`).
+Not built: completing a name while typing, the name as a chip in the page, and a mention in a note or a file's name.
+
+How: `go/mentions.go`.
+Every commit of pages goes through `gitCommit`, which asks before it commits who the changed pages named in `HEAD` (`mentionsBefore`: all of them together, so a page that moves names nobody anew) and afterwards who they name now (`tellMentions`); a name that is new, of a user who sees the page (`canSee`, asked as that user), is noted in their own file, `.zone/watch/<user>.json` (`mentions`, by the page's slug: when, by whom, the commit), beside what they watch: no commit, nothing in the page.
+Most commits read nothing more for it: only a page whose text has an `@` is compared.
+`gitCommitQuiet` is the commit that tells nobody (an import's, `pagesWrite.quiet`).
+`mentionsFor` is what every door shows: the mentions of pages that are there and that the user sees.
+Tests: `tests/test_page_mentions.py`, `TestTheMorningsMailHasTheMentions` in `go/digest_test.go`, `test_updates_has_the_pages_that_mention_you` in `tests/e2e/test_task_assignee.py`.
 
 ## Watching pages
 
@@ -412,7 +439,7 @@ What an assistant reads for you is no look of yours.
 
 ### How watching works
 
-What you watch is yours, not the page's (`go/watch.go`): `.zone/watch/<user>.json` (with the kinds of mail you turned on: Notifications in `docs/spec/users.md`), out of git, written owner-only, gone with the last watch.
+What you watch is yours, not the page's (`go/watch.go`): `.zone/watch/<user>.json` (with the kinds of mail you turned on, Notifications in `docs/spec/users.md`, and the pages that mention you, Mentions on pages above), out of git, written owner-only, gone with the last watch.
 
 ```json
 {"watch": {"roadmap": 1764061200, "projects/": 1764061260},

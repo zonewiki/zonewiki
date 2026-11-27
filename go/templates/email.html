@@ -63,19 +63,25 @@
 {{- if .Choices}}
 <h2>Mail me when</h2>
 <form method="post" action="/notifications" class="notify-form">
+  {{- with .Has "mentioned"}}
+  <fieldset>
+    <legend>Mentions</legend>
+    <label class="notify-check"><input type="checkbox" name="mail" value="mentioned"{{if .On}} checked{{end}}> <span>someone mentions me (@name){{if $.Viewer}} on a page{{else}}, on a page or in a task{{end}}</span></label>
+  </fieldset>
+  {{- end}}
   {{- if .Viewer}}
   {{- with .Has "digest"}}
-  <label class="notify-check"><input type="checkbox" name="mail" value="digest"{{if .On}} checked{{end}}> <span><a href="/changes?watched=1">pages I watch</a> changed: one mail in the morning</span></label>
-  <p class="notify-hint">A morning with no change sends nothing.</p>
+  <fieldset>
+    <legend>Each morning</legend>
+    <label class="notify-check"><input type="checkbox" name="mail" value="digest"{{if .On}} checked{{end}}> <span><a href="/changes?watched=1">pages I watch</a> changed, or a page mentions me</span></label>
+    <p class="notify-hint">One mail, and only on a morning that has something.</p>
+  </fieldset>
   {{- end}}
   {{- else}}
   <fieldset>
     <legend>Tasks</legend>
     {{- with .Has "assigned"}}
     <label class="notify-check"><input type="checkbox" name="mail" value="assigned"{{if .On}} checked{{end}}> <span>a task is given to me</span></label>
-    {{- end}}
-    {{- with .Has "mentioned"}}
-    <label class="notify-check"><input type="checkbox" name="mail" value="mentioned"{{if .On}} checked{{end}}> <span>someone mentions me (@name)</span></label>
     {{- end}}
     {{- with .Has "comments"}}
     <label class="notify-check"><input type="checkbox" name="mail" value="comments"{{if .On}} checked{{end}}> <span>someone comments on a task I have, gave or follow</span></label>
@@ -84,7 +90,7 @@
   {{- with .Has "digest"}}
   <fieldset>
     <legend>Each morning</legend>
-    <label class="notify-check"><input type="checkbox" name="mail" value="digest"{{if .On}} checked{{end}}> <span>the day starts: what is new on my tasks, which <a href="/changes?watched=1">pages I watch</a> changed, and what is due today</span></label>
+    <label class="notify-check"><input type="checkbox" name="mail" value="digest"{{if .On}} checked{{end}}> <span>the day starts: what is new on my tasks, which pages mention me, which <a href="/changes?watched=1">pages I watch</a> changed, and what is due today</span></label>
     <p class="notify-hint">One mail, and only on a morning that has something.</p>
   </fieldset>
   {{- end}}

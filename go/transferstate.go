@@ -146,7 +146,8 @@ var (
 
 // importedWatch: a watch file as an import writes it, from an archive's
 // bytes: the watches that could be one, what was seen of those, and the
-// kinds of mail Zonewiki knows, in its order. "" for nothing to keep.
+// kinds of mail Zonewiki knows, in its order, and the mentions unread, each
+// of what could be a page, by what could be a user. "" for nothing to keep.
 // (Which kinds a user may have is asked when a mail goes out: mails.)
 func importedWatch(raw []byte) string {
 	var in watched
@@ -172,7 +173,18 @@ func importedWatch(raw []byte) string {
 			out.Mail = append(out.Mail, kind)
 		}
 	}
-	if len(out.Watch) == 0 && len(out.Mail) == 0 {
+	for _, slug := range slices.Sorted(maps.Keys(in.Mentions)) {
+		m := in.Mentions[slug]
+		if !watchKeyOK(slug) || strings.HasSuffix(slug, "/") || m.At <= 0 || !userNameRE.MatchString(m.By) ||
+			m.Sha != "" && !shaRE.MatchString(m.Sha) || len(out.Mentions) >= importedWatches {
+			continue
+		}
+		if out.Mentions == nil {
+			out.Mentions = map[string]pageMention{}
+		}
+		out.Mentions[slug] = m
+	}
+	if out.empty() {
 		return ""
 	}
 	text, err := json.MarshalIndent(out, "", "  ")

@@ -1,16 +1,31 @@
 {{- /* /updates: Updates (updates.go; Updates in docs/spec/navigation.md):
-    what is new for whoever is signed in, a section a kind. Tasks: the task
-    app in its Updates mode, as a page embeds it (the cards, what happened on
-    each, Mark read). Mark all read is the page's, beside its heading:
-    js/taskrender.js shows it while a task has news and marks them read. */ -}}
+    what is new for whoever is signed in, a section a kind. Mentions on
+    pages: a row a page that names the user since they last opened it
+    (mentions.go), which leads to the place. Tasks: the task app in its
+    Updates mode, as a page embeds it (the cards, what happened on each,
+    Mark read). Mark all read is the page's, beside its heading, for both:
+    js/updates.js reads the mentions, js/taskrender.js the tasks' news, and
+    it shows while either has some. */ -}}
 {{define "body"}}
 {{.BreadcrumbHTML}}
 <div class="sheet updates-page">
 <header class="page-header"><h1>Updates</h1>
-{{- if .Write}}<div class="page-header-actions"><button type="button" class="btn" id="updates-read-btn" title="Mark every update as read" hidden>Mark all read</button></div>{{end -}}
+<div class="page-header-actions"><button type="button" class="btn" id="updates-read-btn" title="Mark every update as read"{{if not .Mentions}} hidden{{end}}>Mark all read</button></div>
 </header>
 <article class="page-content">
 <p class="tasks-list-home tasks-updates-line">What is new for you. Opening something marks it read.</p>
+<section class="updates-section updates-mentions" aria-labelledby="updates-mentions-h">
+<h2 id="updates-mentions-h">Mentions on pages</h2>
+{{- if .Mentions}}
+<ul class="updates-list">
+{{- range .Mentions}}
+<li class="updates-mention"><a class="updates-mention-page" href="{{.Href}}">{{.Title}}</a> <span class="updates-mention-what"><strong>{{.By}}</strong> mentioned you</span> <time class="updates-mention-when" datetime="{{.At.Format "2006-01-02T15:04:05Z07:00"}}">{{.At.Format "Jan 2 15:04"}}</time></li>
+{{- end}}
+</ul>
+{{- else}}
+<p class="updates-section-line updates-none">Nobody mentioned you on a page since you last looked. Write @name on a page to tell someone.</p>
+{{- end}}
+</section>
 <section class="updates-section updates-tasks" aria-labelledby="updates-tasks-h">
 <h2 id="updates-tasks-h">Tasks</h2>
 <p class="updates-section-line">What others did on your tasks: one given to you, a comment, a mention, one closed.</p>

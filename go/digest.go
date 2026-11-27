@@ -237,6 +237,10 @@ type digest struct {
 	// still unread.
 	Updates      []digestTask
 	OlderUpdates int
+	// Mentions: the pages that mention the user since the last mail and
+	// that they haven't opened; OlderMentions: how many more from before it.
+	Mentions      []shownMention
+	OlderMentions int
 	// Pages: the watched pages changed since the last mail that have news;
 	// OlderPages: how many more have news from before it.
 	Pages      []digestPage
@@ -256,7 +260,7 @@ type digestPage struct{ Slug, By string }
 // is only overdue, or was told before and not read, sends no mail of its
 // own: it would be the same mail every morning.
 func (d digest) worthSending() bool {
-	return len(d.Updates)+len(d.Pages)+len(d.DueToday) > 0
+	return len(d.Updates)+len(d.Mentions)+len(d.Pages)+len(d.DueToday) > 0
 }
 
 // digestFor: the morning's mail for the user name at t, with what is new
@@ -294,6 +298,14 @@ func digestFor(name string, since, t time.Time) digest {
 	sort.SliceStable(updates, func(i, j int) bool { return updates[i].at > updates[j].at })
 	for _, u := range updates {
 		d.Updates = append(d.Updates, u.digestTask)
+	}
+	// Mentions on pages, the latest first.
+	for _, m := range mentionsFor(user) {
+		if m.At.After(since) {
+			d.Mentions = append(d.Mentions, m)
+		} else {
+			d.OlderMentions++
+		}
 	}
 	// Watched pages, A–Z.
 	news := watchNewsFor(user, nil)
@@ -349,6 +361,7 @@ func (d digest) mail(s *Settings) (subject, body string) {
 		}
 	}
 	count(len(d.Updates), "update", "updates")
+	count(len(d.Mentions), "mention", "mentions")
 	count(len(d.Pages), "watched page changed", "watched pages changed")
 	count(len(d.DueToday), "task due today", "tasks due today")
 	subject = appName + ": " + strings.Join(parts, ", ")
@@ -384,6 +397,23 @@ func (d digest) mail(s *Settings) (subject, body string) {
 	if len(d.Updates) > 0 && s.BaseURL != "" {
 		b.WriteString("\n  All of them: " + s.BaseURL + updatesHref + "\n")
 	}
+	if len(d.Mentions) > 0 {
+		b.WriteString("\nMENTIONS\n")
+		for i, m := range d.Mentions {
+			if i == digestMost {
+				fmt.Fprintf(&b, "\n  and %d more\n", len(d.Mentions)-i)
+				break
+			}
+			b.WriteString("\n  " + oneLine(m.Title) + "\n  " + m.By + " mentioned you\n")
+			link(m.Href)
+		}
+		if d.OlderMentions > 0 {
+			fmt.Fprintf(&b, "\n  and %d %s from before, not read yet\n", d.OlderMentions, plural(d.OlderMentions, "mention"))
+		}
+		if s.BaseURL != "" {
+			b.WriteString("\n  All of them: " + s.BaseURL + updatesHref + "\n")
+		}
+	}
 	if len(d.Pages) > 0 {
 		b.WriteString("\nPAGES YOU WATCH\n")
 		for i, p := range d.Pages {
@@ -411,7 +441,7 @@ func (d digest) mail(s *Settings) (subject, body string) {
 		b.WriteString("\n  Your tasks: " + s.BaseURL + mineHref + "\n")
 	}
 	if s.mayViewerDigest(d.user) {
-		b.WriteString(mailFooter(s, "on a morning when pages you watch changed"))
+		b.WriteString(mailFooter(s, "on a morning when pages you watch changed or a page mentions you"))
 	} else {
 		b.WriteString(mailFooter(s, "on a morning that has something new for you or due today"))
 	}

@@ -848,7 +848,7 @@ Zonewiki's own state, none of it in git (`.git/info/exclude` has `/.zone/*`, `ex
 - `config.lock`, `links.lock`, `grants.lock`, `removed-users.lock` — empty files the writers of those four lock (`lockFile`, flock), so two writers take turns
 - `usage/counts.json`, `usage/users.json` — how much the wiki is used, as counts a day for 8 weeks, and the day each user was last active (Usage in `docs/spec/users.md`); `counts.json` holds no name and is the one file here a host may read
 - `seen/<user>.json` — what each user has seen of the tasks' news (What you have seen, under News on your tasks in `docs/spec/tasks.md`)
-- `watch/<user>.json` — the pages and folders each user watches, what they have seen of them (Watching pages in `docs/spec/navigation.md`), and the kinds of mail they turned on (Notifications in `docs/spec/users.md`)
+- `watch/<user>.json` — the pages and folders each user watches, what they have seen of them (Watching pages in `docs/spec/navigation.md`), the kinds of mail they turned on (Notifications in `docs/spec/users.md`) and the pages that mention them (Mentions on pages in `docs/spec/navigation.md`)
 - `digest.json` — the last morning each user's mail was looked into, and up to when they were told what is new (The morning's mail in `docs/spec/tasks.md`)
 - `wake` — the next moment Zonewiki wants to be started for the morning's mail, one line in UTC; no file when nobody wants it (When to be started, above)
 - `unsaved-files.json` — who pasted the first file for a task not made yet (a new task's dialog before its first Save), whose those files are until then (A task's files in `docs/spec/tasks.md`)
@@ -968,7 +968,7 @@ Two folders of `.zone/` hold a file a user, with what is theirs alone and not in
 
 | In the file | Holds | |
 |---|---|---|
-| `.zone/watch/<user>.json` | the pages and folders they watch, what they have seen of them, the kinds of mail they turned on | Watching pages in `docs/spec/navigation.md`, Notifications in `docs/spec/users.md` |
+| `.zone/watch/<user>.json` | the pages and folders they watch, what they have seen of them, the kinds of mail they turned on, the pages that mention them | Watching pages and Mentions on pages in `docs/spec/navigation.md`, Notifications in `docs/spec/users.md` |
 | `.zone/seen/<user>.json` | the tasks whose news they have read | News on your tasks in `docs/spec/tasks.md` |
 
 So after a move a user watches what they watched, old news is not new again, and the mail they ticked is still ticked (it goes out once the address is confirmed where the wiki now is, if the import was made with `--users-only`).
@@ -981,7 +981,7 @@ An import doesn't copy such a file: it reads it and writes what it understood (`
 |---|---|
 | A file of a name that is no user's | passes it over |
 | A file that isn't JSON, or holds nothing to keep | passes it over: that user starts as new |
-| A watch that could be no page or folder (`..`, an empty part, a control character), a look at what could be no task, a kind of mail Zonewiki doesn't know, any other key | leaves it out, and keeps the rest |
+| A watch that could be no page or folder (`..`, an empty part, a control character), a mention of what could be no page or by what could be no user, a look at what could be no task, a kind of mail Zonewiki doesn't know, any other key | leaves it out, and keeps the rest |
 | More than 5,000 watches or looks in one file | keeps the first 5,000 |
 | A file over 1 MB | refuses the archive, as a settings file over 4 MB |
 | A link or a folder where a file should be, a file of another folder of `.zone/` | not unpacked |
