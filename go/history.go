@@ -15,6 +15,8 @@ func historyRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /page/_deleted", deletedPagesView)
 	mux.HandleFunc("GET /changes", changesView)
 	mux.HandleFunc("POST /changes/undo", writesPages(undoChangesRoute))
+	mux.HandleFunc("POST /watch", watchRoute)
+	mux.HandleFunc("POST /watch/read", watchReadRoute)
 	mux.HandleFunc("GET /history/{slug...}", historyView)
 	mux.HandleFunc("GET /revision/{rest...}", revisionView)
 	mux.HandleFunc("GET /diff/{rest...}", diffView)
@@ -266,6 +268,10 @@ func diffView(w http.ResponseWriter, r *http.Request) {
 	}
 	title := mdtext.SlugDisplayName(slug)
 	pageExists := exists(path)
+	// What the page's last change did is a look at the page as it is.
+	if lastCommitIs(slug, sha) {
+		lookedAt(rq, slug)
+	}
 	when, what := runePrefix(sha, 7), ""
 	if i >= 0 {
 		when, what = entries[i].Time, versionLabel(entries[i], entries)

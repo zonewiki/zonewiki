@@ -34,6 +34,7 @@ type Req struct {
 	pinnedDone bool
 	pinned     []ListInfo // the pinned lists (pinnedLists), once
 	counts     *TaskCounts
+	watchNews  *int       // watchCount, once
 	files      []PageFile // iterPages, once
 	stats      []pageStat // the same with their mtimes, once
 	slugs      map[string]bool

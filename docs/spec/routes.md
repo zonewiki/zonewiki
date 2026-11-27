@@ -88,8 +88,10 @@ A name in another place (who sees the page changes) comes back with `rename_ask`
 | GET    | `/revision/<slug>/<sha>` | A page as one save left it (read-only), with ← Older / Newer → and Restore |
 | GET    | `/diff/<slug>/<sha>`  | What one save changed in a page |
 | POST   | `/restore/<slug>/<sha>` | Restore a page to a prior version; creates a new commit |
-| GET    | `/changes`            | Changes: the wiki's commits, newest first, each as its reader may see it; `?user=`, `?assistant=1`, `?under=`, `?since=`, `?n=` (git only; see Version history) |
+| GET    | `/changes`            | Changes: the wiki's commits, newest first, each as its reader may see it; `?user=`, `?assistant=1`, `?under=`, `?since=`, `?watched=1`, `?n=` (git only; see Version history) |
 | POST   | `/changes/undo`       | Undo changes: `sha` (one, or several: an assistant's run of work), `back` (the list's address); see below |
+| POST   | `/watch`              | Watch a page (`page`) or a folder (`folder`), or with `on=0` no longer; back to `back`, else the page (with users; Watching pages in `docs/spec/navigation.md`) |
+| POST   | `/watch/read`         | Mark all read: every watched page's news is read; back to `back`, else the watched changes |
 | GET    | `/page/_deleted`      | Auto-generated list of pages deleted from git history, with one-click restore (git only) |
 | GET    | `/uncommitted`        | Uncommitted Changes: the files changed since their last commit that the user sees (git only; 404 without) |
 | GET    | `/diff-uncommitted/<slug>` | What a page's uncommitted change is, against its last commit (git only) |

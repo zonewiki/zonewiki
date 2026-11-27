@@ -71,7 +71,7 @@ func TestAnAssistantsCommitIsToldByItsTrailer(t *testing.T) {
 		{"Update p", "MCP token", "", "", true},
 		{"Update notes (MCP)", "", "", "", false},
 	}
-	entries := gitLogAll("", "", 4, nil, nil)
+	entries := gitLogAll("", nil, 4, nil, nil)
 	if len(entries) != 4 {
 		t.Fatalf("%d commits", len(entries))
 	}

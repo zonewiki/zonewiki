@@ -787,6 +787,7 @@ Zonewiki's own state, none of it in git (`.git/info/exclude` has `/.zone/*`, `ex
 - `config.lock`, `links.lock`, `grants.lock`, `removed-users.lock` — empty files the writers of those four lock (`lockFile`, flock), so two writers take turns
 - `usage/counts.json`, `usage/users.json` — how much the wiki is used, as counts a day for 8 weeks, and the day each user was last active (Usage in `docs/spec/users.md`); `counts.json` holds no name and is the one file here a host may read
 - `seen/<user>.json` — what each user has seen of the tasks' news (What you have seen, under News on your tasks in `docs/spec/tasks.md`)
+- `watch/<user>.json` — the pages and folders each user watches, and what they have seen of them (Watching pages in `docs/spec/navigation.md`)
 - `unsaved-files.json` — who pasted the first file for a task not made yet (a new task's dialog before its first Save), whose those files are until then (A task's files in `docs/spec/tasks.md`)
 - `drafts/<user>/` — an editor's text left in a conflict when its tab closed, for its user's next edit, 30 days at most (`docs/spec/editor.md`)
 - `tmp/` — a three-way merge's scratch files, removed after each merge
@@ -825,7 +826,7 @@ A change to what Zonewiki keeps in git that an older Zonewiki would misread rais
 Readers stay lenient all the same: the number says which steps Zonewiki ran, not that every file is as Zonewiki wrote it (a file edited by hand or pulled from elsewhere is read as before).
 The settings file and the rest of `.zone/` aren't covered: they are no wiki data (What is in .zone/, above).
 
-What holds users' words or secrets is written readable by Zonewiki's user alone (0600), whatever the umask: `config`, `secret_key`, `signed-out`, `links`, `grants`, `seen/`, `usage/users.json`, `unsaved-files.json`, `drafts/`, the index files (the groups' in `index/groups/` among them, with their pages' words), `index/tasks/` (private tasks' titles among them), `embeddings.json` (every page's slug) and `queries.jsonl` (every user's queries and what they found) (`atomicfile.WriteOwnerOnly`; a file from before is made so at its next write).
+What holds users' words or secrets is written readable by Zonewiki's user alone (0600), whatever the umask: `config`, `secret_key`, `signed-out`, `links`, `grants`, `seen/`, `watch/`, `usage/users.json`, `unsaved-files.json`, `drafts/`, the index files (the groups' in `index/groups/` among them, with their pages' words), `index/tasks/` (private tasks' titles among them), `embeddings.json` (every page's slug) and `queries.jsonl` (every user's queries and what they found) (`atomicfile.WriteOwnerOnly`; a file from before is made so at its next write).
 The pages themselves, in the wiki, keep the umask's mode, as a file made in an editor does.
 
 ### A git remote
@@ -853,7 +854,7 @@ Zonewiki writes each file whole (a reader never sees half of one), but a copy ta
   They hold password and token hashes and keys: keep the backup as confidential as the wiki (Before you open it up in `docs/spec/security.md`).
 - **What can be rebuilt, and needn't be backed up**: `.zone/index/` (Zonewiki builds the search indexes again when they are first needed, which takes a while on a big wiki, and with semantic search embeds every section and task again in the background, which takes longer),
   `.zone/tmp/`, the lock files and the mark `tasks-checked` (a start without it looks the task files through again and changes nothing that is right).
-  Lost, `seen/` shows each user the tasks' news again, `drafts/` loses only a text left in a conflict, `unsaved-files.json` the files pasted in a dialog not saved yet to their uploader (no one opens them), and `queries.jsonl` is a log.
+  Lost, `seen/` shows each user the tasks' news again, `watch/` leaves nobody watching a page, `drafts/` loses only a text left in a conflict, `unsaved-files.json` the files pasted in a dialog not saved yet to their uploader (no one opens them), and `queries.jsonl` is a log.
 - **Restoring**: put the folder back where `ZONE_DATA` points and start Zonewiki;
   the files must belong to the user Zonewiki runs as, and `.zone/config` and `secret_key` should stay readable by it alone (0600: Zonewiki warns in its log when others may read the settings file).
 
@@ -906,7 +907,7 @@ Unpacked, it is a wiki's folder: whoever leaves Zonewiki has the pages as files 
 | `.zone/links` | open invite and reset links don't work |
 | `.zone/index/` | search's indexes are built again when first needed |
 | `.zone/usage/` | the Usage page counts from nothing |
-| `.zone/seen/`, `drafts/`, `removed-users`, `queries.jsonl` | the tasks' news shows again; a text left in a conflict is gone; a removed user's name is still not a stranger's to sign up with where a private folder, a commit or a task names it (Sign-up in `docs/spec/users.md`) |
+| `.zone/seen/`, `watch/`, `drafts/`, `removed-users`, `queries.jsonl` | the tasks' news shows again; nobody watches a page until they watch it again; a text left in a conflict is gone; a removed user's name is still not a stranger's to sign up with where a private folder, a commit or a task names it (Sign-up in `docs/spec/users.md`) |
 | What isn't committed | lost: see Text that is not committed, below |
 | The host's settings: `hosts`, `base-url`, `git-remote`, `trusted-proxies`, `storage-max` | set them again where they are needed (`zonewiki config set`); the import names the ones it left out |
 

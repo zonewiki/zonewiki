@@ -255,7 +255,7 @@ func orList(items []string) string {
 // (user add, an invite).
 func userNameHasHistory(name string) bool {
 	if wasRemoved(name) || exists(filepath.Join(cfg.Data, privateDir, name)) ||
-		exists(filepath.Join(leftDraftsDir(), name)) || exists(seenPath(name)) || namedInTasks(name) {
+		exists(filepath.Join(leftDraftsDir(), name)) || exists(seenPath(name)) || exists(watchPath(name)) || namedInTasks(name) {
 		return true
 	}
 	if !cfg.GitEnabled {

@@ -154,6 +154,7 @@ An assistant has a set of tools, which it picks by itself from what you ask.
 | Notes | Write a note, find notes, file a note into the wiki or onto a page. |
 | Files | Look at an uploaded image or text file, upload a file. |
 | History | See recent changes or a page's versions, restore an old version or a deleted page, undo changes. |
+| Watching | Watch a page or a folder for you, and tell you what changed on the pages you watch. |
 | Guides | Read [your guides](wiki-guide.md) before it writes, so it follows how your wiki is kept. |
 | Zonewiki's own help | Look things up in Zonewiki's documentation. |
 

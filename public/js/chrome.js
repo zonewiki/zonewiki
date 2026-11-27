@@ -308,6 +308,11 @@ export async function refreshDueBadge(poll = false) {
       showCount(a.querySelector('.module-new'), c.new || 0);
       a.title = taskCountsTitle(c);
     });
+    // The watched pages with news: the menu's entry says how many, its
+    // button that there are some.
+    const watched = c.watched || 0;
+    document.querySelectorAll('.menu-watched .menu-count').forEach(el => showCount(el, watched));
+    document.querySelectorAll('.top-user-new').forEach(el => { el.hidden = !watched; });
     // The line that leads to Updates (My tasks: templates/tasks_page.html).
     const note = document.querySelector('.tasks-updates-note');
     if (note) {

@@ -2,7 +2,7 @@
 
 Part of Zonewiki's spec (see `AGENTS.md` for the index).
 
-How you get around Zonewiki: the search modal and its page list, Deleted Pages, the modules and the top of every page (the module switcher, the top actions, the phones' tab bar, the Tasks counts, the status badges), sharing mode, notes, keyboard shortcuts and presentation mode.
+How you get around Zonewiki: the search modal and its page list, Deleted Pages, the modules and the top of every page (the module switcher, the top actions, the phones' tab bar, the Tasks counts, the status badges), watching pages, sharing mode, notes, keyboard shortcuts and presentation mode.
 
 ## Page List
 
@@ -160,6 +160,7 @@ Your other lists and all tasks are one click from there, in the task app's **lis
 Who is signed in,
 **Settings** (the settings pages, below),
 **Admin** (admins; Managing users in `docs/spec/users.md`),
+**Watched pages** (with users: the changes to what you watch, with how many pages have news; Watching pages, below),
 **Sharing mode** (`.menu-sharing`, **Turn sharing mode off** while it is on; desktop only, see Sharing mode),
 **Help** (the manual, `/help`: Help in `docs/spec/routes.md`) and Sign out are in the **user menu**,
 opened by the **user button** at the top right, a round initial, on every screen.
@@ -322,6 +323,75 @@ On a phone such a view keeps a row of its own for them above its content (the bo
 With users such a view has no Sign out: it is in the menu of the page one comes back to.
 
 ---
+
+## Watching pages
+
+You watch a page, or a folder, and Zonewiki tells you when someone else changes it (with users, and with git: the news is the history's).
+It is the pages' side of what following is for a task (Following a task in `docs/spec/tasks.md`): only yourself, nothing watches by itself, and you are told only of what you see.
+
+### Watching a page or a folder
+
+| To | Do |
+|----|----|
+| watch a page | **Watch** in the page's ⋯ menu (**Unwatch** the other way) |
+| watch a folder | open its changes (**In the folder** on Changes, `/changes?under=<folder>`) and press **Watch this folder**: every page in it and in its folders, those made later too |
+| see what you watch | **Watched pages** in the user menu: the list **You watch N things** above the changes, each with **Unwatch** |
+
+A page in a watched folder says so in its menu, **Watched with projects/**, which leads to the list where the folder is unwatched.
+A note has no Watch: it is yours alone.
+An assistant watches for its user with `watch_page` (`docs/spec/mcp.md`).
+
+### What is news
+
+A watched page has news for you when its last change is someone else's, made since you began to watch and since you last looked at the page.
+
+| | |
+|---|---|
+| Your own change | no news, and it takes away what was: you have seen the page you changed |
+| Your assistant's change | news: what an assistant did for you is seen (its commit says so by its `Assistant` trailer) |
+| A rename, a move, a restore, an undo | a change like any other, by who made it |
+| A change not committed yet | none until it is committed: the news is the history's |
+| A page you no longer see | none: not its changes, not that it moved there (`canSee`) |
+| Sharing mode | no count and no marks, as Updates isn't shown |
+
+**Looking reads it**: opening the page, opening what its last change did (its diff, where Changes' rows lead), or **Mark all read** on the watched changes.
+What an assistant reads for you is no look of yours.
+
+### Where the news shows
+
+- **The user button** at the top right has a dot (`.top-user-new`) while a watched page has news, on every page and on a phone, and **Watched pages** in its menu says how many pages (`.menu-count`).
+- **Watched pages** opens Changes with **Only what I watch** ticked (`/changes?watched=1`): the changes to the pages you watch and nothing else, with the other filters as ever.
+  A change that is news is marked **new** (`.changes-new`), in the unfiltered Changes too.
+- **Mark all read** beside the heading there, while there is news.
+
+### How watching works
+
+What you watch is yours, not the page's (`go/watch.go`): `.zone/watch/<user>.json`, out of git, written owner-only, gone with the last watch.
+
+```json
+{"watch": {"roadmap": 1764061200, "projects/": 1764061260},
+ "seen": {"roadmap": {"at": 1764064800, "sha": "1a2b…"}}}
+```
+
+`watch` names a page by its slug and a folder by its path with a `/` after it, each with when the watch began (unix seconds);
+`seen` names, for a watched page, the commit that was its last when you last looked (or began to watch it): its time and its hash, since the history's times are whole seconds.
+A watch makes no commit and changes no page, so nobody's page loads again because someone watches it, and no reader is a commit's author.
+Lost with Zonewiki's folder, nobody watches anything, and nothing else happens.
+
+**The rule** is asked of the pages' last commits, which Zonewiki keeps in memory for the search results (`lastCommits` in `go/lastchange.go`, by path: author, assistant, time, hash), so the count costs no walk of the history:
+`watched.news` for a page (`covers`: the page's own watch or a folder's around it; `newer`: after the watch began and after the commit seen, and not `ownChange`), `newsIn` for all of a user's.
+With a watched folder every page's last commit is asked, with none only the pages watched.
+`rq.watchCount()` counts once a request, for the page shell (`Watched`) and for `GET /api/tasks/due-count`, which answers `watched` beside the tasks' counts, so an open page asks once a minute, not twice (`refreshDueBadge` in `js/chrome.js`).
+
+**The list** is Changes' own (`wikiChanges` with `changesOf.Watched`): git is asked for the watched pages and folders alone (`watched.pathspecs`), of a watched folder only its pages are listed (not its task files or uploads), and each file as its reader may see it, as ever.
+`freshFor` marks a row: it changed a page that has news, after the commit seen.
+
+**The routes**: `POST /watch` (`page` or `folder`, `on=0` to stop, `back`) and `POST /watch/read`, both for a user alone (404 without users and for a visitor).
+A page must be one the asker sees, and there; a folder is any path pages can be in, and its watch tells nothing of what is in it.
+A viewer watches as anyone (both are in `viewerWrites`): it changes nothing of the wiki.
+
+**A watch follows its page**: a rename, a folder's move and a group's rename carry every user's watches along (`watchesMoved`, from `movePage`, `moveFolder` and `renameGroupOp`), as the links follow.
+A page deleted keeps its watch, for when it is restored.
 
 ## Sharing mode
 

@@ -409,6 +409,8 @@ type pageShell struct {
 	Settings    []settingsTab
 	SettingsTab string
 	User        string // who is signed in, with users
+	Watches     bool   // they can watch pages: the menu has Watched pages
+	Watched     int    // how many watched pages have news for them (watchCount)
 	Admin       bool   // they are an admin: the user menu offers Admin
 	Usage       bool   // they see the wiki's usage (seesUsage): the help dialog links to it
 	Viewer      bool   // they are a viewer: nothing to make (no New note, New task)
@@ -457,6 +459,9 @@ func page(w http.ResponseWriter, rq *Req, status int, name, title string, o shel
 	}
 	if sh.ShowActions {
 		sh.ModuleLinks = moduleLinks(rq)
+		if sh.Watches = mayWatch(rq.user) && cfg.GitEnabled; sh.Watches {
+			sh.Watched = rq.watchCount()
+		}
 	}
 	// The build's commit, shown in the corner: "abc1234 2026-09-26 12:00 +dirty".
 	if fields := strings.Fields(cfg.Build); cfg.Build != "unknown" && len(fields) > 0 {
@@ -757,9 +762,12 @@ func buildDeleteDialog(slug, title string) template.HTML {
 // Append to page.
 type pageMenuView struct {
 	Slug, Title             string
-	Git                     bool // History
-	Quicknote               bool // a note: Move to wiki…, Append to page…
-	Renamable               bool // Rename…, Delete…
+	Git                     bool   // History
+	Quicknote               bool   // a note: Move to wiki…, Append to page…
+	Renamable               bool   // Rename…, Delete…
+	Watches                 bool   // Watch or Unwatch: the reader can watch pages
+	Watching                bool   // and watches this one
+	WatchedBy               string // the watched folder it is in, "" for none
 	RenameError, RenameName string
 	RenameAsk               string        // a rename to other readers, asked first: what it would do (the form then confirms RenameName)
 	SharedTarget            string        // Make shared…: where the private page would go ("": not offered, or there are several places)
@@ -779,6 +787,11 @@ func pageMenu(rq *Req, slug, title, renameError, promoteError, appendError, rena
 	m := &pageMenuView{Slug: slug, Title: title, Git: cfg.GitEnabled, Quicknote: isQuicknote(slug) && !visits,
 		Renamable: !isProtected(slug) && canWrite(rq.who(), slug) && !visits, RenameError: renameError,
 		RenameName: renameName, RenameAsk: renameAsk}
+	if m.Watches = mayWatch(rq.who()) && cfg.GitEnabled && !isQuicknote(slug); m.Watches {
+		w := watchesOf(rq.who().Name)
+		_, m.Watching = w.Watch[slug]
+		m.WatchedBy = w.folderOf(slug)
+	}
 	// A private page with nowhere to go but to everyone keeps the plain
 	// Make shared…; with groups to go to, or from a group's folder, Share….
 	if targets := shareTargets(rq.who(), slug); len(targets) == 1 && targets[0].Group == "" && placeOf(slug).kind == ofUser {

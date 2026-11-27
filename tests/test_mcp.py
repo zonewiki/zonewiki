@@ -58,11 +58,12 @@ class TestToolDefinitions:
             "search_wiki", "search_tasks", "grep_wiki", "read_page", "list_pages", "check_links",
             "list_tags", "history", "zone_help", "read_guides", "read_file",
             "write_page", "edit_page", "replace_in_pages", "append_to_page", "file_note", "upload_file", "rename_page",
-            "delete_page", "restore_page", "undo_changes", "rename_task_tag", "create_task_list", "rename_task_list", "create_task", "update_task"]
+            "delete_page", "restore_page", "undo_changes", "rename_task_tag", "create_task_list", "rename_task_list", "create_task", "update_task",
+            "watch_page"]
         reading = {"search_wiki", "search_tasks", "grep_wiki", "read_page", "list_pages", "check_links",
                    "list_tags", "history", "zone_help", "read_guides", "read_file"}
         assert all(t["annotations"]["readOnlyHint"] == (t["name"] in reading) for t in tools)
-        adding = {"append_to_page", "create_task", "create_task_list", "upload_file"}
+        adding = {"append_to_page", "create_task", "create_task_list", "upload_file", "watch_page"}
         assert all(t["annotations"]["destructiveHint"] == (t["name"] not in adding)
                    for t in tools if t["name"] not in reading)
         assert all(t["inputSchema"]["type"] == "object" for t in tools)
@@ -73,8 +74,9 @@ class TestToolDefinitions:
         tools = {t["name"]: t for t in self.tools(client)}
         # (29250 until rename_page got narrow, 29400 until undo_changes, 30200 until source,
         # 30750 until a task's place, 31400 until history's assistant and outside,
-        # 31700 until update_task's mine; go/mcp_test.go caps the file.)
-        assert len(json.dumps(list(tools.values()))) < 31950
+        # 31700 until update_task's mine, 31950 until watch_page and history's watched;
+        # go/mcp_test.go caps the file.)
+        assert len(json.dumps(list(tools.values()))) < 32700
         props = tools["write_page"]["inputSchema"]["properties"]
         assert len(props["summary"]["description"]) < 100 and len(props["guides"]["description"]) < 100
         assert "refused until its id" in tools["read_guides"]["description"]

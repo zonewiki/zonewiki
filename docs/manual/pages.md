@@ -33,6 +33,7 @@ At the top of every page are its title, an **Edit** button (or press `e`) and a 
 | **Present** | shows the page as slides, one per heading (also `p`; only on pages with headings) |
 | **History** | every saved version of the page (see [History and undo](history.md)) |
 | **Print…** | the browser's print dialog, where you can also save a PDF |
+| **Watch** | tells you when someone else changes the page (with users; see [Watching pages](history.md#watching-pages)) |
 | **Share…** or **Make shared…** | moves one of your private or group pages to more readers (below) |
 | **Rename…** | gives the page a new name or folder (below) |
 | **Delete…** | deletes the page after asking (also Ctrl+Delete) |

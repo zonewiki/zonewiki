@@ -176,6 +176,7 @@ READS = [
     ("GET /changes", "GET", "/changes", {}),
     ("GET /changes", "GET", "/changes", {"query_string": {"under": "private/alice"}}),
     ("GET /changes", "GET", "/changes", {"query_string": {"user": "alice", "n": "500"}}),
+    ("GET /changes", "GET", "/changes", {"query_string": {"watched": "1"}}),
     ("GET /page/{slug...}", "GET", "/page/private/alice/old", {}),   # a deleted page offers restore
     ("GET /uncommitted", "GET", "/uncommitted", {}),
     ("GET /api/uncommitted", "GET", "/api/uncommitted", {}),
@@ -887,6 +888,7 @@ MCP_READS = [
     ("history", {"slug": "private/alice/old"}),                  # deleted
     ("history", {}),                                             # recent changes
     ("history", {"under": "private"}),
+    ("history", {"watched": True}),
     ("search_tasks", {"query": QUERY}),
     ("read_guides", {"slug": DIARY}),
     ("read_guides", {"slug": "private/alice/"}),
@@ -1109,6 +1111,11 @@ def test_a_private_list_made_where_the_page_stays_is_its_makers_alone(alice, cli
 # ── Writes ───────────────────────────────────────────────────────────────────
 
 WRITES = [
+    # Watching (test_watch.py asks what a watched folder tells): her page isn't watched, and a folder's watch is bob's own.
+    ("POST /watch", "POST", "/watch", {"data": {"page": DIARY}}),
+    ("POST /watch", "POST", "/watch", {"data": {"page": SNEAK}}),
+    ("POST /watch", "POST", "/watch", {"data": {"folder": "private/alice", "back": "/changes?watched=1"}}),
+    ("POST /watch/read", "POST", "/watch/read", {}),
     ("POST /edit/{slug...}", "POST", f"/edit/{DIARY}", {"data": {"content": "# Bob was here\n"}}),
     ("POST /api/save/{slug...}", "POST", f"/api/save/{DIARY}", {"data": {"content": "# Bob was here\n"}}),
     ("POST /new", "POST", "/new", {"data": {"slug": "private/alice/bobs"}}),
@@ -1226,6 +1233,9 @@ def test_bob_changes_nothing_of_alices(bob, wiki, method, path, kwargs):
 # What bob's assistant tries on alice's pages; "{bobs}" is a note of
 # his, "{old}" the version that still had her deleted page.
 MCP_WRITES = [
+    ("watch_page", {"slug": DIARY}),
+    ("watch_page", {"slug": SNEAK}),
+    ("watch_page", {"slug": "private/alice/"}),
     ("write_page", {"slug": DIARY, "content": "# Bob was here\n", "overwrite": True}),
     ("write_page", {"slug": "private/alice/bobs", "content": "# Bob was here\n"}),
     ("edit_page", {"slug": DIARY, "old_string": QUERY, "new_string": "bob"}),

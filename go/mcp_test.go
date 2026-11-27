@@ -114,7 +114,7 @@ func TestMCPToolDefinitions(t *testing.T) {
 			t.Errorf("%s: readOnlyHint %v, but mcpToolTable says it writes %d", name, readOnly, row.writes)
 		}
 	}
-	if len(names) != len(mcpToolTable) || names[0] != "search_wiki" || names[len(names)-1] != "update_task" {
+	if len(names) != len(mcpToolTable) || names[0] != "search_wiki" || names[len(names)-1] != "watch_page" {
 		t.Errorf("tools: %q", names)
 	}
 	// Raised from 34000 for rename_page's narrow (2026-11): a move that takes
@@ -128,8 +128,10 @@ func TestMCPToolDefinitions(t *testing.T) {
 	// elsewhere, at both doors. From 36900 for the name Zonewiki (2026-11).
 	// From 36950 for update_task's mine (2026-11): a place in the user's
 	// own order of My tasks, which they rank in the browser.
+	// From 37150 for watch_page and history's watched (2026-11): what a
+	// person watches in the browser, their assistant watches for them.
 	// tests/test_mcp.py caps what is served (the same list, compact).
-	if len(mcpToolsJSON) > 37150 {
+	if len(mcpToolsJSON) > 38000 {
 		t.Errorf("the definitions grew to %d bytes: every session loads them", len(mcpToolsJSON))
 	}
 }

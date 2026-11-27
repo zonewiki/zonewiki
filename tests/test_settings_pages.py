@@ -60,10 +60,11 @@ class TestWithUsers:
 
     def test_the_menu_has_settings_for_the_three_pages(self, client, users):
         entries = menu(body(login(client, "bob"), "/page/index"))
-        assert entries == [("/assistant", "Settings"), ("", "Sharing mode"), ("/help", "Help"), ("", "Sign out")]
+        assert entries == [("/assistant", "Settings"), ("/changes?watched=1", "Watched pages"), ("", "Sharing mode"),
+                           ("/help", "Help"), ("", "Sign out")]
         # An admin's has Admin too, an entry of its own.
         entries = menu(body(login(client, "alice"), "/page/index"))
-        assert entries[:2] == [("/assistant", "Settings"), ("/admin", "Admin")]
+        assert entries[:3] == [("/assistant", "Settings"), ("/changes?watched=1", "Watched pages"), ("/admin", "Admin")]
 
     @pytest.mark.parametrize("path, label, heading", [
         ("/assistant", "Assistant", "Connect an assistant"),

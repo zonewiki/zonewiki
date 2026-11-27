@@ -543,10 +543,11 @@ The tool `history` names them alike, `"Water the beds" (task 1a2b3c4d)`, with th
 | **Only text from outside** | `?outside=1` | an assistant said where its text is from (its `Source` trailer, Where the text is from in `docs/spec/mcp.md`) |
 | **In the folder** | `?under=` | as the tools' `under` |
 | **Since** a day | `?since=YYYY-MM-DD` | anything else is ignored |
+| **Only what I watch** | `?watched=1` | with users: the pages and folders the reader watches, and of a commit only those pages (Watching pages in `docs/spec/navigation.md`) |
 
 **All changes** drops them.
 A filter is asked of each commit as it is read (`changesOf.takes`, `keep` in `gitLogAll`), so a filtered list is as long as an unfiltered one.
-The tool `history` takes the same filters (`since`, `under`, `assistant`, `outside`) into the same `changesOf`, so both doors list the same commits; Connect an assistant links each connection to its changes (`?user=<you>&via=<its name>`).
+The tool `history` takes the same filters (`since`, `under`, `assistant`, `outside`, `watched`) into the same `changesOf`, so both doors list the same commits; Connect an assistant links each connection to its changes (`?user=<you>&via=<its name>`).
 An undo comes back to the list as it was filtered.
 
 ### Undo

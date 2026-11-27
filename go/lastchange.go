@@ -25,6 +25,7 @@ type lastCommit struct {
 	author    string // the commit's author as git has it (commitAuthor says whether it is shown)
 	assistant string // the connection an assistant made it through (commitMark.Assistant), "" for none
 	at        int64  // when it was committed (the committer's time, unix seconds)
+	sha       string // the commit (a diff of it is a look at the page as it is: lookedAt)
 }
 
 // lastCommits: the pages' last commits by their paths in git, as of head.
@@ -57,9 +58,9 @@ var lastCommitWait = time.Second
 const scanTimeout = 10 * time.Minute
 
 // lastCommitFormat: what the scan and the moves read of a commit: its
-// author, its time and its trailers that say whether an assistant made it
+// hash, its author, its time and its trailers that say whether an assistant made it
 // and which (markFormat, commitMarkOf).
-const lastCommitFormat = "--format=\x1e%an\x1f%ct\x1f" + markFormat
+const lastCommitFormat = "--format=\x1e%H\x1f%an\x1f%ct\x1f" + markFormat
 
 // lastCommitsSoon starts the scan of the history if it hasn't started (in
 // this wiki), without waiting for it: a search starts it before it ranks,
@@ -315,10 +316,11 @@ func lastCommitsSince(head, now string) bool {
 // lastCommitOf: a commit as lastCommitFormat gives it. names keeps one
 // copy of each author's and assistant's name for all of a scan's pages.
 func lastCommitOf(head string, names map[string]string) (lastCommit, bool) {
-	parts := strings.SplitN(head, "\x1f", 4)
-	if len(parts) != 4 {
+	parts := strings.SplitN(head, "\x1f", 5)
+	if len(parts) != 5 {
 		return lastCommit{}, false
 	}
+	sha, parts := parts[0], parts[1:]
 	mark := commitMarkOf(parts[2], parts[3])
 	at, err := strconv.ParseInt(parts[1], 10, 64)
 	if err != nil {
@@ -332,7 +334,7 @@ func lastCommitOf(head string, names map[string]string) (lastCommit, bool) {
 		names[s] = s
 		return s
 	}
-	return lastCommit{author: one(parts[0]), assistant: one(mark.Assistant), at: at}, true
+	return lastCommit{author: one(parts[0]), assistant: one(mark.Assistant), at: at, sha: strings.Clone(sha)}, true
 }
 
 // headOf: the commit a repository is at; "" for none yet.

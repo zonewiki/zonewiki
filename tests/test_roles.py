@@ -189,6 +189,7 @@ EXEMPT = {
     "POST /api/preview", "POST /api/render-notes",      # render only
     "POST /assistant/token", "POST /assistant/revoke",  # their own MCP token (test_assistant.py)
     "POST /password",                                   # their own password (test_password.py)
+    "POST /watch", "POST /watch/read",                  # what they watch and have seen of it: theirs, nothing of the wiki (test_watch.py)
     # OAuth (test_oauth.py): a connection of their own, read-only as their token; a client's calls carry no session;
     # what one of theirs may see, never to read and change (TestChange)
     "POST /oauth/authorize", "POST /oauth/token", "POST /oauth/register", "POST /assistant/connections/{id}/revoke",
@@ -249,6 +250,7 @@ MCP_WRITES = [
     ("update_task", {"id": "{inbox}", "title": "Carol was here"}),
     ("update_task", {"id": "{inbox}", "list": "team", "share": True}),
     ("upload_file", {"filename": "carols.txt", "text": "Carol was here"}),
+    ("watch_page", {"slug": "plans"}),      # nothing of the wiki, but a connection that changes nothing doesn't change this either
 ]
 
 

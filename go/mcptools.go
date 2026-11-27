@@ -342,7 +342,14 @@ func history(args jsonObj, base string, user asker) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		of := changesOf{Since: since, Under: under, Outside: outside}
+		watched, err := boolArg(args, "watched")
+		if err != nil {
+			return "", err
+		}
+		if watched && !mayWatch(user) {
+			return "", toolErr(noWatchMsg)
+		}
+		of := changesOf{Since: since, Under: under, Outside: outside, Watched: watched}
 		if via = onOneLine(via, clientNameMost); strings.EqualFold(via, "any") {
 			of.Assistant = true
 		} else {
@@ -451,6 +458,15 @@ func recentChanges(of changesOf, limit int, user asker) string {
 	if of.Outside {
 		where = " with text from outside" + where
 	}
+	// What the user watches: of those changes only; and in any list, a
+	// change that is news to them says so.
+	fresh := freshFor(user, watchNewsFor(user, nil))
+	if of.Watched {
+		where = " to what the user watches" + where
+		if len(watchesOf(user.Name).Watch) == 0 {
+			return strings.Join(append(out, "The user watches nothing: watch_page watches a page or a folder for them."), "\n\n")
+		}
+	}
 	if since != "" {
 		when = " since " + since
 	}
@@ -458,6 +474,7 @@ func recentChanges(of changesOf, limit int, user asker) string {
 		return strings.Join(append(out, "No changes"+where+when+"."), "\n\n")
 	}
 	var rows []string
+	anyNews := false
 	ct := tasksOfChanges(user, entries, false)
 	for _, e := range entries {
 		var labels []string
@@ -471,15 +488,23 @@ func recentChanges(of changesOf, limit int, user asker) string {
 				labels = append(labels, item.Label)
 			}
 		}
+		news := ""
+		if fresh != nil && fresh(e) {
+			news, anyNews = " | new", true
+		}
 		rows = append(rows, e.Time+" | "+runePrefix(e.Sha, 7)+" | "+commitWhat(e.Msg, e.commitMark)+byAuthor(e.Author, e.commitMark)+" | "+
-			strings.Join(labels, ", "))
+			strings.Join(labels, ", ")+news)
+	}
+	newSays := ""
+	if anyNews {
+		newSays = " | new: a page the user watches, changed since they last looked at it"
 	}
 	theLimit := ""
 	if len(rows) == limit {
 		theLimit = ", the limit"
 	}
 	out = append(out, fmt.Sprintf("Changes%s%s, newest first (%d%s); when | version | what (\"through …\" after it: written by "+
-		"an assistant) | pages and tasks:\n", where, when, len(rows), theLimit)+strings.Join(rows, "\n"))
+		"an assistant) | pages and tasks%s:\n", where, when, len(rows), theLimit, newSays)+strings.Join(rows, "\n"))
 	return strings.Join(out, "\n\n")
 }
 
@@ -714,6 +739,7 @@ const (
 	toolWritesNothing toolWrites = iota
 	toolWritesTasks              // tasks only: no pages, so not under pagesMu
 	toolWritesPages              // pages (and maybe tasks): run under pagesMu, as the routes that do are (writesPages)
+	toolWritesOwn                // what is the user's alone beside the wiki (what they watch): no page, no task, no lock
 )
 
 // mcpTool: a tool's function and what it writes. A tool that writes is none
@@ -753,6 +779,7 @@ var mcpToolTable = map[string]mcpTool{
 	"rename_task_list": {run: renameTaskListTool, writes: toolWritesPages}, // the list on its tasks, and in the pages' embeds
 	"create_task":      {run: createTaskTool, writes: toolWritesTasks},
 	"update_task":      {run: updateTaskTool, writes: toolWritesTasks},
+	"watch_page":       {run: watchPageTool, writes: toolWritesOwn},
 }
 
 // writeTool: the tool changes the wiki (pages, notes, tasks).

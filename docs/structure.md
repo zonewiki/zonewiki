@@ -80,7 +80,8 @@ What each file and folder of the repository is for.
 │   ├── gitstore.go         # Git: setup, commits, moves, grep over pages, a page's log, versions, diffs, deleted pages
 │   ├── history.go          # History, revisions, diffs, restore, deleted pages, uncommitted changes
 │   ├── changes.go          # Changes (/changes): the wiki's commits as their reader may see them (wikiChanges, which the MCP tool history lists too), by day, filtered by user, assistant, folder and day; whether an assistant wrote a commit and which (its trailer alone: commitMarkOf); what a row offers to undo (undoOffers) and the route that does (undoChangesOp in pageops.go)
-│   ├── lastchange.go       # Who changed each page last (its last commit's author, whether an assistant and which), kept in memory from one scan of the history and the commits since, for search results
+│   ├── lastchange.go       # Who changed each page last (its last commit's author, whether an assistant and which, when, the commit), kept in memory from one scan of the history and the commits since, for search results and for what is news on a watched page
+│   ├── watch.go            # Watching pages: what each user watches and has seen of it (.zone/watch/<user>.json), what is news, the count, POST /watch and /watch/read, the MCP tool watch_page
 │   ├── quicknotes.go       # Notes: create, Move to wiki, Append to page (the routes and MCP share it)
 │   ├── merge.go            # Several editors on one page: drafts' authors, the bases, the three-way merge, texts left in conflict
 │   ├── tasks.go            # Task writes (create, change, comment, tag, move in the manual order, delete; the tasks an undo from Changes puts back), as functions the routes and the MCP tools share

@@ -219,12 +219,14 @@ func fromWhere(source string) string {
 // assistant wrote; Via: only what one wrote through this connection (its
 // Assistant trailer, as commitMarkOf reads it: a client's name, tokenVia,
 // noClientName); Outside: only what an assistant said its text is from
-// (its Source trailer); each empty or false for all. Sharing: the browser
+// (its Source trailer); Watched: only the pages the reader watches
+// (watch.go); each empty or false for all. Sharing: the browser
 // is in sharing mode, which leaves out a commit that changed a page not
 // for sharing.
 type changesOf struct {
 	Since, Under, By, Via       string
 	Assistant, Outside, Sharing bool
+	Watched                     bool
 }
 
 // takes: of says to list a commit with this author and mark (the filters
@@ -236,7 +238,8 @@ func (of changesOf) takes(author string, m commitMark) bool {
 
 // wikiChanges: the wiki's latest commits, newest first, as user sees them,
 // for every door that lists them (Changes in the browser, the MCP tool
-// history): of a commit only the files they may see (canSeePath), not a
+// history): of a commit only the files they may see (canSeePath; of the
+// watched changes only the pages they watch), not a
 // commit that changed none of those, and its message without the names of
 // what they don't see (hideNames). In sharing mode a commit shows only
 // when all it changed shows: its message names what it changed.
@@ -249,7 +252,27 @@ func wikiChanges(user asker, of changesOf, limit int) []LogEntry {
 		return !(of.Sharing && isPage && isNoshare(slug))
 	}
 	keep := func(e LogEntry) bool { return of.takes(e.Author, e.commitMark) && !(of.Sharing && e.Hidden > 0) }
-	entries := gitLogAll(of.Since, of.Under, limit, see, keep)
+	var paths []string
+	if of.Under != "" {
+		paths = []string{of.Under + "/"}
+	}
+	if of.Watched {
+		// Git is asked for the watched pages and folders alone, and of a
+		// watched folder only its pages are listed (not its tasks' files).
+		w := watchesOf(user.Name)
+		if paths = w.pathspecs(of.Under); len(paths) == 0 || !mayWatch(user) {
+			return nil
+		}
+		all := see
+		see = func(path string) bool {
+			slug, isPage := strings.CutSuffix(path, ".md")
+			if _, ok := w.covers(slug); !isPage || !ok {
+				return false
+			}
+			return all(path)
+		}
+	}
+	entries := gitLogAll(of.Since, paths, limit, see, keep)
 	for i := range entries {
 		entries[i].Msg = hideNames(user, entries[i].Msg, entries[i].hidden)
 	}
@@ -264,7 +287,7 @@ const (
 var dayRE = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 
 // changesView: the page /changes. Its filters are the query: user, under,
-// since, assistant=1, via, outside=1; n how many to show.
+// since, assistant=1, via, outside=1, watched=1; n how many to show.
 func changesView(w http.ResponseWriter, r *http.Request) {
 	rq := newReq(r)
 	if !cfg.GitEnabled {
@@ -278,6 +301,7 @@ func changesView(w http.ResponseWriter, r *http.Request) {
 	if since := strings.TrimSpace(q.Get("since")); dayRE.MatchString(since) {
 		of.Since = since
 	}
+	of.Watched = q.Get("watched") != "" && mayWatch(rq.user)
 	users := userNames()
 	if !slices.Contains(users, of.By) {
 		of.By = "" // no user's name: all of them (and a wiki without users has none)
@@ -292,11 +316,29 @@ func changesView(w http.ResponseWriter, r *http.Request) {
 		shown = limit
 	}
 	ct := tasksOfChanges(rq.user, entries, rq.sharing)
+	// What the reader watches: a row is marked while its change is news to
+	// them (a watched page changed by someone else since their last look).
+	watches := mayWatch(rq.user) && !rq.sharing
+	var fresh func(LogEntry) bool
+	if watches {
+		fresh = freshFor(rq.user, watchNews(rq))
+	}
 	v := &changesPageView{Of: of, Users: users, Vias: changesVias(rq.user, of, entries),
-		Days: changeDays(entries, time.Now(), undoOffers(rq.user, entries, ct), ct),
+		Days: changeDays(entries, time.Now(), undoOffers(rq.user, entries, ct), ct, fresh),
 		Back: changesURL(of, shown), Undone: q.Get("undone"), UndoError: q.Get("undo_error"),
-		Filtered:       of.Since != "" || of.Under != "" || of.By != "" || of.Via != "" || of.Assistant || of.Outside,
+		Filtered:       of.Since != "" || of.Under != "" || of.By != "" || of.Via != "" || of.Assistant || of.Outside || of.Watched,
+		Watches:        watches,
 		BreadcrumbHTML: breadcrumb(rq, []crumb{{"Changes", ""}}, "", false, "", "")}
+	if watches {
+		v.News = rq.watchCount()
+		if of.Watched {
+			v.Watching = watchedItems(rq.user)
+		}
+		if of.Under != "" && safePath(of.Under+"/page") != "" {
+			_, v.FolderWatched = watchesOf(rq.user.Name).Watch[folderKey(of.Under)]
+			v.WatchFolder = of.Under
+		}
+	}
 	if len(entries) == limit && limit < changesMost {
 		v.More = changesURL(of, min(2*limit, changesMost))
 	}
@@ -359,6 +401,9 @@ func changesURL(of changesOf, n int) string {
 	if of.Outside {
 		q.Set("outside", "1")
 	}
+	if of.Watched {
+		q.Set("watched", "1")
+	}
 	if n > 0 {
 		q.Set("n", strconv.Itoa(n))
 	}
@@ -375,11 +420,16 @@ type changesPageView struct {
 	Users          []string // for the filter by user; none without users
 	Vias           []string // for the filter by connection (changesVias)
 	Days           []changeDay
-	Filtered       bool   // a filter is set
-	More           string // where the list goes on: the same with more commits
-	Back           string // this list's address, where an undo comes back to
-	Undone         string // what an undo just did, in words
-	UndoError      string // or why it didn't
+	Filtered       bool          // a filter is set
+	More           string        // where the list goes on: the same with more commits
+	Back           string        // this list's address, where an undo comes back to
+	Undone         string        // what an undo just did, in words
+	UndoError      string        // or why it didn't
+	Watches        bool          // the reader can watch pages: the Watched filter is offered
+	Watching       []watchedItem // what they watch, listed with the watched changes
+	News           int           // how many watched pages have news for them (Mark all read)
+	WatchFolder    string        // the folder the list is of, which they can watch
+	FolderWatched  bool          // and whether they do
 	BreadcrumbHTML template.HTML
 }
 
@@ -390,9 +440,11 @@ type changeDay struct {
 }
 
 // changeRow: a commit: Time its time of day, What its message without the
-// assistant's mark, Items what it changed.
+// assistant's mark, Items what it changed. New: it changed a page the
+// reader watches, and they haven't looked since.
 type changeRow struct {
 	Time, Rel, What, Author string
+	New                     bool
 	Assistant               bool
 	Via                     string // which assistant, when the commit says
 	Source                  string // where its text is from, when the assistant said
@@ -566,7 +618,7 @@ func undoChangesRoute(w http.ResponseWriter, r *http.Request) {
 	// Back to the list as it was: only its own filters, read as it reads them.
 	back := url.Values{}
 	if u, err := url.Parse(r.PostForm.Get("back")); err == nil {
-		for _, key := range []string{"user", "under", "since", "via", "assistant", "outside", "n"} {
+		for _, key := range []string{"user", "under", "since", "via", "assistant", "outside", "watched", "n"} {
 			if v := u.Query().Get(key); v != "" {
 				back.Set(key, v)
 			}
@@ -654,8 +706,9 @@ func tasksOfChanges(user asker, entries []LogEntry, sharing bool) changedTasks {
 }
 
 // changeDays: commits, newest first, as the rows of their days, each with
-// what it offers to undo and the tasks it changed as ct has them.
-func changeDays(entries []LogEntry, now time.Time, offers map[string]undoOffer, ct changedTasks) []changeDay {
+// what it offers to undo and the tasks it changed as ct has them; fresh
+// says whether a commit is news to its reader (nil: none is).
+func changeDays(entries []LogEntry, now time.Time, offers map[string]undoOffer, ct changedTasks, fresh func(LogEntry) bool) []changeDay {
 	today, yesterday := now.Format("2006-01-02"), now.AddDate(0, 0, -1).Format("2006-01-02")
 	var days []changeDay
 	last := ""
@@ -672,7 +725,8 @@ func changeDays(entries []LogEntry, now time.Time, offers map[string]undoOffer, 
 			days, last = append(days, changeDay{Label: label}), day
 		}
 		row := changeRow{Time: clock, Rel: e.Rel, Author: e.Author, Assistant: e.ByAssistant(), Via: e.Via(), Source: e.Source,
-			undoOffer: offers[e.Sha], What: commitWhat(e.Msg, e.commitMark), Items: changeItems(e, ct)}
+			undoOffer: offers[e.Sha], What: commitWhat(e.Msg, e.commitMark), Items: changeItems(e, ct),
+			New: fresh != nil && fresh(e)}
 		days[len(days)-1].Rows = append(days[len(days)-1].Rows, row)
 	}
 	return days

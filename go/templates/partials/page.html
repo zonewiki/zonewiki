@@ -53,6 +53,9 @@
 <button type="button" role="menuitem" id="present-btn" hidden>Present<kbd class="menu-key">p</kbd></button>
 {{- if .Git}}<a role="menuitem" href="{{url "history" .Slug}}">History</a>{{end}}
 <button type="button" role="menuitem" data-action="print">Print…</button>
+{{- /* Watch: the reader is told when someone else changes the page (watch.go). A page in a watched folder is watched with it: the entry says so, and leads to where the folder is unwatched. */ -}}
+{{- if and .Watches .WatchedBy (not .Watching)}}<a role="menuitem" class="menu-watch" href="/changes?watched=1" title="You watch the folder {{.WatchedBy}}/, and this page with it">Watched with {{.WatchedBy}}/</a>
+{{- else if .Watches}}<form method="post" action="/watch" class="page-menu-form menu-watch"><input type="hidden" name="page" value="{{.Slug}}"><input type="hidden" name="on" value="{{if .Watching}}0{{else}}1{{end}}"><button type="submit" role="menuitem">{{if .Watching}}Unwatch{{else}}Watch{{end}}</button></form>{{end}}
 {{- if .Quicknote}}<button type="button" role="menuitem" data-action="promote">Move to wiki…</button><button type="button" role="menuitem" data-action="append">Append to page…</button>{{end}}
 {{- if .SharedTarget}}<button type="button" role="menuitem" data-action="privacy">Make shared…</button>{{end -}}
 {{- if .ShareTargets}}<button type="button" role="menuitem" data-action="privacy">Share…</button>{{end -}}

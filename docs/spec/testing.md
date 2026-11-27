@@ -242,6 +242,7 @@ Prefer an API test when the behaviour shows through a route, a Go test when it d
 | `tests/test_task_app_wiring.py` | rendering.md | Guard (above) |
 | `tests/test_task_assignee.py` | tasks.md | A task's assignee through API and MCP, My tasks per user, a shared task kept in a list |
 | `tests/test_task_follow.py` | tasks.md | Following a task and what a follower is told |
+| `tests/test_watch.py` | navigation.md | Watching a page and a folder: what is news, looking, the count, a rename followed, what a watch tells of pages not seen, the tool `watch_page` |
 | `tests/test_task_notify.py` | tasks.md | The mail about a task given to someone, the news' `seen` |
 | `tests/test_task_order.py` | tasks.md | The manual order by moves: a list's and My tasks' own; one order for every owner's tasks (the top above all, room made among tasks of others) |
 | `tests/test_task_refs.py` | rendering.md, tasks.md | `[[task:…]]` references |
@@ -262,6 +263,7 @@ Prefer an API test when the behaviour shows through a route, a Go test when it d
 |--------|------|--------|
 | `test_admin.py` | users.md | The Users tab's dialogs and buttons |
 | `test_changes.py` | rendering.md | Changes found, filtered, leading to a diff, on a phone |
+| `test_watch.py` | navigation.md | Watch in the page menu, the dot and the count, a change marked new and read |
 | `test_editor.py` | editor.md | Auto-save, Done, preview, list continuation, the Task list dialog, slow saves |
 | `test_figures.py` | rendering.md | Math and Mermaid from the vendored copies |
 | `test_fold.py` | rendering.md | Folding sections |

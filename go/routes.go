@@ -233,6 +233,9 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 		}
 		bc = buildBreadcrumb(rq, slug, title, chip, qs)
 		q := r.URL.Query()
+		// The page is before them: its news is read (before the menu and
+		// the shell count it).
+		lookedAt(rq, slug)
 		menu = pageMenu(rq, slug, title, q.Get("rename_error"), q.Get("promote_error"), q.Get("append_error"), q.Get("rename_name"), q.Get("rename_ask"))
 		changed, commit := lastChanged(slug, path, title)
 		if rq.user.Name == visitor {

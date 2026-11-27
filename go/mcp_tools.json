@@ -244,6 +244,10 @@
      "type": "boolean",
      "description": "Only changes whose text an assistant said is from elsewhere."
     },
+    "watched": {
+     "type": "boolean",
+     "description": "Only changes to what the user watches (watch_page); 'new': not yet looked at."
+    },
     "limit": {
      "type": "integer",
      "minimum": 1,
@@ -1203,6 +1207,33 @@
    "readOnlyHint": false,
    "destructiveHint": true,
    "idempotentHint": false,
+   "openWorldHint": false
+  }
+ },
+ {
+  "name": "watch_page",
+  "title": "Watch a page or folder",
+  "description": "Watch a page, or a folder with all its pages, for the user: what someone else changes there is news to them (history with watched). Only when the user asks.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "slug": {
+     "type": "string",
+     "description": "A page's slug, or a folder with a trailing slash: 'projects/'."
+    },
+    "watch": {
+     "type": "boolean",
+     "description": "false: stop watching."
+    }
+   },
+   "required": [
+    "slug"
+   ]
+  },
+  "annotations": {
+   "readOnlyHint": false,
+   "destructiveHint": false,
+   "idempotentHint": true,
    "openWorldHint": false
   }
  }

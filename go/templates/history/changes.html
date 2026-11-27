@@ -7,8 +7,14 @@
 {{define "body"}}
 {{.BreadcrumbHTML}}
 <div class="sheet">
-<header class="page-header"><h1>Changes</h1></header>
+<header class="page-header"><h1>Changes</h1>
+{{- if and .Of.Watched .News}}<div class="page-header-actions"><form method="post" action="/watch/read"><input type="hidden" name="back" value="{{.Back}}"><button type="submit" class="btn" id="watch-read-btn">Mark all read</button></form></div>{{end -}}
+</header>
+{{- if .Of.Watched}}
+<p class="hist-intro">What changed on the pages you watch, newest first. A change someone else made since you last looked at its page is marked <span class="changes-new">new</span>; opening the page, or what the change did to it, reads it.</p>
+{{- else}}
 <p class="hist-intro">What changed in this wiki, newest first: pages, tasks and files, by people and by their assistants. Open a page to see what a change did to it.</p>
+{{- end}}
 <form class="changes-filter" method="get" action="/changes">
   {{- if .Users}}
   <label>By <select name="user"><option value="">anyone</option>{{range .Users}}<option value="{{.}}"{{if eq . $.Of.By}} selected{{end}}>{{.}}</option>{{end}}</select></label>
@@ -18,24 +24,35 @@
   <label>Through <select name="via"><option value="">any connection</option>{{range .Vias}}<option value="{{.}}"{{if eq . $.Of.Via}} selected{{end}}>{{.}}</option>{{end}}</select></label>
   {{- end}}
   <label class="changes-check" title="What an assistant wrote from a web page, a mail or a file, as it said"><input type="checkbox" name="outside" value="1"{{if .Of.Outside}} checked{{end}}> Only text from outside</label>
+  {{- if .Watches}}
+  <label class="changes-check" title="Only the pages and folders you watch (Watch, in a page's menu)"><input type="checkbox" name="watched" value="1"{{if .Of.Watched}} checked{{end}}> Only what I watch</label>
+  {{- end}}
   <label>In the folder <input type="text" name="under" value="{{.Of.Under}}" placeholder="any" autocomplete="off" spellcheck="false" size="12"></label>
   <label>Since <input type="date" name="since" value="{{.Of.Since}}"></label>
   <button type="submit" class="btn">Show</button>
   {{- if .Filtered}} <a href="/changes" class="changes-all">All changes</a>{{end}}
 </form>
+{{- /* A folder's changes: the folder can be watched, its pages made later too. */}}
+{{- if .WatchFolder}}<form method="post" action="/watch" class="changes-watch-folder"><input type="hidden" name="folder" value="{{.WatchFolder}}"><input type="hidden" name="on" value="{{if .FolderWatched}}0{{else}}1{{end}}"><input type="hidden" name="back" value="{{.Back}}">{{if .FolderWatched}}You watch <code>{{.WatchFolder}}/</code>. <button type="submit" class="btn btn-sm">Unwatch</button>{{else}}<button type="submit" class="btn btn-sm">Watch this folder</button> to be told when someone changes a page in <code>{{.WatchFolder}}/</code>, or makes one.{{end}}</form>{{end}}
+{{- if .Of.Watched}}
+<details class="changes-watching"{{if not .Days}} open{{end}}><summary>You watch {{len .Watching}} {{if eq (len .Watching) 1}}thing{{else}}things{{end}}</summary>
+{{- if .Watching}}<ul>{{range .Watching}}<li><a href="{{.Href}}">{{.Label}}</a>{{if .Folder}} <span class="hist-by">a folder: every page in it</span>{{end}} <form method="post" action="/watch"><input type="hidden" name="{{if .Folder}}folder{{else}}page{{end}}" value="{{.Key}}"><input type="hidden" name="on" value="0"><input type="hidden" name="back" value="{{$.Back}}"><button type="submit" class="btn btn-sm">Unwatch</button></form></li>{{end}}</ul>
+{{- else}}<p class="hist-empty">Nothing yet. <strong>Watch</strong> in a page's ⋯ menu watches the page; a folder is watched from its changes (<strong>In the folder</strong>, above).</p>{{end -}}
+</details>
+{{- end}}
 {{- with .Undone}}<p class="users-done" role="status">{{.}} The undo is the change at the top: undo it to have them back.</p>{{end}}
 {{- with .UndoError}}<p class="users-error" role="alert">Not undone. {{.}}</p>{{end}}
 {{- range .Days}}
 <h2 class="changes-day">{{.Label}}</h2>
 <ol class="hist-list changes-list">
-{{- range .Rows}}<li class="hist-row changes-row"><span class="hist-when" title="{{.Rel}}">{{.Time}}</span><span class="changes-what">{{.What}}{{with .Author}}<span class="hist-by"> · {{.}}</span>{{end}}{{if .Assistant}} <span class="changes-assistant" title="Written by an assistant{{with .Author}} acting for {{.}}{{end}}{{if .Via}}; {{.Via}} is the name it gave when it was connected{{end}}">{{if .Via}}through {{.Via}}{{else}}assistant{{end}}</span>{{end}}{{with .Source}} <span class="changes-source" title="Where the assistant said this text is from: nobody here wrote it">from {{.}}</span>{{end}}</span><span class="changes-items">{{range .Items}}{{if .Href}}<a href="{{.Href}}">{{.Label}}</a>{{else}}<span>{{.Label}}</span>{{end}}{{end}}</span>
+{{- range .Rows}}<li class="hist-row changes-row{{if .New}} changes-row-new{{end}}"><span class="hist-when" title="{{.Rel}}">{{.Time}}</span><span class="changes-what">{{if .New}}<span class="changes-new" title="Changed since you last looked at the page you watch">new</span> {{end}}{{.What}}{{with .Author}}<span class="hist-by"> · {{.}}</span>{{end}}{{if .Assistant}} <span class="changes-assistant" title="Written by an assistant{{with .Author}} acting for {{.}}{{end}}{{if .Via}}; {{.Via}} is the name it gave when it was connected{{end}}">{{if .Via}}through {{.Via}}{{else}}assistant{{end}}</span>{{end}}{{with .Source}} <span class="changes-source" title="Where the assistant said this text is from: nobody here wrote it">from {{.}}</span>{{end}}</span><span class="changes-items">{{range .Items}}{{if .Href}}<a href="{{.Href}}">{{.Label}}</a>{{else}}<span>{{.Label}}</span>{{end}}{{end}}</span>
 {{- if or .Undo .Session}}<span class="changes-undo">
 {{- if .Undo}}<form method="post" action="/changes/undo"><input type="hidden" name="sha" value="{{.Undo}}"><input type="hidden" name="back" value="{{$.Back}}"><button type="submit" class="btn btn-sm" title="Put what this changed back as it was before. The undo is a change too, and can be undone.">Undo</button></form>{{end}}
 {{- if .Session}}<form method="post" action="/changes/undo" data-confirm="Undo {{.SessionSays}}? Every page and task they changed goes back to what it was before them."><input type="hidden" name="back" value="{{$.Back}}">{{range .Session}}<input type="hidden" name="sha" value="{{.}}">{{end}}<button type="submit" class="btn btn-sm" title="Undo {{.SessionSays}}">Undo all {{len .Session}}</button></form>{{end}}
 </span>{{end}}</li>{{end -}}
 </ol>
 {{- else}}
-<p class="hist-empty">{{if .Filtered}}No changes like that.{{else}}No changes yet.{{end}}</p>
+<p class="hist-empty">{{if .Of.Watched}}No changes to what you watch.{{else if .Filtered}}No changes like that.{{else}}No changes yet.{{end}}</p>
 {{- end}}
 {{- with .More}}<p class="changes-more"><a href="{{.}}" class="btn">Show more</a></p>{{end}}
 </div>

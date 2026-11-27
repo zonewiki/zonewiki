@@ -281,7 +281,7 @@ Git history, three ways:
 
 | Called with | Gives |
 |-------------|-------|
-| no `slug` | Recent commits across the wiki (`wikiChanges`, the list the browser's Changes shows: `when \| version \| message \| pages and tasks`, a page by its slug, a task it changed by its title and short id, `"Water the beds" (task 1a2b3c4d)`, as Changes names it, else "tasks": The tasks a commit changed in `docs/spec/rendering.md`), from the day `since` (YYYY-MM-DD) or in a folder (`under`), after a line naming the files with uncommitted changes (`gitUncommittedFiles`); `assistant` and `outside` filter as Changes' **Through** and **Only text from outside** do (`changesOf`, one function for both doors: Filtering Changes in `docs/spec/rendering.md`), `assistant: "any"` as **Only by an assistant**. |
+| no `slug` | Recent commits across the wiki (`wikiChanges`, the list the browser's Changes shows: `when \| version \| message \| pages and tasks`, a page by its slug, a task it changed by its title and short id, `"Water the beds" (task 1a2b3c4d)`, as Changes names it, else "tasks": The tasks a commit changed in `docs/spec/rendering.md`), from the day `since` (YYYY-MM-DD) or in a folder (`under`), after a line naming the files with uncommitted changes (`gitUncommittedFiles`); `assistant` and `outside` filter as Changes' **Through** and **Only text from outside** do (`changesOf`, one function for both doors: Filtering Changes in `docs/spec/rendering.md`), `assistant: "any"` as **Only by an assistant**; `watched` as **Only what I watch**, and in any list a change that is news to the user ends in `| new` (Watching pages in `docs/spec/navigation.md`). |
 | `slug` | That page's versions (`gitLog`, across renames: `version \| when \| +added -removed \| message`), a deleted page's too, saying so, and saying when the page has uncommitted changes newer than the first one. |
 | `slug` and `version` | What that version changed, as `gitDiff` with the rename handling of the browser's Changes view. |
 
@@ -343,6 +343,7 @@ The token `/mcp` requires (Auth) guards writes as it guards reads, and git keeps
 | `rename_task_list(list, new_name, summary)` | A task list's name, on its tasks, in pins and on pages. |
 | `create_task(title, description, tags, list, assignee, importance, due, start, repeat, repeat_every, repeat_from, keep, position, after, before, summary, source)` | A task, as `POST /api/tasks` makes it, where it goes in the manual order. |
 | `update_task(id, …same fields…, share, follow, add_tags, remove_tags, comment, status, ids, summary, source)` | Every change to existing tasks: fields, tags, a comment, status, its place in the manual order, several tasks' tags and order at once. |
+| `watch_page(slug, watch=true)` | The user watches a page, or a folder with a `/` after it; `watch=false` stops. |
 
 #### `write_page`
 
@@ -559,6 +560,14 @@ So one call puts a whole list in order (`ids` in that order, `position: "top"`);
 Runs under the tasks lock, so add/remove tags see the current tags.
 Annotated destructive, as it changes and deletes.
 
+#### `watch_page`
+
+What **Watch** in a page's menu does, for the user (Watching pages in `docs/spec/navigation.md`): `slug` names a page they see, or a folder with a slash after it (`projects/`: every page in it, those made later too); `watch: false` stops.
+The answer says what is watched now and where its news shows (`/changes?watched=1`, `history` with `watched`).
+It writes nothing of the wiki, no page and no commit, only what the user watches (`.zone/watch/`), but it is a tool that writes (`toolWritesOwn`): a viewer's assistant and a connection that only reads don't change what their user watches either, and a viewer watches in the browser.
+What the assistant then writes on a watched page is news to its user, and its reading a page is no look of theirs.
+A page the user doesn't see, or one that isn't there, is refused alike ("No page …"); without users there is nothing to watch.
+
 ### Files
 
 Uploads (`_assets/`, File paste and drag & drop in `docs/spec/editor.md`) are read and added by assistants too (`go/mcpfiles.go`), in two ways, since a file that passes through a tool call is in the model's context whole: the tools for small files, and the routes over HTTP with the token for any size.
@@ -733,7 +742,7 @@ so text is said once: the parameters many tools share (`summary`, `guides`) have
 `read_guides` explains the guide gate,
 and `update_task`'s `due`/`start` refer to `create_task`'s,
 which carry the date rules.
-Tests keep the total under 31,700 characters as a client gets it (`test_they_stay_small`) and the file under 36,900 bytes (`TestMCPToolDefinitions`): a new parameter raises them by what it costs, not more.
+Tests keep the total under 32,700 characters as a client gets it (`test_they_stay_small`) and the file under 38,000 bytes (`TestMCPToolDefinitions`): a new parameter raises them by what it costs, not more.
 
 ### Retrieval
 

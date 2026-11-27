@@ -187,15 +187,24 @@ func tasksRoutes(mux *http.ServeMux) {
 		// (js/chrome.js). A write to a list the page doesn't show, or to
 		// another user's own tasks, leaves the word as it is.
 		w.Header().Set("Zone-Tasks", tasksWord(userOf(r), heldScopes(r)...))
+		// watched: how many watched pages have news for the user (watch.go),
+		// which the menu's button and its Watched pages show; asked with the
+		// tasks' counts, so a page asks once a minute, not twice.
 		rq := newReq(r)
 		if r.URL.Query().Get("places") == "" {
-			writeJSON(w, http.StatusOK, taskCounts(rq))
+			writeJSON(w, http.StatusOK, struct {
+				TaskCounts
+				Watched int `json:"watched,omitempty"`
+			}{taskCounts(rq), rq.watchCount()})
 			return
 		}
 		c := taskCounts(rq)
 		out := map[string]any{"count": c.Count, "overdue": c.Overdue, "today": c.Today, "focus": c.Focus, "places": rq.placeCounts()}
 		if c.New > 0 {
 			out["new"] = c.New
+		}
+		if n := rq.watchCount(); n > 0 {
+			out["watched"] = n
 		}
 		writeJSON(w, http.StatusOK, out)
 	})

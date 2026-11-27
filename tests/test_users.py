@@ -465,10 +465,10 @@ class TestModuleMenu:
         assert "module-menu-btn" not in bar and "module-menu-btn" not in crumb
         # Desktop: the user button after Search opens the menu: who, Settings (Connect an assistant, its first tab), Help and Sign out only.
         assert top.index("top-search") < top.index('class="top-user module-menu-btn"')
-        assert '>A</span></button>' in top and 'title="alice"' in top and 'aria-haspopup="menu" aria-expanded="false"' in top
+        assert '>A</span><span class="top-user-new"' in top and 'title="alice"' in top and 'aria-haspopup="menu" aria-expanded="false"' in top
         assert body.count('class="module-menu page-menu"') == 1 and 'module-menu' not in bar
         menu = body.split('class="module-menu page-menu"', 1)[1].split("</div></div>", 1)[0]
-        assert re.findall(r'href="([^"]*)"', menu) == ["/assistant", "/help"]
+        assert re.findall(r'href="([^"]*)"', menu) == ["/assistant", "/changes?watched=1", "/help"]
         assert 'Signed in as <strong>alice</strong>' in menu and 'action="/logout"' in menu and ">Sign out</button>" in menu
 
     def test_a_private_list_is_in_its_users_switcher_alone(self, client, wiki_dir, users):

@@ -354,13 +354,13 @@ func TestGitLogAllFillsTheLimit(t *testing.T) {
 	}
 	see := func(path string) bool { return !strings.HasPrefix(path, "hidden/") }
 	var got []string
-	for _, e := range gitLogAll("", "", 3, see, nil) {
+	for _, e := range gitLogAll("", nil, 3, see, nil) {
 		got = append(got, e.Files...)
 	}
 	if !reflect.DeepEqual(got, want[:3]) {
 		t.Errorf("%v, want %v", got, want[:3])
 	}
-	if n := len(gitLogAll("", "", 10, see, nil)); n != 5 { // and the initial import (index.md)
+	if n := len(gitLogAll("", nil, 10, see, nil)); n != 5 { // and the initial import (index.md)
 		t.Errorf("all of them: %d", n)
 	}
 }
@@ -383,7 +383,7 @@ func TestGitLogsNameFilesAsTheyAre(t *testing.T) {
 		gitCommit("", "Add "+name, filepath.Join(cfg.Data, name))
 	}
 	var files []string
-	for _, e := range gitLogAll("", "", 10, nil, nil) {
+	for _, e := range gitLogAll("", nil, 10, nil, nil) {
 		files = append(files, e.Files...)
 	}
 	for _, name := range odd {

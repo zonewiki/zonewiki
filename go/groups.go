@@ -583,6 +583,7 @@ func renameGroupOp(user asker, old, nameText string) (string, error) {
 		}
 		return "", err
 	}
+	watchesMoved(nil, groupsDir+"/"+old, groupsDir+"/"+name) // who watches its pages watches them where they are now
 	return name, uncommitted
 }
 

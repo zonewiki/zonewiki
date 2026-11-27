@@ -17,7 +17,7 @@
   {{- with .SignIn}}<a class="btn top-signin" href="{{.}}">Sign in</a>{{end}}
   {{- range .ModuleLinks}}{{if .Menu}}
   {{- if $.User}}
-  <button type="button" class="top-user module-menu-btn" aria-haspopup="menu" aria-expanded="false" aria-label="{{$.User}}: account menu" title="{{$.User}}"><span aria-hidden="true">{{initial $.User}}</span></button>
+  <button type="button" class="top-user module-menu-btn" aria-haspopup="menu" aria-expanded="false" aria-label="{{$.User}}: account menu" title="{{$.User}}"><span aria-hidden="true">{{initial $.User}}</span>{{if $.Watches}}<span class="top-user-new" title="Watched pages changed"{{if not $.Watched}} hidden{{end}}></span>{{end}}</button>
   {{- else}}
   <button type="button" class="top-user top-menu module-menu-btn" aria-haspopup="menu" aria-expanded="false" aria-label="Menu" title="Menu">{{template "icon_menu"}}</button>
   {{- end}}

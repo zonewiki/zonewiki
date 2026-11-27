@@ -888,7 +888,7 @@ def test_the_user_button_opens_the_account_menu_on_a_phone(new_page, wiki, monke
     phone.request.post("/login", form={"username": "bob", "password": "bob-pw"})
     phone.goto("/page/index")
     phone.locator(".top-user").tap()
-    expect(phone.locator('.module-menu:not(.groups-menu) [role="menuitem"]:visible')).to_have_text(["Settings", "Help", "Sign out"])   # no admin: no Admin
+    expect(phone.locator('.module-menu:not(.groups-menu) [role="menuitem"]:visible')).to_have_text(["Settings", "Watched pages", "Help", "Sign out"])   # no admin: no Admin
     phone.request.post("/logout")
     phone.request.post("/login", form={"username": "alice", "password": "pw"})   # an admin
     phone.goto("/page/index")
@@ -900,7 +900,7 @@ def test_the_user_button_opens_the_account_menu_on_a_phone(new_page, wiki, monke
     menu = phone.locator(".module-menu:not(.groups-menu)")
     expect(menu).to_be_visible()
     expect(menu.locator(".menu-who")).to_have_text("Signed in as alice")
-    expect(menu.locator('[role="menuitem"]:visible')).to_have_text(["Settings", "Admin", "Help", "Sign out"])
+    expect(menu.locator('[role="menuitem"]:visible')).to_have_text(["Settings", "Watched pages", "Admin", "Help", "Sign out"])
     box = box_of(menu)   # a sheet at the bottom, as a phone's menus are
     assert box["x"] >= 0 and box["x"] + box["width"] <= phone.viewport_size["width"]
     assert box["y"] + box["height"] <= phone.viewport_size["height"] + 1

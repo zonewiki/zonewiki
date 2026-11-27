@@ -539,6 +539,7 @@ func movePage(user asker, oldPath, newPath, slug, newSlug, message string) ([]st
 		return nil, err
 	}
 	changed, linkErr := rewriteMovedLinks(map[string]string{slug: newSlug})
+	watchesMoved(map[string]string{slug: newSlug}, "", "")
 	files := append([]string{oldPath, newPath}, shareUploads(slug, newSlug, newPath)...)
 	if err := notCommitted(gitCommit(user.Name, message, append(files, changed...)...)); err != nil {
 		return changed, err
@@ -584,6 +585,7 @@ func moveFolder(user asker, folder, newFolder, message string) ([][2]string, []s
 	// All the files are in place before any link is rewritten, so each
 	// page's links are re-based from where it moved to.
 	changed, linkErr := rewriteMovedLinks(moved)
+	watchesMoved(moved, folder, newFolder)
 	for _, m := range moves {
 		touched = append(touched, shareUploads(m[0], m[1], filepath.Join(cfg.Data, filepath.FromSlash(m[1]+".md")))...)
 	}
@@ -821,8 +823,9 @@ func renamedTo(sha, rel string) (added, deleted int, old string, ok bool) {
 // changed that see didn't take, hidden their names (for hideNames).
 type LogEntry struct {
 	Sha, Time, Rel, Msg, Author string
-	commitMark                  // whether an assistant wrote it, which, and where its text is from
-	taskMark                    // which tasks it says it changed
+	At                          int64 // when it was committed (unix seconds)
+	commitMark                        // whether an assistant wrote it, which, and where its text is from
+	taskMark                          // which tasks it says it changed
 	Files                       []string
 	Kinds                       string
 	Hidden                      int
@@ -830,14 +833,15 @@ type LogEntry struct {
 }
 
 // gitLogAll: the wiki's commits, newest first, at most limit; since a day
-// (YYYY-MM-DD, from its start), under a folder ("" for either: all). Of
+// (YYYY-MM-DD, from its start; "" for all), of these paths (pathspecs: a
+// file, or a folder with a "/" after it; none for all). Of
 // each commit only the files see takes (nil: all), and a commit with none
 // of them is left out, as is one keep refuses (nil: none; it is given the
 // commit with the files see took); git is asked for more until limit are found, twice
 // as many each time (each call walks the history from the start again, so
 // a fixed batch would cost quadratic time on a long history where see
 // and keep take few commits).
-func gitLogAll(since, under string, limit int, see func(path string) bool, keep func(LogEntry) bool) []LogEntry {
+func gitLogAll(since string, paths []string, limit int, see func(path string) bool, keep func(LogEntry) bool) []LogEntry {
 	if !cfg.GitEnabled {
 		return nil
 	}
@@ -848,21 +852,22 @@ func gitLogAll(since, under string, limit int, see func(path string) bool, keep 
 	var entries []LogEntry
 	for skip := 0; len(entries) < limit; skip, batch = skip+batch, 2*batch {
 		args := []string{"log", "-z", "-n", strconv.Itoa(batch), "--skip", strconv.Itoa(skip), "--name-status", "--no-renames",
-			"--date=format:%Y-%m-%d %H:%M", "--format=\x1e%H\x1f%ad\x1f%ar\x1f%an\x1f" + markFormat + "\x1f" + tasksFormat + "\x1f%s"}
+			"--date=format:%Y-%m-%d %H:%M", "--format=\x1e%H\x1f%ad\x1f%ar\x1f%an\x1f%ct\x1f" + markFormat + "\x1f" + tasksFormat + "\x1f%s"}
 		if since != "" {
 			args = append(args, "--since="+since+" 00:00")
 		}
-		if under != "" {
-			args = append(args, "--", under+"/")
+		if len(paths) > 0 {
+			args = append(append(args, "--"), paths...)
 		}
 		records := logRecords(runGit(args...).Stdout)
 		for _, record := range records {
-			parts := strings.SplitN(record.head, "\x1f", 9)
-			if len(parts) != 9 {
+			parts := strings.SplitN(record.head, "\x1f", 10)
+			if len(parts) != 10 {
 				continue
 			}
-			e := LogEntry{Sha: parts[0], Time: parts[1], Rel: parts[2], Author: commitAuthor(parts[3]), Msg: parts[8],
-				commitMark: commitMarkOf(parts[4], parts[5]), taskMark: taskMarkOf(parts[6], parts[7])}
+			e := LogEntry{Sha: parts[0], Time: parts[1], Rel: parts[2], Author: commitAuthor(parts[3]), Msg: parts[9],
+				commitMark: commitMarkOf(parts[5], parts[6]), taskMark: taskMarkOf(parts[7], parts[8])}
+			e.At, _ = strconv.ParseInt(parts[4], 10, 64)
 			for i := 0; i+1 < len(record.fields); i += 2 {
 				kind, n := record.fields[i], record.fields[i+1]
 				switch {

@@ -84,10 +84,32 @@ The filters above the list narrow it down; click **Show** to apply them.
 | **Only text from outside** | the changes whose text an assistant said came from elsewhere, a web page or a mail |
 | **In the folder** | changes to pages in one folder, such as `projects` |
 | **Since** | changes from that day on |
+| **Only what I watch** | changes to the pages and folders you watch (below) |
 
 **All changes** clears the filters.
 A filtered list has its own address, so you can bookmark "what my assistant did this week".
 **Connect an assistant** links straight to your assistants' changes, and **its changes** beside each connection to what that one changed.
+
+## Watching pages
+
+In a wiki with users you can watch a page, and Zonewiki tells you when someone else changes it.
+
+- **Watch a page**: open its **⋯** menu and choose **Watch**. **Unwatch** is in the same place.
+- **Watch a folder**: open **Changes**, type the folder into **In the folder**, click **Show**, then **Watch this folder**.
+  You are then told about every page in it, including pages made later.
+
+When a page you watch has changed, the round button with your initial at the top right gets a dot.
+Open it and choose **Watched pages**: the number beside it says how many pages have news.
+You get the changes to what you watch, newest first, and each change you haven't looked at is marked **new**.
+Click the page's name in a row to see what the change did.
+
+A change is read once you open the page, or open what its latest change did.
+**Mark all read** at the top reads them all at once.
+Your own changes are never news; what your assistant changed for you is, so you see what it did.
+
+Above the list, **You watch N things** opens the list of what you watch, each with **Unwatch**.
+Watching is yours alone: nobody else sees what you watch, and it changes nothing in the wiki.
+The full rules are in [the spec](../spec/navigation.md#watching-pages).
 
 ## Undoing a change
 

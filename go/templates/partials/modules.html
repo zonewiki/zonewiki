@@ -54,6 +54,8 @@
 {{- with .settings}}<a href="{{(index . 0).Href}}" role="menuitem" class="menu-settings">Settings</a>
 {{- else}}<a href="/assistant" role="menuitem" class="menu-assistant">Connect an assistant</a>{{end -}}
 {{- with .set_login}}<a href="{{.}}" role="menuitem" class="menu-login">Set a login</a>{{end -}}
+{{- /* Watched pages: the changes to what the user watches, with how many pages have news (js/chrome.js keeps it current). */ -}}
+{{- if .watches}}<a href="/changes?watched=1" role="menuitem" class="menu-watched">Watched pages<span class="menu-count"{{if not .watched}} hidden{{end}}>{{if .watched}}{{.watched}}{{end}}</span></a>{{end -}}
 {{- if .admin}}<a href="/admin" role="menuitem" class="menu-admin">Admin</a>{{end -}}
 {{- ""}}<button type="button" role="menuitem" class="menu-sharing">{{if .sharing}}Turn sharing mode off{{else}}Sharing mode{{end}}</button>
 {{- ""}}<a href="/help" role="menuitem" class="menu-help">Help</a>
@@ -81,5 +83,5 @@
 <span class="action-sep" aria-hidden="true"></span>
 <button type="button" class="action-search" aria-label="Search" title="Search (Ctrl+P)">{{template "icon_search"}}<span class="action-label">Search</span></button>
 </nav>
-{{- range .ModuleLinks}}{{if .Menu}}{{template "module_menu" (dict "link" . "user" $.User "sign_out" $.SignOut "settings" $.Settings "set_login" $.SetLogin "admin" $.Admin "sharing" $.Sharing)}}{{end}}{{end}}
+{{- range .ModuleLinks}}{{if .Menu}}{{template "module_menu" (dict "link" . "user" $.User "sign_out" $.SignOut "settings" $.Settings "set_login" $.SetLogin "admin" $.Admin "sharing" $.Sharing "watches" $.Watches "watched" $.Watched)}}{{end}}{{end}}
 {{- end}}

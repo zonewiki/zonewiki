@@ -470,6 +470,7 @@ Tests: `TestASharedAccount` in `tests/test_password.py` and `tests/test_assistan
 A viewer reads everything shared (pages, tasks, history, search) and changes nothing: no page, note, upload, checkbox or task, not even a private one of their own, no tag rename, no Commit.
 They have no private folder in use (no Private, no Notes, `/private` is a 404); one kept from when they were an editor stays on disk and they still see it, but change nothing there either.
 They may change their own password and make their own MCP token, whose assistant only reads.
+They watch pages as anyone does (Watching pages in `docs/spec/navigation.md`): what one watches is one's own, and nothing of the wiki.
 
 #### What a viewer sees
 
@@ -963,7 +964,7 @@ A name that is taken, by a user or an open invite, is refused there ("The user n
 So is the name of a user who was removed (`userNameHasHistory`):
 Zonewiki noted them removed (`.zone/removed-users`, written by the Users tab's Remove and by `zonewiki user remove`),
 their private folder is there or in the history, a commit names them as its author,
-Zonewiki keeps a draft of theirs or what news they had seen (`.zone/drafts/<name>/`, `.zone/seen/<name>.json`),
+Zonewiki keeps a draft of theirs, what news they had seen or what they watched (`.zone/drafts/<name>/`, `.zone/seen/<name>.json`, `.zone/watch/<name>.json`),
 or a list or a task names them: a list's owners (a shared or a group's list), a task's assignee or follower, which is all a member who only read leaves.
 An address that got an account meanwhile is refused too ("There is an account with your address already: sign in with it.").
 Removing a user keeps their private pages, tasks and lists, and their comments and history, so a stranger signing up under the name would get all of it; an admin may still give the name again (`user add`, an invite).
