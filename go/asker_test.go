@@ -34,6 +34,7 @@ func TestAskersAreMadeInFewPlaces(t *testing.T) {
 		"assigneeGone",     // a task's assignee: do they still see its list
 		"assignedOutside",  // tasks' assignees: whom a list narrowed, or tasks moved into it, would leave out
 		"canHaveNews",      // a user, by their seen-file: the tasks that can have news for them
+		"digestFor",        // who the morning's mail goes to: what is new for them, of what they see
 		"followersSeen",    // a follower: do they see the task
 		"isPrivateHome",    // a private folder's owner: is this page their home
 		"listMembers",      // each user: is the list for them

@@ -1368,17 +1368,49 @@ Not built: the name as a chip in the text, and completing it while typing.
 
 ### Mail
 
-Mail goes where you asked for it (`mails`, `mailKinds`): three kinds, each a box in My tasks' settings dialog (there where Zonewiki could mail you: the deployment's mail server, `ZONE_SMTP_*`, Mail in `docs/spec/deployment.md`, and your `email` in `.zone/config`, which sign-up or an admin's `zonewiki user email NAME ADDRESS` sets), **none ticked until you tick it**:
+Mail goes where you asked for it (`mails`, `mailKinds`): four kinds, each a box in My tasks' settings dialog (there where Zonewiki could mail you: the deployment's mail server, `ZONE_SMTP_*`, Mail in `docs/spec/deployment.md`, and your `email` in `.zone/config`, which sign-up or an admin's `zonewiki user email NAME ADDRESS` sets), **none ticked until you tick it**:
 
 | Box | Mail | |
 |-----|------|---|
 | a task is given to me | `tellAssigned`: "bob gave you a task: <title>" | several given in one write one mail, "bob gave you N tasks" |
 | someone mentions me (@name) | `tellMentioned`: "bob mentioned you: <title>" | with the text |
 | someone comments on a task I have, gave or follow | `tellComment`: "bob commented: <title>" | with the comment; not to who it mentions, who gets that mail |
+| the day starts: a summary of what is new and what is due | The morning's mail, below | once a morning, and only one that has something |
 
-Each comes with the task's link where Zonewiki knows its address (`base-url`), sent in the background (a write doesn't wait for the mail server; a failure is in Zonewiki's log), never for what you did yourself.
-The kinds are kept as `"mail": "assigned,comments"` in your registry's `mine` (the kinds turned on, in that order).
-There is no digest and no mail about watched pages.
+The first three come with the task's link where Zonewiki knows its address (`base-url`), sent in the background (a write doesn't wait for the mail server; a failure is in Zonewiki's log), never for what you did yourself.
+The kinds are kept as `"mail": "assigned,comments,digest"` in your registry's `mine` (the kinds turned on, in that order).
+A viewer, to whom no task is given, has none of them.
+
+### The morning's mail
+
+One mail a morning with what a day starts with, for who ticked **the day starts: a summary of what is new and what is due**.
+It works beside the other three: who wants one mail a day and no more unticks those.
+
+| Part | Holds |
+|------|-------|
+| **Updates on your tasks** | the tasks whose news came since the last morning's mail, the latest first, each with the line Updates shows ("bob commented twice · anna closed it") and its link; then how many more have news from before, not read yet, and the link to Updates |
+| **Pages you watch** | the watched pages changed since the last mail that have news for you, A–Z, each with who changed it and its link; then how many more changed before and aren't looked at yet, and the link to the watched changes (Watching pages in `docs/spec/navigation.md`) |
+| **Due today** | the tasks of My tasks due today |
+| **Overdue** | those due before, the longest first, each with its date |
+
+**A morning with nothing sends nothing.**
+A mail goes out when something is new since the last one (an update, a watched page changed) or a task is due today.
+What is only overdue, or was told before and not read, comes along with such a mail but sends none of its own: it would be the same mail every morning.
+
+**It reads nothing for you**: a task or a page is read when you open it, not when a mail named it, so the app shows the same news until you look.
+A part names 20 tasks or pages and counts the rest.
+Your private tasks are in it, by their titles, as My tasks has them: it is your own mail, to your own address.
+
+**When**: once a day, from 7:00 in the wiki's time (`TZ`, the deployment's timezone: `docs/spec/deployment.md`), the first time Zonewiki looks after that, and no longer from noon: a Zonewiki that starts in the afternoon sends no morning's mail to someone who is at their desk by then.
+A Zonewiki that sleeps while nobody uses it (Started by systemd, asleep when idle, there) sends it when something starts it in the morning, so its host wakes it then.
+
+#### How the morning's mail works
+
+`go/digest.go`: `startDigests` looks every minute, from the start on (`sendDigests`), for each user who `mails` the kind `digest` and wasn't looked into today.
+`.zone/digest.json` keeps, a user, the last day looked into and the moment up to which they were told (`{"alice": {"day": "2026-11-25", "at": 1764054000}}`, out of git, owner-only); it is written before the mail goes out, so a mail is rather lost than sent twice, and the first mail tells of the last 24 hours.
+`digestFor` asks everything as the user the mail goes to (`asUser`): `updatesFor` and `newsAll` for the tasks (the rule of Updates), `watchNewsFor` for the pages (the rule of the count), `mineFilter` for what is due; nothing in it that they don't see, and nothing of a task or page they see no longer.
+While the mails go out Zonewiki doesn't exit for being idle (`digestsRunning`, `idleLongEnough`).
+A mail that fails is in Zonewiki's log, and not sent again.
 
 ### What you have seen
 

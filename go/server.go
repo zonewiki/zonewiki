@@ -259,6 +259,7 @@ func main() {
 		}
 	}
 	startUsage() // what the start itself committed is no one's use
+	startDigests()
 	srv := &http.Server{
 		Handler: countRequests(newHandler()),
 		// A slow or idle client doesn't hold a connection for long: the
@@ -475,10 +476,12 @@ func countRequests(next http.Handler) http.Handler {
 // who guessed a password wrong is remembered by the throttles for a day,
 // and an exit would hand a guesser five new tries each time.
 // Nor while the repository is packed: a join of its packs stopped halfway
-// is its work lost, and done again from the start the next time.
+// is its work lost, and done again from the start the next time. Nor while
+// the morning's mails go out (digest.go): a Zonewiki started for them
+// sends them all first.
 func idleLongEnough(after time.Duration) bool {
 	return idle.busy.Load() == 0 && now().Sub(time.Unix(0, idle.last.Load())) >= after &&
-		!loginThrottle.remembers() && !mcpThrottle.remembers() && !packingNow()
+		!loginThrottle.remembers() && !mcpThrottle.remembers() && !packingNow() && !digestsRunning.Load()
 }
 
 // exitWhenIdle ends Zonewiki, with exit code 0, once idleLongEnough: requests

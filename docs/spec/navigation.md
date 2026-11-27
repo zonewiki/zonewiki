@@ -363,6 +363,7 @@ What an assistant reads for you is no look of yours.
 - **Watched pages** opens Changes with **Only what I watch** ticked (`/changes?watched=1`): the changes to the pages you watch and nothing else, with the other filters as ever.
   A change that is news is marked **new** (`.changes-new`), in the unfiltered Changes too.
 - **Mark all read** beside the heading there, while there is news.
+- The morning's mail has them too, for who turned it on (The morning's mail in `docs/spec/tasks.md`).
 
 ### How watching works
 

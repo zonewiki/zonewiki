@@ -154,6 +154,12 @@ def test_the_mail_is_turned_off_in_my_tasks_settings(alice, smtp, wiki_dir):
     login(alice, "alice")
     new(alice, title="Aloud", assignee="bob")
     assert "Aloud" in mails(smtp, 1)[0][1]
+    # The morning's mail is a kind like the others (what it says: go/digest_test.go), and sends nothing by itself.
+    login(alice, "bob")
+    assert turn("digest,assigned", "mail=assigned,comments").status_code == 200
+    assert '"mine": {"mail": "assigned,digest"}' in (wiki_dir / "private/bob/_tasks/lists.json").read_text()
+    assert 'name="mail_digest"' in alice.get("/tasks?mine=1", headers=HOST).get_data(as_text=True)
+    mails(smtp, 1)
 
 
 def test_no_mail_without_a_mail_server(client, wiki_dir, monkeypatch):

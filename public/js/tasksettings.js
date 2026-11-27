@@ -26,8 +26,8 @@ export function parseParams(raw) {
   return out;
 }
 
-// The kinds of mail about tasks a user can turn on (mailKinds in go/notify.go).
-const MAIL = ['assigned', 'mentioned', 'comments'];
+// The kinds of mail a user can turn on (mailKinds in go/notify.go); digest is the morning's summary.
+const MAIL = ['assigned', 'mentioned', 'comments', 'digest'];
 
 // What the Open tab shows, as group= names it (tasksGroups in go/tasksyntax.go).
 const GROUPS = ['none', 'day', 'person', 'list'];

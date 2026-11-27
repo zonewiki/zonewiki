@@ -19,11 +19,12 @@ import (
 // write made is not in it.
 type assignedBefore map[string]string
 
-// The kinds of mail about tasks a user can turn on (My tasks' settings):
-// a task given to them, a mention of them, a comment on a task they have or
-// gave. "mail" in their registry's mine names those turned on, "," between.
+// The kinds of mail a user can turn on (My tasks' settings): a task given
+// to them, a mention of them, a comment on a task they have or gave, and
+// the morning's mail (digest.go: what is new for them and what is due).
+// "mail" in their registry's mine names those turned on, "," between.
 // None is turned on until they do it.
-var mailKinds = []string{"assigned", "mentioned", "comments"}
+var mailKinds = []string{"assigned", "mentioned", "comments", "digest"}
 
 // mails: user gets the mails of kind: the deployment sends mail, they have
 // an address, they aren't disabled, and they turned that kind on.

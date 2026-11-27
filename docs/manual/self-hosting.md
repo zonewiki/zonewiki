@@ -330,7 +330,7 @@ See [Self-hosting behind HTTPS](../spec/security.md#self-hosting-behind-https).
 
 ## Mail
 
-Zonewiki sends mail for two things: sign-up, and telling users about their tasks (a task given to them, a mention, a comment), for those who turned it on in My tasks' settings.
+Zonewiki sends mail for two things: sign-up, and telling users what is new for them (a task given to them, a mention, a comment, or one summary every morning), for those who turned it on in My tasks' settings.
 It needs an SMTP server, set in `.env` (with the binary, the same names as environment variables: [Where settings live](#where-settings-live)):
 
 ```bash

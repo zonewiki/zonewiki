@@ -301,6 +301,7 @@
       <label class="task-settings-check"><input type="checkbox" id="task-settings-mail-assigned{{.Sfx}}" name="mail_assigned"> a task is given to me</label>
       <label class="task-settings-check"><input type="checkbox" id="task-settings-mail-mentioned{{.Sfx}}" name="mail_mentioned"> someone mentions me (@name)</label>
       <label class="task-settings-check"><input type="checkbox" id="task-settings-mail-comments{{.Sfx}}" name="mail_comments"> someone comments on a task I have, gave or follow</label>
+      <label class="task-settings-check" title="Once a morning, and only when there is something: updates on your tasks and changes to the pages you watch since the last mail, and what is due today"><input type="checkbox" id="task-settings-mail-digest{{.Sfx}}" name="mail_digest"> the day starts: a summary of what is new and what is due</label>
     </fieldset>
     {{- end}}
     <label class="task-settings-check task-settings-list" data-field="home" hidden><input type="checkbox" id="task-settings-home{{.Sfx}}" name="homeout"> Leave its tasks out of My tasks</label>

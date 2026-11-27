@@ -525,20 +525,24 @@ def test_my_tasks_settings_turn_the_mails_on(page, wiki, monkeypatch):
     dialog = page.locator("#task-settings-modal")
     box = dialog.locator("[name=mail_assigned]")
     expect(dialog.locator(".task-settings-mail label")).to_have_text(
-        ["a task is given to me", "someone mentions me (@name)", "someone comments on a task I have, gave or follow"])
-    for name in ("mail_assigned", "mail_mentioned", "mail_comments"):
+        ["a task is given to me", "someone mentions me (@name)", "someone comments on a task I have, gave or follow",
+         "the day starts: a summary of what is new and what is due"])
+    for name in ("mail_assigned", "mail_mentioned", "mail_comments", "mail_digest"):
         expect(dialog.locator(f"[name={name}]")).not_to_be_checked()
     box.check()
     dialog.locator("[name=mail_comments]").check()
+    dialog.locator("[name=mail_digest]").check()         # the morning's mail
     with page.expect_navigation():
         dialog.get_by_role("button", name="Save").click()
-    assert '"mine": {"mail": "assigned,comments"}' in (wiki.root / "private/alice/_tasks/lists.json").read_text()
+    assert '"mine": {"mail": "assigned,comments,digest"}' in (wiki.root / "private/alice/_tasks/lists.json").read_text()
     more_menu(page)
     page.get_by_role("menuitem", name="List settings…").click()
     expect(box).to_be_checked()
+    expect(dialog.locator("[name=mail_digest]")).to_be_checked()
     expect(dialog.locator("[name=mail_mentioned]")).not_to_be_checked()
     box.uncheck()
     dialog.locator("[name=mail_comments]").uncheck()
+    dialog.locator("[name=mail_digest]").uncheck()
     with page.expect_navigation():
         dialog.get_by_role("button", name="Save").click()
     assert '"mail"' not in (wiki.root / "private/alice/_tasks/lists.json").read_text()

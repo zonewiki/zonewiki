@@ -610,7 +610,20 @@ Zonewiki stays up:
 
 - while a request runs;
 - while a throttle remembers a wrong password or token (for a day after a client's last wrong try, until its right one): an exit would forget the count and give a guesser five new tries each time;
-- while it packs the repository (Packing the repository, below): a join of the packs stopped halfway is done again from the start.
+- while it packs the repository (Packing the repository, below): a join of the packs stopped halfway is done again from the start;
+- while the morning's mails go out (below).
+
+**The morning's mail needs Zonewiki up in the morning** (The morning's mail in `docs/spec/tasks.md`): it goes out from 7:00 to noon, the first time Zonewiki looks, and a Zonewiki asleep looks at nothing.
+Whoever holds the socket starts it once in that time, with any request; the healthcheck does (`zonewiki health unix:/run/zone/zone.sock`, or `GET /api/health`), which starts Zonewiki and doesn't keep it up afterwards:
+
+```ini
+# zone-morning.timer                   # zone-morning.service
+[Timer]                                [Service]
+OnCalendar=*-*-* 07:05:00              Type=oneshot
+                                       ExecStart=/usr/local/bin/zonewiki health unix:/run/zone/zone.sock
+```
+
+Without it the mail goes out on the mornings someone opens the wiki before noon, and on no others.
 
 What an exit loses is what a restart loses: the caches, which are built again, and the texts an editor's save is merged from,
 so a tab left open over a sleep saves as after any restart
@@ -622,7 +635,7 @@ A Unix socket handed over is treated as one Zonewiki opened (`--addr unix:PATH`,
 
 ## Mail
 
-Zonewiki sends mail for sign-up (Sign-up in `docs/spec/users.md`) and to tell a user that someone gave them a task (Assigning tasks there), mentions them or comments on a task of theirs (Mail in `docs/spec/tasks.md`; each kind only once the user turns it on),
+Zonewiki sends mail for sign-up (Sign-up in `docs/spec/users.md`) and to tell a user that someone gave them a task (Assigning tasks there), mentions them or comments on a task of theirs, and the morning's mail, once a day (Mail and The morning's mail in `docs/spec/tasks.md`; each kind only once the user turns it on),
 through an SMTP server the deployment names in `.env` (`go/mail.go`, Go's `net/smtp`; no dependency):
 
 ```bash
@@ -788,6 +801,7 @@ Zonewiki's own state, none of it in git (`.git/info/exclude` has `/.zone/*`, `ex
 - `usage/counts.json`, `usage/users.json` — how much the wiki is used, as counts a day for 8 weeks, and the day each user was last active (Usage in `docs/spec/users.md`); `counts.json` holds no name and is the one file here a host may read
 - `seen/<user>.json` — what each user has seen of the tasks' news (What you have seen, under News on your tasks in `docs/spec/tasks.md`)
 - `watch/<user>.json` — the pages and folders each user watches, and what they have seen of them (Watching pages in `docs/spec/navigation.md`)
+- `digest.json` — the last morning each user's mail was looked into, and up to when they were told what is new (The morning's mail in `docs/spec/tasks.md`)
 - `unsaved-files.json` — who pasted the first file for a task not made yet (a new task's dialog before its first Save), whose those files are until then (A task's files in `docs/spec/tasks.md`)
 - `drafts/<user>/` — an editor's text left in a conflict when its tab closed, for its user's next edit, 30 days at most (`docs/spec/editor.md`)
 - `tmp/` — a three-way merge's scratch files, removed after each merge
@@ -826,7 +840,7 @@ A change to what Zonewiki keeps in git that an older Zonewiki would misread rais
 Readers stay lenient all the same: the number says which steps Zonewiki ran, not that every file is as Zonewiki wrote it (a file edited by hand or pulled from elsewhere is read as before).
 The settings file and the rest of `.zone/` aren't covered: they are no wiki data (What is in .zone/, above).
 
-What holds users' words or secrets is written readable by Zonewiki's user alone (0600), whatever the umask: `config`, `secret_key`, `signed-out`, `links`, `grants`, `seen/`, `watch/`, `usage/users.json`, `unsaved-files.json`, `drafts/`, the index files (the groups' in `index/groups/` among them, with their pages' words), `index/tasks/` (private tasks' titles among them), `embeddings.json` (every page's slug) and `queries.jsonl` (every user's queries and what they found) (`atomicfile.WriteOwnerOnly`; a file from before is made so at its next write).
+What holds users' words or secrets is written readable by Zonewiki's user alone (0600), whatever the umask: `config`, `secret_key`, `signed-out`, `links`, `grants`, `seen/`, `watch/`, `digest.json`, `usage/users.json`, `unsaved-files.json`, `drafts/`, the index files (the groups' in `index/groups/` among them, with their pages' words), `index/tasks/` (private tasks' titles among them), `embeddings.json` (every page's slug) and `queries.jsonl` (every user's queries and what they found) (`atomicfile.WriteOwnerOnly`; a file from before is made so at its next write).
 The pages themselves, in the wiki, keep the umask's mode, as a file made in an editor does.
 
 ### A git remote
@@ -854,7 +868,7 @@ Zonewiki writes each file whole (a reader never sees half of one), but a copy ta
   They hold password and token hashes and keys: keep the backup as confidential as the wiki (Before you open it up in `docs/spec/security.md`).
 - **What can be rebuilt, and needn't be backed up**: `.zone/index/` (Zonewiki builds the search indexes again when they are first needed, which takes a while on a big wiki, and with semantic search embeds every section and task again in the background, which takes longer),
   `.zone/tmp/`, the lock files and the mark `tasks-checked` (a start without it looks the task files through again and changes nothing that is right).
-  Lost, `seen/` shows each user the tasks' news again, `watch/` leaves nobody watching a page, `drafts/` loses only a text left in a conflict, `unsaved-files.json` the files pasted in a dialog not saved yet to their uploader (no one opens them), and `queries.jsonl` is a log.
+  Lost, `seen/` shows each user the tasks' news again, `watch/` leaves nobody watching a page, `digest.json` has the next morning's mail tell of the last day, `drafts/` loses only a text left in a conflict, `unsaved-files.json` the files pasted in a dialog not saved yet to their uploader (no one opens them), and `queries.jsonl` is a log.
 - **Restoring**: put the folder back where `ZONE_DATA` points and start Zonewiki;
   the files must belong to the user Zonewiki runs as, and `.zone/config` and `secret_key` should stay readable by it alone (0600: Zonewiki warns in its log when others may read the settings file).
 
