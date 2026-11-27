@@ -126,12 +126,24 @@ func (c *converter) add(list *[]string, line string) {
 	}
 }
 
-// code: s as a markdown code span. Report lines are markdown.
+// code: s as a markdown code span, whatever backticks it holds: its fence
+// is one longer than the longest run of them in s, and padded when s
+// starts or ends with one. Report lines are markdown.
 func code(s string) string {
-	if strings.Contains(s, "`") {
-		return "`` " + s + " ``"
+	longest, run := 0, 0
+	for _, c := range s {
+		if c == '`' {
+			run++
+			longest = max(longest, run)
+		} else {
+			run = 0
+		}
 	}
-	return "`" + s + "`"
+	fence := strings.Repeat("`", longest+1)
+	if longest > 0 {
+		return fence + " " + s + " " + fence
+	}
+	return fence + s + fence
 }
 
 // ---- the folder ----

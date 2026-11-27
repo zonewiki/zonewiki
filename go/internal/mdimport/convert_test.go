@@ -574,3 +574,18 @@ func TestSampleFolders(t *testing.T) {
 		}
 	}
 }
+
+// A name in the report stays one code span whatever backticks it holds,
+// so a file named to break out of it can't add markdown or HTML there.
+func TestCodeSpanHoldsAnyBackticks(t *testing.T) {
+	for in, want := range map[string]string{
+		"plain.md":        "`plain.md`",
+		"a`b.md":          "`` a`b.md ``",
+		"a``b<x>.md":      "``` a``b<x>.md ```",
+		"`start and end`": "`` `start and end` ``",
+	} {
+		if got := code(in); got != want {
+			t.Errorf("code(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
