@@ -174,6 +174,9 @@ class TestViewPage:
         assert re.findall(r'class="action-label"[^>]*>(\w+)<', bar) == ["Wiki", "Tasks", "Notes", "Note", "Task", "Search"]
         # Navigation, a divider, then the actions.
         assert bar.index('data-module="tasks"') < bar.index('class="action-sep"') < bar.index('class="action-new-note"')
+        # The Wiki tab's icon is the logo's drawing, the open frame with its small square.
+        wiki = bar.split('data-module="wiki"', 1)[1].split("</a>", 1)[0]
+        assert '<path d="M12 7.25v6.25H2.5V4h6.25"' in wiki and '<rect x="10.5" y="2.5" width="3" height="3"' in wiki
 
     def test_phone_action_buttons_on_views_not_in_editor(self, client, wiki_dir):
         write_page(wiki_dir, "my-page", "# My Page\n")

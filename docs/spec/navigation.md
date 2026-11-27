@@ -256,7 +256,7 @@ The **action bar** (`action_bar` in `templates/partials/modules.html`, `nav.acti
 Navigation and actions apart, so the "new" buttons say what they make instead of a bare +.
 Hidden on desktop (the top actions).
 At ≤640px it is a bottom tab bar across the full width: Wiki · Tasks · Notes | Note · Task | Search (with users Wiki · Private | Tasks · Notes | Note · Task | Search, Private with a lock icon, Notes with a small lock at its icon's top right: `.action-lock`),
-icon over label,
+icon over label (the Wiki tab's is the logo's drawing as a line icon: the open frame with its small square),
 the current module in the accent green,
 each at least 44px.
 The Tasks tab's counts stand right of its icon, due above Today, centred on the icon; they may reach a little past the tab's edge, clear of the next tab's icon, and the tabs keep one width, the icons evenly spaced.
