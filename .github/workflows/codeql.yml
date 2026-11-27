@@ -38,8 +38,10 @@ jobs:
         include:
           - language: actions
             build-mode: none
-          # Built as go build does it (the module in go/, with cgo): CodeQL
-          # reads Go as it compiles.
+          # Built as a plain go build does it (the module in go/; without
+          # Go's simd experiment, so the model's arithmetic is its plain
+          # loops, go/internal/encoder/kernels_plain.go): CodeQL reads Go as
+          # it compiles.
           - language: go
             build-mode: autobuild
           - language: javascript-typescript

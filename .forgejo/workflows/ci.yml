@@ -100,11 +100,6 @@ jobs:
     # keywords and by meaning, in the app's image with the model. A job of
     # its own after the checks, as the bench: it builds that image (from the
     # host's cache, unless the code or the model changed).
-    # Off since 2026-11-18: Microsoft took onnxruntime's GitHub repository
-    # private "while we investigate malicious content", and this job runs
-    # onnxruntime (the floor counts hybrid as failed without the model).
-    # Back on, and the image's ZONE_SEMANTIC_SEARCH below, once that's cleared.
-    if: false
     needs: [checks]
     runs-on: docker
     container:
@@ -166,11 +161,11 @@ jobs:
           tag_args=()
           for t in ${{ steps.meta.outputs.tags }}; do tag_args+=(-t "$t"); done
           # docker, unlike podman, doesn't fall back to Containerfile.
-          # No semantic search in the image since 2026-11-18 (onnxruntime's
-          # repository taken private by Microsoft; see the retrieval job).
+          # Semantic search's model is in the image; ZONE_SEMANTIC_SEARCH=on
+          # in .env turns it on, as with ./run.sh.
           docker build -f Containerfile \
             --build-arg "ZONE_BUILD=${{ steps.meta.outputs.build }}" \
-            --build-arg ZONE_SEMANTIC_SEARCH=off \
+            --build-arg ZONE_SEMANTIC_SEARCH=on \
             "${tag_args[@]}" .
       - name: Push
         run: |

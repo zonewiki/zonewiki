@@ -53,11 +53,6 @@ jobs:
     # Search's quality against its floor (./run.sh retrieval; Measuring
     # retrieval in docs/spec/search.md): the sample wiki's questions, by
     # keywords and by meaning, in the app's image with the model.
-    # Off since 2026-11-18: Microsoft took onnxruntime's GitHub repository
-    # private "while we investigate malicious content", and this job runs
-    # onnxruntime (the floor counts hybrid as failed without the model).
-    # Back on, and the image's ZONE_SEMANTIC_SEARCH below, once that's cleared.
-    if: false
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -65,10 +60,8 @@ jobs:
         run: ./run.sh retrieval
 
   image:
-    # One image per architecture, each on a runner of its own (no emulation:
-    # the arm64 build compiles with cgo and fetches onnxruntime's arm64
-    # build natively), pushed by digest only; `manifest` joins them under
-    # the tags.
+    # One image per architecture, each on a runner of its own (no
+    # emulation), pushed by digest only; `manifest` joins them under the tags.
     needs: [checks]
     if: github.event_name != 'pull_request'
     strategy:
@@ -105,12 +98,11 @@ jobs:
           context: .
           file: Containerfile
           platforms: linux/${{ matrix.arch }}
-          # No semantic search in the image since 2026-11-18 (onnxruntime's
-          # repository taken private by Microsoft "while we investigate
-          # malicious content"; see the retrieval job): on again once cleared.
+          # Semantic search's model is in the image; ZONE_SEMANTIC_SEARCH=on
+          # in .env turns it on, as with ./run.sh.
           build-args: |
             ZONE_BUILD=${{ steps.meta.outputs.build }}
-            ZONE_SEMANTIC_SEARCH=off
+            ZONE_SEMANTIC_SEARCH=on
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.description=Zonewiki: wiki, notes and tasks for you, your team, and your AI agents (plain Markdown files, self-hosted)
@@ -173,7 +165,7 @@ jobs:
   release:
     # On a v* tag, once the checks pass: the binaries for Linux and macOS,
     # amd64 and arm64 (./run.sh binaries, in the tools image with its pinned
-    # Go, without cgo), with SHA256SUMS, LICENSE and THIRD_PARTY_LICENSES,
+    # Go, without cgo, with Go's simd experiment), with SHA256SUMS, LICENSE and THIRD_PARTY_LICENSES,
     # attached to the tag's GitHub release, made here when it has none yet
     # (Release binaries in docs/spec/deployment.md). With gh, which the
     # runners have, and the workflow's token.

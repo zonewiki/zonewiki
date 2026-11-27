@@ -122,7 +122,7 @@ In a checkout of the repository, the same `./run.sh up` builds the image from it
 
 ### From source
 
-With Go 1.27 or newer, a C compiler and git:
+With Go 1.27 or newer and git:
 
 ```bash
 git clone https://github.com/zonewiki/zonewiki && cd zonewiki
@@ -130,7 +130,7 @@ git clone https://github.com/zonewiki/zonewiki && cd zonewiki
 go/zonewiki                           # your wiki: ~/zonewiki
 ```
 
-`CGO_ENABLED=0` builds without semantic search and needs no C compiler.
+`GOEXPERIMENT=simd go build -o zonewiki .` builds with Go's vector arithmetic, which semantic search's model runs many times faster on (the images and the release binaries are built so).
 
 ### Next steps
 

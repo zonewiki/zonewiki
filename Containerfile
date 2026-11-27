@@ -1,6 +1,6 @@
 # Zonewiki's image: the server (one Go binary, with the browser code and the docs
-# it serves built in), and with ZONE_SEMANTIC_SEARCH=on the model and
-# onnxruntime that run semantic search. Three stages, so a change to the code
+# it serves built in), and with ZONE_SEMANTIC_SEARCH=on the model of semantic
+# search, which the binary runs itself. Three stages, so a change to the code
 # rebuilds neither the model layer nor the toolchain's.
 
 # The base image, by digest (the tag's multi-arch index): a tag can be moved
@@ -11,13 +11,16 @@
 ARG UBUNTU=ubuntu:26.04@sha256:065aa8626841f16057b78b027b464cd59c4fac36c204c72dcbf48d66f5fa8a96
 
 # ── Build: the server from go/ ───────────────────────────────────────────────
-# With cgo (a C compiler): semantic search loads onnxruntime with dlopen, so
-# the binary links only libc either way. Zonewiki's own files (zonefiles.go at the
-# repository's root: the browser code, the docs, the licenses) are built in.
+# Without cgo: the binary is static and needs no C compiler. Semantic search's
+# model runs in Go on vector arithmetic (go/internal/encoder), which is Go's
+# simd package: an experiment, so GOEXPERIMENT=simd is set for the build
+# (without it the binary still builds, and embeds many times slower).
+# Zonewiki's own files (zonefiles.go at the repository's root: the browser
+# code, the docs, the licenses) are built in.
 FROM ${UBUNTU} AS build
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      ca-certificates curl gcc libc6-dev && \
+      ca-certificates curl && \
     rm -rf /var/lib/apt/lists/*
 
 # Go, a pinned release checked against its published checksum (go.dev/dl),
@@ -40,7 +43,7 @@ RUN TARGETARCH=${TARGETARCH:-$(dpkg --print-architecture)} \
  && echo "$sum  /tmp/go.tgz" | sha256sum -c - \
  && tar -xzf /tmp/go.tgz -C /usr/local \
  && rm /tmp/go.tgz
-ENV PATH=/usr/local/go/bin:$PATH GOTOOLCHAIN=local CGO_ENABLED=1
+ENV PATH=/usr/local/go/bin:$PATH GOTOOLCHAIN=local CGO_ENABLED=0 GOEXPERIMENT=simd
 
 WORKDIR /src/go
 # The modules first (go.sum checks them), so a code change doesn't fetch them
@@ -58,42 +61,27 @@ COPY docs/screenshots/*.png /src/docs/screenshots/
 COPY go/ ./
 RUN go build -trimpath -ldflags="-s -w" -o /zonewiki .
 
-# ── Semantic search: onnxruntime and the model (opt-in) ─────────────────────
-# With ZONE_SEMANTIC_SEARCH=on in .env, compose.build.yaml passes it here and both
-# are baked into the image, so the first search doesn't wait for a download
-# and Zonewiki works offline. Without it, the folders stay empty. Pinned and
-# checked against their SHA-256: onnxruntime's GitHub release (the sums of
-# its files), the model's files at a fixed revision (go/embed.go has the
-# same names and sums; tests/test_image.py checks they agree).
+# ── Semantic search: the model (opt-in) ──────────────────────────────────────
+# With ZONE_SEMANTIC_SEARCH=on in .env, compose.build.yaml passes it here and
+# the model is baked into the image, so the first search doesn't wait for a
+# download and Zonewiki works offline. Without it, the folder stays empty.
+# Pinned and checked against their SHA-256: the model's files at a fixed
+# revision (go/embed.go has the same names and sums; tests/test_image.py
+# checks they agree). Nothing runs it but the binary: no runtime is fetched.
 FROM ${UBUNTU} AS semantic
-ARG TARGETARCH
 ARG ZONE_SEMANTIC_SEARCH=
-ARG ORT_VERSION=1.31.0
-ARG ORT_SHA256_X64=cc5c72baf5ae5c8238a6841f0897227be2d02826b9cf98eaf02fdefaeeb03a57
-ARG ORT_SHA256_AARCH64=c5b8b3cca31f3d643a3b313b8f42e2d0f16a4fcefd02cda343d97bd5306afaab
 ARG MODEL=jinaai/jina-embeddings-v2-base-de
 ARG MODEL_REVISION=3f9eede875721714945b6a99a3198299243cf2be
 ARG MODEL_ONNX_SHA256=51654b7441fbfcfef6598b01cbd1ea925ca0f0cad81202fcd36fee325783f1b0
 ARG MODEL_VOCAB_SHA256=376c53a06d6911569afc19f584002a11dbcd6b871afb6d96b8600eb3c4e7e7a7
-RUN mkdir -p /opt/onnxruntime /opt/onnxruntime-licenses /opt/zonewiki-model \
+RUN mkdir -p /opt/zonewiki-model \
  && case "$(echo "$ZONE_SEMANTIC_SEARCH" | tr '[:upper:]' '[:lower:]' | tr -d ' ')" in \
       ""|0|off|false|no) exit 0 ;; \
       1|on|true|yes) ;; \
       *) echo "ZONE_SEMANTIC_SEARCH: expected on or off, got '$ZONE_SEMANTIC_SEARCH'" >&2; exit 1 ;; \
     esac \
- && TARGETARCH=${TARGETARCH:-$(dpkg --print-architecture)} \
- && case "$TARGETARCH" in \
-      amd64) arch=x64 sum=$ORT_SHA256_X64 ;; \
-      arm64) arch=aarch64 sum=$ORT_SHA256_AARCH64 ;; \
-      *) echo "no onnxruntime build for $TARGETARCH" >&2; exit 1 ;; \
-    esac \
  && apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates curl \
- && curl -sSfL -o /tmp/ort.tgz \
-      "https://github.com/microsoft/onnxruntime/releases/download/v${ORT_VERSION}/onnxruntime-linux-${arch}-${ORT_VERSION}.tgz" \
- && echo "$sum  /tmp/ort.tgz" | sha256sum -c - \
- && tar -xzf /tmp/ort.tgz -C /opt/onnxruntime --strip-components=2 --wildcards "*/lib/libonnxruntime.so*" \
- && tar -xzf /tmp/ort.tgz -C /opt/onnxruntime-licenses --strip-components=1 --wildcards "*/LICENSE" "*/ThirdPartyNotices.txt" \
  && base="https://huggingface.co/${MODEL}/resolve/${MODEL_REVISION}" \
  && mkdir -p /opt/zonewiki-model/onnx \
  && curl -sSfL -o /opt/zonewiki-model/onnx/model.onnx "$base/onnx/model.onnx" \
@@ -101,7 +89,7 @@ RUN mkdir -p /opt/onnxruntime /opt/onnxruntime-licenses /opt/zonewiki-model \
  && printf '%s  %s\n' "$MODEL_ONNX_SHA256" /opt/zonewiki-model/onnx/model.onnx \
       "$MODEL_VOCAB_SHA256" /opt/zonewiki-model/tokenizer.json | sha256sum -c - \
  && chmod -R a+rX /opt/zonewiki-model \
- && rm -rf /tmp/ort.tgz /var/lib/apt/lists/*
+ && rm -rf /var/lib/apt/lists/*
 
 # ── The image ────────────────────────────────────────────────────────────────
 FROM ${UBUNTU}
@@ -114,10 +102,8 @@ RUN apt-get update && \
       git tzdata ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
-# onnxruntime where the loader finds it, and the model where Zonewiki looks.
-COPY --from=semantic /opt/onnxruntime/ /usr/local/lib/
+# The model where Zonewiki looks.
 COPY --from=semantic /opt/zonewiki-model/ /opt/zonewiki-model/
-RUN ldconfig
 ENV ZONE_MODEL_DIR=/opt/zonewiki-model
 
 WORKDIR /app
@@ -125,7 +111,6 @@ WORKDIR /app
 # no public/ beside it. The licenses of what the image holds, to read
 # (zonewiki licenses prints them, the vendored libraries' too).
 COPY LICENSE THIRD_PARTY_LICENSES ./
-COPY --from=semantic /opt/onnxruntime-licenses/ licenses/onnxruntime/
 COPY --from=build /zonewiki ./zonewiki
 
 # The build ("<hash> <commit date>") shown next to Zonewiki's version, passed in by

@@ -11,7 +11,7 @@ There are four ways to run it; pick the first that fits:
 | [With the binary](#with-the-binary) | Your own computer, the quickest start | git; Linux or a Mac (Windows: WSL2) |
 | [With Docker](#with-docker) | Your computer, a server or a NAS, in a container, from the prebuilt image | Docker or Podman, with Compose |
 | [From the repository](#from-the-repository) | The container built from a checkout with `./run.sh`: to change Zonewiki, or for search by meaning | git, and Docker or Podman with Compose |
-| [From source](#from-source) | Building the binary yourself, to change Zonewiki or for another system | Go, a C compiler and git |
+| [From source](#from-source) | Building the binary yourself, to change Zonewiki or for another system | Go and git |
 
 Whichever you choose, the wiki is a folder of Markdown files, so you can change the way later and keep the wiki.
 
@@ -143,7 +143,7 @@ Everything else is as [with Docker](#with-docker): the same commands, the same `
 
 ## From source
 
-With Go 1.27 or newer, a C compiler and git:
+With Go 1.27 or newer and git:
 
 ```bash
 (cd go && go build -o zonewiki .)

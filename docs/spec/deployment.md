@@ -26,27 +26,26 @@ Three stages:
 
 | Stage | What it does |
 |-------|--------------|
-| `build` | Go (a pinned release, checked against its checksum) builds the server from `go/` with cgo, Zonewiki's own files built in |
-| `semantic` | With `ZONE_SEMANTIC_SEARCH=on`, onnxruntime's library and the model's files; off, three empty folders |
+| `build` | Go (a pinned release, checked against its checksum) builds the server from `go/`, without cgo and with Go's `simd` experiment, Zonewiki's own files built in |
+| `semantic` | With `ZONE_SEMANTIC_SEARCH=on`, the model's files; off, an empty folder |
 | the image | Ubuntu 26.04 LTS with what the two stages made |
 
 `build` runs `go mod download` first, so a code change doesn't fetch the modules again;
 it copies the root's `go.mod` beside `go/` for it, the module of Zonewiki's own files (What the binary holds, below).
-Then it copies what `zonefiles.go` builds in (the browser code, the docs, the licenses) and the server's code, and builds.
+Then it copies what `zonefiles.go` builds in (the browser code, the docs, the licenses) and the server's code, and builds:
+with `CGO_ENABLED=0` (a static binary; the stage has no C compiler) and `GOEXPERIMENT=simd`, Go's vector arithmetic, on which the binary runs semantic search's model itself (Running the model in `docs/spec/search.md`).
 
-`semantic` fetches onnxruntime's shared library (1.31.0, its GitHub release for the image's architecture) and the model's files (a fixed revision),
-each checked against its SHA-256,
-plus onnxruntime's license and third-party notices.
+`semantic` fetches the model's files (a fixed revision),
+each checked against its SHA-256.
 It is its own stage, copying nothing from the repo, so a code change never downloads the model again.
 
 The image has:
 
 - git, `tzdata` and CA certificates via `apt`;
-- `libonnxruntime.so` in `/usr/local/lib` (`ldconfig`);
-- the model in `/opt/zonewiki-model` (`ZONE_MODEL_DIR`);
+- the model in `/opt/zonewiki-model` (`ZONE_MODEL_DIR`), when built with `ZONE_SEMANTIC_SEARCH=on`;
 - the binary as `/app/zonewiki`, with the browser code and the docs built in (no `public/` beside it: it serves its own copies);
 - the licenses as `/app/LICENSE`,
-  `/app/THIRD_PARTY_LICENSES` (Go, the Go modules, the model) and `/app/licenses/onnxruntime/`
+  `/app/THIRD_PARTY_LICENSES` (Go, the Go modules, the model)
   (the vendored libraries' are in the binary, with its copy of `public/vendor/`: `zonewiki licenses` prints them all;
   Mermaid's bundled packages in `public/vendor/mermaid/THIRD_PARTY_LICENSES`, written by `docs/licenses/mermaid_notices.py`);
 - `HOME=/tmp` (Zonewiki may run as a UID without an account);
@@ -102,7 +101,7 @@ Unlike `compose.build.yaml`:
 - no `selinux: Z` (NAS systems have no SELinux, and older compose versions reject the option):
   on a host with SELinux enforcing (Fedora), label the wiki folder once, `chcon -Rt container_file_t <folder>`, or run Zonewiki from the repo;
 - the log is capped (`max-size` 10m, 3 files);
-- what is built in comes with the image, not from git or `.env`: the build string is CI's (`ZONE_BUILD`, Version), and `ZONE_SEMANTIC_SEARCH` is the image's (off for now: Semantic search paused, below).
+- what is built in comes with the image, not from git or `.env`: the build string is CI's (`ZONE_BUILD`, Version), and semantic search's model is the image's (`ZONE_SEMANTIC_SEARCH=on` in `.env` turns it on).
 
 The rest is as in `compose.build.yaml` (`init`, `restart`, healthcheck, `create_host_path: false`, the port: localhost only until `ZONE_BIND=0.0.0.0`, `ZONE_PORT` another port on the host).
 
@@ -248,7 +247,7 @@ With rootless Podman, add the file that keeps your user ID inside the container:
 
 ## From source
 
-With Go 1.27 or newer, a C compiler (for semantic search; `CGO_ENABLED=0` builds without it) and git:
+With Go 1.27 or newer and git:
 
 ```bash
 (cd go && go build -o zonewiki .)
@@ -256,7 +255,7 @@ go/zonewiki                          # the wiki in ~/zonewiki; ZONE_DATA=/path/t
 ```
 
 In Windows PowerShell: `cd go; go build -o zonewiki.exe .; cd ..`, then `$env:ZONE_DATA="$HOME\zonewiki"; go\zonewiki.exe`.
-For semantic search, onnxruntime's library must be where the loader finds it (`docs/spec/search.md`).
+For semantic search at full speed, build with Go's vector arithmetic, `GOEXPERIMENT=simd go build -o zonewiki .` (an experiment of Go 1.27, which the images and the release binaries are built with); a plain build embeds many times slower (Running the model in `docs/spec/search.md`).
 It listens on localhost only: a port alone in `--addr` (`:5080`, the default; `:5081`) is `127.0.0.1`'s unless `ZONE_ALLOW_REMOTE` is set, which opens it on every interface (`listenAddr` in `go/server.go`).
 An address with a host is taken as written (`--addr 0.0.0.0:5080`), and asks for a login first, as `ZONE_ALLOW_REMOTE` does (First run in `docs/spec/security.md`).
 A port another program has stops Zonewiki with what to do (`portTaken` in `go/server.go`): the default is not 5000, which a Mac's AirPlay Receiver and a Synology's DSM use, but another program may have 5080 too: `--addr :5081`.
@@ -314,8 +313,9 @@ CI's test job fails a `v*` tag that isn't (`./run.sh test`, from `GITHUB_REF`), 
 ### What a release binary is
 
 - Zonewiki's server with its own files built in (What the binary holds, above): the browser code, Help's docs, the licenses (`zonewiki licenses`).
-- Built without cgo (`CGO_ENABLED=0`), so statically linked on Linux and without semantic search: it searches by keywords (`go/embed_nocgo.go`), as the images CI publishes do for now (Semantic search paused, below).
-- 22 to 24 MB each (`-trimpath -ldflags="-s -w"`); the build string is the tagged commit and its date, from `go build`'s own record of the checkout (`sourceBuild`, Version below).
+- Built without cgo (`CGO_ENABLED=0`), so statically linked on Linux, and with Go's `simd` experiment (the tools image's `GOEXPERIMENT=simd`).
+  Semantic search works in it as in the image (`ZONE_SEMANTIC_SEARCH=on`): the binary runs the model itself and downloads its files (0.64 GB, checked against their hashes) to `~/.cache/zonewiki/` when first used.
+- 24 to 26 MB each (`-trimpath -ldflags="-s -w"`); the build string is the tagged commit and its date, from `go build`'s own record of the checkout (`sourceBuild`, Version below).
 - It needs git at run time, for the wiki's history: Zonewiki looks for it on `PATH` at start (`exec.LookPath`) and without it runs with no history, versions or undo.
 - Started with nothing set, the wiki is `~/zonewiki`, made at the first start (Data directory, below), and it listens on port 5080 of localhost only (`127.0.0.1:5080`), printing where to open it.
   There it needs no login; opened to other devices (`ZONE_ALLOW_REMOTE=1`) it shows only its first-run page until one is set, as ever (First run in `docs/spec/security.md`).
@@ -357,8 +357,7 @@ The wiki is untouched by an update; it lives in the folder `ZONE_DATA` names.
   Zonewiki runs as that user and writes the wiki as it.
 - Without `run.sh` (which takes the host's): `TZ`, e.g. `Europe/Vienna`, so "today" is your day (else UTC).
 - For other devices (a NAS, a server): `ZONE_ALLOW_REMOTE=1` with `run.sh`, or `ZONE_BIND=0.0.0.0`, which publishes the port on every interface instead of localhost.
-- Optional: `ZONE_PORT` (the host's port, default 5080).
-  `ZONE_SEMANTIC_SEARCH=on` does nothing with the prebuilt image for now: it has no semantic search since 2026-11-18 (Semantic search paused, below), so Zonewiki searches by keywords.
+- Optional: `ZONE_PORT` (the host's port, default 5080), `ZONE_SEMANTIC_SEARCH=on` (semantic search: the model is in the image; plan on roughly 1 GB more RAM).
 
 The wiki's own settings go in its settings file (`.zone/config`, `docs/spec/users.md`), through the container, in the folder of `compose.yaml` and `.env` (no repo needed):
 
@@ -405,13 +404,6 @@ With Container Manager (DSM 7.2 or newer; Docker on older DSM works the same ove
 
 Updates: over SSH, `docker compose pull && docker compose up -d` in the project folder (Container Manager's Image list may also offer the update for `ghcr.io/zonewiki/zonewiki`).
 
-### Semantic search paused
-
-Since 2026-11-18 the images CI publishes have no semantic search (`ZONE_SEMANTIC_SEARCH=off` at build time), and CI's **retrieval** job is skipped (`if: false`),
-because Microsoft took onnxruntime's GitHub repository private "while we investigate malicious content", and both would run onnxruntime.
-Its release downloads are gone with it, so a build with `ZONE_SEMANTIC_SEARCH=on` fails where its layer isn't cached.
-They come back, as they were, once Microsoft has said what happened and onnxruntime has a source that can be trusted again.
-
 ## CI (Forgejo Actions)
 
 `.forgejo/workflows/ci.yml` runs on a push to `main` or a `v*` tag, on every pull request and when started by hand (`workflow_dispatch`);
@@ -441,7 +433,7 @@ That is safe because runs don't overlap; with the queue turned off on the server
 | **e2e** | The browser and Node tasks-core tests (`./run.sh e2e`) | The same |
 | **leaks** | gitleaks over every commit (`./run.sh leaks`) | The same |
 | **bench** | `./run.sh bench` with `ZONE_BENCH_SLACK=3` | After the checks |
-| **retrieval** | `./run.sh retrieval` | After the checks (skipped for now: Semantic search paused) |
+| **retrieval** | `./run.sh retrieval` | After the checks |
 | **image** | Builds the `Containerfile` and pushes it to the Forgejo registry | Not a pull request's run, once the three checks pass |
 | **github** | Pushes main's commit or the tag to another repository, as it is (Publishing to GitHub, below) | A push, with `PUBLISH_REPO` set, once the three checks pass |
 
@@ -458,7 +450,7 @@ and GitHub's shared runners would measure their neighbours more than Zonewiki, a
 It builds the app's image with the model, under a tag of its own (`zonewiki-retrieval`), from the engine's cache unless the code or the model changed.
 
 **image** runs on a push to `main` or a `v*` tag, or a run started by hand.
-It builds the `Containerfile` with `ZONE_SEMANTIC_SEARCH=off` (on until 2026-11-18: Semantic search paused) and the `ZONE_BUILD` string `run.sh` would compute,
+It builds the `Containerfile` with `ZONE_SEMANTIC_SEARCH=on` and the `ZONE_BUILD` string `run.sh` would compute,
 and pushes it as `<REGISTRY>/<owner>/<repo>:<short-sha>` (the repository's name, lowercase),
 plus `:latest` (main) or `:<version>` (tag `v1.2.3` → `1.2.3`).
 The repo variable `REGISTRY` is Forgejo's public host, e.g. `git.example.org`: the host's engine pushes, and the runner's server URL is the internal `http://web:3000`.
@@ -541,9 +533,9 @@ Tests: `tests/test_image.py` (the job's shape: after the checks, a push only, ne
 | **release** | `./run.sh binaries`, the files attached to the tag's GitHub release (Release binaries) | A `v*` tag, once the checks pass |
 
 GitHub publishes the image `compose.yaml` runs.
-**image** builds the `Containerfile` (`ZONE_SEMANTIC_SEARCH=off`, the `ZONE_BUILD` string) once per architecture,
+**image** builds the `Containerfile` (`ZONE_SEMANTIC_SEARCH=on`, the `ZONE_BUILD` string) once per architecture,
 each natively on its own runner (`ubuntu-26.04` for amd64, `ubuntu-26.04-arm` for arm64;
-no emulation, so the arm64 build compiles with cgo, and, with semantic search, fetches onnxruntime's arm64 build and the model as fast as the other),
+no emulation, so the arm64 build is as fast as the other),
 and pushes it to `ghcr.io/<owner>/zonewiki` by digest only (cached between runs in GitHub's cache, a scope per architecture).
 **manifest** joins the two digests under the tags:
 `latest` (main),

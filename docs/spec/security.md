@@ -1001,7 +1001,8 @@ So what builds Zonewiki is named by hash:
 
 - **the base images by digest**, each the tag's multi-arch index: `ARG UBUNTU=ubuntu:26.04@sha256:…` in the `Containerfile`, used by its three stages; the Playwright image in `Containerfile.tools`; the job container `docker:…-cli@sha256:…` in `.forgejo/workflows/ci.yml`;
 - **every CI action by its commit**, in every workflow: `uses: actions/checkout@<40 hex> # v4.4.0`;
-- **Go, gitleaks, onnxruntime and the model**, by version and SHA-256 (Dependencies in `AGENTS.md`).
+- **Go, gitleaks and the model**, by version and SHA-256 (Dependencies in `AGENTS.md`).
+  Nothing else runs the model: the binary does, in Go (Running the model in `docs/spec/search.md`), so no runtime or native library is downloaded, linked or loaded.
 
 One thing is not: on GitHub `docker/setup-buildx-action` (pinned by its commit) starts BuildKit from the `moby/buildkit` image by its tag (`buildx-stable-1`, its default).
 So the builder of the published image is named by tag, not by hash.

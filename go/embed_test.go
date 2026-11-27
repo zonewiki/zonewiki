@@ -413,21 +413,12 @@ func TestSemanticSettings(t *testing.T) {
 		t.Errorf("model dir %s, want %s", got, want)
 	}
 	x := semanticFromEnv(env(map[string]string{"ZONE_SEMANTIC_SEARCH": "on"}))
-	if newOnnxEmbedderWorks() {
-		if x == nil || x.minScore != 0.25 || x.relatedMinScore != 0.25 || x.taskMinScore != 0.3 {
-			t.Errorf("index %+v", x)
-		}
-	} else if x != nil {
-		t.Error("on without onnxruntime")
+	if x == nil || x.minScore != 0.25 || x.relatedMinScore != 0.25 || x.taskMinScore != 0.3 {
+		t.Errorf("index %+v", x)
 	}
 	if newSemanticIndex(newRecorder(), cachePath(), nil, math.NaN(), math.NaN(), math.NaN(), 0).minScore != 0.4 {
 		t.Error("another model's floors aren't the default's")
 	}
-}
-
-func newOnnxEmbedderWorks() bool {
-	_, err := newOnnxEmbedder("")
-	return err == nil
 }
 
 // The model's files are checked against their hashes, and those there are

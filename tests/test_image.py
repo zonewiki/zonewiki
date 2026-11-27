@@ -119,8 +119,6 @@ def test_the_root_module_is_there_for_go_mod_download():
 def test_the_image_ships_the_licenses():
     final = CONTAINERFILE[CONTAINERFILE.rindex("\nFROM "):]
     assert "COPY LICENSE THIRD_PARTY_LICENSES ./" in final
-    assert "COPY --from=semantic /opt/onnxruntime-licenses/ licenses/onnxruntime/" in final
-    assert '-C /opt/onnxruntime-licenses --strip-components=1 --wildcards "*/LICENSE" "*/ThirdPartyNotices.txt"' in stage("semantic")
 
 
 def test_zones_license_is_the_agpl():
@@ -182,17 +180,29 @@ def test_the_prebuilt_image_stays_on_localhost_until_opened():
     assert "0.0.0.0" not in body
 
 
-def test_ci_publishes_no_onnxruntime_while_it_is_paused():
-    # Semantic search paused (docs/spec/deployment.md): since 2026-11-18,
-    # Microsoft has onnxruntime's repository private "while we investigate
-    # malicious content". Neither CI builds an image with it or runs the
-    # retrieval job, which runs it; lift both together, on purpose.
+def test_ci_publishes_semantic_search_and_measures_it():
+    # The image CI publishes has the model, and the retrieval job, which
+    # runs it against the floors, is on (both were off from 2026-11-18 to
+    # 2026-11-26, while onnxruntime ran the model and its source was gone).
     for path in (".github/workflows/ci.yml", ".forgejo/workflows/ci.yml"):
         ci = (REPO / path).read_text(encoding="utf-8")
-        assert "ZONE_SEMANTIC_SEARCH=off" in ci and "ZONE_SEMANTIC_SEARCH=on" not in ci, path
+        assert "ZONE_SEMANTIC_SEARCH=on" in ci and "ZONE_SEMANTIC_SEARCH=off" not in ci, path
         job = ci[ci.index("\n  retrieval:\n"):]
         job = job[:job.index("\n  image:\n")]
-        assert "\n    if: false\n" in job, path
+        assert "if: false" not in job and "./run.sh retrieval" in job, path
+
+
+def test_nothing_runs_the_model_but_the_binary():
+    # Semantic search's model runs in Go (go/internal/encoder): no runtime
+    # is downloaded into an image or linked into the binary, which is built
+    # without cgo and with Go's simd experiment, in both images alike.
+    assert "onnxruntime" not in CONTAINERFILE.lower() and "onnxruntime" not in TOOLS.lower()
+    assert "onnxruntime" not in (REPO / "go" / "go.mod").read_text(encoding="utf-8")
+    env = "ENV PATH=/usr/local/go/bin:$PATH GOTOOLCHAIN=local CGO_ENABLED=0 GOEXPERIMENT=simd\n"
+    assert env in stage("build") and env in TOOLS
+    # A plain go build (no experiment) is tested too: the same vectors, slower.
+    run_sh = (REPO / "run.sh").read_text(encoding="utf-8")
+    assert "GOEXPERIMENT= go test ./internal/encoder" in run_sh
 
 
 def test_forgejo_runs_no_forks_code():
@@ -302,7 +312,8 @@ def test_the_target_architecture_has_no_default():
     # was built with amd64's Go ("Exec format error"). The Containerfile
     # falls back on the container's own architecture instead.
     assert not re.search(r"^ARG TARGETARCH=", CONTAINERFILE, re.M)
-    assert CONTAINERFILE.count("${TARGETARCH:-$(dpkg --print-architecture)}") == 2
+    # (Go alone: the model, the other download, is the same for every one.)
+    assert CONTAINERFILE.count("${TARGETARCH:-$(dpkg --print-architecture)}") == 1
     # The tools image likewise (gitleaks and Go): on an arm64 machine
     # ./run.sh test got amd64's.
     assert not re.search(r"^ARG TARGETARCH=", TOOLS, re.M)

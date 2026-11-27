@@ -61,10 +61,11 @@ RUN TARGETARCH=${TARGETARCH:-$(dpkg --print-architecture)} \
  && echo "$sum  /tmp/go.tgz" | sha256sum -c - \
  && tar -xzf /tmp/go.tgz -C /usr/local \
  && rm /tmp/go.tgz
-# Without cgo, as before the image had a C compiler: the server the tests
-# build searches by keywords (go/embed_nocgo.go), and so does CI's. Only the
-# race detector's run turns it on (run.sh).
-ENV PATH=/usr/local/go/bin:$PATH GOTOOLCHAIN=local CGO_ENABLED=0
+# Without cgo, as the image and the release binaries are built; only the race
+# detector's run turns it on (run.sh). GOEXPERIMENT=simd: Go's vector
+# arithmetic, which runs semantic search's model (go/internal/encoder), as
+# in the Containerfile.
+ENV PATH=/usr/local/go/bin:$PATH GOTOOLCHAIN=local CGO_ENABLED=0 GOEXPERIMENT=simd
 # The server's modules (go.sum checks them), so a test run fetches nothing;
 # with the root's go.mod, the module of Zonewiki's own files (zonefiles.go),
 # which go/go.mod takes from ../.

@@ -292,7 +292,9 @@ case "${1:-up}" in
   test)
     needs_checkout test
     # The server's own checks (gofmt, go vet, go test under the race detector,
-    # which needs cgo: the image is without it otherwise), then the unit/API
+    # which needs cgo: the image is without it otherwise; and the model's
+    # arithmetic once more as a plain go build has it, without the simd
+    # experiment the image sets), then the unit/API
     # tests against it, in the tools image (Containerfile.tools), one worker per
     # CPU (-n 0: one process). Extra args go to pytest; without a tests/…
     # path the whole suite runs but the browser and tasks-core tests (e2e).
@@ -315,7 +317,8 @@ case "${1:-up}" in
     in_image "$image" ${ZONE_TEST_RACE:+-e ZONE_TEST_RACE=1} -- sh -c \
       'echo "==> gofmt, go vet" >&2
        (cd go && f=$(gofmt -l . ../zonefiles.go) && if [ -n "$f" ]; then echo "Not gofmt-formatted (gofmt -w them):" $f >&2; exit 1; fi &&
-         go vet ./... && echo "==> go test -race" >&2 && CGO_ENABLED=1 go test -race ./...) || exit 1
+         go vet ./... && echo "==> go test -race" >&2 && CGO_ENABLED=1 go test -race ./... &&
+         echo "==> the encoder without the simd experiment" >&2 && GOEXPERIMENT= go vet ./internal/encoder && GOEXPERIMENT= go test ./internal/encoder) || exit 1
        for a in "$@"; do case "$a" in tests*) paths=1;; esac; done
        [ -n "$paths" ] || set -- tests --ignore=tests/e2e --ignore=tests/test_tasks_core.py "$@"
        echo "==> pytest $*" >&2
@@ -392,8 +395,9 @@ case "${1:-up}" in
   binaries)
     needs_checkout binaries
     # The release binaries (Release binaries in docs/spec/deployment.md):
-    # zonewiki for Linux and macOS, amd64 and arm64, without cgo (keyword
-    # search), the browser code and the docs built in (zonefiles.go), into
+    # zonewiki for Linux and macOS, amd64 and arm64, without cgo (static on
+    # Linux) and with the simd experiment the image sets (semantic search's
+    # model at full speed), the browser code and the docs built in (zonefiles.go), into
     # dist/ with LICENSE, THIRD_PARTY_LICENSES and SHA256SUMS; in the tools
     # image, with its pinned Go (the image's). CI's release job attaches them
     # to a v* tag's GitHub release. The build string is git's, as for any go

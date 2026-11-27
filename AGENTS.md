@@ -98,7 +98,7 @@ Links are written for the files (`tasks.md#lists`, `../screenshots/page.png`), a
 | Fonts               | The system's sans for text; Source Serif 4 for headings, vendored in `public/vendor/source-serif/` (variable weight, Latin and Latin Extended) |
 | Styling             | Custom CSS (classless, semantic HTML); the look (warm paper and ink, a deep green accent, serif headings) is shared with zonewiki.com and Zonewiki CP's pages: its tokens are the `:root` variables at the top of `public/style.css` |
 | In-browser editor   | Plain `<textarea>` with live preview         |
-| Search              | BM25 in `go/internal/textsearch`, optionally fused with semantic search (`go/embed.go`); search modal (Ctrl+P) and `/search` |
+| Search              | BM25 in `go/internal/textsearch`, optionally fused with semantic search (`go/embed.go`; its model run in Go, `go/internal/encoder`); search modal (Ctrl+P) and `/search` |
 | Storage             | Plain `.md` files in `$ZONE_DATA` (tasks in `_tasks/*.json`) |
 | Container           | Compose with Podman or Docker (Ubuntu 26.04 LTS base image) |
 | Tests               | `go test` for the server's internals; pytest over HTTP against the server, Playwright in a browser |
@@ -145,7 +145,7 @@ The deployment's settings are in `.env` (gitignored; `ZONE_DATA`, `ZONE_ALLOW_RE
 The wiki lives outside the repo, in `ZONE_DATA` (default `~/zonewiki`), which must exist (unset, the binary makes `~/zonewiki`): pages at its root and in folders, uploads in `_assets/`, tasks and their lists in `_tasks/`, the settings file, the search index files, the semantic cache and session key in `.zone/`.
 Details: `docs/spec/deployment.md`.
 
-Without the container (Go 1.27 and a C compiler; `CGO_ENABLED=0` builds one without semantic search):
+Without the container (Go 1.27; `GOEXPERIMENT=simd` builds semantic search's model at full speed, a plain build many times slower):
 
 ```bash
 (cd go && go build -o zonewiki .)
@@ -214,9 +214,9 @@ CI runs the same `run.sh` commands in the image `Containerfile.tools` builds, so
 
 ## Dependencies
 
-`go/go.mod`: `github.com/yuin/goldmark` (markdown), `golang.org/x/text` (search's case folding and NFKD), `github.com/yalue/onnxruntime_go` (semantic search).
+`go/go.mod`: `github.com/yuin/goldmark` (markdown), `golang.org/x/text` (search's case folding and NFKD).
 Nothing else; add a dependency only when it clearly pays for itself.
-**Everything is pinned to an exact version** (`go.sum` checks the modules; the Containerfiles pin Go, onnxruntime, gitleaks and the model by version and SHA-256, `tests/test_image.py` checks that they agree): to update,
+**Everything is pinned to an exact version** (`go.sum` checks the modules; the Containerfiles pin Go, gitleaks and the model by version and SHA-256, `tests/test_image.py` checks that they agree): to update,
 raise a version,
 run `./run.sh test` and `./run.sh e2e`,
 and commit the new pins.
@@ -236,11 +236,11 @@ The binary carries them all (`zonewiki licenses` prints them).
   each with its LICENSE;
   a page loads them only when it has math or a diagram (`js/figures.js`).
   To update, replace those files with a newer release's and run `./run.sh e2e` (`tests/e2e/test_figures.py`); for Mermaid also `python3 docs/licenses/mermaid_notices.py VERSION`, and check the licenses of what it now bundles.
-- Semantic search needs cgo at build time and onnxruntime's shared library at run time,
-  which the binary loads with `dlopen` when it first embeds: with `ZONE_SEMANTIC_SEARCH` on at build time,
-  the image puts `libonnxruntime.so` (1.31.0, its GitHub release) in `/usr/local/lib` and the model in `/opt/zonewiki-model` (the `Containerfile`'s `semantic` stage, its own layer).
-  Without the library, Zonewiki searches by keywords.
-  Locally: the release's `lib/` on `LD_LIBRARY_PATH`; the model is downloaded on first use.
+- Semantic search's model is run by the binary itself (`go/internal/encoder`: its network in Go, no runtime, no cgo; Running the model in `docs/spec/search.md`),
+  on Go's `simd` package, an experiment of Go 1.27: both Containerfiles build with `GOEXPERIMENT=simd` (`tests/test_image.py` checks),
+  and a build without it has the same arithmetic in plain loops, many times slower (`kernels_plain.go`; `./run.sh test` tests both).
+  A Go update may change `simd`: the package's tests and `./run.sh retrieval` say whether the vectors stayed.
+  With `ZONE_SEMANTIC_SEARCH` on at build time the image has the model in `/opt/zonewiki-model` (the `Containerfile`'s `semantic` stage, its own layer); elsewhere it is downloaded on first use.
 - The tests' Python packages (`tests/requirements.txt`: pytest, pytest-xdist, Playwright, werkzeug), pinned too, live only in the tools image.
 - Base images are named by digest and CI actions by commit (`Containerfile`'s `ARG UBUNTU`, `Containerfile.tools`, every workflow; What builds Zonewiki is named by hash in `docs/spec/security.md`): a new image or action goes in the same way, never by tag alone.
 - GitHub's code scanning (CodeQL, `.github/workflows/codeql.yml`) is told which of Zonewiki's functions check a path, a redirect or HTML in `.github/codeql/extensions/zone-go/models.yml` (Code scanning in `docs/spec/security.md`):

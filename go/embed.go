@@ -1,7 +1,7 @@
 // Semantic search: embeddings of page sections, searched by
 // meaning. Opt-in via ZONE_SEMANTIC_SEARCH (semanticFromEnv). Each page is
 // cut into sections (chunkSections), each section turned into a vector by
-// an embedding model (embed_onnx.go), and a query is compared against every
+// an embedding model (embed_model.go), and a query is compared against every
 // vector (cosine similarity, brute force). That is plenty fast at wiki
 // scale, so there is no vector database: the vectors live in memory and in
 // a rebuildable cache file, .zone/index/embeddings.json in the wiki (kept
@@ -418,7 +418,7 @@ func decodeVec(s string) ([]float32, error) {
 
 // ── Embedders ────────────────────────────────────────────────────────────────
 
-// embedder turns texts into vectors: the model (embed_onnx.go) or the
+// embedder turns texts into vectors: the model (embed_model.go) or the
 // tests' concept embedder (embedtest.go).
 type embedder interface {
 	Name() string      // the cache file is per name
@@ -1148,8 +1148,9 @@ func semanticTasks() []semTask {
 }
 
 // semanticFromEnv: the index ZONE_SEMANTIC_SEARCH asks for, its worker not
-// started, or nil (keywords only). A bad setting or a
-// build without the model's runtime is logged, not fatal.
+// started, or nil (keywords only). A bad setting is logged, not fatal; the
+// model is loaded (and, where its files are missing, downloaded) when the
+// index first embeds.
 func semanticFromEnv(getenv func(string) string) *semanticIndex {
 	model, err := parseSemanticSpec(getenv("ZONE_SEMANTIC_SEARCH"))
 	if err != nil {
@@ -1159,11 +1160,7 @@ func semanticFromEnv(getenv func(string) string) *semanticIndex {
 	if model == "" {
 		return nil
 	}
-	emb, err := newOnnxEmbedder(modelDir(getenv))
-	if err != nil {
-		semLog("ZONE_SEMANTIC_SEARCH is on but %v; using keyword search only", err)
-		return nil
-	}
+	emb := newModelEmbedder(modelDir(getenv))
 	semLog("semantic search on, model %s", emb.Name())
 	return newSemanticIndex(emb, statePath("index", "embeddings.json"),
 		semanticTasks, math.NaN(), math.NaN(), math.NaN(), relatedMinChars)

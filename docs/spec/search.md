@@ -352,7 +352,7 @@ In `go/internal/textsearch/search.go` unless said otherwise:
 - With semantic search:
   each ranking goes 30 deep into the fusion, or as deep as the list asked for (`fuseDepth` in `go/retrieval.go`), fused with `rrfK = 60`;
   sections longer than 800 characters are split at paragraphs (`maxChunkChars` in `go/embed.go`);
-  the model reads at most 512 tokens and gives vectors of 768 dimensions (`maxTokens`, `embedDim` in `go/embed_onnx.go`);
+  the model reads at most 512 tokens and gives vectors of 768 dimensions (`maxTokens`, `embedDim` in `go/embed_model.go`);
   its floors are 0.25 for search and Related pages and 0.3 for tasks (`thresholds` in `go/embed.go`; 0.4 each for a model without its own).
 
 ### Scoring fast
@@ -374,27 +374,52 @@ It is opt-in; unset, Zonewiki is keyword-only and nothing in this section runs.
 
 ### Turning it on
 
-Set `ZONE_SEMANTIC_SEARCH=on` in `.env` (a local ONNX model, `jinaai/jina-embeddings-v2-base-de`, German + English; `off`, or unset, turns it off; any other value is logged and keeps it off).
+Set `ZONE_SEMANTIC_SEARCH=on` in `.env` (a local model, `jinaai/jina-embeddings-v2-base-de`, German + English; `off`, or unset, turns it off; any other value is logged and keeps it off).
 The search dialog shows whether it is on (Search mode in `navigation.md`).
 
 Set,
-`run.sh` passes the setting as a build arg and the `Containerfile`'s `semantic` stage fetches onnxruntime's library and the model's files at a fixed revision,
+`run.sh` passes the setting as a build arg and the `Containerfile`'s `semantic` stage fetches the model's files at a fixed revision,
 each checked against its SHA-256 (the same as `modelRevision`, `modelFiles`),
-into `ZONE_MODEL_DIR=/opt/zonewiki-model`: the image grows by about 0.7 GB,
+into `ZONE_MODEL_DIR=/opt/zonewiki-model`: the image grows by about 0.65 GB,
 and the first search doesn't wait for a download.
-That stage copies nothing from the repo, so its layer is rebuilt only when the model or onnxruntime changes, not on every code change.
-Without the container the model goes to `~/.cache/zonewiki/`, downloaded on first use (`downloadModel`, the same hashes), and onnxruntime's library must be on the loader's path (`LD_LIBRARY_PATH`).
-A missing library, a bad setting or a failing model is logged (`[semantic] …`) and search falls back to keywords.
+That stage copies nothing from the repo, so its layer is rebuilt only when the model changes, not on every code change.
+Without the container (a binary you built or downloaded) the model goes to `~/.cache/zonewiki/`, downloaded on first use (`downloadModel`, the same hashes); nothing else is needed.
+A bad setting or a failing model (its files missing and not to be had, say) is logged (`[semantic] …`) and search falls back to keywords.
+
+The model takes about 0.7 GB of memory once it is loaded (when the wiki is first embedded or searched), and up to about 1 GB more while it embeds a batch of long texts, which Go gives back afterwards.
 
 ### The model
 
-It is the only model: `onnxEmbedder` runs it on onnxruntime (`go/embed_onnx.go`, through onnxruntime_go, which loads `libonnxruntime.so` when the model is first used; a binary built without cgo has no semantic search)
+It is the only model, and Zonewiki runs it itself: `modelEmbedder` (`go/embed_model.go`) on `go/internal/encoder` (Running the model, below),
 with its tokenizer in Go (`go/internal/tokenizer`, the model's `tokenizer.json`; it encodes a text's pieces only until it has 512 tokens, merges a piece's pairs from a heap, in n log n of its length, so a long unbroken word costs little, and keeps the tokens of at most 100,000 short pieces),
-with its recipe (at most 512 tokens, the token vectors averaged where the attention mask is set, normalised, no query or passage prefixes),
+with its recipe (at most 512 tokens, the token vectors averaged, normalised, no query or passage prefixes),
 and another model may need another recipe,
 so there is no setting for one.
-Until 2026-10 the Python Zonewiki ran it, with fastembed before that; the vectors are the same bit for bit, and the cache keeps its name `fastembed:<model>`, so it stays valid.
+Until 2026-11 onnxruntime ran it (in the Python Zonewiki until 2026-10, with fastembed before that); the vectors are the same to seven digits (a cosine of 0.9999999 and more between the two),
+and the cache keeps its name `fastembed:<model>`, so it stays valid.
+`TestModelVectorsAreOnnxruntimes` holds the model to vectors onnxruntime gave, where the model's files are (an image with semantic search; skipped elsewhere).
 (An Ollama backend existed and was removed as unused; it is in the git history.)
+
+### Running the model
+
+`go/internal/encoder` is the model's network in Go: a BERT encoder with ALiBi attention (a bias by distance in place of position embeddings) and a gated GELU feed-forward (JinaBERT),
+12 layers of 768 dimensions.
+No runtime or library is loaded and nothing is linked: the binary is built without cgo, and semantic search works in every build, the release binaries included.
+
+- **The weights** come from the model's ONNX file, the one whose hash is pinned (`onnxfile.go`, `onnxstream.go`: just enough of the file's protobuf, with no library).
+  The file is never in memory as a whole: nodes and small tensors are read whole, a big tensor a megabyte at a time into what the model keeps (`Load`), so loading takes little more memory than the loaded model.
+  A matrix has no name of its own in the file; the node that multiplies by it says which layer's it is.
+- **The arithmetic** is nearly all matrix products, done in vectors with Go's `simd` package (`kernels_simd.go`): AVX-512, AVX2 or NEON, whichever the machine has, chosen when it runs.
+  That package is an experiment of Go 1.27 (`GOEXPERIMENT=simd` at build time), which both Containerfiles set.
+  A build without it (a plain `go build`) has the same arithmetic in loops (`kernels_plain.go`): the same vectors within rounding, many times slower, and the log says so when the model loads.
+  `./run.sh test` runs the package's tests both ways.
+- **A product** `c = a·B` has `B` (a layer's weights, packed once when loaded; a head's keys and values, packed per layer) laid out in the order the kernel reads it (`packed`, `gemm` in `matmul.go`),
+  and is cut into jobs for all CPUs (`product`).
+- **A batch's texts** go through the linear layers together, at most 2048 tokens at a time (`batchTokens`), and each attends to its own tokens only (`attention.go`),
+  so no text is padded to another's length and a batch's result is each text's alone, bit for bit.
+
+Go's `simd` package may change with a Go release, since it is an experiment: the package's tests (the kernels against plain loops, `exp` and GELU against `math`'s, a batch against each text alone) and the retrieval floor say whether an update kept the vectors.
+Where its speed and memory were measured is the commits' messages (`git log go/internal/encoder`).
 
 ### Chunks
 
@@ -551,7 +576,7 @@ Targets that name nothing in the wiki (a typo, a renamed page) are listed before
 ### Running it
 
 `./run.sh eval [FILE]` (a path in the wiki, extra args go to `zonewiki eval`, e.g. `--k 5`) builds the app image with semantic search as `ZONE_SEMANTIC_SEARCH` says, as `up` does, and mounts the wiki read-only.
-Without a container: `ZONE_DATA=~/zonewiki go/zonewiki eval FILE` (hybrid only with onnxruntime's library on the loader's path).
+Without a container: `ZONE_DATA=~/zonewiki go/zonewiki eval FILE` (the model is downloaded on first use).
 Tasks are results as in `search_wiki`.
 
 ### The report

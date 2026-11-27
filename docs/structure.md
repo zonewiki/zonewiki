@@ -19,7 +19,7 @@ What each file and folder of the repository is for.
 ├── docs/licenses/mermaid_notices.py  # Writes public/vendor/mermaid/THIRD_PARTY_LICENSES from the bundle's source map
 ├── docs/screenshots/       # The README's and the manual's screenshots + make_screenshots.py (./run.sh screenshots)
 ├── docs/logo/              # Zonewiki's logo: the mark (public/favicon.svg's) with "Zonewiki" outlined in Source Serif 4, light and dark, the mark alone, GitHub's social preview (1280x640); make_logo.py writes the SVGs, with --png the PNGs (mark.png, social-preview.png, the home-screen icons)
-├── Containerfile           # The image: a Go build stage (Zonewiki's own files built in), onnxruntime + the model (opt-in), an Ubuntu 26.04 LTS runtime with the binary and the licenses
+├── Containerfile           # The image: a Go build stage (Zonewiki's own files built in), the model (opt-in), an Ubuntu 26.04 LTS runtime with the binary and the licenses
 ├── compose.yaml            # Runs the prebuilt ghcr.io image, no checkout or build; run.sh drives it beside it alone (see docs/spec/deployment.md)
 ├── compose.build.yaml      # Builds the image from the checkout and runs it (run.sh drives it in a checkout)
 ├── compose.podman.yaml     # Rootless podman only: userns keep-id (run.sh adds it to either)
@@ -39,7 +39,7 @@ What each file and folder of the repository is for.
 ├── .forgejo/issue_template/   # Issue templates: bug.md, feature.md
 ├── .github/ISSUE_TEMPLATE/    # The same two for GitHub, and config.yml (a security problem goes to a private report)
 ├── go/                     # The server: package main, a file per area; pure code without Zonewiki's state in go/internal/
-│   ├── go.mod, go.sum      # Go modules, exact versions (goldmark, x/text, onnxruntime_go), and zonefiles from ../
+│   ├── go.mod, go.sum      # Go modules, exact versions (goldmark, x/text), and zonefiles from ../
 │   ├── server.go           # main: flags, start-up, the routes' mux, the request checks around them; zonewiki eval, zonewiki health, zonewiki manual, zonewiki licenses, zonewiki user, zonewiki group, zonewiki config, zonewiki export, zonewiki import
 │   ├── login.go            # The login gate's routes: /login, /logout
 │   ├── static.go           # public/ served as it is (gzipped, kept by the browser), from the folder or the binary's copy; a file sent with its type
@@ -110,10 +110,11 @@ What each file and folder of the repository is for.
 │   ├── internal/mdtext/    # Package mdtext, no globals: markdown source text (frontmatter, fences, code and math masking, headings and anchors, wikilink syntax, the splice of a section's text, checkboxes, slugs)
 │   ├── internal/settingsfile/  # Package settingsfile: the settings file's format ([user …] and [group …] sections; the strict parser, line edits keeping comments, the owner-only write); what its keys mean stays in configfile.go
 │   ├── internal/tokenizer/ # Package tokenizer: the embedding model's tokenizer (byte-level BPE from its tokenizer.json)
+│   ├── internal/encoder/   # Package encoder: the embedding model run in Go, a JinaBERT encoder on the weights in its ONNX file (encoder.go, attention.go; onnxfile.go, onnxstream.go read the file; matmul.go the products, kernels_simd.go in vectors with GOEXPERIMENT=simd, kernels_plain.go without)
 │   ├── internal/wikiarchive/  # Package wikiarchive: the file a whole wiki moves in (a gzipped tar of a clone and the settings file), written, and read as untrusted: only the history's objects and refs and the settings file, as plain files (wikiarchive.go); a source of entries, a gzipped tar or a zip (source.go), and one unpacking with every check, told by its caller what to keep (unpack.go)
 │   ├── retrieval.go        # Search and LLM retrieval (BM25 + optional semantic index), the query log
 │   ├── embed.go            # Optional semantic search: section embeddings, the index and its cache, Related pages
-│   ├── embed_onnx.go       # The model on onnxruntime (cgo; embed_nocgo.go: built without cgo, keywords only)
+│   ├── embed_model.go      # The model's embedder: its tokenizer and internal/encoder, the vectors pooled
 │   ├── mcp.go              # MCP protocol (JSON-RPC) for /mcp; mcp_tools.json the tool definitions
 │   ├── mcpfiles.go         # Uploads for assistants: read_file, upload_file, and the file routes taking the MCP token
 │   ├── mcptools.go         # The MCP tools that read, and the table of all tools with their dispatch (mcpToolTable); mcpwrite.go and mcpreplace.go those that write pages, mcptasks.go the task tools, mcpguides.go the guides, mcpargs.go what they share

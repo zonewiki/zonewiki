@@ -43,7 +43,7 @@ The tests' server has `no-login = yes` (`settings.NO_LOGIN`), so the first-run p
 Zonewiki looks at the settings file at most once a second, so a test that rewrites it while the server runs waits that out (`write` in `tests/test_config.py`) rather than polling logins, which the throttle would count.
 
 Zonewiki's docs folder (`settings.DOCS`, which `TestZoneHelp` points elsewhere) reaches the server as `--docs`;
-the semantic index (`settings.SEMANTIC`, a `tests/semantic.py` `FakeIndex`: words mapped to a few "concept" axes, so no onnxruntime and no model) as `--semantic-test`: the server gets the fake concept embedder and floors (`go/embedtest.go`), syncs once at start when the test called `sync()`, and restarts after each `sync()`, so it sees the wiki as it is then.
+the semantic index (`settings.SEMANTIC`, a `tests/semantic.py` `FakeIndex`: words mapped to a few "concept" axes, so no model) as `--semantic-test`: the server gets the fake concept embedder and floors (`go/embedtest.go`), syncs once at start when the test called `sync()`, and restarts after each `sync()`, so it sees the wiki as it is then.
 
 A server makes the wiki a git repository at start (`gitSetup`), so every module's wiki is a repository, and `git_setup(tmp_path_factory)` (a server started and stopped) is how a test "restarts Zonewiki" (start-up commits, `index.md`, the yearly archives).
 `settings.GIT_ENABLED = False` gives the server a `PATH` without git, for the fallbacks; the git tests skip when git is not installed.
@@ -204,6 +204,7 @@ Prefer an API test when the behaviour shows through a route, a Go test when it d
 | `go/internal/textsearch/search_test.go` | search.md | BM25, stemming, fuzzy, query syntax, excerpts, an index's views and layers |
 | `go/internal/textsearch/difflib_test.go`, `indexfile_test.go` | search.md | Typo matching's bounds; the mapped index file, bad files, `MergeIndex` |
 | `go/internal/tokenizer/tokenizer_test.go` | search.md | The embedding model's tokenizer |
+| `go/internal/encoder/*_test.go`, `go/embed_model_test.go` | search.md | The embedding model run in Go: the kernels against plain loops, `exp` and GELU, a batch against each text alone, the ONNX file read where it is (also cut short); with the model's files, its vectors against onnxruntime's |
 | `go/internal/wikiarchive/wikiarchive_test.go` | deployment.md, security.md | A wiki's archive: written and read back, what a reader refuses (names that lead out, links, devices, a file twice, no repository), what it passes by, the size |
 | `go/internal/wikiarchive/unpack_test.go` | deployment.md, security.md | The unpacking a tar and a zip share: a table of hostile archives, each refused from both sources (names, links, devices, a file twice, a file and a folder of one name, the byte budget, the entries, a zip's understated size and non-UTF-8 name); a zip's keep; the size kept past the settings file |
 
@@ -349,7 +350,8 @@ A test that fails there waits for the wrong thing (Browser tests, above): fix wh
 ### The race detector
 
 **The Go tests run under the race detector** (`CGO_ENABLED=1 go test -race ./...` in `run.sh`): two requests that read and write the same memory without a lock fail the run, where they would otherwise be a wrong answer once in a while.
-The detector needs cgo, so the tools image has `gcc` and `libc6-dev`; it sets `CGO_ENABLED=0` for everything else, so the server the tests build is without semantic search's library.
+The detector needs cgo, so the tools image has `gcc` and `libc6-dev`; it sets `CGO_ENABLED=0` for everything else, as the image and the release binaries are built.
+The image also sets `GOEXPERIMENT=simd` (Go's vector arithmetic, which runs semantic search's model), and `run.sh test` runs `go/internal/encoder`'s tests once more without it, as a plain `go build` has them.
 What it can see is what the tests run at once: `TestReadersBesideWriters` in `go/internal/taskfiles/concurrent_test.go` is the task store's test for it (writers that change, close, reopen and move tasks between lists, and one that changes five at once as a batch does, beside readers of every kind: each reader sees every task once, and a reader's change of what it was handed is nobody else's).
 
 **The server itself under the detector**: `ZONE_TEST_RACE=1 ./run.sh test …` builds the server the API tests start with `-race` (`tests/goserver.py`), and a race ends that server (`GORACE=halt_on_error=1`), so the test that met it fails and the server's log says where.
