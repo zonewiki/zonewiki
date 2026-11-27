@@ -13,6 +13,13 @@ type Options struct {
 	// Folder: the slug of the folder the pages go into, which isn't there
 	// yet ("my-vault", "private/alice/my-vault", "groups/dev/my-vault").
 	Folder string
+	// Name: the folder's name as its owner knows it (the vault's, the
+	// archive's), the index page's title; "" for one from Folder.
+	Name string
+	// Obsidian: the folder is an Obsidian vault, though its .obsidian/
+	// isn't in fsys (an unpacking that left it out says so). A folder
+	// with .obsidian/ is one anyway.
+	Obsidian bool
 	// PagePart: whether a slug's part is one a page's path may have (the
 	// server's pagePart); a part it refuses gets a "-" suffix.
 	PagePart func(part string) bool
@@ -50,12 +57,13 @@ type File struct {
 }
 
 // Report: what changed on the way, shown before anything is written and
-// kept on the folder's index page. Each list holds lines a person reads
-// ("My Note (2024).md → my-vault/my-note-2024"), in the order of the
-// folder's paths.
+// kept on the folder's index page. Each list holds lines a person reads,
+// in markdown with the names in code spans
+// ("`日記.md` → `my-vault/note` (no letter a page's name keeps)"),
+// sorted, so in the order of the folder's paths, which start them.
 type Report struct {
 	Obsidian  bool     // the folder is an Obsidian vault (it has .obsidian/): its own syntax was converted
-	Renamed   []string // a note whose slug isn't its name (an empty part, a clash, a part refused)
+	Renamed   []string // a note or folder whose slug isn't its name slugified (an empty part, a clash, a part refused)
 	Ambiguous []string // a link with several targets, and the one chosen
 	Missing   []string // a link to no note or file, left as written
 	Lost      []string // what has no equivalent: block references, embedded notes, Dataview and Tasks-plugin syntax

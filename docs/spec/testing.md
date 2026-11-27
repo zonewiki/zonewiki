@@ -192,6 +192,7 @@ Prefer an API test when the behaviour shows through a route, a Go test when it d
 | `go/internal/atomicfile/atomicfile_unix_test.go` | tasks.md | The atomic write: a new file's mode, an old one's kept, a link written through |
 | `go/internal/gitrepo/gitrepo_test.go` | rendering.md | Git's time limit and context, its output streamed and stopped early, no pack inside a commit, Pack, Prune, Join, Drop, when to join |
 | `go/internal/jsonobj/jsonobj_test.go` | mcp.md, tasks.md | JSON objects read a member at a time |
+| `go/internal/mdimport/convert_test.go` | editor.md | Importing pages: slugs, titles, links found and rewritten, files, Obsidian's syntax, the report and index page; the sample vault and plain folder in `testdata/` against their `.golden` files (`-update` writes them) |
 | `go/internal/mdtext/mdtext_test.go`, `text_test.go`, `sections_test.go` | rendering.md, editor.md | Frontmatter, lines, slugs, titles, wikilinks' parts, a section's splice |
 | `go/internal/settingsfile/settingsfile_test.go` | users.md | The settings file parsed, edited keeping comments, written owner-only, group sections |
 | `go/internal/taskfiles/concurrent_test.go` | tasks.md | `TestReadersBesideWriters`, the store under the race detector |

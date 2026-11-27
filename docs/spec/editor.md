@@ -2,7 +2,7 @@
 
 Part of Zonewiki's spec (see `AGENTS.md` for the index).
 
-The in-browser editor, as a user meets it: opening it, saving (auto-save and Done), the formatting bar, the smart helpers (completion, emoji, lists, snippets, the task list dialog, checkboxes), section editing, renaming a page, pasting and dropping files, the editor on a phone, and several editors on one page (merge on save, conflicts).
+The in-browser editor, as a user meets it: opening it, saving (auto-save and Done), the formatting bar, the smart helpers (completion, emoji, lists, snippets, the task list dialog, checkboxes), section editing, renaming a page, pasting and dropping files, importing a folder of notes (an Obsidian vault), the editor on a phone, and several editors on one page (merge on save, conflicts).
 How it works comes last: saves in order, the code the task app shares, section saves, the checkbox index.
 
 ## Opening the editor
@@ -306,6 +306,136 @@ The file keeps its name; the URL the route answers with has it percent-encoded (
 Links written before that, with the name as it is (`[Deck](/_assets/My Deck (v2).pdf)`, which markdown reads as text), are links all the same:
 the renderer encodes the target of a link to `/_assets/…` or `/private/<user>/_assets/…` that has a space in it, up to the file's extension before the closing bracket
 (`encodeUploadLinks` in `go/uploads.go`, for pages, previews, task notes and comments; code aside; the file on disk stays as written).
+
+## Importing pages
+
+A folder of markdown notes, an Obsidian vault for one, becomes a folder of pages in the wiki, with the images and files its notes link to.
+Every page is new, in a folder that isn't there yet (`my-vault`, `private/<you>/my-vault`, `groups/<group>/my-vault`), and that folder's index page lists them and says what changed on the way.
+
+The rule: rewrite only what Zonewiki would misread, keep the rest as written.
+A note whose text needs no change comes over byte for byte.
+
+The conversion is `mdimport.Convert` in `go/internal/mdimport/`: it reads the folder and writes nothing, and makes a plan (the pages' slugs and texts, the files and their names, the index page, the report).
+The server's own rules come to it as callbacks (`Options`): which part a page's path may have (`pagePart`), the name a file gets in the place's uploads, and the URL a link to it takes.
+
+### What an import converts
+
+| In | What is converted |
+|---|---|
+| Any folder | Paths and titles; links between the notes (wikilinks and markdown links, relative ones too); images and files the notes link to; frontmatter |
+| An Obsidian vault | Also inline `#tags`, `%%comments%%`, `==highlights==`, embeds (`![[…]]`), block references, the callout kinds |
+
+A folder is an Obsidian vault when it has an `.obsidian/` folder, or when the caller says so (`Options.Obsidian`: an unpacking that left `.obsidian/` out saw it).
+In any other folder Obsidian's syntax is left as written.
+Notion, Logseq and Dendron exports are folders like any other.
+
+### Paths and titles of imported pages
+
+| A note's path | Becomes |
+|---|---|
+| `My Note (2024).md` | `my-vault/my-note-2024`: each part slugified (`mdtext.ToSlug`) |
+| `Bücher/Lesen.md` | `my-vault/b-cher/lesen`: a slug keeps a–z, 0–9 and `_` |
+| `日記.md` | `my-vault/note`: a part with nothing left is `note`, reported |
+| `Note.md` and `note.md` | `my-vault/note` and `my-vault/note-2`: a clash gets `-2`, `-3` … in the order of the paths, reported |
+| `con.md` | `my-vault/con-`: a part the wiki refuses for a page (`pagePart`: a device's name, a `:`) gets a `-`, reported |
+| `index.md` at the folder's root | `my-vault/index-2`: the index page has the name, reported |
+| `_templates/Daily.md`, `.drafts/A.md` | `my-vault/templates/daily`, `my-vault/drafts/a`: the wiki skips `_` and `.` folders, so the first character goes |
+| `.obsidian/`, `.trash/`, `.git/` | left out, with all in them |
+| `.DS_Store` and other hidden files | left out |
+| `*.canvas`, `*.base`, `*.excalidraw.md`, `*.excalidraw` | left out, reported |
+
+Notes and folders each have their own names in a folder, so a page `note` and a folder `note/` can stand side by side.
+
+Obsidian's title is the file name, Zonewiki's the first `# ` heading (The title in `docs/spec/rendering.md`):
+a note without a `# ` heading (outside its frontmatter and code) gets `# My Note (2024)` on top, after its frontmatter, and a blank line under it.
+
+### Which note or file a link finds
+
+A link's target is looked for in this order, case ignored, `.md` optional and letters composed (a Mac writes `ü` in a file's name as `u` and a mark, a note as one letter), and the first rule that finds a file wins:
+
+1. the path from the folder's root;
+2. the path from the linking note's folder (a markdown link, or a wikilink starting `./` or `../`);
+3. a path's end (`[[folder/Note]]` finds `a/folder/Note.md`);
+4. the base name.
+
+When one rule finds several, the one in the linking note's folder wins, else the shortest path, else the first by name; the link is reported with what it could be and what was chosen.
+A markdown link that finds one file from the root and another from its note's folder takes the root's and is reported too.
+A markdown link's target may be percent-encoded (`Other%20Note.md`) or in angle brackets (`<Other Note.md>`).
+
+### What imported links become
+
+Links in the wiki are paths from its root (Did you mean in `docs/spec/rendering.md`), so every link to a note is rewritten to its page's full path.
+Code is left alone (`mdtext.MaskCode`).
+
+| Written | Becomes |
+|---|---|
+| `[[My Note]]` | `[[my-vault/my-note\|My Note]]`: the written text is the label |
+| `[[My Note#Heading]]` | `[[my-vault/my-note#Heading\|My Note › Heading]]` |
+| `[[My Note\|alias]]` | `[[my-vault/my-note\|alias]]` |
+| `[[My Note#A#B]]` | `[[my-vault/my-note#B\|My Note › B]]`: the last heading |
+| `[[Note#^blockid]]` | a link to the page, reported as lost |
+| `[x](Other%20Note.md)` | `[[my-vault/other-note\|x]]`; with no text, the note's name is the label |
+| `![[pic.png]]`, `![[pic.png\|300]]`, `![[pic.png\|alt\|300]]` | `![](URL)`, `![\|300](URL)`, `![alt\|300](URL)` (Image sizing in `docs/spec/rendering.md`); a height (`300x200`) goes |
+| `![[file.pdf]]`, `[[file.pdf]]` | `[file.pdf](URL)` |
+| `![](img/pic.png)`, `[x](files/a.pdf)` | the same link to the file's URL, its title kept |
+| `![[Other Note]]`, `![x](Other Note.md)` | a link to the page, reported as lost |
+| a link that finds no note or file | left as written (a missing page), reported |
+| `[[#Heading]]`, links elsewhere (`https:`, `mailto:` …), `[x](#anchor)` | as written; `[[#^blockid]]` reported as lost |
+
+The URL is the file's in the uploads of the place the pages go to.
+A wikilink in a table's row, written with `\|`, keeps `\|` in what it becomes.
+`![[…]]` is an embed only in an Obsidian vault; in another folder it stays as written.
+
+### Imported files
+
+Only a file a note links to is copied, into the uploads of the place the pages go to (`_assets/`, `private/<you>/_assets/`, `groups/<group>/_assets/`).
+It gets its name there once, in the order of the paths: the same file linked twice is one file, and two files of the same name in different folders get `pic.png` and `pic-2.png` (the server's `freeUploadName`).
+A file with no name an upload can have is left out and reported, and links to it stay as written.
+A file no note links to is left out and reported.
+
+### Obsidian's own syntax
+
+In an Obsidian vault, outside code:
+
+| Written | Becomes |
+|---|---|
+| `#tag`, `#a/b` | added to the frontmatter's `tags:` (`mdtext.AddFrontmatterTags`, which writes `tags:` as one line), and left in the text as written; a nested tag keeps its `/` (`a/b`), which the `#a/b` filter finds |
+| `%%comment%%` | removed, with a space before it; one on lines of its own goes with its lines |
+| `==text==` | `<mark>text</mark>` |
+| ` ^blockid` at a line's end, `^blockid` on a line of its own | removed (the line stays, empty) |
+| `> [!tip] Title`, `> [!note]-`, `> [!example]` | `> [!TIP]` and `> **Title**` on a line of its own, then an empty `>` line; the fold sign (`-`, `+`) goes; a kind that isn't one of Zonewiki's five gives its name as the title (`**Example**`) |
+| ```` ```dataview ```` blocks, `key:: value` fields, Tasks-plugin dates and signs (`📅`, `🔁` …) | as written, counted in the report as lost |
+| Math, Mermaid, checkboxes | as written (a checkbox stays a checkbox, not a task) |
+
+A tag is Obsidian's: `#` after a space or at a line's start, then letters, digits, `_`, `-` and `/`, not digits alone (`#123`, `#2024/11`).
+So a heading's `# `, a `#` in a URL or in a word, and one in code are no tags.
+
+Obsidian's kinds on Zonewiki's five (Callouts in `docs/spec/rendering.md`):
+
+| Obsidian | Zonewiki |
+|---|---|
+| note, abstract, summary, tldr, info, todo, question, help, faq, example, quote, cite, any other | NOTE |
+| tip, hint, success, check, done | TIP |
+| important | IMPORTANT |
+| warning, attention | WARNING |
+| caution, failure, fail, missing, danger, error, bug | CAUTION |
+
+Frontmatter carries over in every folder: other keys stay, `aliases` too, as a key.
+
+### The import's index page
+
+The index page `<folder>/index` has the folder's name as its title, says what was imported (a folder of markdown notes or an Obsidian vault, how many pages), lists every page by a wikilink to its full path, labelled with the note's path, and keeps the report, a section for each kind that has lines:
+
+| Section | Lists |
+|---|---|
+| Renamed | a note or folder whose slug isn't its name slugified: a part with nothing left, a clash, a part refused, the index's name |
+| Links with several targets | a link that found several, and the one chosen |
+| Links to nothing | a link that found no note or file |
+| Lost on the way | what has no equivalent: block references, embedded notes, Dataview and Tasks-plugin syntax |
+| Left out | files no note links to, files with no name an upload can have, canvases, bases, Excalidraw drawings |
+
+A line names the note's or file's path first, in code (`` `a.md`: `[[Nowhere]]` finds no note or file ``), and the lines are in the order of the paths.
+The pages and files of the plan are in that order too.
 
 ## Mobile editor
 

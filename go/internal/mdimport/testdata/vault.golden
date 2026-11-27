@@ -1,0 +1,93 @@
+=== page my-vault/daily/2026-11-26
+# 2026-11-26
+
+Back to [[my-vault/welcome|welcome]] and [[my-vault/welcome|up]] and [[my-vault/templates/daily-note-template|Daily Note Template]].
+=== page my-vault/my-note-2024
+---
+tags: journal, idea, project/alpha
+aliases: [mine]
+---
+# My Note (2024)
+
+Some thoughts with #idea and #project/alpha, not #123.
+
+> [!TIP]
+> **Remember this**
+>
+> Folded in Obsidian.
+
+> [!NOTE]
+> **Example**
+>
+> An example.
+
+This is <mark>important</mark> text that stays.
+
+
+![|300](/_assets/diagram.png)
+[spec.pdf](/_assets/spec.pdf)
+[[my-vault/projects/roadmap|Roadmap]]
+See [[my-vault/projects/roadmap|Roadmap]].
+
+`[[Welcome]] #notatag` stays in code.
+=== page my-vault/projects/roadmap
+# Roadmap
+
+The goal is clear.
+
+## Next steps
+
+- [ ] Write the spec 📅 2026-12-01
+- [x] Draw the [diagram](/_assets/diagram.png)
+
+```dataview
+LIST FROM #project
+```
+
+status:: active
+
+| Page | Link |
+|---|---|
+| Home | [[my-vault/welcome\|home]] |
+=== page my-vault/welcome
+# Welcome
+
+This vault is a small sample. Start at [[my-vault/projects/roadmap|Projects/Roadmap]] or [[my-vault/my-note-2024|my note]].
+
+- [[my-vault/projects/roadmap#Next steps|Roadmap › Next steps]]
+- [the spec](/_assets/spec.pdf)
+- [Zonewiki](https://zonewiki.com) and [top](#welcome)
+- [[Nowhere]]
+=== page my-vault/templates/daily-note-template
+# {{date}}
+
+## Notes
+=== file Projects/attachments/diagram.png → diagram.png
+=== file Projects/attachments/spec.pdf → spec.pdf
+=== index my-vault/index
+# My Vault
+
+Imported from an Obsidian vault: 5 pages.
+
+## Pages
+
+- [[my-vault/daily/2026-11-26|Daily/2026-11-26]]
+- [[my-vault/my-note-2024|My Note (2024)]]
+- [[my-vault/projects/roadmap|Projects/Roadmap]]
+- [[my-vault/welcome|Welcome]]
+- [[my-vault/templates/daily-note-template|_templates/Daily Note Template]]
+
+## Links to nothing
+
+- `Welcome.md`: `[[Nowhere]]` finds no note or file
+
+## Lost on the way
+
+- `My Note (2024).md`: `![[Roadmap]]`, an embedded note, is a link
+- `My Note (2024).md`: `[[Roadmap#^goal1]]`, a block reference, links to the page
+- `Projects/Roadmap.md`: 1 Dataview query, 1 Dataview field (key:: value), 1 Tasks-plugin task, as written
+
+## Left out
+
+- `Board.canvas`: an Obsidian canvas
+- `Projects/attachments/unused.txt`: no note links to it

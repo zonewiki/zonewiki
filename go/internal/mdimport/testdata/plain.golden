@@ -1,0 +1,24 @@
+=== page my-vault/readme
+# Docs
+
+See [[my-vault/docs/guide|the guide]] and [[my-vault/docs/guide|docs/Guide]].
+![logo](/_assets/logo.png)
+
+Text with #hashtag and ==marks== and %%percent%% stays.
+
+> [!tip] My title
+> stays a quote.
+=== page my-vault/docs/guide
+# Guide
+
+Back to [[my-vault/readme|readme]], and an ![[embed.png]] stays.
+=== file docs/img/logo.png → logo.png
+=== index my-vault/index
+# My Vault
+
+Imported from a folder of markdown notes: 2 pages.
+
+## Pages
+
+- [[my-vault/readme|README]]
+- [[my-vault/docs/guide|docs/Guide]]
