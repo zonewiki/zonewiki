@@ -586,7 +586,7 @@ An undo comes back to the list as it was filtered.
 every task it changed is as it was before it (an edit reverted, a completion reopened and the series' next occurrence it made gone again, a move between lists or places moved back), a task it made is deleted again, a task it deleted is back with its id;
 in one commit, "Undo 1a2b3c4: Update garden", and a change of pages and tasks together (a commit made by hand, say) in one commit too.
 One click and no question: the undo is a change like any other, at the top of the list, and undoing it brings the change back.
-The list then says what it did ("Undone: garden as before; the task “Water the beds” as before.").
+The list then says what it did ("Undone: garden as before; the task “Water the beds” as before."), naming three of each kind and counting the rest ("p00, p01, p02 and 22 more deleted again": an import undone takes back thousands, and the sentence goes in the redirect's URL, which a proxy refuses past a few KB).
 A page's History calls it "Undid the change of <time>".
 
 #### Undoing a change of tasks

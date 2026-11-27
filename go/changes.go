@@ -649,18 +649,31 @@ func undoChangesRoute(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/changes?"+back.Encode(), http.StatusSeeOther)
 }
 
+// undoneNames: how many of each kind undoneSays names; the rest it counts.
+const undoneNames = 3
+
+// fewOf: names, the first undoneNames of them and how many more: an undo
+// of an import takes back thousands, and the sentence goes in a redirect's
+// URL (a proxy refuses a long header) and into an assistant's context.
+func fewOf(names []string) string {
+	if len(names) <= undoneNames {
+		return strings.Join(names, ", ")
+	}
+	return strings.Join(names[:undoneNames], ", ") + " and " + strconv.Itoa(len(names)-undoneNames) + " more"
+}
+
 // undoneSays: what an undo did, in a sentence.
 func undoneSays(u *undone) string {
 	var parts []string
 	if len(u.back) > 0 {
-		parts = append(parts, strings.Join(u.back, ", ")+" as before")
+		parts = append(parts, fewOf(u.back)+" as before")
 	}
 	if len(u.gone) > 0 {
-		parts = append(parts, strings.Join(u.gone, ", ")+" deleted again")
+		parts = append(parts, fewOf(u.gone)+" deleted again")
 	}
 	named := func(what string, names []string, did string) {
 		if len(names) > 0 {
-			parts = append(parts, "the "+plural(len(names), what)+" "+strings.Join(names, ", ")+" "+did)
+			parts = append(parts, "the "+plural(len(names), what)+" "+fewOf(names)+" "+did)
 		}
 	}
 	named("file", u.filesBack, "as before")

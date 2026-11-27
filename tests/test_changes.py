@@ -468,6 +468,26 @@ def test_an_assistants_run_of_task_changes_is_undone_together(client, wiki_dir):
     assert tid not in (wiki_dir / "_tasks/tasks.json").read_text()
 
 
+def test_an_undo_of_many_pages_names_a_few(client, wiki_dir):
+    """An undo that takes back many pages (an import) names three of them
+    and counts the rest: the sentence goes in the redirect's URL, which a
+    proxy refuses past a few KB, and into an assistant's context, whose
+    lines of the pages put back stop at twenty."""
+    for i in range(25):
+        (wiki_dir / f"p{i:02d}.md").write_text(f"# P{i}\n")
+    git(wiki_dir, "add", "-A")
+    git(wiki_dir, "commit", "-qm", "Many pages")
+    sha = git(wiki_dir, "rev-parse", "HEAD").strip()
+    resp = client.post("/changes/undo", data={"sha": sha}, headers=HOST)
+    assert resp.status_code == 303 and len(resp.headers["Location"]) < 300, resp.headers["Location"]
+    said = client.get(resp.headers["Location"], headers=HOST).get_data(as_text=True)
+    assert "Undone: p00, p01, p02 and 22 more deleted again." in said
+    text = tool(client, "undo_changes", versions=offers(client)[0][1])     # the undo undone: all back
+    assert text.startswith("Undone: p00, p01, p02 and 22 more as before.")
+    assert text.count("\nurl: ") == 20 and text.endswith("\n… and 5 more pages (history lists them)"), text
+    assert all((wiki_dir / f"p{i:02d}.md").exists() for i in range(25))
+
+
 def test_an_upload_is_offered_undo_and_said(client, wiki_dir):
     """An upload's change is undone as a page's (undoChangesOp): offered on
     its row, and said by its path, from the browser and to an assistant."""

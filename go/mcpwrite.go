@@ -620,6 +620,10 @@ func restorePage(args jsonObj, base string, user asker) (string, error) {
 		pageInfo(slug, base) + pendingNote(slug, kept) + linkWarning(slug, before, content, user) + guideNote(slug, user), nil
 }
 
+// undoPageLines: how many pages put back undo_changes describes, a line
+// each (an import undone and redone puts back thousands).
+const undoPageLines = 20
+
 // undoChangesTool: undo_changes, the browser's Undo on Changes
 // (undoChangesOp): the changes named by their versions undone together.
 func undoChangesTool(args jsonObj, base string, user asker) (string, error) {
@@ -643,8 +647,11 @@ func undoChangesTool(args jsonObj, base string, user asker) (string, error) {
 		return "", err
 	}
 	var lines []string
-	for _, slug := range done.back {
+	for _, slug := range done.back[:min(len(done.back), undoPageLines)] {
 		lines = append(lines, pageInfo(slug, base)+guideNote(slug, user))
+	}
+	if more := len(done.back) - undoPageLines; more > 0 {
+		lines = append(lines, "… and "+strconv.Itoa(more)+" more pages (history lists them)")
 	}
 	out := undoneSays(done) + " The undo is a change itself (history), and can be undone."
 	if len(lines) > 0 {
