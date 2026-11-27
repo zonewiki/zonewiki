@@ -8,6 +8,7 @@ This page gets you connected first, then explains what a connection may do and h
 
 Every way starts from the wiki's assistant address: your wiki's address followed by `/mcp`, for example `https://wiki.example.com/mcp`, or `http://localhost:5080/mcp` for a wiki on your own computer.
 You find it at the top of **Connect an assistant**, with a **Copy** button: **Settings** in the menu at the top right opens it (your initial; without users, the three lines), on a phone too.
+In a wiki without a login the menu has no **Settings**: its **Connect an assistant** is the page.
 
 There are two ways in:
 
@@ -50,7 +51,7 @@ claude mcp add --transport http zone http://localhost:5080/mcp     # a wiki on y
 Then start Claude Code, type `/mcp`, pick `zone` and sign in.
 Your browser opens the same **Connect an assistant?** page; click **Allow** and go back to the terminal.
 
-A wiki without a login has nothing to sign in to, and Claude Code can't connect this way: Zonewiki answers that MCP is off.
+A wiki without a login has nothing to sign in to, and Claude Code can't connect this way: `claude mcp list` shows it as needing authentication, or says that client registration was rejected.
 There, connect it with a token (below): **Connect an assistant** shows the whole command.
 
 ### ChatGPT and other MCP clients
@@ -66,7 +67,8 @@ Other clients follow the same standard, but how each one sets up a server is up 
 
 ### A token for any client
 
-1. Open **Settings** in the menu at the top right: it opens **Connect an assistant**.
+1. Open **Settings** in the menu at the top right: it opens **Connect an assistant** (in a wiki without a login, the menu's **Connect an assistant** itself).
+   On the machine Zonewiki runs on, `./zonewiki config token` (`./run.sh config token` in a container) makes the wiki's token too, and `user token NAME` a user's: skip to step 4.
 2. Under **Your token** (**The wiki's token** in a wiki without users), type your password and click **Make a token**.
    A wiki without a login asks for no password.
 3. Copy the token.

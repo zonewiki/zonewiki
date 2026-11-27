@@ -29,11 +29,13 @@ On a Mac, `xcode-select --install` installs it (or `brew install git`); on Linux
 
    | Your computer | The file |
    |---------------|----------|
-   | A Mac with Apple silicon (M1 or later) | `zonewiki-macos-arm64` |
-   | A Mac with an Intel processor | `zonewiki-macos-amd64` |
+   | A Mac with Apple silicon (M1 or later), macOS 13 or newer | `zonewiki-macos-arm64` |
+   | A Mac with an Intel processor, macOS 13 or newer | `zonewiki-macos-amd64` |
    | Linux on a PC | `zonewiki-linux-amd64` |
    | Linux on ARM, such as a Raspberry Pi 4 or 5 (64-bit) | `zonewiki-linux-arm64` |
    | Windows | None: in WSL2, the Linux file for your processor |
+
+   The release's `SHA256SUMS` lists each file's checksum: in the folder you downloaded to, `sha256sum -c SHA256SUMS --ignore-missing` checks yours (on a Mac, `shasum -a 256 -c SHA256SUMS --ignore-missing`).
 
 2. In a terminal, name it `zonewiki`, make it a program, and start it:
 
@@ -44,10 +46,12 @@ On a Mac, `xcode-select --install` installs it (or `brew install git`); on Linux
    ./zonewiki
    ```
 
+   Keep the file in a folder of its own, such as `~/Downloads` or `~/bin`, not in your home folder itself: there `zonewiki` is the name of your wiki's folder.
+
 3. Open <http://localhost:5080>.
 
 Your wiki is the folder `zonewiki` in your home folder, made at the first start; the terminal says where.
-To keep it elsewhere, start Zonewiki with that folder.
+To keep it elsewhere, name that folder in `ZONE_DATA` when you start Zonewiki; it must exist: `ZONE_DATA=~/Documents/wiki ./zonewiki`.
 To use a folder of Markdown notes you already have (kept in git or not), add `--init` the first time:
 
 ```bash
@@ -65,8 +69,8 @@ Take the download mark off it once, then start it again:
 xattr -d com.apple.quarantine zonewiki
 ```
 
-If port 5080 is taken, Zonewiki says so and stops.
-Start Zonewiki on another port, `./zonewiki --addr :5081`, and open <http://localhost:5081>.
+If port 5080 is taken, Zonewiki says so and stops; often it is a Zonewiki you started before, in another terminal.
+Stop that one, or start Zonewiki on another port, `./zonewiki --addr :5081`, and open <http://localhost:5081>.
 
 `./zonewiki --help` lists its commands and settings, `./zonewiki --version` says which version it is.
 With `ZONE_SEMANTIC_SEARCH=on` the binary searches by meaning too ([Search by meaning](search.md#search-by-meaning)): it downloads the model (0.32 GB) the first time it needs it, and takes about 0.4 GB more memory.
@@ -95,6 +99,7 @@ echo 'ZONE_DATA=~/zonewiki' > .env
 
 Open <http://localhost:5080>; Zonewiki answers only on this computer.
 The first start downloads the image.
+If another program has port 5080, compose says the address is already in use: add `ZONE_PORT=5081` to `.env`, run `./run.sh up` again, and open <http://localhost:5081>.
 Each `./run.sh` command says what it is doing in lines starting with `==>`; `./run.sh --help` lists them.
 `./run.sh up` says **Zonewiki running at** once Zonewiki answers; if it doesn't start, it shows the end of Zonewiki's log instead, which says why.
 
@@ -131,11 +136,13 @@ You need git and Docker with Compose, or Podman with `podman-compose`.
 Zonewiki is tested on Linux, and should work on macOS, and on Windows in WSL2.
 
 ```bash
-git clone https://github.com/zonewiki/zonewiki && cd zonewiki
+git clone https://github.com/zonewiki/zonewiki zonewiki-src && cd zonewiki-src
 mkdir -p ~/zonewiki                   # your wiki folder
 cp .env.example .env                  # ZONE_DATA is your wiki folder
 ./run.sh up                           # build and start
 ```
+
+The checkout gets a name of its own: `~/zonewiki` is your wiki's folder, the default in `.env`.
 
 Open <http://localhost:5080>.
 The first build takes a few minutes; later starts are quick.
@@ -147,11 +154,14 @@ Everything else is as [with Docker](#with-docker): the same commands, the same `
 With Go 1.27 or newer and git:
 
 ```bash
+git clone https://github.com/zonewiki/zonewiki zonewiki-src && cd zonewiki-src
 (cd go && go build -o zonewiki .)
 go/zonewiki
 ```
 
-The wiki is then the folder `zonewiki` in your home folder, made at the first start.
+The wiki is then the folder `zonewiki` in your home folder, made at the first start (so the checkout has another name).
+For semantic search at full speed, build with Go's vector arithmetic: `(cd go && GOEXPERIMENT=simd go build -o zonewiki .)`.
+That needs Go 1.27 itself: an older Go that fetches 1.27 for the plain build fails on it.
 As with the downloaded binary, no `.env` is read: settings are environment variables at the start.
 
 ```bash

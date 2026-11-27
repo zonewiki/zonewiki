@@ -92,11 +92,13 @@ To start with, it is reachable only from your computer and asks for no login; [N
 
 ### Binary
 
-**Download** the file for your computer (Linux or macOS, amd64 or arm64) from the [latest release](https://github.com/zonewiki/zonewiki/releases/latest) and run it; it needs git.
+**Download** the file for your computer from the [latest release](https://github.com/zonewiki/zonewiki/releases/latest) (`zonewiki-linux-amd64`, `zonewiki-linux-arm64`, `zonewiki-macos-arm64` for Apple silicon, `zonewiki-macos-amd64`) and run it; it needs git.
+`SHA256SUMS` beside them checks the download: `sha256sum -c SHA256SUMS --ignore-missing` (on a Mac, `shasum -a 256 -c` instead of `sha256sum -c`).
 On Windows, run the Linux file in WSL2: there is no Windows binary.
 
 ```bash
-mv zonewiki-macos-arm64 zonewiki      # the file you downloaded
+cd ~/Downloads                        # where you saved it; not your home folder, where ~/zonewiki is the wiki's
+mv zonewiki-linux-amd64 zonewiki      # the file you downloaded
 chmod +x zonewiki
 ./zonewiki                            # your wiki: ~/zonewiki
 ZONE_DATA=~/notes ./zonewiki --init   # or: a folder of Markdown notes you already have
@@ -118,6 +120,8 @@ echo 'ZONE_DATA=~/zonewiki' > .env      # your wiki folder
 ./run.sh up                            # ./run.sh update for a new version
 ```
 
+If another program has port 5080, add `ZONE_PORT=5081` to `.env` and run `./run.sh up` again.
+
 In a checkout of the repository, the same `./run.sh up` builds the image from it instead (to change Zonewiki, or to run a branch): see [From the repository](docs/manual/self-hosting.md#from-the-repository).
 
 ### From source
@@ -125,12 +129,13 @@ In a checkout of the repository, the same `./run.sh up` builds the image from it
 With Go 1.27 or newer and git:
 
 ```bash
-git clone https://github.com/zonewiki/zonewiki && cd zonewiki
+git clone https://github.com/zonewiki/zonewiki zonewiki-src && cd zonewiki-src
 (cd go && go build -o zonewiki .)
 go/zonewiki                           # your wiki: ~/zonewiki
 ```
 
-`GOEXPERIMENT=simd go build -o zonewiki .` builds with Go's vector arithmetic, which semantic search's model runs many times faster on (the images and the release binaries are built so).
+The checkout gets a name of its own because `~/zonewiki` is where the wiki goes.
+`(cd go && GOEXPERIMENT=simd go build -o zonewiki .)` builds with Go's vector arithmetic, which semantic search's model runs many times faster on (the images and the release binaries are built so).
 
 ### Next steps
 
@@ -141,12 +146,13 @@ All the ways are described in [Running Zonewiki yourself](docs/manual/self-hosti
 ## Connect an AI assistant
 
 **By signing in** (a wiki with a login): give your assistant the address `https://your-wiki.example/mcp`.
-In Claude, add it as a custom connector. In Claude Code, run `claude mcp add --transport http zone <address>`.
+In Claude, add it as a custom connector. In Claude Code, run `claude mcp add --transport http zone <address>`, then `/mcp` in Claude Code.
 You sign in, click **Allow**, and it is connected as you.
 Claude.ai and ChatGPT connect from their makers' servers, so they need a wiki on the internet over https; Claude Code reaches any wiki your computer does.
 
-**With a token** (any wiki, any client): open **Connect an assistant** in the browser, or run `./run.sh config token` (`./run.sh user token NAME` with users).
+**With a token** (any wiki, any client): open **Connect an assistant** from the menu at the top right in the browser, or run `./zonewiki config token` (`./run.sh config token` in a container; `user token NAME` with users).
 Then add an MCP server at `http://localhost:5080/mcp` with the header `Authorization: Bearer <token>`.
+In Claude Code: `claude mcp add --transport http zone http://localhost:5080/mcp --header "Authorization: Bearer <token>"`.
 
 Write your conventions on a page called `wiki-guide` (where things go, what's private, how pages are tagged), and every assistant reads them before it writes.
 Assistants can also answer questions about Zonewiki itself.
