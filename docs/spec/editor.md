@@ -280,6 +280,7 @@ Multiple files dropped at once are uploaded sequentially.
 
 ### Undoing an upload
 
+This is the editor's undo of the text; the file stays uploaded, a commit of its own, and Undo on Changes takes that away (Uploads undone in `docs/spec/rendering.md`).
 While the file uploads a placeholder stands where it goes (`![uploading…]()`, or `[name]()`), and the link takes its place when the upload answers.
 Both go in as typing does (`putText` in `js/mdedit.js`: `execCommand('insertText')`), so Ctrl+Z takes the link back to the placeholder, a second one takes that out, and what was typed before stays undoable; it once set `textarea.value`, which wiped the undo history.
 The placeholder is looked for where it was put, then anywhere, since text typed before it meanwhile moves it.

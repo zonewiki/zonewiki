@@ -592,14 +592,28 @@ No mail goes out for a task given back to someone by an undo.
 
 **What can be undone**, and what the operation refuses otherwise, saying why:
 
-- a change of pages and tasks (one that changed a list's registry, a task's files, an upload or any other file too is not: Undo doesn't put those back; a list is renamed or deleted back by hand);
-- each page and task one its reader sees, each page one they may write (a guide: an admin; a viewer: none; a change they don't see all of is answered as no change at all, 404, whoever's task or group's list it touched);
+- a change of pages, uploads and tasks (one that changed a list's registry, a task's files or any other file too is not: Undo doesn't put those back; a list is renamed or deleted back by hand);
+- each page, upload and task one its reader sees, each page one they may write (a guide: an admin; a viewer: none; a change they don't see all of is answered as no change at all, 404, whoever's task, private upload or group's list it touched), each upload in a place they may upload to (Uploads undone, below);
 - each task one they may write back where it was, as any write of tasks asks (`mayUndoTask`): its list still there and theirs to write (`canWriteList`), or their own Inbox; a task the change made goes only as deleting it goes (who made it, an admin: `mayDeleteTask`), which also makes it the one way an assistant takes a task away, and that undoable; a shared task never back into a private place ("a shared task stays shared"); back into a list fewer people see only by who made it or an admin (`mayNarrowTask`, as a move there: Moving a task to fewer or more people in `docs/spec/tasks.md`);
 - no page moved (a rename is undone by renaming back, which asks who may);
-- and no page changed again since, by a commit or by text not committed yet, and no task changed again since (it isn't as the change left it, by anyone), nor between changes undone together by one not among them: the undo would take that along.
+- and no page or upload changed again since, by a commit or by what isn't committed yet, and no task changed again since (it isn't as the change left it, by anyone), nor between changes undone together by one not among them: the undo would take that along.
   The page's History restores any version instead; a task's text is in git.
 
-Changes shows the buttons from what the list knows (`undoOffers`: the kinds of files, who may write, the wiki's latest 1,000 commits for "changed again", `undoWindow`; for tasks the commits' Task trailers, no task file read: a change of tasks is offered when it names every task it changed, the reader sees each, and no later commit among those names one of them or changed one of its task files without naming all it changed); the operation checks again, exactly, so an offer that no longer holds is refused and said ("Not undone. garden was changed again since …", "Not undone. The task “Mow” was changed again since …").
+Changes shows the buttons from what the list knows (`undoOffers`: the kinds of files, who may write (or upload there), the wiki's latest 1,000 commits for "changed again", `undoWindow`; for tasks the commits' Task trailers, no task file read: a change of tasks is offered when it names every task it changed, the reader sees each, and no later commit among those names one of them or changed one of its task files without naming all it changed); the operation checks again, exactly, so an offer that no longer holds is refused and said ("Not undone. garden was changed again since …", "Not undone. The task “Mow” was changed again since …").
+
+#### Uploads undone
+
+**An upload is undone like a page**: a file straight in a place's `_assets/` (the shared `_assets/`, `private/<user>/_assets/`, `groups/<group>/_assets/`: `uploadOf`) that the change added is deleted again, one it replaced or deleted is written back as it was before the change, byte for byte (`gitBlob`: `git cat-file blob`, not the text a page's undo reads, which would make a picture's CR LF a LF).
+So a file uploaded by mistake is taken away from Changes, and a change that adds pages and files together goes back whole.
+
+- **Who**: whoever sees the file and may upload there (`mayUndoUpload`: the place's rule, as `uploadPlace` asks of an upload; a viewer or a read-only connection none).
+  Another user's private file is no change to anyone else, answered as one that isn't there.
+- **Changed again since**: as a page, by a commit not among those undone or by what is on disk and not committed; checked again under the uploads' lock (`uploadMu`, after the task files' lock and before `commitMu`), so a file uploaded meanwhile isn't overwritten.
+- **Storage**: a file written back asks for room, as an upload does (`checkRoom`: what it adds over the file there now; refused when the wiki is full, Storage limit in `docs/spec/users.md`); one taken away is counted at once (`forgetUsage`).
+- **Links**: a page that links the file since is left with a link to nothing, as a page linking an undone page is: the undo doesn't look at who links it, which would also say that a page is there.
+- **Not undone**: a task's files (`_tasks/files/<id>/_assets/`, which go with their task), a list's registry, any other file.
+
+This is the history's undo; the editor's Ctrl+Z after pasting a file takes back only the link it put in the text (Undoing an upload in `docs/spec/editor.md`).
 
 #### An assistant's run
 

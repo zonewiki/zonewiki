@@ -7,6 +7,7 @@ import re
 import socket
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
+from io import BytesIO
 from urllib.parse import parse_qs, urlparse
 
 import pytest
@@ -942,10 +943,13 @@ class TestUndo:
         assert "rename it back" in undo(client, door, git(wiki, "rev-parse", "HEAD").strip())
         assert client.post("/tasks/new-list", data={"name": "shop"}, headers=HOST).status_code == 302   # a list's registry
         assert "changed a list or a task's files too" in undo(client, door, git(wiki, "rev-parse", "HEAD").strip())
-        (wiki / "_assets").mkdir(exist_ok=True)
-        (wiki / "_assets/x.txt").write_text("x")
+        (wiki / "x.txt").write_text("x")                                # no page, no upload
         mixed = commit(wiki, "r", "# R\n")                              # git add -A: the file with it
         assert "changed files too" in undo(client, door, mixed)
+        (wiki / "_tasks/files/1234abcd/_assets").mkdir(parents=True)   # a task's file: its task's, not undone
+        (wiki / "_tasks/files/1234abcd/_assets/scan.png").write_bytes(b"x")
+        scan = commit(wiki, "s", "# S\n")
+        assert "changed a list or a task's files too" in undo(client, door, scan)
         head = git(wiki, "rev-parse", "HEAD")
         for nothing in ("abcdef1", "not a version", ""):
             assert undo(client, door, nothing) is not True
@@ -960,6 +964,117 @@ class TestUndo:
         git(wiki, "commit", "-q", "-m", "Add index")
         assert "home page" in undo(client, door, git(wiki, "rev-parse", "HEAD").strip())
         assert (wiki / "index.md").exists()
+
+    def test_an_upload_goes_and_comes_back_byte_for_byte(self, client, wiki, door):
+        assert upload(client, "scan.png", PICTURE) == "/_assets/scan.png"
+        added = head(wiki)
+        assert git(wiki, "log", "-n1", "--format=%s").strip() == "Upload scan.png"
+        assert undo(client, door, added) is True
+        assert not (wiki / "_assets/scan.png").exists() and "_assets/scan.png" not in git(wiki, "ls-files")
+        assert git(wiki, "status", "--porcelain").strip() == ""
+        assert undo(client, door, head(wiki)) is True                   # the undo undone: the file back
+        assert (wiki / "_assets/scan.png").read_bytes() == PICTURE
+        assert git(wiki, "status", "--porcelain").strip() == ""
+
+    def test_a_replaced_or_deleted_upload_is_written_back(self, client, wiki, door):
+        upload(client, "deck.pdf", PICTURE)
+        assert upload(client, "deck.pdf", b"v2\r\n", overwrite="1") == "/_assets/deck.pdf"
+        assert undo(client, door, head(wiki)) is True
+        assert (wiki / "_assets/deck.pdf").read_bytes() == PICTURE
+        git(wiki, "rm", "-q", "_assets/deck.pdf")
+        git(wiki, "commit", "-q", "-m", "Delete deck.pdf")
+        assert undo(client, door, head(wiki)) is True
+        assert (wiki / "_assets/deck.pdf").read_bytes() == PICTURE
+        # With a page in the same change: both back, in one commit.
+        (wiki / "_assets/deck.pdf").write_bytes(b"v3")
+        both = commit(wiki, "talk", "# Talk\n\n[Deck](/_assets/deck.pdf)\n")
+        assert undo(client, door, both) is True
+        assert (wiki / "_assets/deck.pdf").read_bytes() == PICTURE and not (wiki / "talk.md").exists()
+        assert len(git(wiki, "show", "--name-only", "--format=", "HEAD").split()) == 2
+
+    def test_not_an_upload_changed_again(self, client, wiki, door):
+        upload(client, "scan.png", PICTURE)
+        first = head(wiki)
+        upload(client, "scan.png", b"later", overwrite="1")
+        assert "_assets/scan.png was changed again since" in undo(client, door, first)
+        (wiki / "_assets/scan.png").write_bytes(b"on disk")             # not committed: an undo would take it along
+        assert "isn't committed yet" in undo(client, door, head(wiki))
+        assert (wiki / "_assets/scan.png").read_bytes() == b"on disk"
+
+    def test_a_file_written_back_must_fit(self, client, wiki, door, monkeypatch):
+        monkeypatch.setattr(settings, "CONFIG_FILE", "storage-max = 10KB\n")
+        (wiki / "_assets").mkdir(exist_ok=True)
+        (wiki / "_assets/big.bin").write_bytes(b"x" * 20_000)
+        git(wiki, "add", "-A")
+        git(wiki, "commit", "-q", "-m", "Add big.bin")
+        git(wiki, "rm", "-q", "_assets/big.bin")
+        git(wiki, "commit", "-q", "-m", "Delete big.bin")
+        assert "The wiki is full" in undo(client, door, head(wiki))
+        assert not (wiki / "_assets/big.bin").exists()
+
+
+# A picture's bytes, with what text would change: a CR LF, a lone CR, a NUL.
+PICTURE = b"\x89PNG\r\n\x1a\n\x00\x00\rIHDR\r\n\xff"
+
+
+def upload(client, name, data, page="", **form):
+    """An upload through the browser's route; the URL it answers with."""
+    resp = client.post("/api/upload", data={"file": (BytesIO(data), name), "page": page, **form}, headers=HOST)
+    assert resp.status_code == 200, resp.get_data(as_text=True)
+    return resp.get_json()["url"]
+
+
+class TestUndoAnUploadWithUsers:
+    """An upload is undone by who may upload there: another user's private
+    file is no change to bob (as one that isn't there), a viewer changes
+    nothing."""
+
+    @pytest.fixture(autouse=True)
+    def users(self, client, wiki, monkeypatch):
+        monkeypatch.setattr(settings, "MCP_TOKEN", "")
+        monkeypatch.setattr(settings, "USERS", {"alice": ("alice-pw", "alice-token"), "bob": ("bob-pw", "bob-token"),
+                                                "carol": ("carol-pw", "carol-token")})
+        monkeypatch.setattr(settings, "USER_SETTINGS", {"carol": {"role": "viewer"}})
+
+    @pytest.mark.parametrize("door", DOORS)
+    def test_hers_is_no_change_to_bob(self, client, wiki, door):
+        client.post("/login", data={"username": "alice", "password": "alice-pw"}, headers=HOST)
+        assert upload(client, "secret.png", PICTURE, page="private/alice/diary") == "/private/alice/_assets/secret.png"
+        hers = head(wiki)
+        client.post("/login", data={"username": "bob", "password": "bob-pw"}, headers=HOST)
+        nothing = undo(client, door, "abcdef1", token="bob-token")
+        said = undo(client, door, hers, token="bob-token")
+        assert said is not True and said == nothing.replace("abcdef1", hers)   # as a change that isn't there
+        assert (wiki / "private/alice/_assets/secret.png").read_bytes() == PICTURE
+        # A shared upload of hers is his to undo, as he may upload there.
+        client.post("/login", data={"username": "alice", "password": "alice-pw"}, headers=HOST)
+        upload(client, "map.png", PICTURE, page="garden")
+        client.post("/login", data={"username": "bob", "password": "bob-pw"}, headers=HOST)
+        assert undo(client, door, head(wiki), token="bob-token") is True
+        assert not (wiki / "_assets/map.png").exists()
+        # And hers she undoes herself.
+        client.post("/login", data={"username": "alice", "password": "alice-pw"}, headers=HOST)
+        assert undo(client, door, hers, token="alice-token") is True
+        assert not (wiki / "private/alice/_assets/secret.png").exists()
+
+    @pytest.mark.parametrize("door", DOORS)
+    def test_a_viewer_undoes_none(self, client, wiki, door):
+        client.post("/login", data={"username": "alice", "password": "alice-pw"}, headers=HOST)
+        upload(client, "map.png", PICTURE, page="garden")
+        client.post("/login", data={"username": "carol", "password": "carol-pw"}, headers=HOST)
+        said = undo(client, door, head(wiki), token="carol-token")
+        assert said is not True
+        if door == "browser":
+            assert said == "403"
+        assert (wiki / "_assets/map.png").read_bytes() == PICTURE
+        # Another's private upload: no change to her, not a read-only one (that would say the change is there).
+        client.post("/login", data={"username": "alice", "password": "alice-pw"}, headers=HOST)
+        upload(client, "secret.png", PICTURE, page="private/alice/diary")
+        hers = head(wiki)
+        client.post("/login", data={"username": "carol", "password": "carol-pw"}, headers=HOST)
+        nothing = undo(client, door, "abcdef1", token="carol-token")
+        assert undo(client, door, hers, token="carol-token") == nothing.replace("abcdef1", hers)
+        assert (wiki / "private/alice/_assets/secret.png").read_bytes() == PICTURE
 
 
 class TestUndoAnothersPages:

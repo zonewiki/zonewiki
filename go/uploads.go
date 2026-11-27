@@ -209,6 +209,32 @@ func uploadRel(p place, file string) string {
 	return "_assets/" + file
 }
 
+// uploadOf: the place and name of the upload at rel (a path in the wiki,
+// as git names it), as uploadRel makes one: a file straight in the shared
+// _assets/, a user's private/<user>/_assets/ or a group's
+// groups/<group>/_assets/, by a name an upload can have. ok false for any
+// other file, a task's files among them (_tasks/files/<id>/_assets/).
+func uploadOf(rel string) (place, string, bool) {
+	name := baseName(rel)
+	p := placeOf(rel)
+	if p.kind == ofTask || p.kind == ofNoOne || !uploadNamed(name) || uploadRel(p, name) != rel {
+		return place{}, "", false
+	}
+	return p, name, true
+}
+
+// mayUndoUpload: rel is an upload (uploadOf) that user may take away or
+// put back, as Undo does: they see it and may upload there (uploadPlace),
+// and write at all (changesNothing).
+func mayUndoUpload(user asker, rel string) bool {
+	p, _, ok := uploadOf(rel)
+	if !ok || changesNothing(user) || !canSeePath(user, rel) {
+		return false
+	}
+	q, ours := uploadPlace(user, rel)
+	return ours && q == p
+}
+
 // uploadURL: the URL of file in a place's uploads, as a markdown link takes
 // it: percent-encoded (pathURL), since a space in a link's target ends the
 // link and a bracket may ("My Deck (v2).pdf").

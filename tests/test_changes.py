@@ -11,6 +11,7 @@ import os
 import re
 import subprocess
 import time
+from io import BytesIO
 
 import pytest
 
@@ -315,7 +316,6 @@ def test_a_client_without_a_name_is_an_assistant(client, wiki_dir, monkeypatch):
 def test_an_upload_with_the_token_is_an_assistants(client, wiki_dir):
     """The file routes taking the MCP token are an assistant's door too: its
     upload is marked as upload_file's is (until 2026-11-20 it was a person's)."""
-    from io import BytesIO
     resp = client.post("/api/upload", data={"file": (BytesIO(b"x"), "scan.png")},
                        headers={**HOST, "Authorization": f"Bearer {TOKEN}"})
     assert resp.status_code == 200, resp.data
@@ -461,11 +461,42 @@ def test_an_assistants_run_of_task_changes_is_undone_together(client, wiki_dir):
     rows = offers(client)
     assert rows[0][0] == "Comment on task" and len(rows[0][2]) == 3
     body = client.get("/changes", headers=HOST).get_data(as_text=True)
-    assert "Every page and task they changed goes back" in body
+    assert "Every page, task and file they changed goes back" in body
     resp = client.post("/changes/undo", data={"sha": rows[0][2]}, headers=HOST)
     said = html.unescape(client.get(resp.headers["Location"], headers=HOST).get_data(as_text=True))
     assert "Undone: the task “Order mulch” deleted again." in said
     assert tid not in (wiki_dir / "_tasks/tasks.json").read_text()
+
+
+def test_an_upload_is_offered_undo_and_said(client, wiki_dir):
+    """An upload's change is undone as a page's (undoChangesOp): offered on
+    its row, and said by its path, from the browser and to an assistant."""
+    client.post("/api/upload", data={"file": (BytesIO(b"\x89PNG\r\n"), "scan.png")}, headers=HOST)
+    top = offers(client)[0]
+    assert top[0] == "Upload scan.png" and top[1]
+    resp = client.post("/changes/undo", data={"sha": top[1]}, headers=HOST)
+    said = html.unescape(client.get(resp.headers["Location"], headers=HOST).get_data(as_text=True))
+    assert "Undone: the file _assets/scan.png deleted again." in said
+    assert not (wiki_dir / "_assets/scan.png").exists()
+    undo_sha = offers(client)[0][1]
+    assert undo_sha                                                     # the undo, which can be undone
+    text = tool(client, "undo_changes", versions=undo_sha)
+    assert text.startswith("Undone: the file _assets/scan.png as before.")
+    assert (wiki_dir / "_assets/scan.png").read_bytes() == b"\x89PNG\r\n"
+
+
+def test_her_private_upload_is_offered_to_her_alone(client, wiki_dir, monkeypatch):
+    monkeypatch.setattr(settings, "MCP_TOKEN", "")
+    monkeypatch.setattr(settings, "USERS", {"alice": ("alice-pw", ""), "bob": ("bob-pw", "")})
+    client.post("/login", data={"username": "alice", "password": "alice-pw"}, headers=HOST)
+    client.post("/api/upload", data={"file": (BytesIO(b"x"), "secret.png"), "page": "private/alice/diary"}, headers=HOST)
+    client.post("/api/upload", data={"file": (BytesIO(b"y"), "map.png"), "page": "garden"}, headers=HOST)
+    rows = offers(client)
+    assert [(what, bool(one)) for what, one, _ in rows[:2]] == [("Upload map.png", True), ("Upload private/alice/_assets/secret.png", True)]
+    client.post("/login", data={"username": "bob", "password": "bob-pw"}, headers=HOST)
+    body = client.get("/changes", headers=HOST).get_data(as_text=True)
+    assert "secret.png" not in body
+    assert [(what, bool(one)) for what, one, _ in offers(client)[:1]] == [("Upload map.png", True)]   # a shared one he may upload too
 
 
 def test_a_viewer_is_offered_no_undo(client, wiki_dir, monkeypatch):

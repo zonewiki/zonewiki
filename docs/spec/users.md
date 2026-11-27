@@ -206,7 +206,7 @@ A running Zonewiki keeps its settings when a changed file has an error (Reloadin
 
 | When the wiki is full | What |
 |-----------------------|------|
-| Refused | an upload (its size, less the file's it replaces: a smaller file replacing one always fits); a new page (`/new`, the editor opened on a page that doesn't exist yet, its first save, `write_page`); a new note (`/api/notes`, `write_page` with `note`) |
+| Refused | an upload (its size, less the file's it replaces: a smaller file replacing one always fits), and an upload an undo writes back (likewise); a new page (`/new`, the editor opened on a page that doesn't exist yet, its first save, `write_page`); a new note (`/api/notes`, `write_page` with `note`) |
 | Never refused | an edit to a page, even one that grows it (typed text is never turned away), a restore, a rename or move, a delete, Move to wiki and Append to page (a note's text moves), tasks (small, and capped per request) |
 
 A refusal (`checkRoom`, `refusedFull`) is 507 Insufficient Storage, "The wiki is full: 5.0 GB of 5 GB used. Delete pages or files to make room.", and an MCP tool's error.
@@ -220,7 +220,7 @@ Not the history: a deleted file still in git frees its space, and the history, m
 Zonewiki walks the directory only when a write asks for room, and then at most once a minute (`usedBytes`; a walk reads names and sizes, no contents);
 an upload or a new page adds its size at once (`added`), so uploads in a row can't slip past.
 A figure that says full is walked again first, but at most every 5 seconds (`usageRecheck`), so a client asking over and over in a full wiki doesn't make a walk each time:
-a file deleted on disk counts within seconds, a page deleted through Zonewiki at once (`forgetUsage`).
+a file deleted on disk counts within seconds, a page or upload deleted through Zonewiki (an undo's too) at once (`forgetUsage`).
 
 ### Passwords and tokens
 

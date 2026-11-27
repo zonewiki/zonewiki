@@ -481,15 +481,17 @@ func undoOffers(user asker, entries []LogEntry, ct changedTasks) map[string]undo
 		return offers
 	}
 	latest := latestCommits(undoWindow)
-	// undoable: a commit of the kind an undo takes: pages and tasks' files
-	// alone, all of them seen, the pages the user's to write and none
-	// moved, the tasks named, each one they see (or one deleted for good).
+	// undoable: a commit of the kind an undo takes: pages, uploads and
+	// tasks' files alone, all of them seen, the pages the user's to write
+	// and none moved, the uploads theirs to upload there (mayUndoUpload),
+	// the tasks named, each one they see (or one deleted for good).
 	undoable := func(e LogEntry) bool {
-		if e.Hidden > 0 || len(e.Files) == 0 || strings.Contains(e.Kinds, "A") && strings.Contains(e.Kinds, "D") {
+		if e.Hidden > 0 || len(e.Files) == 0 || len(e.Kinds) != len(e.Files) {
 			return false
 		}
 		tasks := false
-		for _, f := range e.Files {
+		pageKinds := "" // what it did to its pages: an A and a D moved one
+		for i, f := range e.Files {
 			if latest.files[f] == nil {
 				return false
 			}
@@ -497,9 +499,16 @@ func undoOffers(user asker, entries []LogEntry, ct changedTasks) map[string]undo
 				tasks = true
 				continue
 			}
+			if mayUndoUpload(user, f) {
+				continue
+			}
 			if slug, isPage := strings.CutSuffix(f, ".md"); !isPage || safePath(slug) == "" || !canWrite(user, slug) {
 				return false
 			}
+			pageKinds += e.Kinds[i : i+1]
+		}
+		if strings.Contains(pageKinds, "A") && strings.Contains(pageKinds, "D") {
+			return false
 		}
 		if tasks && (mayWriteTasks(user) != nil || len(e.Tasks) == 0 || e.MoreTasks > 0) {
 			return false
@@ -649,14 +658,16 @@ func undoneSays(u *undone) string {
 	if len(u.gone) > 0 {
 		parts = append(parts, strings.Join(u.gone, ", ")+" deleted again")
 	}
-	tasks := func(titles []string, did string) {
-		if len(titles) > 0 {
-			parts = append(parts, "the "+plural(len(titles), "task")+" "+strings.Join(titles, ", ")+" "+did)
+	named := func(what string, names []string, did string) {
+		if len(names) > 0 {
+			parts = append(parts, "the "+plural(len(names), what)+" "+strings.Join(names, ", ")+" "+did)
 		}
 	}
-	tasks(u.tasksBack, "as before")
-	tasks(u.tasksGone, "deleted again")
-	tasks(u.tasksReturned, "back")
+	named("file", u.filesBack, "as before")
+	named("file", u.filesGone, "deleted again")
+	named("task", u.tasksBack, "as before")
+	named("task", u.tasksGone, "deleted again")
+	named("task", u.tasksReturned, "back")
 	return "Undone: " + strings.Join(parts, "; ") + "."
 }
 

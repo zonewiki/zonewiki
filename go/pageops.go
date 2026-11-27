@@ -763,10 +763,12 @@ const undoMost = 50
 
 // undone: what an undo did: the pages put back as they were (their text
 // before the changes, a deleted page brought back) and those taken away
-// (made by the changes), by slug; and the tasks put back as they were,
-// taken away and brought back, each by its title in quotes (taskUndo.title).
+// (made by the changes), by slug; the uploads likewise, by their paths in
+// the wiki; and the tasks put back as they were, taken away and brought
+// back, each by its title in quotes (taskUndo.title).
 type undone struct {
 	back, gone                          []string
+	filesBack, filesGone                []string
 	tasksBack, tasksGone, tasksReturned []string
 }
 
@@ -775,17 +777,21 @@ func (u *undone) pages() []string { return append(slices.Clone(u.back), u.gone..
 // undoChangesOp undoes changes of the wiki, commits by their versions:
 // every page they changed is as it was before them, and every task, in one
 // commit ("Undo <version>: <what it said>", "Undo N changes: …"), which is
-// a change like any other and can be undone too. A change is undone whole
-// or not at all, and only where that loses nothing and is the user's to do:
-//   - it changed only pages and tasks' files (taskfiles.Store.FileOwner;
-//     not a list's registry, a task's files, an upload), each one user
-//     sees (a change user doesn't see all of is no change to them: refused
-//     as missing), each page one they may write;
+// a change like any other and can be undone too. Its uploads too: one it
+// added is taken away, one it replaced or deleted written back, byte for
+// byte (gitBlob). A change is undone whole or not at all, and only where
+// that loses nothing and is the user's to do:
+//   - it changed only pages, uploads (uploadOf) and tasks' files
+//     (taskfiles.Store.FileOwner; not a list's registry, a task's files),
+//     each one user sees (a change user doesn't see all of is no change to
+//     them: refused as missing), each page one they may write, each upload
+//     one they may upload there (mayUndoUpload);
 //   - it moved no page (a rename is undone by renaming back, which asks
 //     who may: checkReaders);
-//   - no page it changed was changed since by a commit that isn't among
-//     those undone, or holds text not committed yet: the undo would take
-//     that along;
+//   - no page or upload it changed was changed since by a commit that
+//     isn't among those undone, or holds what isn't committed yet: the undo
+//     would take that along;
+//   - what the uploads written back add fits the wiki (checkRoom);
 //   - each task it changed is as the changes left it, and is the user's to
 //     put back (taskUndoLocked, mayUndoTask).
 //
@@ -804,6 +810,7 @@ func undoChangesOp(user asker, versions []string, suffix string, check func(slug
 	var commits []commit
 	how := map[string]map[string]byte{} // file → commit → A, M or D
 	var files []string
+	uploads := map[string]place{}            // of files, the uploads, with their places
 	taskChanges := map[string][]fileChange{} // commit → the task files it changed
 	for _, v := range versions {
 		none := refuseAs(refusedNotFound, "No change "+strconv.Quote(v)+"; history lists them.")
@@ -831,14 +838,21 @@ func undoChangesOp(user asker, versions []string, suffix string, check func(slug
 				continue
 			}
 			slug, isPage := strings.CutSuffix(c.Path, ".md")
-			if !isPage || safePath(slug) == "" {
+			if p, _, isUpload := uploadOf(c.Path); isUpload {
+				if changesNothing(user) && canSeePath(user, c.Path) { // one they don't see: no change of theirs, below
+					return nil, refuseAs(refusedReadOnly, noChangeMsg(user))
+				}
+				if !mayUndoUpload(user, c.Path) {
+					return nil, none
+				}
+				uploads[c.Path] = p
+			} else if !isPage || safePath(slug) == "" {
 				what := "files"
 				if isTaskFile(c.Path) {
 					what = "a list or a task's files"
 				}
-				return nil, refuse("Change " + short + " changed " + what + " too, which Undo doesn't put back: only changes of pages and tasks are undone.")
-			}
-			if !canWrite(user, slug) {
+				return nil, refuse("Change " + short + " changed " + what + " too, which Undo doesn't put back: only changes of pages, uploads and tasks are undone.")
+			} else if !canWrite(user, slug) {
 				return nil, notWritable(user, slug, "No change "+strconv.Quote(v)+"; history lists them.")
 			}
 			if how[c.Path] == nil {
@@ -846,23 +860,36 @@ func undoChangesOp(user asker, versions []string, suffix string, check func(slug
 				files = append(files, c.Path)
 			}
 			how[c.Path][sha] = c.Kind
-			kinds += string(c.Kind)
+			if _, isUpload := uploads[c.Path]; !isUpload {
+				kinds += string(c.Kind) // a page moved: an upload's A and D are no move
+			}
 		}
 		if strings.Contains(kinds, "A") && strings.Contains(kinds, "D") {
 			return nil, refuse("Change " + short + " moved a page: rename it back instead.")
 		}
 		commits = append(commits, commit{sha, subject})
 	}
-	// Each page: nothing but these changes since the oldest of them, and
-	// what it was before that one.
+	// Each page and upload: nothing but these changes since the oldest of
+	// them, and what it was before that one.
 	type step struct {
 		slug, path string
-		text       *string // nil: the page is taken away
+		text       *string // nil: the page or upload is taken away
+		upload     string  // an upload: its path in the wiki, and its
+		newest     string  // latest commit, one of these changes
 	}
 	var steps []step
+	var grows int64 // what the uploads written back add to the wiki
 	done := &undone{}
 	for _, rel := range files {
 		slug, path := strings.TrimSuffix(rel, ".md"), filepath.Join(cfg.Data, rel)
+		p, isUpload := uploads[rel]
+		if isUpload {
+			slug = rel // what the refusals name
+			var ok bool
+			if path, ok = uploadPath(p, baseName(rel)); !ok {
+				return nil, refuse(rel + " can't be put back: it is no file of its folder's uploads now.")
+			}
+		}
 		ours := how[rel]
 		last := lastCommitsOf(rel, len(ours))
 		for _, sha := range last {
@@ -874,9 +901,42 @@ func undoChangesOp(user asker, versions []string, suffix string, check func(slug
 			return nil, refuseAs(refusedConflict, slug+": its history doesn't hold these changes anymore.")
 		}
 		if isUncommitted(path) {
+			if isUpload {
+				return nil, refuseAs(refusedConflict, rel+" was changed on disk and that isn't committed yet: undoing would take that along.")
+			}
 			return nil, refuseAs(refusedConflict, slug+" has changes not committed yet: commit them first (or undo them in its editor).")
 		}
 		oldest := last[len(last)-1]
+		if isUpload {
+			// The bytes, as they are and as they were: no text is read.
+			current, err := os.ReadFile(path)
+			there := err == nil
+			if err != nil && !errors.Is(err, os.ErrNotExist) {
+				return nil, err
+			}
+			s := step{slug: rel, path: path, upload: rel, newest: last[0]}
+			if ours[oldest] == 'A' { // added by these changes: gone again
+				if !there {
+					continue
+				}
+				steps = append(steps, s)
+				done.filesGone = append(done.filesGone, rel)
+				continue
+			}
+			before, ok := gitBlob(oldest+"^", rel)
+			if !ok {
+				return nil, refuseAs(refusedConflict, rel+": the file before the change can't be read.")
+			}
+			if there && bytes.Equal(current, before) {
+				continue
+			}
+			text := string(before)
+			s.text = &text
+			steps = append(steps, s)
+			grows += int64(len(before) - len(current))
+			done.filesBack = append(done.filesBack, rel)
+			continue
+		}
 		current, err := currentText(path)
 		if err != nil {
 			return nil, err
@@ -929,6 +989,9 @@ func undoChangesOp(user asker, versions []string, suffix string, check func(slug
 			return nil, err
 		}
 	}
+	if err := checkRoom(grows); err != nil {
+		return nil, err
+	}
 	message := "Undo " + runePrefix(commits[0].sha, 7) + ": " + commits[0].subject
 	if len(commits) > 1 {
 		shas := make([]string, len(commits))
@@ -952,6 +1015,22 @@ func undoChangesOp(user asker, versions []string, suffix string, check func(slug
 			return nil, refuseAs(refusedUnchanged, "The pages and tasks already are as they were before.")
 		}
 		done.tasksBack, done.tasksGone, done.tasksReturned = tw.back, tw.gone, tw.returned
+	}
+	if len(done.filesBack)+len(done.filesGone) > 0 {
+		// An upload isn't written under pagesMu but under uploadMu (after
+		// the task files' lock, before commitMu, as storeUpload takes it
+		// before its commit): each still as these changes left it, so one
+		// uploaded meanwhile isn't overwritten.
+		uploadMu.Lock()
+		defer uploadMu.Unlock()
+		for _, s := range steps {
+			if s.upload == "" {
+				continue
+			}
+			if last := lastCommitsOf(s.upload, 1); len(last) != 1 || last[0] != s.newest || isUncommitted(s.path) {
+				return nil, refuseAs(refusedConflict, s.upload+" was changed again since: undoing would take that along. Its history has every version.")
+			}
+		}
 	}
 	paths := make([]string, len(steps))
 	for i, s := range steps {

@@ -118,20 +118,23 @@ The full rules are in [the spec](../spec/navigation.md#watching-pages).
 ## Undoing a change
 
 A row in Changes can have an **Undo** button.
-Click it and every page and task that change touched goes back to how it was before it:
+Click it and every page, file and task that change touched goes back to how it was before it:
 an edited page gets its old text back, a page it made is deleted again, a page it deleted comes back;
+a file it uploaded is deleted again, one it replaced or deleted comes back as it was;
 an edited task gets its old fields back, a completed one is open again (without the next one of its series), a moved one goes back to its list, a task it made is deleted again and one it deleted comes back.
 There's no question first, because the undo is itself a change at the top of the list, and undoing the undo brings the change back.
 A page's history calls it "Undid the change of …".
 
 **Undo** is offered only when it can be done cleanly:
 
-- the change touched only pages and tasks, not a list's settings or uploads;
-- you may edit every page it touched, and every task (a task it made is deleted only by whoever made it, or an admin; a shared task doesn't become private again; a task goes back to a list fewer people see only when you made it, or are an admin);
+- the change touched only pages, uploaded files and tasks, not a list's settings or a task's files;
+- you may edit every page it touched, upload where each of its files is, and every task (a task it made is deleted only by whoever made it, or an admin; a shared task doesn't become private again; a task goes back to a list fewer people see only when you made it, or are an admin);
 - it didn't rename or move a page (rename it back instead);
-- none of its pages or tasks has changed since, by anyone.
+- none of its pages, files or tasks has changed since, by anyone.
   Other tasks changing in the meantime don't matter.
 
+So a file uploaded by mistake is taken away with the **Undo** on its row ("Upload …"); a page that links it since is left with a link that leads nowhere ([Undo](../spec/rendering.md#undo), Uploads undone).
+If the wiki is full, a file that would come back is refused until there is room.
 If a page changed again, restore the version you want from that page's history instead.
 When an undo is refused, Changes says why, such as "Not undone. garden was changed again since …".
 A task put back is exactly as it was, its history too: the undo itself shows in Changes, not in the task.

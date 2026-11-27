@@ -444,10 +444,10 @@ Not pages' frontmatter tags.
 
 #### `undo_changes`
 
-The browser's Undo on Changes, through the same operation (`undoChangesOp`; Undo under Version history in `docs/spec/rendering.md`): the changes named by their versions (as `history` lists them; a list, or one string) are taken back whole, their pages and tasks as before them, in one commit `Undo <sha>: <what it said>` or `Undo N changes: …`.
-Refused, with the reason, for a change that changed other files too (a list's registry, a task's files, an upload), moved a page, changed a page the user may not write or a task they may not put back (What can be undone), or whose pages or tasks were changed again since (a commit, or text not committed yet).
+The browser's Undo on Changes, through the same operation (`undoChangesOp`; Undo under Version history in `docs/spec/rendering.md`): the changes named by their versions (as `history` lists them; a list, or one string) are taken back whole, their pages, uploads and tasks as before them, in one commit `Undo <sha>: <what it said>` or `Undo N changes: …`.
+Refused, with the reason, for a change that changed other files too (a list's registry, a task's files), moved a page, changed a page the user may not write or a task they may not put back (What can be undone), an upload in a place the user may not upload to, or whose pages, uploads or tasks were changed again since (a commit, or what isn't committed yet); and an upload written back that the wiki has no room for.
 A task the change made is deleted again, as only who made it or an admin deletes one: the one way an assistant takes a task away, undoable as any undo.
-The answer says which pages are as before and which are deleted again, and which tasks are as before, deleted again or back.
+The answer says which pages and files are as before and which are deleted again, and which tasks are as before, deleted again or back.
 
 #### `restore_page`
 

@@ -1132,6 +1132,21 @@ func gitShow(sha, path string) (string, bool) {
 	return r.Stdout, r.Code == 0
 }
 
+// gitBlob: the file rel (relative to the wiki) as a commit has it, byte
+// for byte (ok false when it hasn't): an upload put back as it was. Not
+// gitShow, which reads text and makes its line ends "\n", which would
+// change a picture's bytes.
+func gitBlob(sha, rel string) ([]byte, bool) {
+	var buf bytes.Buffer
+	failed := false
+	r := wikiRepo().Stream(context.Background(), gitrepo.Call{Timeout: gitTimeout}, func(out io.Reader) bool {
+		_, err := io.Copy(&buf, out)
+		failed = err != nil
+		return false
+	}, "cat-file", "blob", sha+":"+rel)
+	return buf.Bytes(), r.Code == 0 && !failed
+}
+
 // relativeTime: "2 days ago".
 func relativeTime(t time.Time) string {
 	seconds := int(now().Sub(t).Seconds())
