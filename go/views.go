@@ -592,8 +592,36 @@ func outlinks(rq *Req, slug, path string) []pageLink {
 	return pageLinks(pages)
 }
 
-// shownFile: one of a page's Files: the upload's link, its name and size.
-type shownFile struct{ Href, Name, Size string }
+// shownFile: one of a page's Files: the upload's link, its name, size and
+// kind (fileKind, its icon).
+type shownFile struct{ Href, Name, Size, Kind string }
+
+// fileKinds: a file's kind by its extension, for its icon in Files (the
+// icon_file template): pictures, sound and film, documents, spreadsheets,
+// archives; any other is a "file". By the extension, not the host's mime
+// table, which knows no office types in the container.
+var fileKinds = map[string]string{}
+
+func init() {
+	for kind, exts := range map[string]string{
+		"image":   "png jpg jpeg gif webp avif svg bmp ico tif tiff heic",
+		"media":   "mp3 m4a ogg oga opus wav flac aac mp4 m4v webm mov mkv ogv avi",
+		"doc":     "pdf doc docx odt rtf txt md pages ppt pptx odp key epub",
+		"sheet":   "xls xlsx ods csv tsv numbers",
+		"archive": "zip gz tgz tar bz2 xz 7z rar zst",
+	} {
+		for _, ext := range strings.Fields(exts) {
+			fileKinds["."+ext] = kind
+		}
+	}
+}
+
+func fileKind(name string) string {
+	if kind := fileKinds[strings.ToLower(filepath.Ext(name))]; kind != "" {
+		return kind
+	}
+	return "file"
+}
 
 // pageFiles: a page's Files: the uploads its text links to or shows (links
 // and images, the targets its render parsed, in the page's order, each once),
@@ -624,7 +652,7 @@ func pageFiles(rq *Req, targets []string) []shownFile {
 			continue
 		}
 		files = append(files, shownFile{Href: pathURL(strings.Split(strings.TrimPrefix(u.Path, "/"), "/")...),
-			Name: name, Size: formatSize(st.Size())})
+			Name: name, Size: formatSize(st.Size()), Kind: fileKind(name)})
 	}
 	return files
 }

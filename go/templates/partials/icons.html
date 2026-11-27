@@ -53,3 +53,17 @@
 {{define "icon_menu" -}}
 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><line x1="3" y1="4.5" x2="13" y2="4.5"/><line x1="3" y1="8" x2="13" y2="8"/><line x1="3" y1="11.5" x2="13" y2="11.5"/></svg>
 {{- end}}
+
+{{- /* A file by its kind (fileKind): a picture, sound or film, a document
+    (lines on a page), a spreadsheet (a grid on a page), an archive (a box),
+    any other a page. */}}
+{{define "icon_file" -}}
+<svg class="file-icon" data-kind="{{.}}" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+{{- if eq . "image"}}<rect x="2" y="3" width="12" height="10" rx="1.5"/><circle cx="5.75" cy="6.5" r="1.25"/><path d="M2.5 12l3.5-3.5 2.5 2.5 2-2 3 3"/>
+{{- else if eq . "media"}}<circle cx="8" cy="8" r="6"/><path d="M6.75 5.75v4.5L10.5 8z"/>
+{{- else if eq . "doc"}}<path d="M9.5 1.5H4a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V5z"/><polyline points="9.5 1.5 9.5 5 13 5"/><path d="M5.5 8h5M5.5 10.25h5M5.5 12.5h3"/>
+{{- else if eq . "sheet"}}<path d="M9.5 1.5H4a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V5z"/><polyline points="9.5 1.5 9.5 5 13 5"/><rect x="5" y="7.5" width="6" height="5"/><path d="M8 7.5v5M5 10h6"/>
+{{- else if eq . "archive"}}<rect x="2.5" y="3" width="11" height="3" rx=".75"/><path d="M3.5 6v7a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V6"/><path d="M6.5 8.5h3"/>
+{{- else}}<path d="M9.5 1.5H4a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V5z"/><polyline points="9.5 1.5 9.5 5 13 5"/>
+{{- end}}</svg>
+{{- end}}

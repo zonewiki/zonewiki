@@ -69,6 +69,7 @@ Hover it (or tap it on a phone) to see them.
 ### Files
 
 **Files** lists the files the page links to or shows, images included, each with its size: click one to open or download it.
+A small icon before each name says what kind of file it is: a picture, sound or video, a document, a spreadsheet, an archive, or any other file.
 A file you put on the page (pasted, dropped or attached in the editor) is listed as soon as the page links to it, and a file stops being listed when its link is gone.
 It lists only files you may open, and none that isn't there; with no files on the page there's no **Files**.
 The full rules are in [Side columns](../spec/routes.md#files).

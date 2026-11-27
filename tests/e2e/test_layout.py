@@ -492,22 +492,30 @@ def test_side_columns_on_big_screens(new_page, wiki):
 
 def test_files_in_the_side_column_and_at_the_pages_end(new_page, wiki):
     # A page's Files: in the right column on a big screen, a long name
-    # wrapping inside it; at the page's end below 1320px.
+    # wrapping inside it, each name after its kind's icon on its first
+    # line; at the page's end below 1320px.
     long_name = "Quarterly-report-for-the-garden-committee-2026-final-version.pdf"
     (wiki.root / "_assets" / long_name).write_bytes(b"%PDF" + b"x" * 5000)
-    (wiki.root / "_assets/beds.png").write_bytes(b"\x89PNG")
-    wiki.write("plans", f"# Plans\n\nThe [report](/_assets/{long_name}) and ![Beds](/_assets/beds.png).\n\nSee [[Release]].\n")
+    others = ("beds.png", "budget.xlsx", "walk.mp4", "photos.zip", "seeds.bin")
+    for name in others:
+        (wiki.root / "_assets" / name).write_bytes(b"\x89PNG")
+    wiki.write("plans", f"# Plans\n\nThe [report](/_assets/{long_name}) and ![Beds](/_assets/beds.png), "
+               + ", ".join(f"[{n}](/_assets/{n})" for n in others[1:]) + ".\n\nSee [[Release]].\n")
     wiki.write("release", "# Release\n")
     page = new_page(viewport=BIG)
     page.goto("/page/plans")
     files = page.locator(".rail-context .page-files")
-    expect(files.locator("li")).to_have_count(2)
+    expect(files.locator("li")).to_have_count(6)
     expect(files.locator("a", has_text=long_name)).to_have_attribute("href", f"/_assets/{long_name}")
     expect(files.locator(".file-size").first).to_have_text("4.9 KB")
     column = box_of(page.locator(".rail-context"))
     for li in files.locator("li").all():
         box = box_of(li)
         assert box["x"] + box["width"] <= column["x"] + column["width"] + 1
+        icon, link = box_of(li.locator(".file-icon")), box_of(li.locator("a"))
+        assert abs(icon["x"] - link["x"]) < 1 and link["y"] <= icon["y"] < link["y"] + 16 and icon["width"] == 12
+    assert [li.locator(".file-icon").get_attribute("data-kind") for li in files.locator("li").all()] == [
+        "doc", "image", "sheet", "media", "archive", "file"]
     page.screenshot(path=str(SCREENSHOT_DIR / "page-files.png"))
     page.set_viewport_size({"width": 1000, "height": 900})
     foot = page.locator(".page-foot .page-files")

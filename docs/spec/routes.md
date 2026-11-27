@@ -422,6 +422,18 @@ and **Files** last (below).
 ### Files
 
 **Files** (`files_section`, after **Links to** in the column and after the other sections in `.page-foot`, so below 1320px too) lists the uploads the page's text links to or shows, images included, in the page's order, each once, with its size: a link opens the file as its route serves it (inline or as a download).
+Before each name a small line icon in the muted text colour says its kind (`icon_file` in `templates/partials/icons.html`, `data-kind`), by its extension, whatever its case (`fileKind`, not the host's mime table, which in the container knows no office types):
+
+| Kind | Icon | Extensions |
+|------|------|------------|
+| `image` | a picture | png, jpg, jpeg, gif, webp, avif, svg, bmp, ico, tif, tiff, heic |
+| `media` | a play button | mp3, m4a, ogg, oga, opus, wav, flac, aac, mp4, m4v, webm, mov, mkv, ogv, avi |
+| `doc` | lines on a page | pdf, doc, docx, odt, rtf, txt, md, pages, ppt, pptx, odp, key, epub |
+| `sheet` | a grid on a page | xls, xlsx, ods, csv, tsv, numbers |
+| `archive` | a box | zip, gz, tgz, tar, bz2, xz, 7z, rar, zst |
+| `file` | a page | any other, or none |
+
+At the page's end the files are a line like the other sections', a comma after each but the last (after its size, so a wrapped line doesn't start with one).
 A page has no files of its own (File paste and drag & drop in `docs/spec/editor.md`): an upload is the page's while the page links to it, as a page that moves takes along the uploads it links (`shareUploads`).
 Its targets are the links, images and autolinks the render parses (`Env.Links`, `RenderOpts.Links`), so a link in code or in raw HTML is none;
 a target counts when it names a file straight in an `_assets/` folder, as a path or with the wiki's own address before it (`pageFiles` in `go/views.go`), not another site's.

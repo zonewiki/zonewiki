@@ -477,13 +477,24 @@ class TestViewPage:
             "[gone](/_assets/gone.pdf), [deep](/_assets/sub/deep.png), [[index]].\n\n"
             "```\n[code](/_assets/notes.txt)\n```\n"))
         body = client.get("/page/garden", headers=HOST).get_data(as_text=True)
-        files = ('<h3>Files</h3><ul><li><a href="/_assets/photo.png">photo.png</a> <span class="file-size">4 bytes</span></li>'
-                 '<li><a href="/_assets/My%20Deck%20%28v2%29.pdf">My Deck (v2).pdf</a> <span class="file-size">2 KB</span></li>'
-                 '<li><a href="/_assets/notes.txt">notes.txt</a> <span class="file-size">2 bytes</span></li></ul>')
+        files = ('<h3>Files</h3><ul><li><a href="/_assets/photo.png">[image]photo.png</a> <span class="file-size">4 bytes</span></li>'
+                 '<li><a href="/_assets/My%20Deck%20%28v2%29.pdf">[doc]My Deck (v2).pdf</a> <span class="file-size">2 KB</span></li>'
+                 '<li><a href="/_assets/notes.txt">[doc]notes.txt</a> <span class="file-size">2 bytes</span></li></ul>')
+        # Each name has its kind's icon before it (drawn, here its kind).
+        icons = lambda html: re.sub(r'<svg class="file-icon" data-kind="(\w+)"[^>]*>.*?</svg>', r"[\1]", html)
         right = body.split('<aside class="rail rail-context" aria-label="Links">', 1)[1].split("</aside>", 1)[0]
-        assert '<section class="backlinks page-files" data-id="files">' + files in right
+        assert '<section class="backlinks page-files" data-id="files">' + files in icons(right)
         foot = body.split('<div class="page-foot">', 1)[1].split("</div>", 1)[0]
-        assert '<section class="backlinks page-files" id="files">' + files in foot
+        assert '<section class="backlinks page-files" id="files">' + files in icons(foot)
+        # The kinds by extension, whatever its case; any other is a file.
+        kinds = {"a.XLSX": "sheet", "b.csv": "sheet", "c.mp4": "media", "d.mp3": "media", "e.zip": "archive",
+                 "f.docx": "doc", "g.SVG": "image", "h.bin": "file", "noext": "file"}
+        for name in kinds:
+            (wiki_dir / "_assets" / name).write_bytes(b"x")
+        write_page(wiki_dir, "kinds", "# Kinds\n\n" + " ".join(f"[{n}](/_assets/{n})" for n in kinds) + "\n")
+        body = client.get("/page/kinds", headers=HOST).get_data(as_text=True)
+        foot = body.split('<div class="page-foot">', 1)[1].split("</div>", 1)[0]
+        assert re.findall(r'data-kind="(\w+)"[^>]*>.*?</svg>([^<]+)</a>', foot) == [(k, n) for n, k in kinds.items()]
         # A page without uploads has no Files.
         write_page(wiki_dir, "paths", "# Paths\n\n[A page](garden), [gone](/_assets/gone.pdf).\n")
         assert "page-files" not in client.get("/page/paths", headers=HOST).get_data(as_text=True)
