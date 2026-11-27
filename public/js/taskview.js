@@ -281,14 +281,16 @@ st.pressedCard = null;
 let collapsing = null;   // { el, timer }
 function collapseLater(el) {
   if (collapsing?.el === el) return;   // already waiting (the press runs setExpanded twice, a double-click two presses)
-  finishCollapse();
-  collapsing = { el, timer: setTimeout(finishCollapse, COLLAPSE_DELAY_MS) };
+  finishCollapse(true);
+  collapsing = { el, timer: setTimeout(() => finishCollapse(), COLLAPSE_DELAY_MS) };
 }
-function finishCollapse() {
+function finishCollapse(now = false) {
   if (!collapsing) return;
   const { el, timer } = collapsing;
-  collapsing = null;
   clearTimeout(timer);
+  // Nothing moves under a drag either: it closes once the drag is over.
+  if (st.draggedId && !now) { collapsing.timer = setTimeout(() => finishCollapse(), COLLAPSE_DELAY_MS); return; }
+  collapsing = null;
   if (!el.isConnected || el.dataset.id === st.expandedId) return;
   const from = el.offsetHeight;
   el.classList.remove('task-expanded', 'task-details');

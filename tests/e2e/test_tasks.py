@@ -5139,6 +5139,41 @@ def test_line_marks_notes(page, wiki):
     expect(marker).to_be_visible()
 
 
+def test_a_dragged_task_does_not_expand(page, wiki):
+    # Regression: the press that starts a drag selected the card and so
+    # expanded it (the whole title wrapped) as it was dragged, and the
+    # card expanded before collapsed 400ms in, under the pointer. The press
+    # now expands on release, and nothing closes while a drag lasts.
+    page.set_viewport_size({"width": 1000, "height": 1200})
+    _expand_setup(page)
+    passport, plain = card(page, LONG), card(page, "Plain")
+    one_line = box_of(passport)["height"]
+    passport.locator(".task-content").click()                           # expanded, selected
+    expect(passport).to_have_class(EXPANDED)
+    # Press Plain (on top) and drag it below the passport.
+    assert _open_titles(page) == ["Plain", "Short with notes", LONG]
+    start, target = box_of(plain.locator(".task-content")), box_of(passport)
+    page.mouse.move(start["x"] + 10, start["y"] + start["height"] / 2)
+    page.mouse.down()
+    for i in range(1, 6):
+        page.mouse.move(start["x"] + 10, start["y"] + (target["y"] + target["height"] * 0.75 - start["y"]) * i / 5, steps=2)
+    expect(plain).to_have_class(re.compile(r"\btask-dragging\b"))
+    page.wait_for_timeout(600)                                          # past the collapse's wait
+    expect(passport).to_have_class(EXPANDED)                            # nothing moved mid-drag
+    page.mouse.up()
+    wait_until(page, lambda: _open_titles(page) == ["Short with notes", LONG, "Plain"])
+    expect(card(page, "Plain")).to_have_class(re.compile(r"\btask-selected\b"))
+    expect(page.locator(".task-expanded")).to_have_count(0)
+    # The long one, dragged, stays a line too; a click still expands it.
+    _drop(card(page, LONG), card(page, "Short with notes"), "before")
+    wait_until(page, lambda: _open_titles(page) == [LONG, "Short with notes", "Plain"])
+    expect(card(page, LONG)).to_have_class(re.compile(r"\btask-selected\b"))
+    expect(card(page, LONG)).not_to_have_class(EXPANDED)
+    assert abs(box_of(card(page, LONG))["height"] - one_line) < 2
+    card(page, LONG).locator(".task-content").click()
+    expect(card(page, LONG)).to_have_class(EXPANDED)
+
+
 def test_expanded_task_keeps_its_line(page, wiki):
     # Expanding keeps the first line as it is (tags and dates don't move);
     # the title wraps instead of being cut off, the notes open below.

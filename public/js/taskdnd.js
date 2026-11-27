@@ -54,6 +54,7 @@ function setupBoardDragAndDrop() {
     item.addEventListener('dragstart', e => {
       // Touch has its own long-press drag (see touchDrop); selecting, nothing drags.
       if (st.lastPointerType === 'touch' || st.selectMode) { e.preventDefault(); return; }
+      st.pressPending = null;   // dragged: the press doesn't expand it
       st.draggedId = item.dataset.id;
       item.classList.add('task-dragging');
       e.dataTransfer.effectAllowed = 'move';
@@ -108,6 +109,7 @@ function setupDragAndDrop() {
   items.forEach(item => {
     item.addEventListener('dragstart', e => {
       if (st.lastPointerType === 'touch' || st.selectMode) { e.preventDefault(); return; }
+      st.pressPending = null;   // dragged: the press doesn't expand it
       st.draggedId = item.dataset.id;
       item.classList.add('task-dragging');
       e.dataTransfer.effectAllowed = 'move';

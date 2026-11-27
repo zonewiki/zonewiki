@@ -1060,6 +1060,12 @@ so a double-click's second click still lands on the card the first one selected.
 Each press of it selects that card again, which doesn't restart the wait.
 A pressed card is also not scrolled into view when it expands (`pressedCard`; it is in view already, and scrolling would move it from under the pointer).
 
+#### Nothing moves under a drag
+
+A mouse press selects its card at once but expands it only when the button comes up (`pressPending`, cleared by `dragstart`):
+a press that starts a drag leaves the card a line, so what is dragged is the line you took, and the cards around it keep their places.
+The card expanded before stays open while the drag lasts and closes after it (`finishCollapse` waits while `draggedId` is set), so the drop targets don't move under the pointer.
+
 ### Look
 
 Tasks have their own tones, set on `.tasks-app` (so a task card elsewhere keeps the page's): `--border` a step darker than the wiki's, which every line in it uses (cards, section headers, labels, fields), so cards and sections stand out;

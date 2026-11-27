@@ -492,12 +492,28 @@ function wireListHandlers() {
       if (e.shiftKey && st.selectedId) { e.preventDefault(); app.extendSelection(id); }
       else if (e.ctrlKey || e.metaKey) { e.preventDefault(); app.toggleSelection(id); }
       else {
+        // Selected now, expanded when the button comes up: a press that
+        // starts a drag leaves the card a line (pressPending, released below).
         st.pressedCard = el;
+        st.pressPending = id;
         try { app.setSelected(id); } finally { st.pressedCard = null; }
       }
     });
   });
 }
+
+// A press that ends without a drag (dragstart clears pressPending) expands
+// the card it selected, as a selection does (expandSelected): the whole
+// title, or its details while they are open on the way.
+st.pressPending = null;
+document.addEventListener('mouseup', () => {
+  const id = st.pressPending;
+  st.pressPending = null;
+  if (!id || st.selectedIds.size !== 1 || st.selectedId !== id || id === st.expandedId) return;
+  st.pressedCard = app.listEl?.querySelector(`.task-item[data-id="${CSS.escape(id)}"]`) || null;
+  if (!st.pressedCard) return;
+  try { app.expandSelected(id); } finally { st.pressedCard = null; }
+}, true);
 
 // The tasks still to do among `tasks`: what a section or a limit counts
 // (not one ticked off that still shows).

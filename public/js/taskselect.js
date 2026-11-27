@@ -702,8 +702,9 @@ function setSelected(id) {
   updateSelectionClasses();
   // The selected task shows its whole title. On touch the tap
   // handler does it, since the compat mousedown selects without the click.
-  // Selecting the expanded task again keeps its details as they are.
-  if (id && st.lastPointerType !== 'touch' && id !== st.expandedId) app.expandSelected(id);
+  // Selecting the expanded task again keeps its details as they are;
+  // a mouse press expands it when released, not dragged (pressPending).
+  if (id && st.lastPointerType !== 'touch' && id !== st.expandedId && st.pressPending !== id) app.expandSelected(id);
   // A pressed card is in view; scrolling an expanded one into view would
   // move it from under the pointer.
   if (id && !st.pressedCard) {
