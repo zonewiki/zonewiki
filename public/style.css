@@ -1165,7 +1165,13 @@ main > .sheet > h2 { font-family: var(--serif); font-size: 1.45rem; font-weight:
 .page-list-special:not(:has(+ .page-list-special)):not(:last-child) {
   border-bottom: 2px solid color-mix(in srgb, var(--muted) 45%, var(--border));
 }
-.page-list-item a { color: var(--link); text-decoration: none; font-weight: 500; }
+/* The title keeps its width up to 70% (wrapping past that); the slug
+   takes what is left, cut at its start, so a long file name never squeezes
+   the title to a few letters and the end of the name stays in sight. */
+.page-list-item a {
+  flex: 1 0 auto; max-width: 70%; overflow-wrap: anywhere;
+  color: var(--link); text-decoration: none; font-weight: 500;
+}
 .page-list-item a:hover { text-decoration: underline; }
 .page-list-item.hidden { display: none; }
 .page-list-item.active { background: var(--code-bg); margin: 0 -.75rem; padding-left: .75rem; padding-right: .75rem; border-radius: 6px; }
@@ -1174,7 +1180,8 @@ main > .sheet > h2 { font-family: var(--serif); font-size: 1.45rem; font-weight:
   display: flex;
   align-items: center;
   gap: .75rem;
-  flex-shrink: 0;
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 .page-slug {
@@ -1182,7 +1189,12 @@ main > .sheet > h2 { font-family: var(--serif); font-size: 1.45rem; font-weight:
   font-size: .775rem;
   color: var(--muted);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: rtl;   /* cut at the start; the <bdi> inside keeps the text left to right */
+  min-width: 0;
 }
+.page-item-right .lock { flex-shrink: 0; }
 
 /* A private page's lock: beside its title, in the page lists */
 .lock { font-size: .75em; opacity: .75; font-weight: normal; }

@@ -43,6 +43,8 @@ On a wide screen the dialog shows the highlighted result next to the list, scrol
 The dialog shows 15 content matches.
 When there are more, click **All results →** for a page with up to 50 and a count.
 
+A long file name next to a title is cut at its start, so you still see the whole title and the end of the name.
+
 ## Search syntax
 
 Words find pages and tasks that have any of them.

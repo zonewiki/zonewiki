@@ -16,6 +16,7 @@ Backdrop click detection: `e.target === searchModal` (not coordinate comparison 
 
 Page data is loaded lazily on first open from `GET /api/pages-list` (JSON: slug, title, links, mtime) and cached for the session.
 Each list item shows the page title and slug — dates are not shown in the modal.
+The title keeps its width, up to 70% of the row (wrapping past that); the slug takes what is left and is cut at its start (`…-file-name-end`, `direction: rtl` around a `<bdi>`), so a long file name never squeezes the title to a few letters and the file name's end stays in sight.
 
 ### Moving through results
 

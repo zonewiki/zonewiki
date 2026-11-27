@@ -60,7 +60,7 @@ function renderModalList(pages) {
   modalPageList.innerHTML = pages.map(p =>
     `<li class="page-list-item${p.special ? ' page-list-special' : ''}" data-title="${he(p.title.toLowerCase())}" data-slug="${he(p.slug)}" data-links="${p.links}" data-mtime="${p.mtime}">` +
     `<a href="${he(p.href || `/page/${p.slug}`)}">${he(p.title)}</a>` +
-    `<span class="page-item-right">${p.private ? '<span class="lock" title="Private: only you see this page">🔒</span>' : ''}${p.group ? `<span class="lock" title="@${he(p.group)}: its members see this page">👥</span>` : ''}<span class="page-slug">${he(p.slug)}</span></span></li>`
+    `<span class="page-item-right">${p.private ? '<span class="lock" title="Private: only you see this page">🔒</span>' : ''}${p.group ? `<span class="lock" title="@${he(p.group)}: its members see this page">👥</span>` : ''}<span class="page-slug"><bdi>${he(p.slug)}</bdi></span></span></li>`
   ).join('');
 }
 
@@ -288,7 +288,7 @@ function applyModalControls() {
       const slugHtml  = field === 'slug'  ? highlightIndices(p.slug,  indices) : he(p.slug);
       return `<li class="page-list-item" data-title="${he(p.title.toLowerCase())}" data-slug="${he(p.slug)}" data-links="${p.links}" data-mtime="${p.mtime}">` +
         `<a href="${he(p.href || `/page/${p.slug}`)}">${titleHtml}</a>` +
-        `<span class="page-item-right"><span class="page-slug">${slugHtml}</span></span></li>`;
+        `<span class="page-item-right"><span class="page-slug"><bdi>${slugHtml}</bdi></span></span></li>`;
     }).join('');
   } else {
     // No query: static list, sort by dropdown, filter by unlinked checkbox.

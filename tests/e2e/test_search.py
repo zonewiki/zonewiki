@@ -485,3 +485,25 @@ def test_the_meaning_indicator_fits_the_dialog_on_a_phone(new_page, wiki):
     assert mode["width"] > 0
     assert dialog["x"] <= mode["x"] and mode["x"] + mode["width"] <= dialog["x"] + dialog["width"]
     page.screenshot(path="tests/e2e/_screenshots/search-mode-phone.png")
+
+
+def test_a_long_file_name_leaves_the_title_its_room(page, wiki):
+    # Regression: the slug beside the title never shrank, so a long file
+    # name squeezed the title to a few letters. The slug is cut at its
+    # start now, the file name's end in sight.
+    slug = "projects/2026/archive/" + "a-very-long-file-name-that-goes-on-and-on-" * 3 + "end"
+    wiki.write(slug, "# Quarterly planning meeting notes\n\nText.\n")
+    page.set_viewport_size({"width": 800, "height": 900})
+    page.goto("/page/index")
+    page.keyboard.press("Control+p")
+    page.locator("#modal-filter").fill("quarterly")
+    item = page.locator(f"#modal-page-list .page-list-item[data-slug='{slug}']")
+    expect(item).to_be_visible()
+    title = item.locator("a")
+    # The title whole, on one line.
+    assert title.evaluate("a => a.scrollWidth <= a.clientWidth + 1")
+    assert box_of(title)["height"] < 30
+    slug_box, row = box_of(item.locator(".page-slug")), box_of(item)
+    assert slug_box["x"] + slug_box["width"] <= row["x"] + row["width"] + 1    # stays in the row
+    assert item.locator(".page-slug").evaluate("s => s.scrollWidth > s.clientWidth")   # cut
+    page.screenshot(path="tests/e2e/_screenshots/search-long-slug.png")
