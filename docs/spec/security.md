@@ -1002,6 +1002,12 @@ Forgejo's runner gives its jobs the host engine's socket, which is root on the h
 So a pull request from another repository (a fork) runs no job there.
 The checks run only for a push, a run started by hand, or a pull request from a branch of the repository itself (`if:` in `.forgejo/workflows/ci.yml`), and the jobs after them need them.
 
+That holds for the workflow as this repository has it.
+A fork's pull request brings its own: Forgejo runs a `pull_request` from the workflow files in the pull request, so a stranger can take the `if:` out, or add a job.
+What stops them is Forgejo's, not the file's:
+it runs no workflow of a fork's pull request until someone with write access approves it on the pull request (each time, unless **Approve always** trusts its author), and it gives such a run no secret (`REGISTRY_TOKEN`, `PUBLISH_KEY`, `PUBLISH_CHECK` are empty) and a token that only reads.
+So approving a fork's run gives its code the runner's host: approve none from someone you wouldn't give it to, never **Approve always** a stranger, and read what it runs (its workflows, `run.sh`, the tests) first.
+
 GitHub's runners are machines of their own per job, and a pull request's job gets no secret and a token that only reads, so the same checks run there for every pull request.
 Test: `test_forgejo_runs_no_forks_code` in `tests/test_image.py`.
 

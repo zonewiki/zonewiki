@@ -479,6 +479,7 @@ They reach it through the socket mounted into job containers:
 - runner label `docker`, runner config `container.docker_host: automount`;
 - so a job runs with root on the host: the engine's socket lets it start any container, with the host's disk mounted.
   A pull request from another repository (a fork) runs nothing there (the checks' `if:`, on `github.event.pull_request.head.repo.full_name`; bench and retrieval need the checks, the image runs for no pull request), since its code would take the runner, the layer cache the image is built from, and the registry token of the next image job;
+  a fork can change that `if:` in its pull request, so what holds then is Forgejo's approval of a fork's run (CI runs no stranger's code with the host's engine in `docs/spec/security.md`);
   its checks run on GitHub (CI (GitHub Actions), below), or by hand after a look, or once it is pushed as a branch of this repository;
 - the host's engine trusts the internal certificate via `/etc/docker/certs.d/<REGISTRY>/ca.crt`, which the runner also mounts read-only into job containers via `container.options`;
 - checkout goes over the runner's internal `http://web:3000`, so no job needs a `ca-certificates` package.

@@ -212,7 +212,9 @@ def test_forgejo_runs_no_forks_code():
     """Forgejo's jobs get the host engine's socket (root on the host, and the
     registry token's next image job): a pull request from another repository
     runs no job there. The checks say so; every other job needs them or runs
-    for no pull request (docs/spec/security.md, CI runs no stranger's code)."""
+    for no pull request (docs/spec/security.md, CI runs no stranger's code).
+    A fork can change this file in its pull request: Forgejo's approval of a
+    fork's run, which no test can check, holds then."""
     ci = (REPO / ".forgejo" / "workflows" / "ci.yml").read_text(encoding="utf-8")
     jobs = re.split(r"\n  (?=[a-z]+:\n)", "\n" + ci.split("\njobs:\n", 1)[1])[1:]
     assert [j.split(":", 1)[0] for j in jobs] == ["checks", "bench", "retrieval", "image", "github"]
