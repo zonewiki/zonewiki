@@ -1089,7 +1089,8 @@ main > .sheet > h2 { font-family: var(--serif); font-size: 1.45rem; font-weight:
   .search-modal { width: min(1180px, 94vw); height: 76vh; max-height: none; }
   .search-modal[open] {
     display: grid; gap: 0 1.25rem;
-    grid-template: auto minmax(0, 1fr) / minmax(0, 32rem) minmax(0, 1fr);
+    /* The controls, the filters (each across), then the results and the preview. */
+    grid-template: auto auto minmax(0, 1fr) / minmax(0, 32rem) minmax(0, 1fr);
   }
   .search-modal-controls, .search-filters { grid-column: 1 / -1; }
   .search-preview {

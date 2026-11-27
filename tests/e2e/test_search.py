@@ -433,6 +433,30 @@ def test_preview_pane_on_wide_screens(new_page, wiki):
     expect(preview.locator(".search-preview-title")).not_to_have_text("Garden")
 
 
+def test_the_filters_sit_above_the_results_on_wide_screens(new_page, wiki):
+    # Regression: the wide dialog's grid had a row for the controls and one
+    # for the results; the filters' row took the second, and the results and
+    # the preview fell into a row of their own below the dialog's height,
+    # the content matches running under the chips.
+    for i in range(30):
+        wiki.write(f"stone-{i}", f"# Stone {i}\n\nA stone wall, number {i}.\n")
+    page = new_page(viewport={"width": 1400, "height": 800})
+    page.goto("/page/index")
+    page.keyboard.press("Control+p")
+    page.locator("#modal-filter").fill("stone")
+    expect(page.locator("#modal-content-matches .search-result-card").first).to_be_visible()
+    # The chips themselves, not their row: the row collapsed to nothing while
+    # its chips spilled out of it, under the results.
+    dialog, chip = box_of(page.locator("#search-modal")), box_of(page.locator(".search-chip").first)
+    results, preview = box_of(page.locator(".modal-results")), box_of(page.locator("#modal-preview"))
+    assert box_of(page.locator(".search-filters"))["height"] >= chip["height"]
+    assert chip["y"] + chip["height"] <= results["y"] + 1
+    assert chip["y"] + chip["height"] <= preview["y"] + 1
+    for box in (results, preview):    # inside the dialog, scrolling there
+        assert box["y"] + box["height"] <= dialog["y"] + dialog["height"] + 1
+    page.screenshot(path="tests/e2e/_screenshots/search-filters-wide.png")
+
+
 def test_no_preview_pane_on_narrow_screens(new_page, wiki):
     wiki.write("garden", "# Garden\n\nCompost.\n")
     page = new_page(viewport={"width": 1000, "height": 800})
