@@ -261,5 +261,5 @@ Links to other websites open in a new tab; links within Zonewiki stay in the sam
 
 You can write HTML in a page, and it's shown as written, with limits for safety:
 scripts and forms show as text, and nothing is loaded from other websites unless the person running your Zonewiki allowed that site.
-An `id` or `name` you give gets `user-content-` in front: a link to `#note` still finds `<a name="note">`, and in an SVG `url(#shade)` and `<use href="#dot">` still find yours, but a `<style>` of your own selects it as `#user-content-note`.
+An `id` or `name` you give gets `user-content-` in front, and so does a label's `for`: a link to `#note` still finds `<a name="note">`, and in an SVG `url(#shade)` and `<use href="#dot">` still find yours, but a `<style>` of your own selects it as `#user-content-note`.
 In a task's description or comment, a `<style>` shows as text ([Raw HTML](../spec/rendering.md#raw-html)).

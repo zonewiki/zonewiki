@@ -224,7 +224,8 @@ func TestRawHTMLDefused(t *testing.T) {
 
 // A page's raw HTML gives no element one of Zonewiki's ids or names (its
 // scripts find elements by id, the browser by name: window.x): theirs get
-// "user-content-" in front, however written, and an SVG's url(#…) follows;
+// "user-content-" in front, however written, and a label's for and an
+// SVG's url(#…) follow;
 // a longer name ending in "id", a URL's "?id=" and Zonewiki's own ids stay.
 func TestRawHTMLIDsAreItsOwn(t *testing.T) {
 	for src, want := range map[string]string{
@@ -234,6 +235,7 @@ func TestRawHTMLIDsAreItsOwn(t *testing.T) {
 		"<div>\n<a href=\"/x\"name=\"hljs\">a</a>\n</div>\n":                                 `<a href="/x"name="user-content-hljs">a</a>`,
 		"<a href=/x\nid\n=\"y\">a</a>":                                                       "<a href=/x\nid\n=\"user-content-y\">a</a>",
 		`<svg><linearGradient id="g"/><rect fill="url(#g)" style="fill: url( '#g')"/></svg>`: `<svg><linearGradient id="user-content-g"/><rect fill="url(#user-content-g)" style="fill: url( '#user-content-g')"/></svg>`,
+		`<label FOR = "task-add-btn">add</label>`:                                            `<label FOR = "user-content-task-add-btn">add</label>`,
 		`<span data-id="a" grid="b"><a href="/page/x?id=5&amp;name=n">a</a></span>`:          `<span data-id="a" grid="b"><a href="/page/x?id=5&amp;name=n">a</a></span>`,
 		"<div>\n\n## Zone's heading\n\n</div>\n":                                             `<h2 id="zones-heading">`,
 	} {

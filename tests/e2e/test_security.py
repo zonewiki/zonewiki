@@ -304,6 +304,21 @@ def test_a_pages_svg_finds_its_own_parts(page, wiki):
         assert page.evaluate(f"document.getElementById('user-content-{use}').getBBox().width") > 0
 
 
+def test_a_pages_label_clicks_none_of_zones_controls(page, wiki):
+    # A click on a label is a click on the control it is for: a page's
+    # <label for="task-add-btn"> laid over the page clicked the task list's
+    # New with the reader's every click. Its for has "user-content-" in front,
+    # as the page's ids do, so it is for none of Zonewiki's.
+    wiki.write("label", "# Label\n\n<label for=\"task-add-btn\" id=\"cover\">Read on</label>\n\n[[tasks:]]\n")
+    page.goto("/page/label")
+    expect(page.locator("#task-add-btn")).to_be_visible()
+    page.locator("#user-content-cover").click()
+    page.wait_for_timeout(300)
+    expect(page.locator("#task-edit-modal")).to_be_hidden()
+    page.locator("#task-add-btn").click()                  # the button itself opens it
+    expect(page.locator("#task-edit-modal")).to_be_visible()
+
+
 def test_a_click_submits_only_a_form_zone_put_there(page, wiki):
     # A page's own <style> could show the page's closed Delete dialog and lay
     # its button over the whole page, transparent: the reader's next click

@@ -685,7 +685,9 @@ var defusedTagRE = regexp.MustCompile(`(?i)<(/?(?:form|input|button|select|texta
 // ends, renamed (what is rendered next may start with its "=").
 //
 // What in a page names one of its elements by id follows it there, so it
-// finds the page's own and never one of Zonewiki's: an SVG's url(#…)
+// finds the page's own and never one of Zonewiki's: a label's for (idRE
+// takes it with the ids: a <label for="task-add-btn"> laid over the page
+// clicked Zonewiki's button with the reader's every click), an SVG's url(#…)
 // (urlRefRE: fill, stroke, clip-path, mask, filter, marker-*, in an
 // attribute or a <style>), and the href or xlink:href of an SVG element that
 // uses another (svgRefTagRE, svgHrefRE: <use>, <textPath>, <mpath>,
@@ -698,8 +700,8 @@ var (
 	htmlTagRE   = regexp.MustCompile(`<[A-Za-z](?:[^>"']|"[^"]*"|'[^']*')*`)
 	srcdocRE    = regexp.MustCompile(`(?i)srcdoc([\t\n\f\r ]*(?:=|$))`)
 	pingRE      = regexp.MustCompile(`(?i)(^|[^A-Za-z0-9_-])(ping[\t\n\f\r ]*(?:=|$))`)
-	idRE        = regexp.MustCompile(`(?i)(^|[\t\n\f\r /"'])((?:id|name)[\t\n\f\r ]*=[\t\n\f\r ]*["']?)`)
-	idEndRE     = regexp.MustCompile(`(?i)(^|[\t\n\f\r /"'])((?:id|name)[\t\n\f\r ]*)$`)
+	idRE        = regexp.MustCompile(`(?i)(^|[\t\n\f\r /"'])((?:id|name|for)[\t\n\f\r ]*=[\t\n\f\r ]*["']?)`)
+	idEndRE     = regexp.MustCompile(`(?i)(^|[\t\n\f\r /"'])((?:id|name|for)[\t\n\f\r ]*)$`)
 	urlRefRE    = regexp.MustCompile(`(?i)(url\([\t\n\f\r ]*["']?[\t\n\f\r ]*)` + hashRef)
 	svgRefTagRE = regexp.MustCompile(`(?i)^<(?:use|textpath|mpath|feimage|lineargradient|radialgradient|pattern|filter|tref|cursor|animate|animatemotion|animatetransform|animatecolor|set|discard)(?:[\t\n\f\r /]|$)`)
 	svgHrefRE   = regexp.MustCompile(`(?i)(^|[\t\n\f\r /"'])((?:xlink:)?href[\t\n\f\r ]*=[\t\n\f\r ]*["']?[\t\n\f\r ]*)` + hashRef)
