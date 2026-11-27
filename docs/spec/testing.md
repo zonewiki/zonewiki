@@ -201,6 +201,7 @@ Prefer an API test when the behaviour shows through a route, a Go test when it d
 | `go/internal/textsearch/difflib_test.go`, `indexfile_test.go` | search.md | Typo matching's bounds; the mapped index file, bad files, `MergeIndex` |
 | `go/internal/tokenizer/tokenizer_test.go` | search.md | The embedding model's tokenizer |
 | `go/internal/wikiarchive/wikiarchive_test.go` | deployment.md, security.md | A wiki's archive: written and read back, what a reader refuses (names that lead out, links, devices, a file twice, no repository), what it passes by, the size |
+| `go/internal/wikiarchive/unpack_test.go` | deployment.md, security.md | The unpacking a tar and a zip share: a table of hostile archives, each refused from both sources (names, links, devices, a file twice, a file and a folder of one name, the byte budget, the entries, a zip's understated size and non-UTF-8 name); a zip's keep; the size kept past the settings file |
 
 ### API (`tests/`)
 

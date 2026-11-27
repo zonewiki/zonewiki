@@ -1019,7 +1019,9 @@ So nothing of it is used as it is:
 1. **Unpack** (`wikiarchive.Read`), into `.zone-import/` in `ZONE_DATA`:
    only the repository's history (`.git/HEAD`, `.git/packed-refs`, `.git/objects/`, `.git/refs/`) and `.zone/config` are written out, as plain files.
    The repository's `config`, its `hooks/`, its `info/`, `objects/info/alternates` and the whole work tree are passed by.
-   An entry that isn't a file or a folder where one of those should be (a link, a device), a name with `..`, a leading `/`, a backslash or a control character, anything beside `wiki/`, a file twice: the archive is refused.
+   An entry that isn't a file or a folder where one of those should be (a link, a device), a name with `..`, a leading `/`, a backslash or a control character, anything beside `wiki/`, a file twice, a name that is both a file and a folder: the archive is refused.
+   These checks aren't tar's: the package reads entries from a source (a gzipped tar here, or a zip) and unpacks them in one place (`wikiarchive.Unpack`), which its caller tells what to keep, how many bytes it may write (counted as they are written, not as a header states) and how many entries the archive may hold, and in which words to refuse.
+   A zip's source refuses a name that isn't UTF-8 and takes a link from its mode bits; it is for the markdown import to come, and `zonewiki import` reads tar alone.
 2. **Fetch the history** into a repository made here (`git init`, then `git fetch` of all branches and tags, with `transfer.fsckObjects`): what git reads and runs is this repository's config, never the archive's.
 3. **Check out** the branch the archive had checked out, with `core.symlinks=false`.
    With `--max-size`, the files' sizes are asked of the history first (`git ls-tree -l`): a small history can hold files far bigger than itself.

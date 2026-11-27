@@ -805,7 +805,8 @@ So the import uses neither as it comes:
 
 - **Of the archive, only the history and the settings file are written out**: the repository's objects and refs, and `.zone/config`.
   Its git config, hooks, attributes, alternates and work tree are never unpacked (`wikiarchive.Read`).
-- **Only files and folders**: a link or a device where one of those should be, a name that leads out of the archive (`..`, a leading `/`), a backslash or a control character in a name, a file named twice, refuse the whole archive.
+- **Only files and folders**: a link or a device where one of those should be, a name that leads out of the archive (`..`, a leading `/`), a backslash or a control character in a name, a file named twice, a name that is both a file and a folder, refuse the whole archive.
+  These checks are made in one unpacking (`wikiarchive.Unpack`) whatever the archive's format, a tar's or a zip's, which only gives the entries (a zip's links are in its mode bits, its names must be UTF-8, and the bytes counted are those written, never the size its header states).
 - **The history is fetched** into a repository the import makes, with git checking every object (`transfer.fsckObjects`); the files are checked out of that, links in the history as plain files (`core.symlinks=false`).
   So no hook of the archive's runs, at the import or at any commit Zonewiki makes afterwards, and nothing in the wiki's folder points out of it.
 - **A size is kept**: with `--max-size`, unpacking stops past it, and the files a history would check out are counted before they are, so neither a tar nor a compressed history fills the disk.
@@ -817,7 +818,7 @@ So the import uses neither as it comes:
 
 An export is as confidential as the wiki it came from: it holds every user's private pages and the password hashes, whoever runs the command (the wiki's folder is theirs to read anyway).
 There is no export or import in the browser or over MCP.
-Tests: `tests/test_transfer.py`, `go/internal/wikiarchive/wikiarchive_test.go`.
+Tests: `tests/test_transfer.py`, `go/internal/wikiarchive/wikiarchive_test.go`, `go/internal/wikiarchive/unpack_test.go`.
 
 ## Throttling
 

@@ -7,6 +7,11 @@
 // only the repository's history (its objects and refs) and the settings
 // file are written out, as plain files; the repository's config, its hooks
 // and its work tree stay in the archive.
+//
+// What makes reading safe isn't tar's, so it is in two parts (unpack.go,
+// source.go): a source of entries (Tar, or Zip) and one unpacking with
+// every check (Unpack), told by its caller what to keep. Read is the wiki's
+// caller.
 package wikiarchive
 
 import (
@@ -94,113 +99,49 @@ type Found struct {
 // (.git/HEAD, .git/packed-refs, .git/objects/, .git/refs/) and the settings
 // file (.zone/config), and nothing else of it. dir must be the caller's own
 // and empty. max is how many bytes may be written (0: any number); past it
-// Read stops with ErrTooBig.
+// Read stops with ErrTooBig. The settings file has a limit of its own
+// (ConfigMax).
 //
 // An archive that isn't one of a wiki is an error: something beside wiki/,
 // a name that leads out of it, a link or a device where the history or the
 // settings file should be, the same file twice, no repository.
 func Read(r io.Reader, dir string, max int64) (Found, error) {
 	var found Found
-	zr, err := gzip.NewReader(r)
-	if err != nil {
-		return found, fmt.Errorf("not a Zonewiki export (a gzipped tar): %v", err)
-	}
-	tr := tar.NewReader(zr)
 	var head, objects bool
-	for entries := 0; ; entries++ {
-		h, err := tr.Next()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil && entries == 0 {
-			// Some other file, gzipped: "cut off or damaged" would say to
-			// send the same one again.
-			return found, fmt.Errorf("not a Zonewiki export (a gzipped tar): what is gzipped is no tar (%v)", err)
-		}
-		if err != nil {
-			return found, fmt.Errorf("the archive is cut off or damaged: %v", err)
-		}
-		if h.Typeflag == tar.TypeXGlobalHeader {
-			continue
-		}
-		parts, err := nameParts(h.Name)
-		if err != nil {
-			return found, err
-		}
-		if len(parts) == 0 {
-			continue // "./"
-		}
-		if parts[0] != Top {
-			return found, fmt.Errorf("not a Zonewiki export: it holds %q beside %s/", parts[0], Top)
-		}
-		rel := parts[1:]
-		isConfig := slices.Equal(rel, []string{".zone", "config"})
-		if !isConfig && !isHistory(rel) {
-			continue // the work tree, the repository's config and hooks: not read
-		}
-		path := filepath.Join(append([]string{dir, Top}, rel...)...)
-		switch h.Typeflag {
-		case tar.TypeDir:
-			if isConfig {
-				return found, fmt.Errorf("%s is a folder in the archive, not the settings file", h.Name)
+	n, err := Unpack(Tar(r), dir, Rules{
+		Not:      "not a Zonewiki export",
+		MaxBytes: max,
+		Keep: func(name []string, kind Kind) (Take, error) {
+			if name[0] != Top {
+				return Take{}, fmt.Errorf("not a Zonewiki export: it holds %q beside %s/", name[0], Top)
 			}
-			if err := os.MkdirAll(path, 0o777); err != nil {
-				return found, err
+			rel := name[1:]
+			isConfig := slices.Equal(rel, []string{".zone", "config"})
+			switch {
+			case isConfig && kind == Folder:
+				return Take{}, fmt.Errorf("%s is a folder in the archive, not the settings file", strings.Join(name, "/"))
+			case isConfig:
+				found.Config = true // a link or a device is refused by Unpack
+				return Take{Keep: true, Max: ConfigMax, Private: true}, nil
+			case !isHistory(rel):
+				return Take{}, nil // the work tree, the repository's config and hooks: not read
+			case kind == Folder:
+				objects = objects || slices.Equal(rel, []string{".git", "objects"})
+			case kind == File:
+				head = head || slices.Equal(rel, []string{".git", "HEAD"})
+				objects = objects || len(rel) > 2 && rel[1] == "objects"
 			}
-			objects = objects || slices.Equal(rel, []string{".git", "objects"})
-			continue
-		case tar.TypeReg:
-		default:
-			return found, fmt.Errorf("%s is a link or a device in the archive: an export holds files and folders only", h.Name)
-		}
-		limit := int64(-1)
-		switch {
-		case isConfig:
-			limit = ConfigMax
-		case max > 0:
-			limit = max - found.Bytes
-		}
-		n, err := writeFile(path, tr, limit, isConfig)
-		found.Bytes += n
-		if err != nil {
-			return found, err
-		}
-		found.Config = found.Config || isConfig
-		head = head || slices.Equal(rel, []string{".git", "HEAD"})
-		objects = objects || len(rel) > 2 && rel[1] == "objects"
+			return Take{Keep: true}, nil
+		},
+	})
+	found.Bytes = n
+	if err != nil {
+		return found, err
 	}
 	if !head || !objects {
 		return found, fmt.Errorf("not a Zonewiki export: no git repository in it (%s/.git)", Top)
 	}
 	return found, nil
-}
-
-// nameParts: an entry's name as its folders and its own name; an error for
-// one that could lead anywhere but into the archive's folder, or that no
-// file Zonewiki or git writes has.
-func nameParts(name string) ([]string, error) {
-	bad := func() ([]string, error) {
-		return nil, fmt.Errorf("not a Zonewiki export: the name %q in it", name)
-	}
-	if strings.HasPrefix(name, "/") || strings.ContainsRune(name, '\\') {
-		return bad()
-	}
-	for _, c := range name {
-		if c < 0x20 || c == 0x7f {
-			return bad()
-		}
-	}
-	var parts []string
-	for i, p := range strings.Split(strings.TrimSuffix(name, "/"), "/") {
-		switch {
-		case p == "." && i == 0:
-			continue // tar -C … . writes ./wiki
-		case p == "" || p == "." || p == "..":
-			return bad()
-		}
-		parts = append(parts, p)
-	}
-	return parts, nil
 }
 
 // isHistory: rel (under wiki/) is of the repository's history: what names
@@ -222,38 +163,4 @@ func isHistory(rel []string) bool {
 		return !(rel[2] == "info" && len(rel) > 3 && strings.HasSuffix(rel[3], "alternates"))
 	}
 	return false
-}
-
-// writeFile writes what r holds as the new file at path, at most limit
-// bytes (-1: any number), and returns how many it wrote. The file must not
-// be there: an archive names each file once.
-func writeFile(path string, r io.Reader, limit int64, ownerOnly bool) (int64, error) {
-	if err := os.MkdirAll(filepath.Dir(path), 0o777); err != nil {
-		return 0, err
-	}
-	mode := os.FileMode(0o666)
-	if ownerOnly {
-		mode = 0o600
-	}
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
-	if err != nil {
-		if errors.Is(err, fs.ErrExist) {
-			return 0, fmt.Errorf("not a Zonewiki export: it holds %s twice", filepath.Base(path))
-		}
-		return 0, err
-	}
-	if limit >= 0 {
-		r = io.LimitReader(r, limit+1)
-	}
-	n, err := io.Copy(f, r)
-	if cerr := f.Close(); err == nil {
-		err = cerr
-	}
-	if err == nil && limit >= 0 && n > limit {
-		err = ErrTooBig
-	}
-	if err != nil && !errors.Is(err, ErrTooBig) {
-		err = fmt.Errorf("the archive can't be unpacked (cut off, damaged, or no room for it): %w", err)
-	}
-	return n, err
 }

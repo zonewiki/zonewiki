@@ -108,7 +108,7 @@ What each file and folder of the repository is for.
 │   ├── internal/mdtext/    # Package mdtext, no globals: markdown source text (frontmatter, fences, code and math masking, headings and anchors, wikilink syntax, the splice of a section's text, checkboxes, slugs)
 │   ├── internal/settingsfile/  # Package settingsfile: the settings file's format ([user …] and [group …] sections; the strict parser, line edits keeping comments, the owner-only write); what its keys mean stays in configfile.go
 │   ├── internal/tokenizer/ # Package tokenizer: the embedding model's tokenizer (byte-level BPE from its tokenizer.json)
-│   ├── internal/wikiarchive/  # Package wikiarchive: the file a whole wiki moves in (a gzipped tar of a clone and the settings file), written, and read as untrusted: only the history's objects and refs and the settings file, as plain files
+│   ├── internal/wikiarchive/  # Package wikiarchive: the file a whole wiki moves in (a gzipped tar of a clone and the settings file), written, and read as untrusted: only the history's objects and refs and the settings file, as plain files (wikiarchive.go); a source of entries, a gzipped tar or a zip (source.go), and one unpacking with every check, told by its caller what to keep (unpack.go)
 │   ├── retrieval.go        # Search and LLM retrieval (BM25 + optional semantic index), the query log
 │   ├── embed.go            # Optional semantic search: section embeddings, the index and its cache, Related pages
 │   ├── embed_onnx.go       # The model on onnxruntime (cgo; embed_nocgo.go: built without cgo, keywords only)
