@@ -268,6 +268,15 @@ func TestClientKey(t *testing.T) {
 			t.Errorf("%v: %q", c, got)
 		}
 	}
+	// A proxy that adds a line of its own after the client's (HAProxy's
+	// forwardfor): the client's line is no key it may pick.
+	r := httptest.NewRequest("GET", "/", nil)
+	r.RemoteAddr = "172.17.0.1:1234"
+	r.Header.Add("X-Forwarded-For", "6.6.6.6")
+	r.Header.Add("X-Forwarded-For", "203.0.113.9")
+	if got := clientKey(r); got != "203.0.113.9" {
+		t.Errorf("two lines: %q", got)
+	}
 }
 
 func TestHostName(t *testing.T) {

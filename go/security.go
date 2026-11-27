@@ -444,7 +444,10 @@ func sameSecret(given, secret string) bool {
 // client in X-Forwarded-For: the last entry not itself a trusted proxy,
 // which a proxy appended (entries before it are the client's to make up),
 // its address without a port; an entry that is no address counts as the
-// hop that appended it.
+// hop that appended it. Every X-Forwarded-For line counts, in order, as
+// one list: a proxy that adds a line of its own (HAProxy's forwardfor)
+// leaves the client's line first, and the first alone would let a
+// client pick a new key with every guess.
 // Anyone else's X-Forwarded-For is ignored: a client on the LAN could
 // otherwise send a new one with every guess and never be throttled.
 // On a Unix socket (--addr unix:PATH) the peer is the proxy, whatever
@@ -474,7 +477,7 @@ func clientAddr(r *http.Request) string {
 	if onSocket {
 		host = "127.0.0.1"
 	}
-	header := r.Header.Get("X-Forwarded-For")
+	header := strings.Join(r.Header.Values("X-Forwarded-For"), ",")
 	peer, err := netip.ParseAddr(host)
 	if err != nil || header == "" {
 		return host

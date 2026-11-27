@@ -897,6 +897,7 @@ A client has that whole network to take addresses from, and each would otherwise
 
 **Behind a trusted proxy** (`trusted-proxies` in the settings file; unset: loopback), the client is the last `X-Forwarded-For` entry that isn't itself a trusted proxy: the one the proxy appended.
 Entries before it are the client's to make up.
+Every `X-Forwarded-For` line counts, in the order they came, as one list: a proxy that adds a line of its own (HAProxy's `forwardfor`) leaves the client's line first, which alone would let a client name a new address with every guess.
 It is taken by its address alone (`forwardedAddr`):
 
 - a port with it (`203.0.113.9:4711`, `[2001:db8::1]:4711`) is dropped, as it would make each connection a client of its own;
