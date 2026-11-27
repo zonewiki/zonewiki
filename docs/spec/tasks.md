@@ -609,7 +609,7 @@ The ⋯ menu is there for whoever sees the tasks, not only where a list has sett
 ### Export tasks
 
 **Export tasks** (`GET /api/tasks/export?list=&tag=&assignee=`, `?mine=1` for My tasks, `?lists=` for several; `apiExport`) downloads `zone-tasks-<list>-<date>.json` (`all` for All tasks, `my-tasks` for My tasks;
-the name goes into `Content-Disposition` quoted and escaped, `mime.FormatMediaType`, as the list's name is the request's): the tasks the list shows (its `list=` and `tag=`, not what is typed in the search field),
+the name goes into `Content-Disposition` quoted and escaped, `mime.FormatMediaType`, as the list's name is the request's): the tasks the list shows (its `list=` and `tag=`, not what is typed in the filter field),
 open and closed of every year,
 each as the API shows it,
 with its description,
@@ -661,8 +661,8 @@ How a task list is worked with: its header, the filter, opening and editing a ta
 
 Tabs, filter and **+ New** sit on one line on desktop (`.tasks-toolbar` `flex: 1 1 20rem`).
 
-On a phone (≤640px) the tabs share their line with a search button, ⋯ and a label-less "+" (accessible name "New task"); the line under it holds what the tab adds (how it shows its tasks, the Order).
-The filter field is behind the search button (`.tasks-search-btn`, `showFilter` in `js/tasktabs.js`): it shows once asked for (the button, or `/`, `#`, `@`), is put away when left empty, and stays for as long as it filters (`.tasks-filtered`), so what narrows the list is never out of sight.
+On a phone (≤640px) the tabs share their line with a filter button (a funnel), ⋯ and a label-less "+" (accessible name "New task"); the line under it holds what the tab adds (how it shows its tasks, the Order).
+The filter field is behind the filter button (`.tasks-filter-btn`, `showFilter` in `js/tasktabs.js`): it shows once asked for (the button, or `/`, `#`, `@`), is put away when left empty, and stays for as long as it filters (`.tasks-filtered`), so what narrows the list is never out of sight.
 Where nothing is grouped or filtered (Today, most days) the list starts right under the tabs.
 A page's locked words (a list's name, an embed's `tag=`) are in the field, not on that line: the page's heading says what it shows.
 

@@ -200,7 +200,7 @@
 }
 .tasks-header .btn { padding: .25rem .7rem; }
 /* The phone's way to the filter field (below); elsewhere the field is there. */
-.tasks-search-btn { display: none; }
+.tasks-filter-btn { display: none; }
 
 /* View selector — a segmented control: every view visible, one click to
    switch, the current one filled with the primary colour. */
@@ -1448,9 +1448,9 @@ ul.task-comment-list { list-style: none; margin: .3rem 0 0; padding: 0; font-siz
      right under the tabs. The toolbar's parts are the header's own here. */
   .tasks-toolbar { display: contents; }
   .view-tabs { display: flex; flex: 1 1 0; min-width: 0; order: 1; }
-  .tasks-search-btn { display: inline-flex; align-items: center; order: 2; align-self: stretch; padding: .25rem .55rem; color: var(--muted); }
-  .tasks-search-btn svg { width: 1rem; height: 1rem; }
-  .tasks-search-btn[aria-expanded="true"], .tasks-filtered .tasks-search-btn { color: var(--fg); background: var(--code-bg); }
+  .tasks-filter-btn { display: inline-flex; align-items: center; order: 2; align-self: stretch; padding: .25rem .55rem; color: var(--muted); }
+  .tasks-filter-btn svg { width: 1rem; height: 1rem; }
+  .tasks-filter-btn[aria-expanded="true"], .tasks-filtered .tasks-filter-btn { color: var(--fg); background: var(--code-bg); }
   .tasks-header .tasks-more-btn { order: 3; align-self: stretch; }
   .tasks-header [id^="task-add-btn"] { order: 4; }
   /* The line's end, where a second one follows. */
@@ -1462,7 +1462,7 @@ ul.task-comment-list { list-style: none; margin: .3rem 0 0; padding: 0; font-siz
   .tasks-header select.tasks-sort { order: 7; }
   .tasks-header .tasks-sort-reset { order: 7; margin-left: -.6rem; }
   .tasks-header div.chip-input, .tasks-header > input, .tasks-toolbar > input { order: 8; flex: 1 1 100%; }
-  .tasks-header:not(.tasks-searching):not(.tasks-filtered) :is(div.chip-input, .tasks-toolbar > input) { display: none; }
+  .tasks-header:not(.tasks-filter-open):not(.tasks-filtered) :is(div.chip-input, .tasks-toolbar > input) { display: none; }
   /* Task editor: full screen on phones (it is a whole form, not a popup). */
   .task-edit-modal {
     width: 100%; max-width: none; height: 100dvh; max-height: none;

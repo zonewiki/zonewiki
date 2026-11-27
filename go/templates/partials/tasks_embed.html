@@ -24,8 +24,8 @@
     </div>
     <div class="tasks-toolbar">
       {{- /* On a phone the filter field is behind this (tasks.css, js/tasktabs.js): the list starts under the tabs. */}}
-      <button type="button" class="btn tasks-search-btn" aria-label="Search and filter" aria-expanded="false" title="Search and filter (/)">{{template "icon_search"}}</button>
-      <input type="text" id="task-filter-search{{.Sfx}}" placeholder="Search… #tag" title="Text searches title and description · #tag filters by tag · #a #b = both tags · #a|b = either · -#tag = without · list:name = in that list (list:inbox) · !high, !low = that importance{{if .CanAssign}} · is:updated = with news for you · is:following = what you follow{{end}}" autocomplete="off">
+      <button type="button" class="btn tasks-filter-btn" aria-label="Filter" aria-expanded="false" title="Filter (/)">{{template "icon_filter"}}</button>
+      <input type="text" id="task-filter-search{{.Sfx}}" placeholder="Filter… #tag" title="Text filters by title and description · #tag filters by tag · #a #b = both tags · #a|b = either · -#tag = without · list:name = in that list (list:inbox) · !high, !low = that importance{{if .CanAssign}} · is:updated = with news for you · is:following = what you follow{{end}}" autocomplete="off">
       <select class="tasks-sort" id="task-sort{{.Sfx}}" aria-label="Order" title="Order (o){{if .Mine}}. My order is yours alone: ranking here moves nothing in a list{{end}}" hidden><option value="manual">{{if .Mine}}My order{{else}}Manual{{end}}</option><option value="due">Due date</option><option value="created">Created</option></select>
       {{- /* Shown while the tab is sorted (js/taskview.js applySort): a sort turns dragging off, and this is the click back. */}}
       <button type="button" class="btn tasks-sort-reset" id="task-sort-reset{{.Sfx}}" aria-label="Back to {{if .Mine}}My order{{else}}Manual{{end}}" title="Back to {{if .Mine}}My order{{else}}Manual{{end}}, the order you drag in (o)" hidden>×</button>

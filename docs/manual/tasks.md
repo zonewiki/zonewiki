@@ -163,7 +163,7 @@ A bar at the bottom then acts on all of them: **All**, **Tag…**, **List…**, 
 
 ### Filtering a list
 
-Type in the filter field (**/**) to narrow the list:
+Type in the filter field (**/**; on a phone, tap the funnel first) to narrow the list:
 
 | Word | Shows the tasks |
 |------|-----------------|

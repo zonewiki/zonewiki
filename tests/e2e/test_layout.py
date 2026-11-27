@@ -281,7 +281,7 @@ def test_backlinks_chip_desktop_hover_and_click(page, wiki):
 
 TASKS_HEADER_PARTS = ["#tasks-tabs", "#task-filter-search", "#task-add-btn"]
 # On a phone the filter field is behind the search button, on the tabs' line.
-PHONE_HEADER_PARTS = ["#tasks-tabs", ".tasks-search-btn", "#task-add-btn"]
+PHONE_HEADER_PARTS = ["#tasks-tabs", ".tasks-filter-btn", "#task-add-btn"]
 
 
 def tasks_header_rows(pg, parts=TASKS_HEADER_PARTS) -> int:
@@ -308,13 +308,13 @@ def test_tasks_all_tab_header_is_compact(new_page, wiki, ctx, rows):
     if phone:
         expect(field).to_be_hidden()
         assert tasks_header_rows(pg, PHONE_HEADER_PARTS + ["#task-sort"]) == 2
-        pg.locator(".tasks-search-btn").tap()
+        pg.locator(".tasks-filter-btn").tap()
         expect(field).to_be_focused()
         assert tasks_header_rows(pg, PHONE_HEADER_PARTS + ["#task-sort", "#task-filter-search"]) == 3
         # Left empty it is put away again; while it filters it stays.
         pg.locator("#tasks-list").tap(position={"x": 5, "y": 5})
         expect(field).to_be_hidden()
-        pg.locator(".tasks-search-btn").tap()
+        pg.locator(".tasks-filter-btn").tap()
         field.fill("zzz")
         pg.locator("#tasks-list").tap(position={"x": 5, "y": 5})
         expect(field).to_be_visible()

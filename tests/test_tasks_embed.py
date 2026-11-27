@@ -189,6 +189,15 @@ class TestPageViewLink:
         assert 'id="task-filter-search"' in html
         assert "task-filter-tag" not in html
 
+    def test_filter_field_is_called_filter(self, client, wiki_dir):
+        """It narrows the list, it doesn't search: the field, its phone
+        button and the button's icon (a funnel) say Filter."""
+        html = preview(client, "[[tasks:]]\n")
+        assert 'placeholder="Filter… #tag"' in html
+        assert 'class="btn tasks-filter-btn" aria-label="Filter"' in html
+        assert 'title="Filter (/)"' in html
+        assert "Search" not in html.split('class="tasks-toolbar"')[1].split("</div>")[0]
+
     def test_embed_contains_start_date_field(self, client, wiki_dir):
         """Edit modal has a Start (start_date) field and an unstored
         days-before-due helper; the old lead/anchor fields are gone."""
