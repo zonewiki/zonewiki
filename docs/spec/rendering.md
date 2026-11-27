@@ -663,6 +663,13 @@ how headings carry their ids is the renderer's (`Env.HeadingIDs`: `id` on a page
 **A heading's id is `mdtext.HeadingID`** of its text, the same function a `[[page#Section]]` link's anchor comes from (`SectionAnchor`) and the browser's `headingId` is held to (`tests/test_text_parity.py`):
 what is no letter, digit, `_`, `-` or space goes, then the ends are trimmed, so "& more" is `more`.
 
+**Unless it is one of Zonewiki's own ids** (`zonewikiID` in `go/elementids.go`): then it gets `user-content-` in front, as an id in a page's raw HTML does (Raw HTML, above), so `## Modal` is `user-content-modal`.
+A heading must not stand in for one of Zonewiki's elements: its scripts find them by id (`## Task edit id` ahead of a task list was the field the task dialog saves from), its styles select them (`## Img lightbox` was hidden), and an id is a global (`## Mermaid` was `window.mermaid`).
+Zonewiki's ids are those its templates, scripts and styles name, and the globals its scripts read, listed in `zonewikiIDList`; one ending in `-<number>` counts as its first part (a list embedded twice has `tasks-app-2`).
+`TestZonewikisIDsAreNoHeadingsIDs` finds them in the source and fails for one missing from the list.
+Where a heading's id is needed elsewhere it is asked the same way (`headingID`, `sectionAnchor`): a `[[Page#Modal]]` link, the side column's contents, a search result's or a linked task's section, a section's ☑ chip.
+A `#modal` written by hand still finds the heading (`hashTarget` in `js/util.js`: a heading of the rendered text first, then an element with `user-content-` in front, then Zonewiki's own).
+
 ### Section headings and HTML post-processing
 
 Zonewiki's additions to goldmark's output work on the parsed document,

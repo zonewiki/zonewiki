@@ -206,7 +206,7 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 	headingNames := map[string]string{}
 	for _, h := range headings {
 		if h.startsSection() {
-			headingNames[mdtext.SectionAnchor(h.text)] = mdtext.PlainHeading(h.text)
+			headingNames[sectionAnchor(h.text)] = mdtext.PlainHeading(h.text)
 		}
 	}
 	var tasks []TaskLink

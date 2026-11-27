@@ -829,7 +829,7 @@ func findTaskBacklinks(open []*Task, slug string) []TaskLink {
 			if page != "" && (page == slug || mdtext.ToSlug(page) == slug) {
 				found = true
 				if sec != "" && section == "" {
-					section, anchor = sec, mdtext.SectionAnchor(sec)
+					section, anchor = sec, sectionAnchor(sec)
 				}
 			}
 		}
@@ -838,7 +838,7 @@ func findTaskBacklinks(open []*Task, slug string) []TaskLink {
 			if page == slug {
 				found = true
 				if frag != "" && section == "" {
-					section, anchor = strings.ReplaceAll(frag, "-", " "), frag
+					section, anchor = strings.ReplaceAll(frag, "-", " "), headingID(frag)
 				}
 			}
 		}

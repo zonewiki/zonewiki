@@ -38,7 +38,7 @@ func wikilinker(rq *Req, slugs map[string]bool, from string) func(inner string) 
 		page, section, label := mdtext.SplitWikilink(inner)
 		anchor := ""
 		if section != "" {
-			anchor = "#" + html.EscapeString(mdtext.SectionAnchor(section))
+			anchor = "#" + html.EscapeString(sectionAnchor(section))
 		}
 		if page == "" {
 			if anchor == "" {

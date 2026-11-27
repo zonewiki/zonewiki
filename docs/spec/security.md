@@ -680,6 +680,9 @@ That holds wherever the name stands on its own before `=` (after HTML's whitespa
 A diagram's labels have none (A diagram makes no form either, above).
 A `#link` to one finds it all the same (`hashTarget` in `js/util.js`).
 
+A heading's id, made from its text, is never one of Zonewiki's ids either: `## Modal` would be the new note's dialog to a script, `## Mermaid` would be `window.mermaid`.
+One that would be gets `user-content-` in front too (Heading ids in `docs/spec/rendering.md`).
+
 #### Nothing takes the rendered HTML apart
 
 The defusing holds for the HTML as it is rendered.

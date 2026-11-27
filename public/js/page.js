@@ -19,16 +19,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // An id or name a page's raw HTML gives has "user-content-" in front
 // (go/markdown.go defuseHTML: so it can't stand in for one of Zonewiki's
-// elements), so for #note the browser finds no element and stays where it is:
-// this goes there instead, on opening the page and when a link changes the
-// hash (fold.js has unfolded its section by then).
+// elements), and so has a heading named as one of Zonewiki's ids (headingID),
+// so for #note the browser finds no element and stays where it is, and for
+// #modal it goes to the new note's dialog: this goes where hashTarget says
+// instead, on opening the page and when a link changes the hash (fold.js has
+// unfolded its section by then).
 function scrollToRawAnchor() {
   let id = location.hash.slice(1);
   if (!id) return;
   try { id = decodeURIComponent(id); } catch (_) { /* as written */ }
-  if (document.getElementById(id) || document.getElementsByName(id).length) return;
   const el = hashTarget(location.hash);
-  if (el) requestAnimationFrame(() => el.scrollIntoView());
+  if (el && el.id !== id) requestAnimationFrame(() => el.scrollIntoView());
 }
 window.addEventListener('hashchange', scrollToRawAnchor);
 

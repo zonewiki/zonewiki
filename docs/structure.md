@@ -78,6 +78,7 @@ What each file and folder of the repository is for.
 │   ├── views.go            # The page shell, breadcrumb, modules, menus, the settings pages' tabs (settingsTabs), side columns; templates/ (embedded)
 │   ├── pages.go            # The wiki's files: slugs, listing, sharing mode, link graph, renames, the pages that embed a list
 │   ├── markdown.go         # Markdown → HTML on goldmark, with Zonewiki's rules (checkboxes, callouts, heading ids …)
+│   ├── elementids.go       # Zonewiki's own element ids, which no heading of a page takes (headingID: "user-content-" in front)
 │   ├── math.go             # $…$ and $$…$$ math kept as TeX for KaTeX (a goldmark extension)
 │   ├── sections.go         # Headings and sections as the parser finds them, for the ✎s, the editor, the MCP tools and search (pageHeadings, pageSections, findSection)
 │   ├── checkboxes.go       # Checkboxes as the parser finds them, so a tick goes to the box the page shows (taskItems, taskLineKeys, toggleNthCheckbox)

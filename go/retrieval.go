@@ -2011,7 +2011,7 @@ func sectionAnchorOf(heading string, level int) string {
 	if heading == "" || level > 3 {
 		return ""
 	}
-	return "#" + mdtext.HeadingID(mdtext.PlainHeading(heading))
+	return "#" + sectionAnchor(heading)
 }
 
 // searchSections: a page's sections as the section index has them

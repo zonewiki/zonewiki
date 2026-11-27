@@ -46,6 +46,8 @@ A private page shows 🔒 beside its title, a group's page 👥 and the group's 
 Hover over the title or a heading and a small link icon appears after it.
 Click it to copy the address of the page, or of that section with its `#anchor`.
 "Link copied" confirms it.
+The anchor is the heading's text in lower case, with `-` between the words (`#meeting-notes`);
+where Zonewiki uses that anchor itself (a heading **New** or **Mermaid**), it gets `user-content-` in front (`#user-content-new`), and a link to `#new` still finds the heading.
 
 ### Contents and connections
 

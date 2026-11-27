@@ -30,16 +30,22 @@ export function closeOnBackdropClick(dialog) {
 // the task app's t (tag the selected tasks).
 export const keyPrefix = { key: null, timer: null };
 
-// The element a #hash names: one of Zonewiki's (a heading's id), else one a
-// page's raw HTML gave that id or name, which carries "user-content-" in
-// front (go/markdown.go defuseHTML: so it can't stand in for one of Zonewiki's
-// elements), as GitHub's do. null for none.
+// The element a #hash names: a heading (or footnote) of the text Zonewiki
+// rendered with that id; else one with "user-content-" in front, which a
+// page's raw HTML gave that id or name, or a heading named as one of
+// Zonewiki's own ids has (go/markdown.go defuseHTML, headingID: so it can't
+// stand in for one of Zonewiki's elements), as GitHub's do; else Zonewiki's
+// own element of that id. So #modal goes to a heading "Modal", not to the
+// new note's dialog, and #tasks-app not to a task list in the page. null
+// for none.
 export function hashTarget(hash) {
   if (!hash || hash.length < 2) return null;
   let id = hash.slice(1);
   try { id = decodeURIComponent(id); } catch (_) { /* as written */ }
-  return document.getElementById(id) || document.getElementById('user-content-' + id)
-    || document.getElementsByName('user-content-' + id)[0] || null;
+  const el = document.getElementById(id);
+  if (el?.closest('[data-rendered]') && !el.closest('.tasks-app, dialog')) return el;
+  return document.getElementById('user-content-' + id)
+    || document.getElementsByName('user-content-' + id)[0] || el || null;
 }
 
 export function he(s) {

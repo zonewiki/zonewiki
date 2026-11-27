@@ -992,7 +992,7 @@ func rewriteLinksSeenBy(text, oldSlug, newSlug, source, section string, readers 
 	sourceDir := posixDir(source)
 	anchor := ""
 	if section != "" {
-		anchor = "#" + mdtext.SectionAnchor(section)
+		anchor = "#" + sectionAnchor(section)
 	}
 	text = replaceMdLinks(text, func(m mdLinkMatch) string {
 		rest := m.rest

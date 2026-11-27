@@ -265,6 +265,33 @@ def test_a_pages_ids_stand_in_for_none_of_zones(page, wiki):
     wait_until(page, in_view)
 
 
+def test_a_pages_headings_stand_in_for_none_of_zones(page, wiki):
+    # A heading's id is made from its text: "## Task edit id" ahead of a task
+    # list had the id the task dialog's script finds its field by, and the
+    # image lightbox's style hid "## Img lightbox". A heading named as one of
+    # Zonewiki's ids has "user-content-" in front; a link to its section goes
+    # there, and so does a #task-edit-id written by hand.
+    wiki.write("heads", "# Heads\n\n[[#Task edit id]] and [by hand](#task-edit-id)\n\n## Img lightbox\n\n"
+               + "Filler.\n\n" * 80 + "## Task edit id\n\nThe end.\n\n[[tasks:]]\n")
+    page.goto("/page/heads")
+    assert page.evaluate("document.getElementById('task-edit-id').tagName") == "INPUT"
+    expect(page.locator("h2#user-content-img-lightbox")).to_be_visible()
+
+    def in_view():
+        return page.evaluate("document.getElementById('user-content-task-edit-id').getBoundingClientRect().top"
+                             " < innerHeight")
+    assert not in_view()
+    page.locator("a[href='#task-edit-id']").click()
+    wait_until(page, in_view)
+    page.evaluate("scrollTo(0, 0)")
+    wait_until(page, lambda: not in_view())
+    page.locator("a.wikilink[href='#user-content-task-edit-id']").click()
+    wait_until(page, in_view)
+    page.goto("/page/index")
+    page.goto("/page/heads#task-edit-id")
+    wait_until(page, in_view)
+
+
 def test_a_click_submits_only_a_form_zone_put_there(page, wiki):
     # A page's own <style> could show the page's closed Delete dialog and lay
     # its button over the whole page, transparent: the reader's next click

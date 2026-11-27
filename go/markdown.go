@@ -508,10 +508,12 @@ func tocLabel(h ast.Node, src []byte) string {
 	return strings.TrimSpace(b.String())
 }
 
+// uniqueSlug: a heading's id on the page (headingID), with -1, -2 … after
+// it when one before has it already.
 func uniqueSlug(slug string, seen map[string]bool) string {
-	u := slug
+	u := headingID(slug)
 	for i := 1; seen[u]; i++ {
-		u = fmt.Sprintf("%s-%d", slug, i)
+		u = headingID(fmt.Sprintf("%s-%d", slug, i))
 	}
 	seen[u] = true
 	return u
