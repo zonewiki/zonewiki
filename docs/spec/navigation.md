@@ -388,13 +388,17 @@ The row and the mail lead to the page, at the name: the browser scrolls there an
 | A page deleted, moved or narrowed since | its mention shows nowhere |
 
 An assistant asked what is new is told too: `history` without a page names the pages that mention its user (`docs/spec/mcp.md`).
-Not built: completing a name while typing, the name as a chip in the page, and a mention in a note or a file's name.
+**In the text** such a name is a chip (`.mention`), on the page and in the editor's preview, your own name filled (`.mention-me`): a chip says that the name tells someone.
+A name that tells nobody (no such user, one who doesn't see the page) is the text it was, and so is every name for who isn't signed in: a public wiki's visitor isn't shown who its users are (Mentions in `docs/spec/rendering.md`).
+**In the editor** `@` offers who can be named there (Mentions in the editor in `docs/spec/editor.md`).
+Not built: a mention in a note or a file's name.
 
 How: `go/mentions.go`.
 Every commit of pages goes through `gitCommit`, which asks before it commits who the changed pages named in `HEAD` (`mentionsBefore`: all of them together, so a page that moves names nobody anew) and afterwards who they name now (`tellMentions`); a name that is new, of a user who sees the page (`canSee`, asked as that user), is noted in their own file, `.zone/watch/<user>.json` (`mentions`, by the page's slug: when, by whom, the commit), beside what they watch: no commit, nothing in the page.
 Most commits read nothing more for it: only a page whose text has an `@` is compared.
 `gitCommitQuiet` is the commit that tells nobody (an import's, `pagesWrite.quiet`).
 `mentionsFor` is what every door shows: the mentions of pages that are there and that the user sees.
+`mentionableOn` says who a text on a page can name, as its asker may know them: who sees the page (`placeSeers`) and can be told; the chips (`mentionChips`) and the editor's list (`GET /api/mentionable`) ask it.
 Tests: `tests/test_page_mentions.py`, `TestTheMorningsMailHasTheMentions` in `go/digest_test.go`, `test_updates_has_the_pages_that_mention_you` in `tests/e2e/test_task_assignee.py`.
 
 ## Watching pages

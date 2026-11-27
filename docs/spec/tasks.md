@@ -1365,7 +1365,7 @@ Updates' pill has the same number, and it is the only pill with one: news is cou
 `@name` in a comment or a description, of a user who can be given tasks (not in code, not the `@` of a mail address), is logged in the task's history as `mentioned` (`mentionsOf`, `logMentions`), with who was named, by who wrote it; it is news to them, on a task they have nothing else to do with too.
 A description logs only the names it didn't have before.
 In a group's list only its members are mentioned (Assigning in a group's list).
-Not built: the name as a chip in the text, and completing it while typing.
+In a task's description and comments such a name is a chip, as on a page (Mentions in `docs/spec/rendering.md`), and `@` in those fields offers who a task can be given to (Mentions in the editor in `docs/spec/editor.md`).
 
 ### Mail
 

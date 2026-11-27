@@ -106,6 +106,9 @@ func renderMd(rq *Req, text string, o RenderOpts) string {
 	text = mdtext.UnmaskCode(escapeWikilinkPipes(text), stash)
 	env := &Env{EditSlug: o.EditSlug, SectionKeys: o.SectionKeys, SectionChips: sectionTaskChips(rq, o.SectionTasks), Host: requestHost(rq),
 		HeadingIDs: o.HeadingIDs, Wikilink: wikilinker(rq, nil, o.Page), TOC: o.TOC, Links: o.Links}
+	if o.Page != "" { // on a page: who reads it is known
+		env.Mention = mentionChips(rq, o.Page)
+	}
 	result := markdown(text, env, false)
 	result = injectTaskRefs(rq, result, refs)
 	if o.TOC != nil {
@@ -154,13 +157,13 @@ func requestHost(rq *Req) string {
 // <style> as text (Env.NoStyle). With
 // lineBreaks (comments) each line of a paragraph is a line, as it was typed.
 func renderNotes(rq *Req, texts []string, lineBreaks bool) []string {
-	links := wikilinker(rq, nil, "")
+	links, chips := wikilinker(rq, nil, ""), mentionChips(rq, "")
 	out := make([]string, len(texts))
 	for i, text := range texts {
 		text, stash := mdtext.MaskCode(text)
 		text, refs := maskTaskRefs(text)
 		text = mdtext.UnmaskCode(escapeWikilinkPipes(text), stash)
-		result := markdown(text, &Env{Host: requestHost(rq), HeadingIDs: headingNoID, Wikilink: links, LineBreaks: lineBreaks, NoStyle: true}, false)
+		result := markdown(text, &Env{Host: requestHost(rq), HeadingIDs: headingNoID, Wikilink: links, Mention: chips, LineBreaks: lineBreaks, NoStyle: true}, false)
 		out[i] = injectTaskRefs(rq, result, refs)
 	}
 	return out

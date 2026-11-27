@@ -139,6 +139,23 @@ Custom titles (`> [!TIP] My title`) are not supported; that stays a plain quote.
   `max-width:100%` ensures the image never overflows on narrow screens.
 - An image on another host isn't loaded: `![alt](https://elsewhere.example/x.png)` is a link to it (`a.external-image`, a 🖼 before its alt text, or the address without one), unless the `external-content` setting names the host (A page loads nothing from other hosts in `docs/spec/security.md`).
 
+### Mentions
+
+`@name` of a user who is told by it is shown as a chip: `<span class="mention">@name</span>`, and for the reader's own name `class="mention mention-me"`, filled.
+The text stays `@name`: the chip is how it is shown, nothing is written into the page.
+
+| | |
+|---|---|
+| On a page | a chip for a user who reads the page and can be told (Mentions on pages in `docs/spec/navigation.md`); the editor's preview shows the same |
+| In a task's description and comments | a chip for a user a task can be given to (Mentions in `docs/spec/tasks.md`) |
+| Any other `@word` | the text it was: no such user, one who doesn't see the page, a name in code, the `@` of a mail address |
+| Who isn't signed in, a wiki without users | no chips at all |
+| In a heading, in a link's text | a chip too; the heading's id and its label in the side column are of the text as written |
+
+How: `@name` is an inline of its own (`mentionParser` in `go/markdown.go`, triggered by `@` after a space, a bracket or a line's start, as `mentionRE` reads a mention), whose node holds the text as its child, so every reading of a heading's or a link's text reads the name as written.
+The renderer puts the chip around it where `Env.Mention` says so (`mentionChips` in `go/mentions.go`), and nothing where it doesn't: without it a render is what it was.
+Tests: `test_a_name_that_tells_is_a_chip` in `tests/test_page_mentions.py`.
+
 ### Syntax highlighting
 
 `highlight.js` (vendored, see Dependencies in `AGENTS.md`) auto-highlights fenced code blocks client-side after load; math and Mermaid diagrams render client-side too (Math and diagrams).

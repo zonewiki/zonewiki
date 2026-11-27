@@ -78,6 +78,7 @@ A name in another place (who sees the page changes) comes back with `rename_ask`
 | GET    | `/api/search?q=...`   | JSON search results (used by the search UI); its parameters below |
 | GET    | `/api/page-preview/<slug>` | `{ title, html }`: a page rendered for the search modal's preview pane (heading ids as `data-pid`, no task list embeds) |
 | GET    | `/api/pages`          | JSON list of all existing page slugs (for wikilink hints) |
+| GET    | `/api/mentionable`    | `{ names }`: the users a text can name with `@name` so that they are told, A–Z, without who asks: with `?page=<slug>` who reads that page, without it who a task can be given to. Empty in sharing mode, for a page the asker doesn't see, without users and for a visitor (Mentions in the editor in `docs/spec/editor.md`) |
 | GET    | `/api/pages-list`     | The search modal's page list: each page the user sees, plus the built-in entries; not for a visitor (Page List in `docs/spec/navigation.md`) |
 
 `/api/search` takes `&unlinked=1`: only pages nothing links to, no tasks;

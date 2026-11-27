@@ -2992,3 +2992,11 @@ a.external-image::before { content: "🖼 "; }
 .updates-row.updates-read { opacity: .55; }
 .updates-row.updates-read .updates-row-what { color: var(--muted); }
 .updates-page .updates-more { margin-top: .5rem; }
+
+/* A mention (@name of a user who is told by it; go/markdown.go mention):
+   a quiet chip in the text, the reader's own name filled. */
+.mention {
+  padding: .05em .3em; border-radius: 4px; white-space: nowrap;
+  background: color-mix(in srgb, var(--link) 12%, transparent); color: var(--link); font-weight: 500;
+}
+.mention-me { background: var(--link); color: var(--bg); }

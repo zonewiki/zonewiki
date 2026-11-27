@@ -188,3 +188,65 @@ def test_an_import_of_notes_tells_nobody(alice, smtp, wiki_dir):
     if not slug.startswith("private/"):
         save(alice, slug, "# Meeting\n\n@bob said yes. And @dan?\n")
         assert list(kept(wiki_dir, "dan")) == [slug] and kept(wiki_dir, "bob") == {}
+
+
+def names(client, page=None):
+    """Who the editor's completion offers for @ on that page."""
+    resp = client.get("/api/mentionable", query_string={} if page is None else {"page": page}, headers=HOST)
+    assert resp.status_code == 200
+    return resp.get_json()["names"]
+
+
+def test_a_name_that_tells_is_a_chip(alice, smtp, wiki_dir):
+    """@name of a user who reads the page is a chip, the reader's own name
+    marked; any other @word is the text it was, and so is a name in code,
+    in a mail address, or for who isn't signed in."""
+    save(alice, "team", "# Team\n\n## Ask @bob\n\nAsk @bob, @Carol and @alice, not @nobody or @dan-x. Mail bob@example.org, run `@bob`.\n\n"
+                        "[to @bob](https://example.org/x)\n")
+    html = alice.get("/page/team", headers=HOST).get_data(as_text=True)
+    assert 'Ask <span class="mention">@bob</span>, <span class="mention">@Carol</span> and ' \
+           '<span class="mention mention-me" title="That is you">@alice</span>, not @nobody or @dan-x.' in html
+    assert "bob@example.org" in html and "<code>@bob</code>" in html and 'mention">@nobody' not in html
+    # In a heading and in a link's text too; the heading's id and the side column's label are of the text as written.
+    assert re.search(r'<h2 id="ask-bob"[^>]*>Ask <span class="mention">@bob</span>', html)
+    assert '<a href="https://example.org/x"' in html and 'to <span class="mention">@bob</span></a>' in html
+    # bob reads it with his own name marked.
+    login(alice, "bob")
+    html = alice.get("/page/team", headers=HOST).get_data(as_text=True)
+    assert '<span class="mention mention-me" title="That is you">@bob</span>, <span class="mention">@Carol</span>' in html
+    # On her private page nobody else is told: only her own name is a chip.
+    login(alice, "alice")
+    save(alice, "private/alice/diary", "# Diary\n\n@bob and @alice.\n")
+    html = alice.get("/page/private/alice/diary", headers=HOST).get_data(as_text=True)
+    assert '@bob and <span class="mention mention-me" title="That is you">@alice</span>.' in html
+    # The editor's preview shows what the page will.
+    resp = alice.post("/api/preview?page=team", data="Hi @bob and @nobody", headers={**HOST, "Content-Type": "text/plain"})
+    assert 'Hi <span class="mention">@bob</span> and @nobody' in resp.get_data(as_text=True)
+
+
+def test_a_tasks_text_has_the_chip_too(alice, smtp, wiki_dir):
+    from tests.test_task_notify import new
+    new(alice, title="Review", description="Ask @bob, not @carol (a viewer) or @nobody.")
+    resp = alice.post("/api/render-notes", json={"notes": ["Ask @bob, not @carol or @nobody."]}, headers=HOST)
+    assert resp.status_code == 200, resp.get_data(as_text=True)
+    assert 'Ask <span class="mention">@bob</span>, not @carol or @nobody.' in resp.get_json()["notes"][0]
+
+
+def test_the_completion_offers_who_reads_the_page(alice, smtp, wiki_dir):
+    # A shared page: every user who can be told, a viewer too, without who asks.
+    assert names(alice, "roadmap") == ["bob", "carol", "dan"]
+    login(alice, "bob")
+    assert names(alice, "roadmap") == ["alice", "carol", "dan"]
+    # His private page: nobody would be told. Someone else's: nothing is said.
+    assert names(alice, "private/bob/notes") == []
+    assert names(alice, "private/alice/diary") == []
+    # A task's text (no page): who a task can be given to.
+    assert names(alice) == ["alice", "dan"] and names(alice, "") == ["alice", "dan"]
+    assert names(alice, "../etc/passwd") == []
+    # No names in sharing mode, and none for who isn't signed in.
+    alice.set_cookie("zone-sharing", "1")
+    assert names(alice, "roadmap") == []
+    alice.delete_cookie("zone-sharing")
+    alice.post("/logout", headers=HOST)
+    resp = alice.get("/api/mentionable?page=roadmap", headers=HOST)
+    assert resp.status_code in (302, 401, 403) or resp.get_json()["names"] == []

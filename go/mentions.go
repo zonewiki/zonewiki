@@ -220,3 +220,45 @@ func readMention(user, slug string, all bool) {
 		return true
 	})
 }
+
+// mentionChips: whether @name is shown as a chip to the request's reader,
+// on the page slug: the name of a user who is told by it (canBeTold, and
+// sees the page), and whether it is the reader's own. On no page ("": a
+// task's text) the name of a user a task can be given to, as a task's
+// mentions go (mentionsOf). nil, so every name stays text, without users
+// and for a visitor: who isn't signed in isn't shown who the users are.
+func mentionChips(rq *Req, slug string) func(name string) (chip, me bool) {
+	s := settings()
+	if rq == nil || s.Users == nil || rq.who().Name == "" || rq.who().Name == visitor {
+		return nil
+	}
+	told := mentionableOn(rq.who(), slug, true)
+	return func(name string) (bool, bool) {
+		return slices.Contains(told, name), name == rq.who().Name
+	}
+}
+
+// mentionableOn: the users a text on the page slug can name, so that they
+// are told, as user may know them: who sees the page and can be told, on
+// no page ("") who a task can be given to. Nobody for a page user doesn't
+// see. With self, user's own name too (it is shown as a chip; naming
+// oneself tells nobody).
+func mentionableOn(user asker, slug string, self bool) []string {
+	s := settings()
+	if s.Users == nil || user.Name == "" || user.Name == visitor {
+		return nil
+	}
+	var names []string
+	switch {
+	case slug == "":
+		names = s.assignableUsers()
+	case !canSee(user, slug):
+		return nil
+	default:
+		names = slices.DeleteFunc(placeSeers(placeOf(slug)), func(name string) bool { return !s.canBeTold(name) })
+	}
+	if !self {
+		names = slices.DeleteFunc(slices.Clone(names), func(name string) bool { return name == user.Name })
+	}
+	return names
+}

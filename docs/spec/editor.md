@@ -101,6 +101,7 @@ The completion (`linkAutocomplete` in `js/completion.js`) is also used by the ta
 | `[text](` | the same, as `/page/` links |
 | `[[task:` (editor) | open tasks instead (see Task references in `docs/spec/rendering.md`) |
 | `:` and two letters | emoji (see Emoji, below) |
+| `@` (with users) | who can be named there (see Mentions in the editor, below) |
 
 Arrow keys navigate, Enter or Tab inserts `[[slug]]` (it prevents the key's default, so the editor's own Enter/Tab handling skips it), Escape closes.
 Slugs are fetched once from `/api/pages`, shared by every field.
@@ -133,6 +134,22 @@ The same `linkAutocomplete`, so in the editor, the task title and the task Descr
 - Sharing mode doesn't hide this list (no page or task names in it).
 
 The names are GitHub's (gemoji v4.1.0, MIT, `public/vendor/gemoji/emoji.json`, as downloaded; to update it, replace the file with a newer release's), fetched the first time `:xx` is typed, then cached by the browser.
+
+### Mentions in the editor
+
+The same `linkAutocomplete`, with users: in the editor, and in a task's title, description and comments.
+
+- Typing `@` lists who can be named there, so that they are told: **on a page, the users who read it**, a viewer too (Mentions on pages in `docs/spec/navigation.md`); **in a task's text, who a task can be given to** (Mentions in `docs/spec/tasks.md`).
+  Never yourself: naming oneself tells nobody.
+- More letters narrow the list: names that start with them first, then names that hold them.
+- Enter, Tab or a click writes `@name` and a space, so the file holds the name as plain text.
+- The list opens after a space, the start of a line or an opening bracket, so the `@` of a mail address doesn't open it, and not inside code.
+- On a private page nobody is listed: nobody else reads it, so nobody would be told.
+- Sharing mode shows no names: no list.
+- The live preview shows the name as the page will: a chip, for a name that tells someone.
+
+The names come from `GET /api/mentionable?page=<slug>` (no `page`: a task's text), asked for each page when first needed and again after a minute (`mentionMatches` in `js/completion.js`).
+Tests: `test_the_completion_offers_who_reads_the_page` in `tests/test_page_mentions.py`, `test_the_editor_completes_a_name_and_the_page_shows_it_as_a_chip` in `tests/e2e/test_task_assignee.py`.
 
 ### List continuation
 

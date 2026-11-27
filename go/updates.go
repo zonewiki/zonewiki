@@ -19,6 +19,7 @@ const updatesHref = "/updates"
 func updatesRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /updates", updatesPage)
 	mux.HandleFunc("POST /updates/read", updatesReadRoute)
+	mux.HandleFunc("GET /api/mentionable", mentionableRoute)
 }
 
 // updatesView: the page (updates.html).
@@ -82,4 +83,18 @@ func updatesPage(w http.ResponseWriter, r *http.Request) {
 	}
 	v.Unread = len(v.Mentions)+len(v.Watched) > 0
 	page(w, rq, http.StatusOK, "updates.html", "Updates", shell{wide: true}, v)
+}
+
+// mentionableRoute: GET /api/mentionable?page=<slug>: the users a text on
+// that page can name with @name so that they are told ({"names": […]}),
+// for the editor's completion: who reads the page, without who asks; with
+// no page (a task's text) who a task can be given to. No names in sharing
+// mode, for a page the asker doesn't see, without users or for a visitor.
+func mentionableRoute(w http.ResponseWriter, r *http.Request) {
+	slug := r.URL.Query().Get("page")
+	names := []string{}
+	if !sharingOn(r) && (slug == "" || safePath(slug) != "") {
+		names = append(names, mentionableOn(userOf(r), slug, false)...)
+	}
+	writeJSON(w, http.StatusOK, M{"names": names})
 }

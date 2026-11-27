@@ -193,11 +193,13 @@ You don't type task ids: the editor's task completion and **Make a task** write 
 ### Mentioning someone
 
 In a wiki with users, write `@` and a user's name, such as `@anna`, to tell that person about the page.
+Type `@` and the editor lists who can be named on this page; pick one with **Enter** or a click.
+On the page the name shows as a small chip, and your own name is filled in, so you spot where you are named.
 When you choose **Done**, Anna sees it on her **Updates** page, behind the bell at the top right, and gets a mail if she asked for one ([Notifications](teams.md#notifications)).
 The link takes her to the place where her name is.
 
 - She is told once: editing the page again doesn't tell her again.
-- Only someone who can read the page is told, so a name on your private page tells nobody.
+- Only someone who can read the page is told, so a name on your private page tells nobody: the list is empty there, and the name stays plain text.
 - You can mention a viewer too.
 - Importing notes tells nobody, even where the notes hold names.
 

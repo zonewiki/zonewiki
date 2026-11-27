@@ -210,6 +210,9 @@ READS = [
     ("GET /api/tasks/due-count", "GET", "/api/tasks/due-count", {}),
     ("GET /api/tasks/headless", "GET", "/api/tasks/headless", {}),
     ("GET /api/tasks/assignable", "GET", "/api/tasks/assignable", {}),
+    # Who a text on a page can name: nobody for a page the asker doesn't see (and who reads it isn't said).
+    ("GET /api/mentionable", "GET", "/api/mentionable", {"query_string": {"page": DIARY}}),
+    ("GET /api/mentionable", "GET", "/api/mentionable", {"query_string": {"page": SNEAK}}),
     ("GET /api/tasks/export", "GET", "/api/tasks/export", {}),
     ("GET /api/tasks/export", "GET", "/api/tasks/export", {"query_string": {"list": "secretlist"}}),
     ("GET /api/tasks/export", "GET", "/api/tasks/export", {"query_string": {"mine": "1"}}),

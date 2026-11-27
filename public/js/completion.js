@@ -55,6 +55,27 @@ function taskAcMatches(query, onLoad) {
     }));
 }
 
+// Who `@` can name on a page (its slug; '' for text on no page), so that
+// they are told: asked of the server for each page when first needed and
+// again when older than a minute; `onLoad` runs when a fetch it started has
+// come back. Best first: a name that starts with what is typed, then one
+// that holds it.
+const mentionable = new Map();   // slug → { names, at, loading }
+function mentionMatches(slug, query, onLoad) {
+  let m = mentionable.get(slug);
+  if (!m) mentionable.set(slug, m = { names: [], at: 0, loading: false });
+  if (!m.loading && Date.now() - m.at > 60000) {
+    m.loading = true;
+    fetch('/api/mentionable?page=' + encodeURIComponent(slug))
+      .then(r => r.ok ? r.json() : { names: m.names })
+      .then(d => { m.names = d.names || []; m.at = Date.now(); m.loading = false; onLoad(); })
+      .catch(() => { m.loading = false; });
+  }
+  const q = query.toLowerCase();
+  return [...m.names.filter(n => n.startsWith(q)), ...m.names.filter(n => !n.startsWith(q) && n.includes(q))]
+    .slice(0, 8).map(n => ({ value: n, label: '@' + n }));
+}
+
 // Emoji for `:name` completion: GitHub's gemoji table (vendored, MIT),
 // fetched when first needed; `onLoad` runs when a fetch it started is back.
 let emojiList = null, emojiLoading = false;
@@ -133,7 +154,8 @@ function getCaretCoords(el) {
 // it), Esc closes. Returns { update }, for text inserted by script.
 // `:name` (two letters or more, after a space or at the start) offers
 // emoji, and a whole `:name:` turns into its emoji: the file holds the
-// character itself, not the shortcode.
+// character itself, not the shortcode. With users, `@` offers who can be
+// named there (mentionMatches): the readers of the page, who are told by it.
 export function linkAutocomplete(ta, { tasks = false, page = null } = {}) {
   loadWikiPages();
   let el = null, index = 0, mode = 'wikilink';
@@ -148,6 +170,11 @@ export function linkAutocomplete(ta, { tasks = false, page = null } = {}) {
     // [label]( then what looks like a page path (no space, no closing paren)
     const m = before.match(/\[[^\]]*\]\(([^()\n]*)$/);
     if (m && (m[1] === '' || /^[/a-z0-9_-]/i.test(m[1]))) return ['mdlink', m[1].replace(/^\/page\//, '')];
+    // @ and the start of a name, after a space, a bracket or a line's start
+    // (not a mail address's @), as the server reads a mention. Not in
+    // sharing mode, which shows no names, nor where the text's page isn't known.
+    const at = before.match(/(?:^|[\s(\[{>,;:])@([a-z0-9-]*)$/i);
+    if (at && users() && !sharingOn() && slugNow() !== null && !inCode(before)) return ['mention', at[1]];
     // Not after a letter or digit, so "Note:", 10:30 and http: don't open it.
     const e = before.match(/(?:^|[\s([{"'*_~>])(:([a-z0-9_+-]{2,}))$/i);
     if (e && !inCode(before)) return ['emoji', e[2]];
@@ -157,6 +184,9 @@ export function linkAutocomplete(ta, { tasks = false, page = null } = {}) {
   // With users (<body data-users>) private/ holds the users' private pages;
   // without, it is an ordinary folder.
   const users = () => document.body.dataset.users === '1';
+
+  // The page the text is on ('' for none, null: not known).
+  const slugNow = () => typeof page === 'function' ? page() : page;
 
   // Page slugs to offer: those every reader of the text sees. On a private
   // page all the user sees; on a group's page the shared ones and that
@@ -201,6 +231,7 @@ export function linkAutocomplete(ta, { tasks = false, page = null } = {}) {
     mode = kind;
     const matches = kind === 'task' ? taskAcMatches(q, () => update(true))
       : kind === 'emoji' ? emojiMatches(q, () => update(true))
+      : kind === 'mention' ? mentionMatches(slugNow() || '', q, () => update(true))
       : (found => kind === 'wikilink' ? newPrivate(q, found) : found)(
           offered().filter(p => p.includes(q.toLowerCase())).slice(0, 8));
     if (matches.length) show(matches); else hide();
@@ -240,7 +271,7 @@ export function linkAutocomplete(ta, { tasks = false, page = null } = {}) {
       item.dataset.value = value;
       item.textContent = typeof m === 'string' ? m : m.label;
       // A page of a group: its mark before the slug.
-      if (typeof m === 'string' && users() && mode !== 'emoji' && mode !== 'task' && /^groups\/[^/]+\//.test(m)) {
+      if (typeof m === 'string' && users() && mode !== 'emoji' && mode !== 'task' && mode !== 'mention' && /^groups\/[^/]+\//.test(m)) {
         item.textContent = `👥 ${m}`;
       }
       if (m.meta) {
@@ -291,6 +322,10 @@ export function linkAutocomplete(ta, { tasks = false, page = null } = {}) {
     } else if (mode === 'emoji') {
       ta.setSelectionRange(ta.value.lastIndexOf(':', pos - 1), pos);
       document.execCommand('insertText', false, value);
+    } else if (mode === 'mention') {
+      // The name, and a space where none follows: typing goes on after it.
+      ta.setSelectionRange(ta.value.lastIndexOf('@', pos - 1), pos);
+      document.execCommand('insertText', false, '@' + value + (/^\s/.test(ta.value.slice(pos)) ? '' : ' '));
     } else {
       ta.setSelectionRange(ta.value.lastIndexOf('[[', pos), pos);
       document.execCommand('insertText', false, mode === 'task' ? `[[task:${value}]]` : `[[${value}]]`);

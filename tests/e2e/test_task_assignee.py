@@ -1431,3 +1431,46 @@ def test_a_viewer_reads_the_mentions_of_them(alice, new_page):
     expect(carol.locator(".updates-mention.updates-read")).to_have_count(1)
     expect(carol.locator("#updates-read-btn")).to_be_hidden()
     expect(carol.locator(".top-updates-count")).to_be_hidden()
+
+
+def test_the_editor_completes_a_name_and_the_page_shows_it_as_a_chip(alice, wiki):
+    """@ in the editor offers who reads the page, and Enter writes the name;
+    saved, the name is a chip on the page, the reader's own marked. Not for
+    a mail address's @, nor in code; on a private page nobody is offered."""
+    wiki.write("roadmap", "# Roadmap\n\n")
+    alice.goto("/edit/roadmap")
+    textarea = alice.locator("#editor-textarea")
+    textarea.click()
+    alice.keyboard.press("Control+End")
+    items = alice.locator(".wikilink-ac-item")
+    alice.keyboard.type("Ask @")
+    expect(items).to_have_text(["@bob", "@carol"])            # not herself, not dan, who is disabled
+    alice.keyboard.type("c")
+    expect(items).to_have_text(["@carol"])
+    alice.keyboard.press("Enter")
+    expect(textarea).to_have_value("# Roadmap\n\nAsk @carol ")
+    expect(items).to_have_count(0)
+    alice.keyboard.type("and @bo")
+    expect(items).to_have_text(["@bob"])
+    alice.keyboard.press("Tab")
+    expect(textarea).to_have_value("# Roadmap\n\nAsk @carol and @bob ")
+    alice.keyboard.type("or mail bob@")                      # a mail address: no list
+    expect(items).to_have_count(0)
+    alice.keyboard.type("example.org, `@b")                  # in code: none
+    expect(items).to_have_count(0)
+    alice.keyboard.type("` and @alice")                      # her own name isn't offered
+    expect(items).to_have_count(0)
+    # The live preview has the chips already.
+    expect(alice.locator("#editor-preview .mention")).to_have_text(["@carol", "@bob", "@alice"])
+    alice.get_by_role("button", name="Done").click()
+    alice.wait_for_url("**/page/roadmap")
+    chips = alice.locator("article .mention")
+    expect(chips).to_have_text(["@carol", "@bob", "@alice"])
+    expect(alice.locator("article .mention-me")).to_have_text(["@alice"])
+    expect(alice.locator("article code")).to_have_text("@b")
+    # On her private page nobody would be told: nothing is offered.
+    alice.goto("/edit/private/alice/diary")
+    textarea.click()
+    alice.keyboard.type("Dear @")
+    alice.wait_for_timeout(300)
+    expect(items).to_have_count(0)

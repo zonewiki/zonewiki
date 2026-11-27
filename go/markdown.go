@@ -15,6 +15,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"unicode"
 	"zonewiki/internal/mdtext"
 
 	"github.com/yuin/goldmark"
@@ -50,6 +51,10 @@ type Env struct {
 	// autolinks it parses, in the page's order, for the page's Files
 	// (pageFiles); nil: nowhere.
 	Links *[]string
+	// Mention: whether @name is shown as a chip: the name of a user who is
+	// told by it (mentionChips in mentions.go), and whether that is the
+	// reader themselves; nil: a name stays text.
+	Mention func(name string) (chip, me bool)
 	// NoStyle: a <style> in the raw HTML shows as text (a task's notes and
 	// comments, renderNotes: they go with the task onto every page that
 	// shows its list, the reader's own among them, where a <style> would
@@ -124,7 +129,7 @@ func newMDRenderer(inline bool) *mdRenderer {
 	opts := []goldmark.Option{
 		goldmark.WithExtensions(extension.Table, extension.Strikethrough,
 			extension.NewLinkify(extension.WithLinkifyURLRegexp(urlRE)),
-			extension.Footnote, extension.DefinitionList, typographer, mathExtension{block: !inline}, wikilinkExtension{}),
+			extension.Footnote, extension.DefinitionList, typographer, mathExtension{block: !inline}, wikilinkExtension{}, mentionExtension{}),
 		goldmark.WithParserOptions(
 			parser.WithParagraphTransformers(
 				util.Prioritized(alertTransformer{}, 100),
@@ -528,6 +533,7 @@ func (r *zoneRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
 	reg.Register(kindMathInline, r.mathInline)
 	reg.Register(kindMathBlock, r.mathBlock)
 	reg.Register(kindWikilink, r.wikilink)
+	reg.Register(kindMention, r.mention)
 }
 
 func attr(n ast.Node, name string) string {
@@ -775,6 +781,86 @@ func attrBytes(v any) []byte {
 		return []byte(v)
 	}
 	return []byte(fmt.Sprint(v))
+}
+
+// A mention (@name; Mentions on pages in docs/spec/navigation.md) is an
+// inline of its own, parsed where goldmark parses inlines, so code spans,
+// math, raw HTML and a mail address keep their @ as text. It is what
+// mentionRE (tasklogic.go) finds in the text: @ after a space, a bracket or
+// a line's start, then a name. The node holds the text as its child, so
+// whatever reads a heading's or a link's text reads the name as written;
+// the renderer puts a chip around it where Env.Mention says the name is a
+// user's who is told, and nothing where it doesn't.
+
+var kindMention = ast.NewNodeKind("ZoneMention")
+
+// mentionNode: @Name, the text itself its child.
+type mentionNode struct {
+	ast.BaseInline
+	Name string // without the @, lowercase
+}
+
+func (n *mentionNode) Kind() ast.NodeKind         { return kindMention }
+func (n *mentionNode) Dump(src []byte, level int) { ast.DumpHelper(n, src, level, nil, nil) }
+
+type mentionExtension struct{}
+
+func (mentionExtension) Extend(m goldmark.Markdown) {
+	m.Parser().AddOptions(parser.WithInlineParsers(util.Prioritized(mentionParser{}, 950)))
+}
+
+type mentionParser struct{}
+
+func (mentionParser) Trigger() []byte { return []byte{'@'} }
+
+func (mentionParser) Parse(parent ast.Node, block text.Reader, pc parser.Context) ast.Node {
+	// What may come before the @ (mentionRE): not a letter, so not a mail
+	// address's.
+	if before := block.PrecendingCharacter(); !unicode.IsSpace(before) && !strings.ContainsRune("([{>,;:", before) {
+		return nil
+	}
+	line, seg := block.PeekLine()
+	n := mentionNameLen(line[1:])
+	if n == 0 {
+		return nil
+	}
+	block.Advance(1 + n)
+	node := &mentionNode{Name: strings.ToLower(string(line[1 : 1+n]))}
+	node.AppendChild(node, ast.NewTextSegment(seg.WithStop(seg.Start+1+n)))
+	return node
+}
+
+// mentionNameLen: how long the name b starts with is: a letter or digit,
+// then letters, digits and "-" (a user's name, as mentionRE reads one).
+func mentionNameLen(b []byte) int {
+	n := 0
+	for n < len(b) {
+		c := b[n]
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-' && n > 0) {
+			break
+		}
+		n++
+	}
+	return n
+}
+
+// mention: the chip around a name that tells its user, the reader's own
+// name marked; any other @name is the text it was.
+func (r *zoneRenderer) mention(w util.BufWriter, src []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+	if r.env == nil || r.env.Mention == nil {
+		return ast.WalkContinue, nil
+	}
+	chip, me := r.env.Mention(node.(*mentionNode).Name)
+	switch {
+	case !chip:
+	case !entering:
+		_, _ = w.WriteString("</span>")
+	case me:
+		_, _ = w.WriteString(`<span class="mention mention-me" title="That is you">`)
+	default:
+		_, _ = w.WriteString(`<span class="mention">`)
+	}
+	return ast.WalkContinue, nil
 }
 
 // Wikilinks ([[Page]], [[Page|Label]], [[Page#Section]], [[#Section]]) are
