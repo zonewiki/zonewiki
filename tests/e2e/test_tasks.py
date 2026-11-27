@@ -341,7 +341,7 @@ def test_tasks_link_shows_my_tasks(page, wiki):
     # Each card says which list it is in; one in the Inbox says nothing.
     expect(card(page, "Milk").locator(".task-tag-list")).to_have_text("shop")
     expect(card(page, "Loose").locator(".task-tag-list")).to_have_count(0)
-    expect(page.locator(".tasks-place:has(.tasks-place-pin) .tasks-place-label")).to_have_text(["task", "shop", "attic"])
+    expect(page.locator(".tasks-place-pinned .tasks-place-label")).to_have_text(["task", "shop", "attic"])
     expect(page.locator(".tasks-place-first")).to_have_count(0)        # no pill is where new tasks go
     expect(page.locator(".tasks-place[aria-current]")).to_have_attribute("data-place", "mine")
     # Filed into the list that is left out, a task leaves, and the notice says where it went.
@@ -1387,7 +1387,7 @@ def test_the_inbox_has_a_pill_and_a_view_of_its_own(page, wiki):
     expect(page.locator(".tasks-place .tasks-place-label")).to_have_text(["My tasks", "Inbox", "groceries", "More"])
     expect(inbox.locator(".module-due")).to_have_text("1")
     expect(inbox.locator(".tasks-place-lock")).to_have_count(0)        # no users: it is no one's alone
-    expect(inbox.locator(".tasks-place-pin")).to_have_count(0)
+    expect(inbox).to_have_class(re.compile(r"\btasks-place-view\b"))
     expect(inbox).to_have_attribute("title", "Inbox: new tasks land here")
     inbox.click()
     page.wait_for_url(re.compile(r"/tasks\?list=inbox$"))
@@ -1796,7 +1796,7 @@ def test_the_move_dialog_makes_a_new_list(page, wiki):
     # The row of lists is there without a reload (the wiki had no list, and so no row):
     # a list made anywhere is pinned, a pill after the Inbox.
     expect(page.locator(".tasks-places .tasks-place .tasks-place-label")).to_have_text(["My tasks", "Inbox", "shop", "All tasks"])
-    expect(page.locator("a.tasks-place[data-place='list:shop'] .tasks-place-pin")).to_have_count(1)
+    expect(page.locator("a.tasks-place-pinned[data-place='list:shop']")).to_have_count(1)
     expect(page.locator(".lists-more-item[data-place='list:shop']")).to_have_count(0)
     expect(page.locator(".lists-more-item .lists-more-new")).to_have_count(0)
     # At this width (1280px) the lists are the left column, there now too.
@@ -3063,7 +3063,7 @@ def test_c_t_makes_a_private_task_in_the_users_inbox(page, wiki, monkeypatch):
     expect(card(page, "Call the bank").locator(".task-private")).to_be_visible()
     inbox = page.locator('.tasks-place[data-place="inbox"]')
     expect(inbox.locator(".module-focus")).to_have_text("1")
-    expect(inbox.locator(".tasks-place-lock")).to_have_count(1)
+    expect(inbox.locator(".tasks-place-lock")).to_have_count(0)         # its tray says what it is, its tooltip whose
     expect(inbox).to_have_attribute("title", "Inbox: new tasks land here (only you see it)")
     inbox.click()
     page.wait_for_url(re.compile(r"/tasks\?list=inbox$"))
@@ -5588,7 +5588,7 @@ def test_new_list_from_the_tasks_pages_menu(page, wiki):
     expect(page.locator(".page-header h1")).to_have_text("List: shop")
     expect(page.locator(".tasks-place .tasks-place-label")).to_have_text(["My tasks", "Inbox", "shop", "More"])
     expect(page.locator('.tasks-place[data-place="list:shop"]')).to_have_attribute("aria-current", "page")
-    expect(page.locator('.tasks-place[data-place="list:shop"] .tasks-place-pin')).to_have_count(1)
+    expect(page.locator('.tasks-place-pinned[data-place="list:shop"]')).to_have_count(1)
     expect(page.locator(".tasks-made-first")).to_have_count(0)
     # The Tasks link comes back to the view you are on: the new list.
     expect(page.locator(".breadcrumb .module-link[data-module=tasks]")).to_have_attribute("href", "/tasks?list=shop")
@@ -5662,7 +5662,7 @@ def test_rename_and_delete_list_dialogs(page, wiki):
     expect(page.locator(".tasks-app")).to_have_count(0)
     page.locator(".tasks-no-list button").click()
     page.wait_for_url(re.compile(r"/tasks\?list=food$"))            # made, and pinned
-    expect(page.locator('.tasks-place[data-place="list:food"] .tasks-place-pin')).to_have_count(1)
+    expect(page.locator('.tasks-place-pinned[data-place="list:food"]')).to_have_count(1)
     page.goto("/page/shop")
     expect(page.locator(".tasks-app")).to_have_count(1)
 
@@ -5679,7 +5679,7 @@ def test_pin_and_move_first_from_a_lists_menu(page, wiki):
     page.locator(".page-header .page-menu-btn").click()
     menu.get_by_role("menuitem", name="Pin").click()
     page.wait_for_url("**/tasks?list=shop")
-    expect(page.locator('.tasks-place[data-place="list:shop"] .tasks-place-pin')).to_have_count(1)
+    expect(page.locator('.tasks-place-pinned[data-place="list:shop"]')).to_have_count(1)
     expect(tasks).to_have_attribute("href", "/tasks?list=shop")
     page.goto("/tasks?list=work")
     page.locator(".page-header .page-menu-btn").click()
@@ -5713,7 +5713,7 @@ def test_pin_and_move_first_from_a_lists_menu(page, wiki):
     page.locator(".page-header .page-menu-btn").click()
     menu.get_by_role("menuitem", name="Unpin").click()
     page.wait_for_url("**/tasks?list=shop")
-    expect(page.locator(".tasks-place-pin")).to_have_count(0)
+    expect(page.locator(".tasks-place-pinned")).to_have_count(0)
     expect(labels).to_have_text(["My tasks", "Inbox", "shop"])
 
 
@@ -5901,7 +5901,7 @@ def test_settings_dialog_changes_the_lists_settings_and_the_pages(page, wiki):
     assert '{"name": "shop", "view": "open", "limit": "6", "keep": "1"' in text and '"pinned": []' in text
     assert wiki.read("shopping") == before[1]                        # the page keeps its own tab
     expect(page.locator("#tasks-tabs [aria-selected='true']")).to_have_text(["To buy"])
-    expect(page.locator(".tasks-place-pin")).to_have_count(0)
+    expect(page.locator(".tasks-place-pinned")).to_have_count(0)
 
 
 def test_plan_default_and_all_tasks_settings(page, wiki):

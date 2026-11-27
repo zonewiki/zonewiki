@@ -71,11 +71,16 @@
     js/listsrow.js, which also closes More, filters it and marks lists new
     to this browser). */}}
 {{- if .More}}<nav class="tasks-places" aria-label="Task lists"{{if and .Menu .Write}} data-reorder{{end}}><div class="tasks-places-group">
-{{- range .Places}}<a href="{{.Href}}" class="tasks-place" data-place="{{.Key}}" title="{{.Title}}{{if .Private}} (only you see it){{end}}{{with .Group}} (the group {{.}}'s: only its members see it){{end}}"{{if .Current}} aria-current="page"{{end}}>
-{{- if .Pinned}}<span class="tasks-place-pin" aria-hidden="true">{{template "icon_pin"}}</span>{{end}}
-{{- /* Whose it is, as on a page: a lock for what is yours alone, people for what is some's. */}}
-{{- if .Private}}<span class="tasks-place-lock" aria-hidden="true">{{template "icon_lock"}}</span>{{end}}{{if .Group}}<span class="tasks-place-lock tasks-place-for" aria-hidden="true">{{template "icon_people"}}</span>{{end}}<span class="tasks-place-label">{{.Label}}</span>{{template "module_counts" .Counts}}</a>
+{{- /* The views first (My tasks, Updates, the Inbox: each with its icon, drawn
+    by tasks.css from data-place, as in the column), a rule, then the lists:
+    the pins and More. */}}
+{{- $rule := false}}
+{{- range .Places}}{{if and .Pinned (not $rule)}}{{$rule = true}}<span class="tasks-places-rule" aria-hidden="true"></span>{{end -}}
+<a href="{{.Href}}" class="tasks-place{{if .Pinned}} tasks-place-pinned{{else}} tasks-place-view{{end}}" data-place="{{.Key}}" title="{{.Title}}{{if .Private}} (only you see it){{end}}{{with .Group}} (the group {{.}}'s: only its members see it){{end}}"{{if .Current}} aria-current="page"{{end}}>
+{{- /* Whose a list is, as on a page: a lock for what is yours alone, people for what is some's (the Inbox, always yours, has its tray). */}}
+{{- if and .Private .Pinned}}<span class="tasks-place-lock" aria-hidden="true">{{template "icon_lock"}}</span>{{end}}{{if .Group}}<span class="tasks-place-lock tasks-place-for" aria-hidden="true">{{template "icon_people"}}</span>{{end}}<span class="tasks-place-label">{{.Label}}</span>{{template "module_counts" .Counts}}</a>
 {{- end}}
+{{- if not $rule}}<span class="tasks-places-rule" aria-hidden="true"></span>{{end}}
 {{- with .More}}<details class="lists-more"><summary class="tasks-place lists-more-btn" title="{{if .Current}}{{.Label}}: one of the lists you haven't pinned and all tasks{{else}}The lists you haven't pinned, and all tasks{{end}}"{{if .Current}} aria-current="page"{{end}}><span class="tasks-place-label">{{.Label}}</span><span class="lists-more-caret" aria-hidden="true">▾</span></summary>
 <div class="lists-more-panel">
 {{- if .Filter}}<input type="search" class="lists-more-filter" placeholder="Find a list…" aria-label="Find a list" autocomplete="off" spellcheck="false">{{end}}

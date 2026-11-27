@@ -98,7 +98,7 @@ def test_its_members_see_it(client, wiki, member):
     assert f"<h1>List: {LIST}" in page and "The group hiring's list: only its members see it" in page and "(alice, carol)" in page
     # A pill of who made it (pinned for them), under More for the others.
     row = client.get("/tasks", headers=HOST).get_data(as_text=True)
-    assert (f'class="tasks-place" data-place="list:{LIST}"' if member == "alice" else f'class="lists-more-item" data-list="{LIST}"') in row
+    assert (f'class="tasks-place tasks-place-pinned" data-place="list:{LIST}"' if member == "alice" else f'class="lists-more-item" data-list="{LIST}"') in row
     titles = [t["title"] for t in client.get("/api/tasks", headers=HOST).get_json()]
     assert f"Offer for the {SECRET}" in titles and "Order chairs" in titles
     assert SECRET in client.get("/search", query_string={"q": SECRET}, headers=HOST).get_data(as_text=True)
@@ -443,7 +443,7 @@ def test_a_groups_list_needs_users_and_a_group_you_are_in(client, git_wiki_dir, 
 def places(client):
     """The switcher as the Tasks page has it: (the pills' keys, More's heads and lists in order)."""
     html = client.get("/tasks", headers=HOST).get_data(as_text=True)
-    pills = re.findall(r'class="tasks-place" data-place="([^"]+)"', html)
+    pills = re.findall(r'class="tasks-place tasks-place-(?:view|pinned)" data-place="([^"]+)"', html)
     more = re.findall(r'class="lists-more-head">([^<]+)<|class="lists-more-item" data-list="([^"]+)"', html)
     return pills, [head or name for head, name in more]
 

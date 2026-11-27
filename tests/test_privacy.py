@@ -1565,7 +1565,7 @@ def test_the_inbox_is_a_pill_and_a_view(bob, wiki):
     assert places[:3] == ["mine", "updates", "inbox"]
     pill = page.split('data-place="inbox"', 1)[1].split("</a>", 1)[0]
     assert 'aria-current="page"' in pill and "(only you see it)" in pill and ">Inbox<" in pill
-    assert '<a href="/tasks?list=inbox" class="tasks-place" data-place="inbox"' in page
+    assert '<a href="/tasks?list=inbox" class="tasks-place tasks-place-view" data-place="inbox"' in page
     assert "<h1>Inbox" in page and "Your Inbox: only you see its tasks" in page
     assert "New tasks land here, and only you see them." in page
     assert 'data-init-list="inbox"' in page

@@ -9,7 +9,7 @@ from datetime import date
 
 from playwright.sync_api import expect
 
-from conftest import SCREENSHOT_DIR, TABLET, box_of, list_page, make_list
+from conftest import PHONE, SCREENSHOT_DIR, TABLET, box_of, list_page, make_list
 
 BIG = {"width": 1600, "height": 900}
 
@@ -124,6 +124,40 @@ def test_the_column_comes_at_1024px_before_the_pages_side_columns(new_page, wiki
     page.set_viewport_size({"width": 1023, "height": 800})
     expect(rail).to_be_hidden()
     expect(page.locator(".tasks-places")).to_be_visible()
+
+
+def test_the_rows_views_have_their_icons_and_a_rule_after_them(new_page, wiki):
+    # On a phone the row says which pills are views and which are lists:
+    # My tasks and the Inbox start with the column's icons, a hairline
+    # follows them, and a pinned list is its name alone (no pin glyph).
+    page = new_page(viewport=PHONE)
+    make_list(page, "shop", pin=True)
+    page.goto("/tasks?mine=1")
+    row = page.locator(".tasks-places")
+    expect(row.locator(".tasks-place .tasks-place-label")).to_have_text(["My tasks", "Inbox", "shop", "More"])
+    icon = lambda sel: row.locator(sel).evaluate(
+        "el => { const s = getComputedStyle(el, '::before');"
+        " return [s.content, s.maskImage || s.webkitMaskImage, parseFloat(s.width), parseFloat(s.height)]; }")
+    mine, inbox, shop = (icon(f'[data-place="{key}"]') for key in ("mine", "inbox", "list:shop"))
+    for content, mask, w, h in (mine, inbox):
+        assert content == '""' and mask.startswith('url("data:image/svg+xml') and w == h and 10 <= w <= 16, (mine, inbox)
+    assert mine[1] != inbox[1], (mine, inbox)
+    assert shop[0] in ("none", "normal"), shop                    # a list: no icon
+    expect(row.locator('[data-place="list:shop"] svg')).to_have_count(0)
+    # The icon sits before the name, in the pill.
+    pill, label = box_of(row.locator('[data-place="inbox"]')), box_of(row.locator('[data-place="inbox"] .tasks-place-label'))
+    assert label["x"] - pill["x"] >= 13 + 8, (pill, label)
+    # One rule, between the Inbox and the first list, thin and visible.
+    rule = row.locator(".tasks-places-rule")
+    expect(rule).to_have_count(1)
+    r, before, after = box_of(rule), box_of(row.locator('[data-place="inbox"]')), box_of(row.locator('[data-place="list:shop"]'))
+    assert before["x"] + before["width"] <= r["x"] and r["x"] + r["width"] <= after["x"], (before, r, after)
+    assert r["width"] == 1 and 10 <= r["height"] <= before["height"], r
+    page.screenshot(path=str(SCREENSHOT_DIR / "pills-views-phone.png"))
+    # Without a pin the rule is before More.
+    page.request.post("/tasks/pin-list", form={"list": "shop", "pin": "0"})
+    page.goto("/tasks?mine=1")
+    assert rule.evaluate("el => [el.previousElementSibling.dataset.place, el.nextElementSibling.className]") == ["inbox", "lists-more"]
 
 
 def test_the_row_is_one_line_that_fades_where_it_goes_on(new_page, wiki):

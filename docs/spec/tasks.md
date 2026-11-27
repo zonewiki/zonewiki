@@ -1705,10 +1705,14 @@ on the page's white sheet with it, looking as the module switcher at the top of 
 **My tasks is the first pill, with users Updates the second, then the Inbox; a pinned list is a pill; a list that isn't pinned is under More.**
 In order: **My tasks** (above), whenever there is a row;
 **Updates** (`data-place="updates"`; with users, not in sharing mode: `hasUpdates`; tooltip "News on your tasks: given to you, commented, mentioned, closed"; Updates);
-**Inbox** (`data-place="inbox"`; for who has one, `hasInbox`: with a lock with users; tooltip "Inbox: new tasks land here");
+**Inbox** (`data-place="inbox"`; for who has one, `hasInbox`; tooltip "Inbox: new tasks land here", with users "… (only you see it)");
 then **the pinned lists** in their order,
 then **More ▾**.
-The pinned lists carry a pin (`.tasks-place-pin`, tooltip "Pinned list #<name>"), a private list a lock (tooltip "… (only you see it)").
+**The row says which pills are views and which are lists**: My tasks, Updates and the Inbox each start with their icon, the left column's (a person, a bell, a tray; `.tasks-place-view`, drawn by `tasks.css` from `data-place`),
+a hairline follows them (`.tasks-places-rule`),
+and the lists come after it: the pins (`.tasks-place-pinned`, tooltip "Pinned list #<name>"), each its name alone, and More.
+A pinned list has no pin on its pill (what stands after the rule and before More is pinned, as the column's **Pinned** heading says it); a private one has a lock (tooltip "… (only you see it)"), a group's the people icon.
+The Inbox, always yours, has its tray and no lock, as in the column.
 
 The heading names what is shown: **List: <name>** (with 🔒 for a private one), **My tasks**, **Updates**, **Inbox** or **All tasks** (the window's title likewise).
 Every list's pill or link goes to `/tasks?list=<ref>`: the list with its settings,
@@ -1772,7 +1776,7 @@ It keeps one rhythm: every line as high, the same room before each group and hea
 the names start in one line, with no pin (the heading says it), and a list's lock or people after its name (the Inbox, always yours, has none there).
 **Every line starts with a small icon**, so the column reads as places at a glance: a person for My tasks, a bell for Updates, a tray for the Inbox, a stack for All tasks, and for every list the list icon its chip has (A list on screen);
 in the text's colour and faint, stronger on the current line and under the mouse (masks in CSS, `.lists-rail-item::before`, `--rail-icon`; nothing in the HTML).
-The row of pills has none: a pill is its name.
+The row of pills has the views' icons alone (a list's pill is its name): The list switcher, above.
 My tasks, Updates, the Inbox and the pins carry the pills' counts, kept current with them (`js/chrome.js` refreshes `.lists-rail-place` by `data-place` too); the other lists none, as under More.
 The pins can be dragged up and down with the mouse, for who may pin, as the pills can (Dragging the pills).
 A list new to this browser has "new" beside its name there as under More, and counts as seen once the column has shown it (More then gets no dot).

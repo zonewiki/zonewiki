@@ -245,7 +245,7 @@ def test_leave_out_of_my_tasks_is_a_setting_of_your_own_lists(alice, wiki):
     facts = alice.locator(".tasks-list-facts")
     expect(facts).to_have_text("Left out of My tasks.")
     expect(facts.locator("a")).to_have_attribute("href", "/tasks?mine=1")
-    expect(alice.locator('.tasks-place[data-place="list:someday"] .tasks-place-pin')).to_have_count(1)
+    expect(alice.locator('.tasks-place-pinned[data-place="list:someday"]')).to_have_count(1)
     expect(card(alice, "Learn the oboe")).to_be_visible()
     expect(link.locator(".module-due")).to_have_text("1")
     expect(alice.locator('.tasks-place[data-place="mine"] .module-due')).to_have_text("1")

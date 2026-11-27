@@ -40,7 +40,8 @@
 /* The task list switcher (tasks_page.html .tasks-places): on /tasks, on the sheet above
    the heading, a row of pills, one per list (My tasks, the Inbox and the pinned lists
    first, then More: the others A–Z and All tasks, in a panel), the current one shaded as in the module switcher;
-   pinned lists with a pin, private ones with a lock. Shown below 1024px
+   the views (My tasks, Updates, the Inbox) each with its icon, a rule after them,
+   then the pinned lists, private ones with a lock. Shown below 1024px
    (style.css: from there the lists are the left column). */
 /* It looks as the module switcher at the top of the page does (style.css,
    .module-group): one white capsule with a border holding the pills, which
@@ -83,7 +84,17 @@
 /* One number on a pill: what is due there (My tasks also what is new for
    you). The Focus count is the Tasks link's: the day's load. */
 .tasks-place .module-focus { display: none; }
-.tasks-place-lock, .tasks-place-pin { display: inline-flex; }
+.tasks-place-lock { display: inline-flex; }
+/* The views' icons, the column's (--rail-icon, below), before the name; and
+   the rule between the views and the lists: a hairline in the capsule. */
+.tasks-place-view::before {
+  content: ""; flex: none; width: 13px; height: 13px; margin-right: -.1rem;
+  background: currentColor; opacity: .7;
+  -webkit-mask: var(--rail-icon) center / contain no-repeat;
+  mask: var(--rail-icon) center / contain no-repeat;
+}
+.tasks-place-view:hover::before, .tasks-place-view[aria-current]::before { opacity: 1; }
+.tasks-places-rule { flex: none; align-self: stretch; width: 1px; margin: .3rem; background: var(--border); }
 /* More: a details whose summary is the row's last pill and whose panel hangs
    under it: links, a line each; a filter field over them when there are many
    (js/listsrow.js). The row, not More, places the panel (the pills' line
@@ -177,9 +188,9 @@
   mask: var(--rail-icon, var(--list-icon)) center / contain no-repeat;
 }
 .lists-rail-item:hover::before, .lists-rail-item[aria-current]::before { opacity: .8; }
-.lists-rail-item[data-place="mine"] { --rail-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='8' cy='5.25' r='2.5'/%3E%3Cpath d='M3 13.5c0-2.6 2.2-4.25 5-4.25s5 1.65 5 4.25'/%3E%3C/svg%3E"); }
-.lists-rail-item[data-place="updates"] { --rail-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4.5 11V7.5a3.5 3.5 0 0 1 7 0V11l1 1.5h-9z'/%3E%3Cpath d='M6.75 14.25a1.4 1.4 0 0 0 2.5 0'/%3E%3C/svg%3E"); }
-.lists-rail-item[data-place="inbox"] { --rail-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.5 9.5 4.5 3.5h7l2 6v3h-11z'/%3E%3Cpath d='M2.5 9.5h3.2a2.3 2.3 0 0 0 4.6 0h3.2'/%3E%3C/svg%3E"); }
+:is(.lists-rail-item, .tasks-place-view)[data-place="mine"] { --rail-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='8' cy='5.25' r='2.5'/%3E%3Cpath d='M3 13.5c0-2.6 2.2-4.25 5-4.25s5 1.65 5 4.25'/%3E%3C/svg%3E"); }
+:is(.lists-rail-item, .tasks-place-view)[data-place="updates"] { --rail-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4.5 11V7.5a3.5 3.5 0 0 1 7 0V11l1 1.5h-9z'/%3E%3Cpath d='M6.75 14.25a1.4 1.4 0 0 0 2.5 0'/%3E%3C/svg%3E"); }
+:is(.lists-rail-item, .tasks-place-view)[data-place="inbox"] { --rail-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.5 9.5 4.5 3.5h7l2 6v3h-11z'/%3E%3Cpath d='M2.5 9.5h3.2a2.3 2.3 0 0 0 4.6 0h3.2'/%3E%3C/svg%3E"); }
 .lists-rail-all { --rail-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 2.5 13.5 5.25 8 8 2.5 5.25z'/%3E%3Cpath d='M2.5 8 8 10.75 13.5 8'/%3E%3Cpath d='M2.5 10.75 8 13.5l5.5-2.75'/%3E%3C/svg%3E"); }
 .lists-rail-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lists-rail-mark { display: inline-flex; flex: none; color: var(--muted); opacity: .7; }

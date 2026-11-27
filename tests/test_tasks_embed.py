@@ -309,8 +309,10 @@ class TestListSwitcher:
         assert re.findall(r'href="([^"]+)"', nav) == ["/tasks?mine=1", "/tasks?list=inbox", "/tasks?list=task", "/tasks?list=gifts", "/tasks?list=shop", "/tasks"]
         assert 'title="List #shop"' in nav and 'title="Pinned list #task"' in nav
         assert 'title="Inbox: new tasks land here"' in nav and 'title="Every task but those of the lists left out of My tasks"' in nav
-        # The pinned list marked with a pin; My tasks, the Inbox and the others not. No pill has a plus.
-        assert re.findall(r'data-place="([^"]+)"[^>]*>(?:<span class="tasks-place-pin")', nav) == ["list:task"]
+        # The views are marked as views (their icons), the pinned list as a pin, one rule between them. No pill has a plus.
+        assert re.findall(r'class="tasks-place tasks-place-pinned" data-place="([^"]+)"', nav) == ["list:task"]
+        assert re.findall(r'class="(tasks-places-rule|tasks-place tasks-place-(?:view|pinned))"', nav) == [
+            "tasks-place tasks-place-view", "tasks-place tasks-place-view", "tasks-places-rule", "tasks-place tasks-place-pinned"]
         assert "tasks-place-first" not in nav
         assert "tasks-place-lock" not in nav   # without users nothing is private
         assert "lists-more-filter" not in nav  # a few lists: no field to find one
@@ -370,7 +372,9 @@ class TestListSwitcher:
         assert places(html) == [("mine", "My tasks", False), ("inbox", "Inbox", False)]
         assert more(html) == ("All tasks", True, [("/tasks?list=shop", "shop", False), ("/tasks", "All tasks", True)])
         # The Tasks link goes where it would without the pin: the view shown.
-        assert "tasks-place-pin" not in html and 'href="/tasks" class="module-link" data-module="tasks"' in html
+        assert "tasks-place-pinned" not in html and 'href="/tasks" class="module-link" data-module="tasks"' in html
+        # The rule after the views is there all the same, before More.
+        assert '</a><span class="tasks-places-rule" aria-hidden="true"></span><details class="lists-more">' in html
         # My tasks is every task all the same: a pin is a pill.
         line = self.get(client, "/tasks?mine=1").split('class="tasks-list-home tasks-mine-line">', 1)[1].split("</p>", 1)[0]
         assert line == "Every open task."
@@ -396,7 +400,7 @@ class TestListSwitcher:
                                 ("list:shop", "shop", False)]
         assert more(html) == ("More", False, [("/tasks?list=gifts", "gifts", False), ("/tasks", "All tasks", False)])
         nav = html.split('<nav class="tasks-places"', 1)[1].split("</nav>", 1)[0]
-        assert re.findall(r'data-place="([^"]+)"[^>]*>(?:<span class="tasks-place-pin")', nav) == ["list:task", "list:shop"]
+        assert re.findall(r'class="tasks-place tasks-place-pinned" data-place="([^"]+)"', nav) == ["list:task", "list:shop"]
         assert "<h1>My tasks</h1>" in html and "<title>My tasks" in html
         # Under the heading: what it holds, the lists left out each a link to the list.
         line = html.split('class="tasks-list-home tasks-mine-line">', 1)[1].split("</p>", 1)[0]
