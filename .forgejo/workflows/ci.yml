@@ -247,6 +247,15 @@ jobs:
           fi
           case "$GITHUB_REF" in
             refs/heads/main) git push publish "$sha:refs/heads/main" ;;
-            refs/tags/v*)    git push publish "$GITHUB_REF" ;;
+            refs/tags/v*)
+              # actions/checkout leaves a lightweight tag of its own in place
+              # of an annotated one, and the release's notes are the tag's
+              # message: fetch the tag as this repository has it.
+              git fetch -q --force origin "+$GITHUB_REF:$GITHUB_REF"
+              if [ "$(git cat-file -t "$GITHUB_REF")" != tag ]; then
+                echo "$GITHUB_REF is not an annotated tag: not pushing it." >&2
+                exit 1
+              fi
+              git push publish "$GITHUB_REF" ;;
           esac
           rm -f ~/.ssh/publish_key "$HOME/publish-check.sh"

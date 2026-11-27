@@ -519,7 +519,7 @@ What the job does, in order:
    A tag may name a commit the other repository has already, so it is pushed all the same.
 4. Runs `PUBLISH_CHECK` if there is one: a script of the operator's own that gets `BASE` (the other repository's main, empty when it has none) and `HEAD` (the commit pushed) and refuses the push by failing.
    It is a secret so that a rule that is one person's business stays out of the repository.
-5. Pushes.
+5. Pushes. A tag is fetched again from this repository first, since `actions/checkout` puts a lightweight tag of its own in place of an annotated one, and the release's notes are the tag's message; a tag that isn't annotated stops the job.
 
 The runs of the repository go one at a time (One run at a time, above), so two don't race for main.
 A pull request runs nothing of this: only a push to this repository starts the job, and secrets don't reach other repositories' pull requests.
