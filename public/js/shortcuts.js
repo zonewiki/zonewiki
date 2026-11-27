@@ -86,7 +86,7 @@ document.addEventListener('keydown', e => {
   // g-prefix navigation: gh=home, gn=Notes, ga=all tasks, gt=where the
   // Tasks link goes (My tasks, or the view /tasks showed last)
   // (/tasks in a wiki without lists), gp=your private home (with users: the Private
-  // pill).
+  // pill), gc=Changes.
   if (keyPrefix.key === 'g') {
     resetPrefix();
     const dest = { h: '/page/index', n: '/notes', a: '/tasks', t: tasksLinkHref() };
@@ -94,6 +94,8 @@ document.addEventListener('keydown', e => {
     // gg=your group's home (the list of them, with several): for who is in a group.
     const groups = document.querySelector('.module-link[data-module="groups"]');
     if (groups) dest.g = groups.getAttribute('href');
+    // gc=Changes: where the menu has it (git keeps the history).
+    if (document.querySelector('.menu-changes')) dest.c = '/changes';
     if (dest[e.key]) { e.preventDefault(); window.location.href = dest[e.key]; }
     return;
   }

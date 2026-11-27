@@ -412,6 +412,7 @@ type pageShell struct {
 	User        string // who is signed in, with users
 	Watches     bool   // they can watch pages: the menu has Watched pages
 	Watched     int    // how many watched pages have news for them (watchCount)
+	Changes     bool   // git keeps the wiki's history: the menu has Changes
 	Admin       bool   // they are an admin: the user menu offers Admin
 	Usage       bool   // they see the wiki's usage (seesUsage): the help dialog links to it
 	Viewer      bool   // they are a viewer: nothing to make (no New note, New task)
@@ -469,6 +470,7 @@ func page(w http.ResponseWriter, rq *Req, status int, name, title string, o shel
 	}
 	if sh.ShowActions {
 		sh.ModuleLinks = moduleLinks(rq)
+		sh.Changes = cfg.GitEnabled
 		if sh.Watches = mayWatch(rq.user) && cfg.GitEnabled; sh.Watches {
 			sh.Watched = rq.watchCount()
 		}

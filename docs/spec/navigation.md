@@ -177,17 +177,20 @@ Your other lists and all tasks are one click from there, in the task app's **lis
 
 ### The user menu
 
-Who is signed in,
-**Settings** (the settings pages, below),
-**Admin** (admins; Managing users in `docs/spec/users.md`),
-**Watched pages** (with users: the changes to what you watch, with how many pages have news; Watching pages, below),
-**Sharing mode** (`.menu-sharing`, **Turn sharing mode off** while it is on; desktop only, see Sharing mode),
-**Help** (the manual, `/help`: Help in `docs/spec/routes.md`) and Sign out are in the **user menu**,
-opened by the **user button** at the top right, a round initial, on every screen.
-On a phone it is at the right end of the breadcrumb's row and opens the same menu, as a sheet from the bottom edge, without Sharing mode (a desktop's): Settings, Admin, Help and Sign out are there, and nothing of them in a row of the page's own (Top actions, below).
+The **user menu**, opened by the **user button** at the top right, a round initial, on every screen, has who is signed in, then its items in groups, a line between them (`.task-menu-sep`, as in a task's ⋯ menu):
+
+1. what changed: **Changes** (`/changes`, **g c**; with git: Version history in `docs/spec/routes.md`) and **Watched pages** (with users: the changes to what you watch, with how many pages have news; Watching pages, below);
+2. the settings: **Settings** (the settings pages, below) and **Admin** (admins; Managing users in `docs/spec/users.md`);
+3. **Sharing mode** (`.menu-sharing`, **Turn sharing mode off** while it is on; desktop only, see Sharing mode) and **Help** (the manual, `/help`: Help in `docs/spec/routes.md`);
+4. **Sign out**.
+
+A group with nothing in it is left out, with its line (no git: no Changes and no Watched pages).
+An item with a shortcut shows its key at its right where there is a keyboard (`data-key`, as a task's menu does, no part of its name): **g c**, **S**, **?**.
+On a phone it is at the right end of the breadcrumb's row and opens the same menu, as a sheet from the bottom edge, without Sharing mode (a desktop's): Changes, Settings, Admin, Help and Sign out are there, and nothing of them in a row of the page's own (Top actions, below).
 
 **A wiki without users has the menu too**, so that what is about the wiki has one place in every wiki:
 three lines (`.top-menu`, "Menu") stand where the user button would, and open
+**Changes** (with git),
 **Settings** (when it has a password),
 **Sharing mode**, **Help**, and **Sign out** when there is a password.
 A wiki that asks for no login has one settings page, so its menu names it, **Connect an assistant** (the wiki's token), and has **Set a login** after it (the first run's form, `/setup`;
@@ -564,6 +567,7 @@ Bare-key shortcuts are suppressed when focus is inside an `input`, `textarea`, `
 | **g** then **n** | anywhere | Navigate: Notes |
 | **g** then **a** | anywhere | Navigate: all tasks (`/tasks`) |
 | **g** then **t** | anywhere | Navigate: Tasks (its home) |
+| **g** then **c** | anywhere | Navigate: Changes (with git; the user menu's **Changes**) |
 | **g** then **p** | anywhere | Navigate: your private home (with users) |
 | **g** then **g** | anywhere | Navigate: your group's home, or the list of your groups (in a group) |
 | **c** then **n** | anywhere | Create: note |

@@ -151,7 +151,7 @@ class TestLogin:
         assert body.count('class="top-user top-menu module-menu-btn"') == 1 and "signout-user" not in body
         assert body.count('action="/logout"') == 1 and 'action="/logout" class="menu-signout"' in body
         menu = body.split('class="module-menu page-menu"', 1)[1].split("</div>", 1)[0]
-        assert re.findall(r'href="([^"]*)"', menu) == ["/assistant", "/help"] and ">Settings</a>" in menu   # Change password: a tab of Settings
+        assert re.findall(r'href="([^"]*)"', menu) == ["/changes", "/assistant", "/help"] and ">Settings</a>" in menu   # Change password: a tab of Settings
         assert 'action="/logout"' in menu and ">Sign out</button>" in menu and "menu-sharing" in menu
 
 
@@ -468,7 +468,7 @@ class TestModuleMenu:
         assert '>A</span><span class="top-user-new"' in top and 'title="alice"' in top and 'aria-haspopup="menu" aria-expanded="false"' in top
         assert body.count('class="module-menu page-menu"') == 1 and 'module-menu' not in bar
         menu = body.split('class="module-menu page-menu"', 1)[1].split("</div></div>", 1)[0]
-        assert re.findall(r'href="([^"]*)"', menu) == ["/assistant", "/changes?watched=1", "/help"]
+        assert re.findall(r'href="([^"]*)"', menu) == ["/changes", "/changes?watched=1", "/assistant", "/help"]
         assert 'Signed in as <strong>alice</strong>' in menu and 'action="/logout"' in menu and ">Sign out</button>" in menu
 
     def test_a_private_list_is_in_its_users_switcher_alone(self, client, wiki_dir, users):
@@ -511,7 +511,7 @@ class TestModuleMenu:
         assert body.count('class="module-menu page-menu"') == 1 and "module-menu" not in bar
         menu = body.split('class="module-menu page-menu"', 1)[1].split("</div>", 1)[0]
         assert 'aria-label="Menu"' in menu
-        assert re.findall(r'href="([^"]*)"', menu) == ["/assistant", "/help/self-hosting#setting-a-login", "/help"]
+        assert re.findall(r'href="([^"]*)"', menu) == ["/changes", "/assistant", "/help/self-hosting#setting-a-login", "/help"]
         assert "menu-sharing" in menu and "Signed in as" not in menu and "/logout" not in body
         # Phones: the same three lines, the same button.
         assert "signout-" not in body and body.count("module-menu-btn") == 1

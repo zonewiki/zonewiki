@@ -673,7 +673,7 @@ def test_desktop_sign_out_is_in_the_menu_without_users(page, wiki, monkeypatch):
     page.locator(".top-actions .top-menu").click()
     menu = page.locator(".module-menu")
     expect(menu.locator('[role="menuitem"]')).to_have_text(
-        ["Settings", "Sharing mode", "Help", "Sign out"])
+        ["Changes", "Settings", "Sharing mode", "Help", "Sign out"])
     menu.get_by_role("menuitem", name="Sign out").click()
     page.wait_for_url("**/login**")
 
@@ -808,7 +808,7 @@ def test_sign_out_is_in_the_menu_on_a_phone(new_page, wiki, monkeypatch):
     expect(phone.get_by_role("button", name="Sign out")).to_be_hidden()
     phone.locator(".top-user").tap()
     menu = phone.locator(".module-menu")
-    expect(menu.locator('[role="menuitem"]:visible')).to_have_text(["Settings", "Help", "Sign out"])
+    expect(menu.locator('[role="menuitem"]:visible')).to_have_text(["Changes", "Settings", "Help", "Sign out"])
     menu.get_by_role("menuitem", name="Sign out").tap()
     phone.wait_for_url("**/login**")
 
@@ -870,7 +870,7 @@ def test_three_lines_open_the_menu_on_a_phone_without_users(new_page, wiki):
     opener.tap()
     menu = phone.locator(".module-menu")
     expect(menu).to_be_visible()
-    expect(menu.locator('[role="menuitem"]:visible')).to_have_text(["Connect an assistant", "Set a login", "Help"])
+    expect(menu.locator('[role="menuitem"]:visible')).to_have_text(["Changes", "Connect an assistant", "Set a login", "Help"])
     box = box_of(menu)
     assert box["x"] >= 0 and box["x"] + box["width"] <= phone.viewport_size["width"]
     menu.get_by_role("menuitem", name="Connect an assistant").tap()
@@ -888,7 +888,7 @@ def test_the_user_button_opens_the_account_menu_on_a_phone(new_page, wiki, monke
     phone.request.post("/login", form={"username": "bob", "password": "bob-pw"})
     phone.goto("/page/index")
     phone.locator(".top-user").tap()
-    expect(phone.locator('.module-menu:not(.groups-menu) [role="menuitem"]:visible')).to_have_text(["Settings", "Watched pages", "Help", "Sign out"])   # no admin: no Admin
+    expect(phone.locator('.module-menu:not(.groups-menu) [role="menuitem"]:visible')).to_have_text(["Changes", "Watched pages", "Settings", "Help", "Sign out"])   # no admin: no Admin
     phone.request.post("/logout")
     phone.request.post("/login", form={"username": "alice", "password": "pw"})   # an admin
     phone.goto("/page/index")
@@ -900,7 +900,7 @@ def test_the_user_button_opens_the_account_menu_on_a_phone(new_page, wiki, monke
     menu = phone.locator(".module-menu:not(.groups-menu)")
     expect(menu).to_be_visible()
     expect(menu.locator(".menu-who")).to_have_text("Signed in as alice")
-    expect(menu.locator('[role="menuitem"]:visible')).to_have_text(["Settings", "Watched pages", "Admin", "Help", "Sign out"])
+    expect(menu.locator('[role="menuitem"]:visible')).to_have_text(["Changes", "Watched pages", "Settings", "Admin", "Help", "Sign out"])
     box = box_of(menu)   # a sheet at the bottom, as a phone's menus are
     assert box["x"] >= 0 and box["x"] + box["width"] <= phone.viewport_size["width"]
     assert box["y"] + box["height"] <= phone.viewport_size["height"] + 1

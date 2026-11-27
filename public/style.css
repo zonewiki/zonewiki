@@ -1331,11 +1331,18 @@ main > .sheet > h2 { font-family: var(--serif); font-size: 1.45rem; font-weight:
 .module-menu-backdrop[hidden], .module-menu[hidden] { display: none !important; }
 .module-menu .menu-icon { margin-right: .5rem; }
 .groups-menu .groups-menu-all { margin-top: .2rem; padding-top: .5rem; border-top: 1px solid var(--border); border-radius: 0 0 4px 4px; color: var(--muted); }
-/* Who is signed in, and Sign out last, under a rule. */
+/* Who is signed in, over a rule; the groups below with a line between
+   them (.task-menu-sep), Sign out last. */
 .module-menu .menu-who { padding: .35rem .8rem .45rem; font-size: .8rem; color: var(--muted); border-bottom: 1px solid var(--border); margin-bottom: .2rem; }
 .module-menu .menu-who strong { color: var(--fg); }
-.module-menu .menu-signout { margin: .2rem 0 0; padding-top: .2rem; border-top: 1px solid var(--border); }
+.module-menu .menu-signout { margin: 0; }
 .module-menu .menu-signout button { width: 100%; }
+/* An item's shortcut at its right, where there is a keyboard, as in a
+   task's menu (no part of the item's name). */
+@media (hover: hover) and (pointer: fine) {
+  .module-menu [data-key] { display: flex; justify-content: space-between; align-items: baseline; gap: 1.5rem; }
+  .module-menu [data-key]::after { content: attr(data-key) / ""; color: var(--muted); font-size: .75rem; }
+}
 .module-menu a[aria-current] { font-weight: 600; }
 /* The editor keeps its focus: the logo only, as the way home. */
 .editor-page .module-link:not([data-module="wiki"]),

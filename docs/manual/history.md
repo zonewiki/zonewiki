@@ -58,7 +58,7 @@ Nothing is thrown away: the page as it was before the restore stays in its histo
 ## Changes across the wiki
 
 **Changes** lists what changed in the whole wiki, newest first, grouped by day.
-Open it from the search dialog (Ctrl+P, where it's listed above the pages), or with **Changes across the wiki** on any page's history.
+Open it from the menu at the top right (your initial, or the three lines), with **g** then **c**, from the search dialog (Ctrl+P, where it's listed above the pages), or with **Changes across the wiki** on any page's history.
 
 Each row shows:
 

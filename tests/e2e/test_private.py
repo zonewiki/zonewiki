@@ -30,8 +30,14 @@ def test_the_menu_opens_by_click_and_closes_on_escape(alice):
     btn.click()
     expect(menu).to_be_visible()
     expect(btn).to_have_attribute("aria-expanded", "true")
-    expect(menu.get_by_role("menuitem")).to_have_text(["Settings", "Watched pages", "Sharing mode", "Help", "Sign out"])
+    expect(menu.get_by_role("menuitem")).to_have_text(["Changes", "Watched pages", "Settings", "Sharing mode", "Help", "Sign out"])
     expect(menu.locator(".menu-who")).to_have_text("Signed in as alice")
+    # In groups, a line between them, as in a task's menu: what changed,
+    # the settings, Sharing mode and Help, Sign out.
+    expect(menu.locator("hr.task-menu-sep")).to_have_count(3)
+    # A shortcut at its item's right, no part of its name.
+    expect(menu.locator(".menu-changes")).to_have_attribute("data-key", "g c")
+    assert menu.locator(".menu-changes").evaluate("e => getComputedStyle(e, '::after').content").startswith('"g c"')
     # The first item has the focus; it sits under the button.
     expect(menu.get_by_role("menuitem").first).to_be_focused()
     b, m = box_of(btn), box_of(menu)
@@ -54,9 +60,11 @@ def test_the_menu_works_from_the_keyboard_and_closes_on_a_click_elsewhere(alice)
     btn.focus()
     alice.keyboard.press("ArrowDown")
     expect(menu).to_be_visible()
-    expect(menu.get_by_role("menuitem", name="Settings")).to_be_focused()
+    expect(menu.get_by_role("menuitem", name="Changes")).to_be_focused()
     alice.keyboard.press("ArrowDown")
     expect(menu.get_by_role("menuitem", name="Watched pages")).to_be_focused()
+    alice.keyboard.press("ArrowDown")
+    expect(menu.get_by_role("menuitem", name="Settings")).to_be_focused()
     alice.keyboard.press("ArrowDown")
     expect(menu.get_by_role("menuitem", name="Sharing mode")).to_be_focused()
     alice.keyboard.press("ArrowDown")
@@ -231,7 +239,8 @@ def test_without_users_the_menu_is_at_the_top_right(page, wiki):
     btn.click()
     expect(menu).to_be_visible()
     expect(btn).to_have_attribute("aria-expanded", "true")
-    expect(menu.locator('[role="menuitem"]')).to_have_text(["Connect an assistant", "Set a login", "Sharing mode", "Help"])
+    expect(menu.locator('[role="menuitem"]')).to_have_text(["Changes", "Connect an assistant", "Set a login", "Sharing mode", "Help"])
+    expect(menu.locator("hr.task-menu-sep")).to_have_count(2)   # no Sign out: no line before it
     page.keyboard.press("Escape")
     expect(menu).to_be_hidden()
     btn.click()
@@ -242,6 +251,16 @@ def test_without_users_the_menu_is_at_the_top_right(page, wiki):
     page.locator(".module-menu").get_by_role("menuitem", name="Set a login").click()
     page.wait_for_url("**/help/self-hosting#setting-a-login")
     expect(page.locator("#setting-a-login")).to_be_visible()
+
+
+def test_the_menu_and_g_c_open_changes(page, wiki):
+    page.goto("/page/index")
+    page.locator(".top-actions .top-menu").click()
+    page.locator(".module-menu").get_by_role("menuitem", name="Changes").click()
+    page.wait_for_url("**/changes")
+    page.goto("/page/index")
+    page.keyboard.press("g"); page.keyboard.press("c")
+    page.wait_for_url("**/changes")
 
 
 def test_without_users_sharing_mode_is_in_the_menu(page, wiki):

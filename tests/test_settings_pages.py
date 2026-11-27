@@ -60,11 +60,11 @@ class TestWithUsers:
 
     def test_the_menu_has_settings_for_the_three_pages(self, client, users):
         entries = menu(body(login(client, "bob"), "/page/index"))
-        assert entries == [("/assistant", "Settings"), ("/changes?watched=1", "Watched pages"), ("", "Sharing mode"),
-                           ("/help", "Help"), ("", "Sign out")]
+        assert entries == [("/changes", "Changes"), ("/changes?watched=1", "Watched pages"), ("/assistant", "Settings"),
+                           ("", "Sharing mode"), ("/help", "Help"), ("", "Sign out")]
         # An admin's has Admin too, an entry of its own.
         entries = menu(body(login(client, "alice"), "/page/index"))
-        assert entries[:3] == [("/assistant", "Settings"), ("/changes?watched=1", "Watched pages"), ("/admin", "Admin")]
+        assert entries[:4] == [("/changes", "Changes"), ("/changes?watched=1", "Watched pages"), ("/assistant", "Settings"), ("/admin", "Admin")]
 
     @pytest.mark.parametrize("path, label, heading", [
         ("/assistant", "Assistant", "Connect an assistant"),
@@ -106,7 +106,7 @@ class TestWithUsers:
         login(client, "demo")
         text = body(client, "/assistant")
         assert tabs(text) == ([("/assistant", "Assistant"), ("/groups", "Groups")], "Assistant")
-        assert menu(text)[0] == ("/assistant", "Settings")
+        assert menu(text)[2] == ("/assistant", "Settings")
         # Its password page, opened by its address, says why, under the tabs it has.
         assert tabs(body(client, "/password")) == ([("/assistant", "Assistant"), ("/groups", "Groups")], None)
 
@@ -119,7 +119,7 @@ class TestWithoutUsers:
         three = [("/assistant", "Assistant"), ("/password", "Password"), ("/usage", "Usage")]
         text = body(client, "/assistant")
         assert tabs(text) == (three, "Assistant")
-        assert menu(text) == [("/assistant", "Settings"), ("", "Sharing mode"), ("/help", "Help"), ("", "Sign out")]
+        assert menu(text) == [("/changes", "Changes"), ("/assistant", "Settings"), ("", "Sharing mode"), ("/help", "Help"), ("", "Sign out")]
         assert tabs(body(client, "/password")) == (three, "Password")
         assert tabs(body(client, "/usage")) == (three, "Usage")
 
@@ -127,7 +127,7 @@ class TestWithoutUsers:
         text = body(client, "/assistant")
         assert tabs(text) == ([], None)
         entries = menu(text)
-        assert entries[0] == ("/assistant", "Connect an assistant") and entries[1][1] == "Set a login"
+        assert entries[0] == ("/changes", "Changes") and entries[1] == ("/assistant", "Connect an assistant") and entries[2][1] == "Set a login"
         assert "Settings" not in [label for _, label in entries]
         assert crumbs(text) == ["Assistant"]
         # Usage is a page by its address, which the help dialog links to.

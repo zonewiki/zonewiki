@@ -24,6 +24,9 @@
           <dt><kbd>n</kbd></dt><dd>Notes</dd>
           <dt><kbd>t</kbd></dt><dd>Tasks (My tasks)</dd>
           <dt><kbd>a</kbd></dt><dd>All tasks</dd>
+          {{- if .Changes}}
+          <dt><kbd>c</kbd></dt><dd>Changes</dd>
+          {{- end}}
           {{- if .Users}}
           <dt><kbd>p</kbd></dt><dd>Your private home</dd>
           <dt><kbd>g</kbd></dt><dd>Your group's home <span class="sc-hint">(in a group)</span></dd>

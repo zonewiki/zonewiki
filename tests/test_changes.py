@@ -199,6 +199,11 @@ def test_where_it_is_found(client, wiki_dir):
     assert [p["title"] for p in listed[:2]] == ["Changes", "Deleted Pages"] and listed[0]["href"] == "/changes"
     assert 'href="/changes"' in client.get("/history/index", headers=HOST).get_data(as_text=True)
     assert 'href="/changes?assistant=1"' in client.get("/assistant", headers=HOST).get_data(as_text=True)
+    # The menu at the top right, its first group with Watched pages, and g c
+    # (docs/spec/navigation.md, The user menu).
+    page = client.get("/page/index", headers=HOST).get_data(as_text=True)
+    assert '<a href="/changes" role="menuitem" class="menu-changes" data-key="g c">Changes</a>' in page
+    assert "<dt><kbd>c</kbd></dt><dd>Changes</dd>" in page
 
 
 def test_without_git_there_is_no_such_page(client, wiki_dir, monkeypatch):
@@ -206,6 +211,10 @@ def test_without_git_there_is_no_such_page(client, wiki_dir, monkeypatch):
     assert client.get("/changes", headers=HOST).status_code == 404
     assert "Changes" not in [p["title"] for p in client.get("/api/pages-list", headers=HOST).get_json()]
     assert "/changes" not in client.get("/assistant", headers=HOST).get_data(as_text=True)
+    # Nor in the menu: its first group is gone with its line, and so is g c.
+    page = client.get("/page/index", headers=HOST).get_data(as_text=True)
+    assert "menu-changes" not in page and "<dd>Changes</dd>" not in page
+    assert 'aria-label="Menu" hidden><a href="/assistant"' in page
 
 
 # ── Which assistant ─────────────────────────────────────────────────────────
