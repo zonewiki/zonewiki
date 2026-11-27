@@ -673,7 +673,7 @@ def test_desktop_sign_out_is_in_the_menu_without_users(page, wiki, monkeypatch):
     page.locator(".top-actions .top-menu").click()
     menu = page.locator(".module-menu")
     expect(menu.locator('[role="menuitem"]')).to_have_text(
-        ["Changes", "Settings", "Sharing mode", "Help", "Sign out"])
+        ["Changes", "Settings", "Help", "Sign out"])
     menu.get_by_role("menuitem", name="Sign out").click()
     page.wait_for_url("**/login**")
 
@@ -881,7 +881,7 @@ def test_the_user_button_opens_the_account_menu_on_a_phone(new_page, wiki, monke
     """On a phone the account menu is behind the round user button, as on
     desktop: who is signed in, Settings (its Groups tab also for who is in
     none: that is where one is made), Admin for an admin, Help and Sign
-    out; not Sharing mode, a desktop's."""
+    out."""
     monkeypatch.setattr(settings, "USERS", {"alice": ("pw", ""), "bob": ("bob-pw", "")})
     monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"role": "admin"}})
     phone = new_page(**TOUCH_PHONE)

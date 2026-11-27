@@ -181,18 +181,18 @@ The **user menu**, opened by the **user button** at the top right, a round initi
 
 1. what changed: **Changes** (`/changes`, **g c**; with git: Version history in `docs/spec/routes.md`) and **Watched pages** (with users: every change to what you watch; which of them are news is on Updates; Watching pages, below);
 2. the settings: **Settings** (the settings pages, below) and **Admin** (admins; Managing users in `docs/spec/users.md`);
-3. **Sharing mode** (`.menu-sharing`, **Turn sharing mode off** while it is on; desktop only, see Sharing mode) and **Help** (the manual, `/help`: Help in `docs/spec/routes.md`);
+3. **Help** (the manual, `/help`: Help in `docs/spec/routes.md`);
 4. **Sign out**.
 
 A group with nothing in it is left out, with its line (no git: no Changes and no Watched pages).
-An item with a shortcut shows its key at its right where there is a keyboard (`data-key`, as a task's menu does, no part of its name): **g c**, **S**, **?**.
-On a phone it is at the right end of the breadcrumb's row and opens the same menu, as a sheet from the bottom edge, without Sharing mode (a desktop's): Changes, Settings, Admin, Help and Sign out are there, and nothing of them in a row of the page's own (Top actions, below).
+An item with a shortcut shows its key at its right where there is a keyboard (`data-key`, as a task's menu does, no part of its name): **g c**, **?**.
+On a phone it is at the right end of the breadcrumb's row and opens the same menu, as a sheet from the bottom edge: Changes, Settings, Admin, Help and Sign out are there, and nothing of them in a row of the page's own (Top actions, below).
 
 **A wiki without users has the menu too**, so that what is about the wiki has one place in every wiki:
 three lines (`.top-menu`, "Menu") stand where the user button would, and open
 **Changes** (with git),
 **Settings** (when it has a password),
-**Sharing mode**, **Help**, and **Sign out** when there is a password.
+**Help**, and **Sign out** when there is a password.
 A wiki that asks for no login has one settings page, so its menu names it, **Connect an assistant** (the wiki's token), and has **Set a login** after it (the first run's form, `/setup`;
 in a wiki open to the network on purpose the manual's section on it, `/help/self-hosting#setting-a-login`, since its login is set on the host: A login on purpose in `docs/spec/security.md`).
 No name: there is nobody.
@@ -214,7 +214,7 @@ The menu is one template (`module_menu` in `templates/partials/modules.html`) an
 
 Settings opens the first, Connect an assistant: the one a new user looks for.
 The breadcrumb of Connect an assistant, Change password and Usage says Settings; Groups is also the Groups module's page (The Groups pill), and keeps its own.
-Sharing mode, Help and Sign out are not settings and stay in the menu, as Admin does: it is about the wiki's people, not about you.
+Help and Sign out are not settings and stay in the menu, as Admin does: it is about the wiki's people, not about you.
 
 How it works: each tab is a page of its own at the address it always had, so a link to one, the back button and a browser without JavaScript need nothing new, and there is no `/settings` route.
 `settingsTabs` in `go/views.go` says which pages who asks has; the page shell carries them (`Settings`) for the menu, and the view that is one of them says which (`shell{settings: …}`, `SettingsTab`), for the row (`settings_tabs` in `templates/partials/settings_tabs.html`, the admin page's `.admin-tabs`).
@@ -248,7 +248,7 @@ in this order:
 - **Search** (`.top-search`, Ctrl+P), the one used most, as a labelled pill with its shortcut (`.top-search-key`, `⌘P` on a Mac), white on the paper like the module switcher's pills;
 - the menu's button: with users the user button, a round initial; without, three lines (The user menu).
 
-Sharing mode takes no room here while it is off: it is switched now and then, so the top row's place goes to Search, and the switch on is **S** and the user menu.
+Sharing mode takes no room here while it is off: it is switched now and then, so the top row's place goes to Search, and the switch on is **S**.
 There are no "new" buttons on desktop: a new note is `c n` (`openNewNote`), a new task `c t` (`openDefaultTask`); the row stays calm, and phones have both in the action bar.
 The pill and the chip have fixed widths, so the row's width (`--top-actions-w`, which the breadcrumb's padding and the status badges' position use) doesn't depend on the font; its border ends on the content's right edge.
 **On a phone (≤640px) only the last shows**, the menu's button (a visitor's **Sign in**), at the right end of the breadcrumb's row: Search is in the tab bar, and the Sharing chip is a desktop's.
@@ -475,10 +475,10 @@ A page deleted keeps its watch, for when it is restored.
 ## Sharing mode
 
 For sharing the screen: the page on screen stays as it is, everything that shows *other* pages around it is hidden, and pages not for sharing are left out entirely.
-Switched on by **S** (Shift+s; `toggleSharing` in `js/actions.js`) or **Sharing mode** in the menu at the top right (The user menu).
-While on, a thin amber bar runs across the top and an amber **Sharing** chip sits at the top right (Top actions), which turns it off, as **S** and the menu's **Turn sharing mode off** do.
+Switched on by **S** (Shift+s; `toggleSharing` in `js/actions.js`); the user menu has no item for it: a shortcut is enough for a switch used now and then, and the menu stays short.
+While on, a thin amber bar runs across the top and an amber **Sharing** chip sits at the top right (Top actions), which turns it off, as **S** does.
 Off, nothing on the screen takes room for it: it is used now and then, for a call or a projector; the shortcuts dialog (`?`) lists **S**.
-Phones have no switch (no top actions, and the account menu leaves it out).
+Phones have no switch (no top actions and no keyboard).
 The state is a cookie (`zone-sharing=1`, a year;), so the server knows it: `layout.html` renders `<html class="sharing">` from the first paint (nothing flashes on load), and switching reloads the page, rendered for the new mode.
 
 ### Around the page

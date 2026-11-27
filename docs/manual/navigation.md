@@ -36,8 +36,8 @@ At the top right of each page, on a computer:
 |--------|------|
 | **Sharing** | Only while [Sharing mode](#sharing-mode) is on: turns it off |
 | **Search** | Opens the search, as `Ctrl+P` does (see [Search](search.md)) |
-| Your initial | With users: the user menu, with **Settings**, **Admin** (for admins), **Sharing mode**, **Help** and **Sign out** |
-| Three lines | Without users: the menu, with **Settings** (while the wiki has no login: **Connect an assistant** and **Set a login**), **Sharing mode**, **Help** and **Sign out** |
+| Your initial | With users: the user menu, with **Settings**, **Admin** (for admins), **Help** and **Sign out** |
+| Three lines | Without users: the menu, with **Settings** (while the wiki has no login: **Connect an assistant** and **Set a login**), **Help** and **Sign out** |
 
 On a phone only the last of these is at the top right, your initial or the three lines, on the same line as the breadcrumb: tap it for **Settings**, **Admin**, **Help** and **Sign out**.
 Search is in the tab bar there.
@@ -209,7 +209,7 @@ The page you're on stays as it is, but what would show *other* pages around it i
 - the Tasks counts and the uncommitted count;
 - the search dialog's list of recent pages (it lists nothing until you type).
 
-Turn it on with `S` (Shift+s), or with **Sharing mode** in the menu at the top right (your initial; without users, the three lines).
+Turn it on with `S` (Shift+s).
 While it's on, a thin amber bar runs across the top of the screen and an amber **Sharing** button sits at the top right: click it, or press `S` again, to turn it off.
 It stays on, also after a reload, until you turn it off.
 Phones have no switch for it.

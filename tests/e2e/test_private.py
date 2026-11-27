@@ -30,10 +30,10 @@ def test_the_menu_opens_by_click_and_closes_on_escape(alice):
     btn.click()
     expect(menu).to_be_visible()
     expect(btn).to_have_attribute("aria-expanded", "true")
-    expect(menu.get_by_role("menuitem")).to_have_text(["Changes", "Watched pages", "Settings", "Sharing mode", "Help", "Sign out"])
+    expect(menu.get_by_role("menuitem")).to_have_text(["Changes", "Watched pages", "Settings", "Help", "Sign out"])
     expect(menu.locator(".menu-who")).to_have_text("Signed in as alice")
     # In groups, a line between them, as in a task's menu: what changed,
-    # the settings, Sharing mode and Help, Sign out.
+    # the settings, Help, Sign out.
     expect(menu.locator("hr.task-menu-sep")).to_have_count(3)
     # A shortcut at its item's right, no part of its name.
     expect(menu.locator(".menu-changes")).to_have_attribute("data-key", "g c")
@@ -65,8 +65,6 @@ def test_the_menu_works_from_the_keyboard_and_closes_on_a_click_elsewhere(alice)
     expect(menu.get_by_role("menuitem", name="Watched pages")).to_be_focused()
     alice.keyboard.press("ArrowDown")
     expect(menu.get_by_role("menuitem", name="Settings")).to_be_focused()
-    alice.keyboard.press("ArrowDown")
-    expect(menu.get_by_role("menuitem", name="Sharing mode")).to_be_focused()
     alice.keyboard.press("ArrowDown")
     expect(menu.get_by_role("menuitem", name="Help")).to_be_focused()
     alice.keyboard.press("ArrowDown")
@@ -226,7 +224,7 @@ def test_sign_out_is_in_the_menu_on_desktop(alice):
 
 def test_without_users_the_menu_is_at_the_top_right(page, wiki):
     """A wiki without users has no user menu, but the menu: three lines after
-    Search open Connect an assistant, Set a login, Sharing mode and Help."""
+    Search open Connect an assistant, Set a login and Help."""
     page.goto("/page/index")
     expect(page.locator(".breadcrumb .module-link[data-module=notes]")).to_be_visible()
     btn = page.locator(".top-actions .top-menu")
@@ -239,7 +237,7 @@ def test_without_users_the_menu_is_at_the_top_right(page, wiki):
     btn.click()
     expect(menu).to_be_visible()
     expect(btn).to_have_attribute("aria-expanded", "true")
-    expect(menu.locator('[role="menuitem"]')).to_have_text(["Changes", "Connect an assistant", "Set a login", "Sharing mode", "Help"])
+    expect(menu.locator('[role="menuitem"]')).to_have_text(["Changes", "Connect an assistant", "Set a login", "Help"])
     expect(menu.locator("hr.task-menu-sep")).to_have_count(2)   # no Sign out: no line before it
     page.keyboard.press("Escape")
     expect(menu).to_be_hidden()
@@ -261,14 +259,6 @@ def test_the_menu_and_g_c_open_changes(page, wiki):
     page.goto("/page/index")
     page.keyboard.press("g"); page.keyboard.press("c")
     page.wait_for_url("**/changes")
-
-
-def test_without_users_sharing_mode_is_in_the_menu(page, wiki):
-    page.goto("/page/index")
-    page.locator(".top-actions .top-menu").click()
-    page.locator(".module-menu").get_by_role("menuitem", name="Sharing mode").click()
-    expect(page.locator("html.sharing")).to_have_count(1)
-    expect(page.locator(".top-sharing")).to_be_visible()
 
 
 def test_the_phone_has_private_and_quicknote_tabs(new_page, wiki, monkeypatch):

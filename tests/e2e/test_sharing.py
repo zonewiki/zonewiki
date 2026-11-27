@@ -56,21 +56,21 @@ def test_sharing_mode_hides_the_surroundings(new_page, wiki):
     expect(page.locator(".top-sharing")).to_have_count(0)
 
 
-def test_the_user_menu_switches_sharing_mode(new_page, wiki, monkeypatch):
-    # With users the account menu has it, worded for what a click does.
+def test_the_user_menu_has_no_sharing_mode(new_page, wiki, monkeypatch):
+    # The switch is S and, while on, the chip: the account menu has no item.
     from tests import settings
     monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "")})
     page = new_page(viewport={"width": 1400, "height": 900})
     page.request.post("/login", form={"username": "alice", "password": "pw"})
     page.goto("/page/index")
     page.locator(".top-user").click()
-    with page.expect_navigation():
-        page.get_by_role("menuitem", name="Sharing mode").click()
-    expect(page.locator("html.sharing")).to_have_count(1)
+    expect(page.get_by_role("menuitem", name="Help")).to_be_visible()
+    expect(page.get_by_role("menuitem", name="Sharing mode")).to_have_count(0)
+    page.keyboard.press("Escape")
+    sharing_on(page)
     page.locator(".top-user").click()
-    with page.expect_navigation():
-        page.get_by_role("menuitem", name="Turn sharing mode off").click()
-    expect(page.locator("html.sharing")).to_have_count(0)
+    expect(page.get_by_role("menuitem", name="Help")).to_be_visible()
+    expect(page.get_by_role("menuitem", name="Turn sharing mode off")).to_have_count(0)
 
 
 def test_sharing_mode_search_lists_nothing_until_typed(new_page, wiki):

@@ -152,7 +152,7 @@ class TestLogin:
         assert body.count('action="/logout"') == 1 and 'action="/logout" class="menu-signout"' in body
         menu = body.split('class="module-menu page-menu"', 1)[1].split("</div>", 1)[0]
         assert re.findall(r'href="([^"]*)"', menu) == ["/changes", "/assistant", "/help"] and ">Settings</a>" in menu   # Change password: a tab of Settings
-        assert 'action="/logout"' in menu and ">Sign out</button>" in menu and "menu-sharing" in menu
+        assert 'action="/logout"' in menu and ">Sign out</button>" in menu and "menu-sharing" not in menu   # Sharing mode: S, not the menu
 
 
 class TestDisabled:
@@ -512,7 +512,7 @@ class TestModuleMenu:
         menu = body.split('class="module-menu page-menu"', 1)[1].split("</div>", 1)[0]
         assert 'aria-label="Menu"' in menu
         assert re.findall(r'href="([^"]*)"', menu) == ["/changes", "/assistant", "/help/self-hosting#setting-a-login", "/help"]
-        assert "menu-sharing" in menu and "Signed in as" not in menu and "/logout" not in body
+        assert "menu-sharing" not in menu and "Signed in as" not in menu and "/logout" not in body
         # Phones: the same three lines, the same button.
         assert "signout-" not in body and body.count("module-menu-btn") == 1
         # Where it leads is there.

@@ -49,10 +49,10 @@
       assistant, the one there is, and Set a login (the form of the first
       run, setup.go; in a wiki open to the network on purpose the manual's
       section: there it is set on the host); Admin for an admin;
-    - Sharing mode and Help (the manual, help.go);
+    - Help (the manual, help.go; sharing mode is S, not an item here);
     - Sign out.
     With users it is the user menu: who is signed in first. A phone has the
-    same menu, without Sharing mode. An item with a shortcut shows its key
+    same menu. An item with a shortcut shows its key
     where there is a keyboard (data-key, as a task's menu does). Opened by
     the top right's button (js/chrome.js). Outside the tab bar's nav: its
     touch handling picks a tab by position. */}}
@@ -69,7 +69,6 @@
 {{- with .set_login}}<a href="{{.}}" role="menuitem" class="menu-login">Set a login</a>{{end -}}
 {{- if .admin}}<a href="/admin" role="menuitem" class="menu-admin">Admin</a>{{end -}}
 <hr class="task-menu-sep">
-{{- ""}}<button type="button" role="menuitem" class="menu-sharing" data-key="S">{{if .sharing}}Turn sharing mode off{{else}}Sharing mode{{end}}</button>
 {{- ""}}<a href="/help" role="menuitem" class="menu-help" data-key="?">Help</a>
 {{- if .sign_out}}<hr class="task-menu-sep"><form method="post" action="/logout" class="menu-signout"><button type="submit" role="menuitem">Sign out</button></form>{{end -}}
 </div>
@@ -95,5 +94,5 @@
 <span class="action-sep" aria-hidden="true"></span>
 <button type="button" class="action-search" aria-label="Search" title="Search (Ctrl+P)">{{template "icon_search"}}<span class="action-label">Search</span></button>
 </nav>
-{{- range .ModuleLinks}}{{if .Menu}}{{template "module_menu" (dict "link" . "user" $.User "sign_out" $.SignOut "settings" $.Settings "set_login" $.SetLogin "admin" $.Admin "sharing" $.Sharing "watches" $.Watches "changes" $.Changes)}}{{end}}{{end}}
+{{- range .ModuleLinks}}{{if .Menu}}{{template "module_menu" (dict "link" . "user" $.User "sign_out" $.SignOut "settings" $.Settings "set_login" $.SetLogin "admin" $.Admin "watches" $.Watches "changes" $.Changes)}}{{end}}{{end}}
 {{- end}}

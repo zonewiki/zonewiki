@@ -61,7 +61,7 @@ class TestWithUsers:
     def test_the_menu_has_settings_for_the_three_pages(self, client, users):
         entries = menu(body(login(client, "bob"), "/page/index"))
         assert entries == [("/changes", "Changes"), ("/changes?watched=1", "Watched pages"), ("/assistant", "Settings"),
-                           ("", "Sharing mode"), ("/help", "Help"), ("", "Sign out")]
+                           ("/help", "Help"), ("", "Sign out")]
         # An admin's has Admin too, an entry of its own.
         entries = menu(body(login(client, "alice"), "/page/index"))
         assert entries[:4] == [("/changes", "Changes"), ("/changes?watched=1", "Watched pages"), ("/assistant", "Settings"), ("/admin", "Admin")]
@@ -119,7 +119,7 @@ class TestWithoutUsers:
         three = [("/assistant", "Assistant"), ("/password", "Password"), ("/usage", "Usage")]
         text = body(client, "/assistant")
         assert tabs(text) == (three, "Assistant")
-        assert menu(text) == [("/changes", "Changes"), ("/assistant", "Settings"), ("", "Sharing mode"), ("/help", "Help"), ("", "Sign out")]
+        assert menu(text) == [("/changes", "Changes"), ("/assistant", "Settings"), ("/help", "Help"), ("", "Sign out")]
         assert tabs(body(client, "/password")) == (three, "Password")
         assert tabs(body(client, "/usage")) == (three, "Usage")
 
