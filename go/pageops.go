@@ -812,15 +812,34 @@ func checkImportFolder(user asker, folder string) (importInto, error) {
 	if strings.EqualFold(folder, up.folder()) {
 		return importInto{}, refuse("“" + folder + "” holds the place's other pages: import into a new folder inside it")
 	}
-	if _, err := os.Lstat(filepath.Dir(file)); !errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Lstat(filepath.Dir(file)); !errors.Is(err, os.ErrNotExist) && !emptyFolder(filepath.Dir(file)) {
 		return importInto{}, refuseAs(refusedExists, "A folder named “"+folder+"” is there already: import into a new one, so nothing clashes")
 	}
 	return to, nil
 }
 
+// emptyFolder: dir is a folder (not a link) that holds no file, only
+// empty folders if any: what an undone import or deleted pages leave,
+// where nothing can clash.
+func emptyFolder(dir string) bool {
+	if st, err := os.Lstat(dir); err != nil || !st.IsDir() {
+		return false
+	}
+	empty := true
+	_ = filepath.WalkDir(dir, func(_ string, d fs.DirEntry, err error) error {
+		if err != nil || !d.IsDir() {
+			empty = false
+			return fs.SkipAll
+		}
+		return nil
+	})
+	return empty
+}
+
 // importOptions: what the converter needs to plan an import into folder
 // for user (mdimport.Options), the folder checked first (checkImportFolder):
-// a page's part as safePath takes it (pagePart), a file's name one an
+// a page's part as safePath takes it (pagePart), a note's name not a
+// folder's guide's (AGENTS.md, CLAUDE.md: guidePage), a file's name one an
 // upload can have (uploadName) that is free in the place's uploads and not
 // given to another file of this import (freeImportName), and its link the
 // place's (uploadURL).
@@ -833,6 +852,14 @@ func importOptions(user asker, folder string) (mdimport.Options, error) {
 	return mdimport.Options{
 		Folder:   folder,
 		PagePart: pagePart,
+		// A note named AGENTS.md or CLAUDE.md would become a folder's
+		// guide: an admin's, made on purpose, never by an import.
+		NoteRefused: func(part string) string {
+			if guideFiles[part+".md"] {
+				return "a page of that name would be a guide for assistants"
+			}
+			return ""
+		},
 		FileName: func(want string) string {
 			name := freeImportName(to.up, uploadName(want), given)
 			if name != "" {

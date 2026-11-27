@@ -227,6 +227,10 @@ func (c *converter) part(name, space string, taken map[string]bool) (string, str
 	}
 	if !c.o.PagePart(s) {
 		s, why = s+"-", "not a name a page may have"
+	} else if c.o.NoteRefused != nil && strings.HasPrefix(space, "n\x00") {
+		if r := c.o.NoteRefused(s); r != "" {
+			s, why = s+"-", r
+		}
 	}
 	if taken[space+s] {
 		why = "another has the name"

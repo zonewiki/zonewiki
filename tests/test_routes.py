@@ -1186,6 +1186,7 @@ class TestApiPagesList:
         assert {"Tasks", "Notes"} <= builtin.keys()
         assert builtin["Tasks"]["href"] == "/tasks"
         assert not next(p for p in pages if p["slug"] == "aaa").get("builtin")
+        assert builtin["Import pages"]["href"] == "/import"   # for who may write (test_import.py: not a viewer)
 
 
 # ===========================================================================

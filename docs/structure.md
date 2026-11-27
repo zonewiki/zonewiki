@@ -72,6 +72,7 @@ What each file and folder of the repository is for.
 │   ├── private.go          # The private home private/<user>/index (/private) and a group's home groups/<group>/index (/groups, /groups/<group>): their templates, their protection; Share… (where a page can go), what moves with it, the place's mark
 │   ├── routes.go           # The wiki's routes: pages, the editor, notes, search, previews
 │   ├── pageops.go          # Page writes the routes and the MCP tools share (delete, rename, restore, create, save, undo, a markdown import: importOp, importOptions): checks, text not yet in git kept
+│   ├── imports.go          # Import pages (/import): a zip of notes uploaded, unpacked to wait in .zone/imports/<id>/ for its uploader's Import (importOp) or Cancel, its report; the waiting folders swept after an hour and cleared at a start
 │   ├── refusal.go          # What an operation refuses with (refusalError: a kind and a message), for pages and tasks alike; each door answers it its way
 │   ├── views.go            # The page shell, breadcrumb, modules, menus, the settings pages' tabs (settingsTabs), side columns; templates/ (embedded)
 │   ├── pages.go            # The wiki's files: slugs, listing, sharing mode, link graph, renames, the pages that embed a list

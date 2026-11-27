@@ -168,6 +168,7 @@ Prefer an API test when the behaviour shows through a route, a Go test when it d
 | `go/files_test.go` | deployment.md | The binary's own files: all of `public/` in it, served as the folder serves it (type, `Last-Modified`, gzip, 404s, no way out), a folder winning, the built-in docs for Help and `zone_help`, `public/` found only with `zonewiki.js`, `zonewiki licenses` |
 | `go/gitstore_test.go` | rendering.md, users.md | Git helpers: commits, log, diffs, hung git, `TestLastChangedAsksGitOnce`, packing's schedule, drafts committed, `TestMissingUsers` |
 | `go/golden_test.go` | rendering.md | The text functions against `golden.json.gz` |
+| `go/importop_test.go`, `go/imports_test.go` | editor.md, security.md | A markdown import's write (`importOp`: one commit, undone whole, refused whole), its options (the folder, a guide's name refused, files' names); the waiting imports swept after their hour and cleared at a start |
 | `go/lastchange_test.go` | search.md | Who changed a page last: a user, an assistant, a terminal, a visitor, a file changed since; the scan read only as far as needed, git asked again only when the repository moved, a reset |
 | `go/mail_test.go` | users.md, deployment.md | The SMTP client, mail settings, `validEmail`, sign-up keys, `pending` |
 | `go/markdown_test.go` | rendering.md | The renderer: checkboxes, callouts, heading ids, images, links, raw HTML defused, concurrent renders |
@@ -221,6 +222,7 @@ Prefer an API test when the behaviour shows through a route, a Go test when it d
 | `tests/test_groups_own.py` | users.md | Groups made in the browser: names, owners, leaving, ending, renaming |
 | `tests/test_image.py` | deployment.md, security.md | Guard (above) |
 | `tests/test_group_lists.py` | tasks.md | A group's lists: the leak probes, members, moving a list to or from a group, the task's files |
+| `tests/test_import.py` | editor.md, security.md | Import pages: a private, a group's and a shared import, the report, who sees a waiting import, a viewer refused, zips refused (names, not a zip, too big, a full wiki) leaving nothing, the waiting folder gone after Import, Cancel, a second upload, an hour, a restart; a note named as a guide; the import undone |
 | `tests/test_list_owners.py` | tasks.md | A shared list's owners and what a member who is none may do |
 | `tests/test_math.py` | rendering.md | Math over HTTP, section editing below a `$$` block |
 | `tests/test_mcp.py` | mcp.md | The MCP tools over HTTP: files, guides, reading and writing tools, `zone_help` |
@@ -274,6 +276,7 @@ Prefer an API test when the behaviour shows through a route, a Go test when it d
 | `test_editor.py` | editor.md | Auto-save, Done, preview, list continuation, the Task list dialog, slow saves |
 | `test_figures.py` | rendering.md | Math and Mermaid from the vendored copies |
 | `test_fold.py` | rendering.md | Folding sections |
+| `test_import.py` | editor.md | Import pages from the New Page form: a zip uploaded, its report, Import, the folder's index, undone from Changes |
 | `test_format_bar.py` | editor.md | The formatting bar |
 | `test_groups.py` | users.md | Groups: Share…, the switcher, making and renaming, name pills, the narrowing question |
 | `test_layout.py` | routes.md | Side columns, no horizontal scroll at phone width, copy-link icons |

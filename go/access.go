@@ -253,6 +253,13 @@ func inGroup(user asker, group string) bool {
 	return user.HasGroup(group) && settings().memberOf(user.Name, group)
 }
 
+// uploadedBy: a waiting upload (a markdown import's, go/imports.go) by the
+// user named by is user's: only its uploader sees it, applies it or
+// cancels it, not an admin, never a visitor.
+func uploadedBy(user asker, by string) bool {
+	return user.Name != visitor && user.Name == by
+}
+
 // groupsFor: the groups whose places are user's (inGroup), A–Z.
 func groupsFor(user asker) []string {
 	var out []string

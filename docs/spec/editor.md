@@ -316,7 +316,61 @@ The rule: rewrite only what Zonewiki would misread, keep the rest as written.
 A note whose text needs no change comes over byte for byte.
 
 The conversion is `mdimport.Convert` in `go/internal/mdimport/`: it reads the folder and writes nothing, and makes a plan (the pages' slugs and texts, the files and their names, the index page, the report).
-The server's own rules come to it as callbacks (`Options`): which part a page's path may have (`pagePart`), the name a file gets in the place's uploads, and the URL a link to it takes.
+The server's own rules come to it as callbacks (`Options`): which part a page's path may have (`pagePart`), which name a note may not have (a folder's guide's), the name a file gets in the place's uploads, and the URL a link to it takes.
+
+### Importing a zip in the browser
+
+1. **Import pages…** on the New Page form (`/new`) opens `/import`, with whom the pages are for as the form had it.
+   The form asks for a zip, the folder the pages go into, and, with users, whom they are for (everyone, a group of yours, only you), as New Page does.
+   It asks for no format: a folder of markdown notes and an Obsidian vault are one kind of zip.
+2. **Upload** sends the zip.
+   The folder is the one typed, or one named after the zip (`My Vault.zip` → `my-vault`), in the place chosen (`private/<you>/my-vault`, `groups/<group>/my-vault`).
+   A folder that is there already, or not one you may write into, is refused before the zip is unpacked, so nothing clashes; a folder holding only empty folders (what an undone import leaves) counts as not there.
+3. The answer is the report, and **Import** and **Cancel**: nothing is in the wiki yet.
+   It says how many pages and files will go into which folder, whether it is an Obsidian vault, and the report's lines under the headings of the index page (The import's index page, below): names changed and clashes, links with several targets and the one chosen, links to nothing, what was lost, files left out.
+4. **Import** writes the pages, in one commit (`importOp`: "Import 214 pages and 87 files from My Vault"), and opens the folder's index page; the home page of the place gets a line linking it.
+   **Undo** on Changes takes the whole import back.
+   **Cancel** drops what was uploaded and goes back to the form.
+
+Who may import: anyone who may write, into where they may write (the shared wiki, their private folder, a group's they are in); not a viewer, not a visitor of a public wiki.
+
+A zip holding one folder (a vault zipped as its folder, `My Vault/…`) is that folder's notes, and the index page is named after it; any other zip is named after the zip.
+A vault's `.obsidian/`, `.trash/` and `.git/` are never unpacked, nor a Mac's `__MACOSX/` or a link; that `.obsidian/` was there makes the folder an Obsidian vault all the same (`Options.Obsidian`).
+
+A note that would become a folder's guide (`AGENTS.md`, `CLAUDE.md`: a guide is an admin's, written on purpose; Guides in `docs/spec/mcp.md`) is imported as `agents-`, `claude-`, and the report's Renamed says why: a page of that name would be a guide for assistants.
+
+### What an upload may be
+
+| Limit | Refused with |
+|---|---|
+| The zip at most upload-max (100 MB unless set; Request bodies in `docs/spec/security.md`) | "The zip is too large: an upload may be at most 100 MB" (413) |
+| What it unpacks to at most four times upload-max, and at most what the wiki has room for under storage-max | "The zip holds too much" (413), "The wiki has no room for what the zip holds" (507) |
+| At most 20,000 entries | Unpack's words: "not a zip of notes: it holds more than 20000 entries" |
+| Every name inside the folder unpacked into (no `..`, no `/` first, no backslash or control character, UTF-8), only files and folders, no file twice | "not a zip of notes: the name … in it" (400) |
+| Not a zip at all, or cut off | "not a zip of notes (a zip): …" (400) |
+| No `.md` file in it | "The zip holds no markdown notes" (400) |
+| What the plan writes has room under storage-max | "The wiki is full" (507) |
+
+The four-times rule and the entries' number are to be measured on real vaults and set from that.
+
+### The waiting import
+
+Between Upload and Import the upload waits in `.zone/imports/<id>/` (a random id): what was unpacked (`notes/`) and `import.json` (the uploader's name, the folder, the name, whether it was a vault, when).
+The zip itself is written there only because a zip is read by seeking in a file, and it is deleted as soon as it is unpacked, before the report is shown.
+Nothing of it is in git (`.zone/` is not), in an export (`zonewiki export` takes a clone and the settings file), or shown by any route; only its uploader sees the report, imports or cancels it.
+Import converts it again, so a file's name in the uploads is the one free then.
+
+| When | The waiting folder |
+|---|---|
+| Import, the commit made | Removed |
+| Import, refused or its commit failed | Kept, so Import can be tried again (the report shows why) |
+| Cancel | Removed at once |
+| The same user uploads again | Removed: one waits per user, the new one in its place |
+| An upload refused or cut off half way | Removed before the answer |
+| Neither clicked for an hour | Removed: looked for at every request to an import route |
+| Zonewiki stopped or crashed meanwhile | Removed at the next start, with all of `.zone/imports/` |
+
+There is no timer of its own: the next import request, or the next start, does it (`sweepImports`, `clearImports` in `go/imports.go`).
 
 ### What an import converts
 
@@ -338,6 +392,7 @@ Notion, Logseq and Dendron exports are folders like any other.
 | `日記.md` | `my-vault/note`: a part with nothing left is `note`, reported |
 | `Note.md` and `note.md` | `my-vault/note` and `my-vault/note-2`: a clash gets `-2`, `-3` … in the order of the paths, reported |
 | `con.md` | `my-vault/con-`: a part the wiki refuses for a page (`pagePart`: a device's name, a `:`) gets a `-`, reported |
+| `AGENTS.md`, `sub/CLAUDE.md` | `my-vault/agents-`, `my-vault/sub/claude-`: a page of that name would be a folder's guide (the server's `NoteRefused`), reported; a folder so named keeps its name |
 | `index.md` at the folder's root | `my-vault/index-2`: the index page has the name, reported |
 | `_templates/Daily.md`, `.drafts/A.md` | `my-vault/templates/daily`, `my-vault/drafts/a`: the wiki skips `_` and `.` folders, so the first character goes |
 | `.obsidian/`, `.trash/`, `.git/` | left out, with all in them |

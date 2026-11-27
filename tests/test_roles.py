@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from tests import settings
-from tests.conftest import HOST
+from tests.conftest import HOST, notes_zip
 
 REPO = Path(__file__).resolve().parent.parent
 USERS = {"alice": ("alice-pw", "alice-token"), "carol": ("carol-pw", "carol-token")}
@@ -148,6 +148,10 @@ WRITES = [
     ("POST /api/tasks/reorder", "POST", "/api/tasks/reorder", {"json": {"moves": [{"id": "{task}", "after": "", "before": ""}]}}),
     ("PUT /api/tasks/{id}", "PUT", "/api/tasks/{task}", {"json": {"position": "top"}}),
     ("POST /api/tasks/import", "POST", "/api/tasks/import", {"json": {"file": {"tasks": [{"title": "Imported"}]}}}),
+    ("POST /import", "POST", "/import", {"data": lambda: {"file": (BytesIO(notes_zip()), "vault.zip")}}),
+    ("POST /import", "POST", "/import", {"data": lambda: {"file": (BytesIO(notes_zip()), "vault.zip"), "for": "private"}}),
+    ("POST /import/apply", "POST", "/import/apply", {"data": {"id": "0" * 32}}),
+    ("POST /import/cancel", "POST", "/import/cancel", {"data": {"id": "0" * 32}}),
     ("POST /api/tasks/restore", "POST", "/api/tasks/restore", {"json": {"tasks": [{"id": "new-id-1", "title": "Restored"}]}}),
     # Her own things, from when she was an editor, and new ones: refused too.
     ("POST /api/notes", "POST", "/api/notes", {"data": {"title": "New note"}}),

@@ -278,6 +278,17 @@ func TestImportOptions(t *testing.T) {
 	if _, err := importOptions(asUser("alice"), "index"); err != nil {
 		t.Errorf("a folder of the page index's name: %v", err) // a page, not a folder
 	}
+	// A folder holding only empty folders (an import undone) clashes with nothing.
+	if err := os.MkdirAll(filepath.Join(cfg.Data, "undone/sub"), 0o777); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := importOptions(asUser("alice"), "undone"); err != nil {
+		t.Errorf("an empty folder: %v", err)
+	}
+	writePageSaying(t, "undone/sub/note", "x")
+	if _, err := importOptions(asUser("alice"), "undone"); err == nil {
+		t.Error("a folder with a page in it: no refusal")
+	}
 	for folder, kind := range map[string]refusal{
 		"private/bob/x": refusedNotFound, "_hidden/x": refusedInvalid, "a//b": refusedInvalid, "../x": refusedInvalid,
 		"private/alice": refusedInvalid, "private/alice/_assets": refusedInvalid,
@@ -298,6 +309,9 @@ func TestImportOptions(t *testing.T) {
 	}
 	if o.Folder != "private/alice/vault" || o.PagePart("a:b") || !o.PagePart("notes") {
 		t.Errorf("folder %q, page parts", o.Folder)
+	}
+	if o.NoteRefused("agents") == "" || o.NoteRefused("claude") == "" || o.NoteRefused("notes") != "" {
+		t.Error("a note named as a folder's guide isn't refused, or another is")
 	}
 	for _, c := range [][2]string{
 		{"pic.png", "pic-2.png"},     // there in alice's uploads

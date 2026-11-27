@@ -75,7 +75,7 @@ func init() {
 		"history/diff.html", "history/diff_uncommitted.html", "history/history.html",
 		"history/revision.html", "history/uncommitted.html", "users.html", "admin_wiki.html", "groups.html", "welcome.html", "signup.html", "assistant.html",
 		"password.html", "email.html", "usage.html", "oauth.html", "help.html",
-		"setup.html"} {
+		"setup.html", "import.html"} {
 		views[name] = template.Must(template.Must(partials.Clone()).ParseFS(templateFS, "templates/"+name))
 	}
 }

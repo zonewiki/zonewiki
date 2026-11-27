@@ -137,6 +137,7 @@ Treat every backup as you treat the wiki: it holds every user's private pages, a
 ## Moving to another Zonewiki
 
 A wiki moves in one file: from your computer to a server or a NAS, to the hosted Zonewiki, or from there to a Zonewiki of your own.
+Notes from another app, an Obsidian vault for one, come in as pages instead: see [Importing notes](importing.md).
 The file holds the pages, uploads and tasks with all their history, and the users, who sign in afterwards with the password they had.
 
 Where the wiki is now, write the file; Zonewiki may keep running:

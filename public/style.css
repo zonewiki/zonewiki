@@ -957,6 +957,14 @@ main > .sheet > h2 { font-family: var(--serif); font-size: 1.45rem; font-weight:
   color: var(--fg); background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
 }
 .new-page-form .promote-check { display: block; margin-bottom: 1rem; }
+.new-page-actions, .import-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+
+/* ── Import pages (/import) ────────────────────────────────────────────────── */
+
+.import-form input[type="file"] { display: block; max-width: 100%; font: inherit; }
+.import-hint { margin: .4rem 0 1rem; font-size: .875rem; color: var(--muted); }
+.import-lines li { overflow-wrap: anywhere; }
+.import-actions { margin-top: 1.5rem; }
 
 /* ── Rename bar ────────────────────────────────────────────────────────────── */
 

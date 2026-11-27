@@ -4,8 +4,10 @@ browser tests (tests/e2e) build on git_wiki_dir too."""
 
 import hashlib
 import html
+import io
 import re
 import shutil
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -103,6 +105,21 @@ def list_page(client, wiki_dir: Path, slug: str, content: str, **kwargs) -> Path
             pin = "first" if p["pin"].lower() == "default" else "1"
             assert client.post("/tasks/pin-list", data={"list": name, "pin": pin}, **kwargs).status_code == 302
     return path
+
+
+def notes_zip(files: dict | None = None) -> bytes:
+    """A zip of a folder of notes, for Import pages (POST /import): its
+    files by name, text or bytes; a small Obsidian vault zipped as its
+    folder ("My Vault/…", with .obsidian/) when none are given."""
+    if files is None:
+        files = {"My Vault/Garden.md": "# Garden\n\nSee [[Roses]] and ![[pic.png]].\n",
+                 "My Vault/Roses.md": "Red ones.\n", "My Vault/pic.png": b"\x89PNG\r\n\x1a\n",
+                 "My Vault/.obsidian/app.json": "{}"}
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+        for name, data in files.items():
+            z.writestr(name, data)
+    return out.getvalue()
 
 
 def content_hash(text: str) -> str:

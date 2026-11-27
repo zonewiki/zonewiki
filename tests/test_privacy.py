@@ -18,7 +18,7 @@ from urllib.parse import unquote
 import pytest
 
 from tests import settings
-from tests.conftest import HOST, content_hash, git_setup
+from tests.conftest import HOST, content_hash, git_setup, notes_zip
 
 REPO = Path(__file__).resolve().parent.parent
 
@@ -181,6 +181,8 @@ READS = [
     ("GET /uncommitted", "GET", "/uncommitted", {}),
     ("GET /api/uncommitted", "GET", "/api/uncommitted", {}),
     ("GET /new", "GET", "/new", {}),
+    ("GET /import", "GET", "/import", {}),
+    ("GET /import", "GET", "/import", {"query_string": {"for": "private"}}),
     ("GET /_assets/{path...}", "GET", "/_assets/private/alice/photo.png", {}),
     ("GET /private/{user}/_assets/{file}", "GET", "/private/alice/_assets/photo.png", {}),
     ("GET /groups/{group}/_assets/{file}", "GET", "/groups/alice/_assets/photo.png", {}),   # no group's folder (test_group_pages.py)
@@ -1151,6 +1153,11 @@ WRITES = [
     ("POST /promote/{slug...}", "POST", "/promote/{bobs}", {"data": {"folder": "", "name": "x", "link_from": SNEAK}}),
     ("POST /api/toggle-checkbox/{slug...}", "POST", f"/api/toggle-checkbox/{DIARY}", {"data": {"idx": "0"}}),
     ("POST /api/commit-file", "POST", "/api/commit-file", {"json": {"filepath": "private/alice/draft.md"}}),
+    # Import pages: a zip into her folder, by its path and by way of his; her waiting import (test_import.py), by no id.
+    ("POST /import", "POST", "/import", {"data": lambda: {"file": (BytesIO(notes_zip()), "vault.zip"), "folder": "private/alice/vault"}}),
+    ("POST /import", "POST", "/import", {"data": lambda: {"file": (BytesIO(notes_zip()), "vault.zip"), "folder": SNEAK + "/x"}}),
+    ("POST /import/apply", "POST", "/import/apply", {"data": {"id": "0" * 32}}),
+    ("POST /import/cancel", "POST", "/import/cancel", {"data": {"id": "0" * 32}}),
     ("POST /api/commit-all", "POST", "/api/commit-all", {}),
     ("POST /api/upload", "POST", "/api/upload", {"data": lambda: {"file": (BytesIO(b"bob"), "photo.png"),
                                                                   "page": DIARY, "overwrite": "1"}}),

@@ -13,7 +13,7 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 
 from tests import settings
-from tests.conftest import HOST, write_page
+from tests.conftest import HOST, notes_zip, write_page
 
 pytestmark = pytest.mark.skipif(not settings.GIT_ENABLED, reason="git not installed")
 
@@ -270,6 +270,21 @@ def test_a_refused_change_commits_nothing(client, wiki):
     text, err = mcp(client, "edit_page", slug="p", old_string="Not there.", new_string="x")
     assert err and "not found" in text
     assert subjects(wiki) == head and git(wiki, "status", "--porcelain").strip() == "M p.md"
+
+
+def test_an_import_keeps_the_homes_text_not_yet_in_git(client, wiki):
+    """Import pages (the browser's door alone: no tool imports) adds a line
+    to the home page: what the home held on disk is committed first, in a
+    commit of its own, and the import's adds only its line."""
+    commit(wiki, "index", "# Home\n\nCommitted.\n")
+    write_page(wiki, "index", "# Home\n\nCommitted.\n\nOnly on disk.\n")
+    resp = client.post("/import", data={"file": (BytesIO(notes_zip()), "My Vault.zip")}, headers=HOST)
+    id = re.search(r'name="id" value="([0-9a-f]{32})"', resp.get_data(as_text=True))[1]
+    assert client.post("/import/apply", data={"id": id}, headers=HOST).status_code == 303
+    assert subjects(wiki)[:2] == ["Import 2 pages and 1 file from My Vault", "Save index"]
+    assert "+Only on disk." in git(wiki, "show", "--format=", "HEAD~1") and git(wiki, "status", "--porcelain").strip() == ""
+    added = [line for line in git(wiki, "show", "--format=", "--", "index.md").splitlines() if line.startswith("+") and not line.startswith("+++")]
+    assert added == ["+", "+- [[my-vault/index|My Vault]]"]   # after a blank line, as the text ends in a paragraph
 
 
 class TestOneWriteAtATime:

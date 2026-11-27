@@ -34,7 +34,8 @@ func pageRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/save/{slug...}", writesPages(apiSave))
 	mux.HandleFunc("GET /new", func(w http.ResponseWriter, r *http.Request) {
 		var groups []string
-		if !changesNothing(userOf(r)) { // a viewer makes no page
+		writes := !changesNothing(userOf(r)) // a viewer makes no page
+		if writes {
 			groups = groupsFor(userOf(r))
 		}
 		// for: where the page starts (the New page button of a group's home, of the private home).
@@ -42,7 +43,8 @@ func pageRoutes(mux *http.ServeMux) {
 		if g, ok := strings.CutPrefix(who, "group:"); who != "private" && !(ok && slices.Contains(groups, g)) {
 			who = ""
 		}
-		page(w, newReq(r), http.StatusOK, "new.html", "New Page", shell{}, &newPageView{Groups: groups, For: who})
+		page(w, newReq(r), http.StatusOK, "new.html", "New Page", shell{}, &newPageView{Groups: groups, For: who,
+			CanImport: writes && userOf(r).Name != visitor})
 	})
 	mux.HandleFunc("POST /new", writesPages(createPage))
 	mux.HandleFunc("POST /link-new", writesPages(linkNew))
@@ -742,8 +744,9 @@ func keepLeftDraft(r *http.Request, s *editorSave) {
 // new page can be made in.
 type newPageView struct {
 	view
-	Groups []string
-	For    string // what For starts at: "", "private", "group:<name>"
+	Groups    []string
+	For       string // what For starts at: "", "private", "group:<name>"
+	CanImport bool   // Import pages… (imports.go): not for a viewer or a visitor
 }
 
 // createPage: /new, the form for a new page's name (pages are made from
@@ -963,6 +966,10 @@ func apiPagesList(w http.ResponseWriter, r *http.Request) {
 		M{"slug": "/tasks", "title": "Tasks", "href": "/tasks", "links": 0, "mtime": 0, "builtin": true},
 		M{"slug": "/notes", "title": "Notes", "href": "/notes", "links": 0, "mtime": 0, "builtin": true},
 		M{"slug": "/help", "title": "Help", "href": "/help", "links": 0, "mtime": 0, "builtin": true})
+	if !changesNothing(rq.user) {
+		// Found by typing, as Help is: the New Page form has the button.
+		out = append(out, M{"slug": "/import", "title": "Import pages", "href": "/import", "links": 0, "mtime": 0, "builtin": true})
+	}
 	writeJSON(w, http.StatusOK, out)
 }
 

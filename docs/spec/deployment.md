@@ -862,6 +862,7 @@ Zonewiki's own state, none of it in git (`.git/info/exclude` has `/.zone/*`, `ex
 - `unsaved-files.json` — who pasted the first file for a task not made yet (a new task's dialog before its first Save), whose those files are until then (A task's files in `docs/spec/tasks.md`)
 - `drafts/<user>/` — an editor's text left in a conflict when its tab closed, for its user's next edit, 30 days at most (`docs/spec/editor.md`)
 - `tmp/` — a three-way merge's scratch files, removed after each merge
+- `imports/<id>/` — a zip of notes uploaded to import, unpacked, waiting for its uploader's Import or Cancel, an hour at most, and all removed at a start (The waiting import in `docs/spec/editor.md`)
 - `index/` — search's files: `pages.idx` and `sections.idx` (the BM25 indexes of what is shared), `groups/<group>/` (the same for each group's pages and its lists' tasks, read by its members' searches alone), `tasks/<hash>.gob` (each closed tasks' archive's search docs) and `embeddings.json` (the semantic search cache) (`docs/spec/search.md`)
 - `queries.jsonl` — the query log, only with `query-log = yes`
 - `tasks-checked` — the mark that a start has checked the task files, so later starts skip it while git says they haven't changed (Storage in `docs/spec/tasks.md`)
@@ -924,7 +925,7 @@ Zonewiki writes each file whole (a reader never sees half of one), but a copy ta
   Back these up with the folder; where the git remote is the only copy, keep a copy of `.zone/` beside it.
   They hold password and token hashes and keys: keep the backup as confidential as the wiki (Before you open it up in `docs/spec/security.md`).
 - **What can be rebuilt, and needn't be backed up**: `.zone/index/` (Zonewiki builds the search indexes again when they are first needed, which takes a while on a big wiki, and with semantic search embeds every section and task again in the background, which takes longer),
-  `.zone/tmp/`, the lock files and the mark `tasks-checked` (a start without it looks the task files through again and changes nothing that is right).
+  `.zone/tmp/`, `.zone/imports/`, the lock files and the mark `tasks-checked` (a start without it looks the task files through again and changes nothing that is right).
   Lost, `seen/` shows each user the tasks' news again, `watch/` leaves nobody watching a page, `digest.json` has the next morning's mail tell of the last day, `drafts/` loses only a text left in a conflict, `unsaved-files.json` the files pasted in a dialog not saved yet to their uploader (no one opens them), and `queries.jsonl` is a log.
 - **Restoring**: put the folder back where `ZONE_DATA` points and start Zonewiki;
   the files must belong to the user Zonewiki runs as, and `.zone/config` and `secret_key` should stay readable by it alone (0600: Zonewiki warns in its log when others may read the settings file).
@@ -978,6 +979,7 @@ Unpacked, it is a wiki's folder: whoever leaves Zonewiki has the pages as files 
 | `.zone/links` | open invite and reset links don't work |
 | `.zone/index/` | search's indexes are built again when first needed |
 | `.zone/usage/` | the Usage page counts from nothing |
+| `.zone/imports/` | a zip of notes waiting to be imported is uploaded again |
 | `.zone/seen/`, `watch/`, `drafts/`, `removed-users`, `queries.jsonl` | the tasks' news shows again; nobody watches a page until they watch it again; a text left in a conflict is gone; a removed user's name is still not a stranger's to sign up with where a private folder, a commit or a task names it (Sign-up in `docs/spec/users.md`) |
 | What isn't committed | lost: see Text that is not committed, below |
 | The host's settings: `hosts`, `base-url`, `git-remote`, `trusted-proxies`, `storage-max`, `imprint`, `privacy` | set them again where they are needed (`zonewiki config set`); the import names the ones it left out |

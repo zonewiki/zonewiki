@@ -23,6 +23,12 @@ type Options struct {
 	// PagePart: whether a slug's part is one a page's path may have (the
 	// server's pagePart); a part it refuses gets a "-" suffix.
 	PagePart func(part string) bool
+	// NoteRefused: why a note's own name (the last part of its slug, one
+	// PagePart takes) isn't one an imported page may have, "" when it is:
+	// a name that would make the page something else (the server's: a
+	// folder's guide, AGENTS.md). The part gets a "-" suffix, reported
+	// with the reason. Nil: every name PagePart takes.
+	NoteRefused func(part string) string
 	// FileName: the name a file the notes link to gets in the place's
 	// uploads, from the name it has (want, its base name in the vault):
 	// one an upload can have, free in the place's _assets/ and not given

@@ -817,8 +817,23 @@ So the import uses neither as it comes:
 - **Nothing of the archive's `.zone/` but the settings file** is taken: no session key (which would let its maker sign sessions), no OAuth grants, no links.
 
 An export is as confidential as the wiki it came from: it holds every user's private pages and the password hashes, whoever runs the command (the wiki's folder is theirs to read anyway).
-There is no export or import in the browser or over MCP.
+There is no export or import of a whole wiki in the browser or over MCP.
 Tests: `tests/test_transfer.py`, `go/internal/wikiarchive/wikiarchive_test.go`, `go/internal/wikiarchive/unpack_test.go`.
+
+### An uploaded zip of notes
+
+Import pages (Importing pages in `docs/spec/editor.md`) takes a zip anyone who may write uploads in the browser, and its notes become pages.
+The zip and what it holds are untrusted, so:
+
+- **It is unpacked by the same checks** (`wikiarchive.Unpack`, above): every name, kept or not, stays inside the folder unpacked into; links and devices are never written; a file twice, a name both a file and a folder, a name that isn't UTF-8 refuse the whole zip.
+  A vault's `.obsidian/`, `.trash/` and `.git/` are never written out, so no git config or hook of the zip's is ever on disk.
+- **Its sizes are capped**: the zip itself by upload-max (its body by upload-max and 64 KB for the form, on `Content-Length` before it is read, and counted as it is written), what it unpacks to by four times upload-max and by the room storage-max leaves (what waits in `.zone/` isn't counted by storage-max, so it is held to it on arrival), its entries by 20,000.
+- **It waits where no route reaches**: in `.zone/imports/<random id>/`, out of git and out of an export, the zip deleted as soon as it is unpacked; only its uploader's requests find it (`uploadedBy` in `go/access.go`; another's id is 404, as one that isn't there), and it is gone after an hour, at Cancel, at the uploader's next upload, and at a start (The waiting import in `docs/spec/editor.md`).
+- **What it writes goes through the wiki's rules**: the folder is checked as a page's is (`checkImportFolder`: a place the uploader may write, not there yet), every page's path by `safePath`, every file's name as an upload's, the whole write is one operation under the page lock (`importOp`, `writesPages`), and a note can't become a folder's guide (Guides are an admin's to write, above).
+  The pages are markdown like any other: rendered under the page policy, their raw HTML defused.
+- **The routes are closed to viewers and visitors** (not in `viewerWrites`, `visitorRoutes`), and the Origin check holds for the upload, Import and Cancel as for every POST.
+
+Tests: `tests/test_import.py`, the probes in `tests/test_privacy.py` and `tests/test_roles.py`, `go/imports_test.go`.
 
 ## Throttling
 
@@ -890,7 +905,7 @@ Until then its clients count as one.
 
 | What | Limit | Section |
 |------|-------|---------|
-| A request's body | 16 MB; an upload 100 MB or `upload-max` | Request bodies |
+| A request's body | 16 MB; an upload, a zip to import, 100 MB or `upload-max` | Request bodies |
 | What the wiki holds | `storage-max` | Storage limit in `docs/spec/users.md` |
 | A search query | 500 characters, 32 words, 8 looked for as typos | Search queries |
 | Connections | 100 at a time; a stalled one closed after 10 s (headers) or 60 s | Slow clients |
@@ -901,6 +916,7 @@ Request bodies are capped (`checks`), so one request can't fill the server's mem
 
 - at most 16 MB (`bodyMax`: a page, a task, an MCP call);
 - an upload (`/api/upload`) 100 MB, or the settings' `upload-max` (`Settings.uploadMax`; reloaded with them, so a change needs no restart).
+- a zip of notes to import (`POST /import`) `upload-max` and 64 KB for the form's other fields (`importFormMax`), its zip itself `upload-max` (An uploaded zip of notes, above).
 
 A body over it is refused with 413 (`Too large: at most 16 MB`, the size as `formatSize` writes it) on its `Content-Length`, before it is read.
 One sent without a length (chunked) is cut at the limit (`http.MaxBytesReader`, `tooLarge`), and the routes that read whole bodies (the page writes, `/mcp`, the preview, the tasks API) answer that with 413 too.

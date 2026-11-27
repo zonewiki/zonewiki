@@ -89,12 +89,13 @@ The page renders the state (`semanticStatus`: on, indexing, failed, off) as `dat
 | "Tasks" | slug shown as `/tasks`, `href: /tasks`: the built-in tasks page | always |
 | "Notes" | slug `/notes`, href `/notes` | always |
 | "Help" | slug `/help`, href `/help`: the manual (Help in `docs/spec/routes.md`) | always (not for a visitor) |
+| "Import pages" | slug `/import`, href `/import`: a zip of notes (Importing pages in `docs/spec/editor.md`) | for who may write (not a viewer, not a visitor) |
 | Changes | `href: /changes` | git only |
 | "Deleted Pages" | `_deleted` | git only |
 
-Tasks and Notes are modules, linked from the module switcher, and Help is in the user menu and the shortcuts dialog, so the empty-query list leaves them out (each is found by typing: Notes matches searches for "notes").
+Tasks and Notes are modules, linked from the module switcher, Help is in the user menu and the shortcuts dialog, and Import pages on the New Page form, so the empty-query list leaves them out (each is found by typing: Notes matches searches for "notes").
 Changes and Deleted Pages, also marked `special`, are pinned above the pages whatever the sort, set apart by a stronger rule (`.page-list-special`).
-Typing matches all five like any other entry; "Unlinked only" leaves them out.
+Typing matches all six like any other entry; "Unlinked only" leaves them out.
 
 Special pages (starting with `_`) are not filtered out of the search modal or backlink counts but are treated as regular pages otherwise.
 

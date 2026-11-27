@@ -20,6 +20,12 @@
   <label class="promote-check"><input type="checkbox" name="private" value="1"{{if eq $.For "private"}} checked{{end}}> Private: only you see it (in private/{{.}}/)</label>
   {{- end}}
   {{- end}}
-  <button type="submit" class="btn btn-primary">Create</button>
+  <div class="new-page-actions">
+    <button type="submit" class="btn btn-primary">Create</button>
+    {{- if .CanImport}}
+    {{- /* Import pages…: the form for a zip of notes, For carried over (no slug needed). */}}
+    <button type="submit" class="btn" formaction="/import" formmethod="get" formnovalidate>Import pages…</button>
+    {{- end}}
+  </div>
 </form>
 {{end}}

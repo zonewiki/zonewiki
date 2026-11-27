@@ -138,6 +138,38 @@ func TestAPartTheWikiRefusesGetsAHyphen(t *testing.T) {
 	}
 }
 
+// A note's name the caller refuses (a folder's guide) gets a hyphen and
+// the caller's reason; a folder of that name is no note and keeps it.
+func TestANoteNameTheCallerRefusesGetsAHyphen(t *testing.T) {
+	fsys := fstest.MapFS{
+		"AGENTS.md":        &fstest.MapFile{Data: []byte("# Agents\n")},
+		"agents/CLAUDE.md": &fstest.MapFile{Data: []byte("# Claude\n")},
+		"agents/plain.md":  &fstest.MapFile{Data: []byte("# Plain\n")},
+	}
+	o := options()
+	o.NoteRefused = func(p string) string {
+		if p == "agents" || p == "claude" {
+			return "a guide's name"
+		}
+		return ""
+	}
+	plan, err := Convert(fsys, o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var slugs []string
+	for _, p := range plan.Pages {
+		slugs = append(slugs, p.Slug)
+	}
+	if want := []string{"my-vault/agents-", "my-vault/agents/claude-", "my-vault/agents/plain"}; !reflect.DeepEqual(slugs, want) {
+		t.Errorf("slugs %q, want %q", slugs, want)
+	}
+	if want := []string{"`AGENTS.md` → `my-vault/agents-` (a guide's name)",
+		"`agents/CLAUDE.md` → `my-vault/agents/claude-` (a guide's name)"}; !reflect.DeepEqual(plan.Report.Renamed, want) {
+		t.Errorf("renamed %q", plan.Report.Renamed)
+	}
+}
+
 func TestANoteWithoutATitleGetsItsName(t *testing.T) {
 	plan := convert(t, false, map[string]string{
 		"Plain (1).md":   "Some text.\n",

@@ -1,0 +1,61 @@
+{{- /* /import: Import pages (imports.go, Importing pages in docs/spec/editor.md).
+    The form takes a zip and the folder its pages go into; the upload answers
+    with the report of what would be imported, and Import and Cancel. */ -}}
+{{define "body"}}
+{{.BreadcrumbHTML}}
+{{- with .Report}}
+<h1>Import “{{.Name}}”</h1>
+{{- with $.Error}}
+<p class="users-error" role="alert">{{.}}</p>
+{{- end}}
+<p class="import-summary">Nothing is in the wiki yet.
+  <strong>{{.Pages}} {{if eq .Pages 1}}page{{else}}pages{{end}}</strong>{{if .Files}} and <strong>{{.Files}} {{if eq .Files 1}}file{{else}}files{{end}}</strong>{{end}}
+  will go into the new folder <code>{{.Folder}}/</code>, whose index page lists them and keeps this report.
+  {{- if .Obsidian}} It is an Obsidian vault: its own syntax is converted.{{end}}</p>
+{{- range .Sections}}
+<h2>{{.Title}}</h2>
+<div class="import-lines">{{.HTML}}</div>
+{{- else}}
+<p>Every note comes over as it is named, and every link finds its page or file.</p>
+{{- end}}
+<div class="import-actions">
+  <form method="post" action="/import/apply">
+    <input type="hidden" name="id" value="{{.ID}}">
+    <button type="submit" class="btn btn-primary">Import</button>
+  </form>
+  <form method="post" action="/import/cancel">
+    <input type="hidden" name="id" value="{{.ID}}">
+    <button type="submit" class="btn">Cancel</button>
+  </form>
+</div>
+{{- else}}
+<h1>Import pages</h1>
+<p>A folder of markdown notes, an Obsidian vault for one, as a zip: its notes become pages in a new folder, with the images and files they link to.
+  You see what will come over before anything is written.</p>
+{{- with .Error}}
+<p class="users-error" role="alert">{{.}}</p>
+{{- end}}
+<form class="new-page-form import-form" method="post" action="/import" enctype="multipart/form-data">
+  <label for="import-folder">Folder</label>
+  <input type="text" id="import-folder" name="folder" value="{{.Folder}}" placeholder="Named after the zip, e.g. my-vault">
+  {{- if and .Shell.User .Groups}}
+  <label for="import-for">For</label>
+  <select id="import-for" name="for">
+    <option value="">Everyone who uses this wiki</option>
+    {{- range .Groups}}
+    <option value="group:{{.}}"{{if eq $.For (print "group:" .)}} selected{{end}}>@{{.}}: its members see them (in groups/{{.}}/)</option>
+    {{- end}}
+    <option value="private"{{if eq .For "private"}} selected{{end}}>Only you (in private/{{.Shell.User}}/)</option>
+  </select>
+  {{- else}}
+  {{- with .Shell.User}}
+  <label class="promote-check"><input type="checkbox" name="private" value="1"{{if eq $.For "private"}} checked{{end}}> Private: only you see them (in private/{{.}}/)</label>
+  {{- end}}
+  {{- end}}
+  <label for="import-file">Zip file</label>
+  <input type="file" id="import-file" name="file" accept=".zip,application/zip" required>
+  <p class="import-hint">At most {{.MaxUpload}}. A folder that is there already is refused, so nothing clashes.</p>
+  <button type="submit" class="btn btn-primary">Upload</button>
+</form>
+{{- end}}
+{{end}}

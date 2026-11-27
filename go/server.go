@@ -230,7 +230,8 @@ func main() {
 	noDeltaForUploads(cfg.Data)
 	ensureHomePage()
 	cleanLeftDrafts()
-	setUpTasks() // the task files as this Zonewiki keeps them (tasksetup.go)
+	clearImports() // what waited when Zonewiki stopped (imports.go)
+	setUpTasks()   // the task files as this Zonewiki keeps them (tasksetup.go)
 	noteWikiFormat(format)
 	packAtStart() // the repository's loose objects, in the background (gitstore.go)
 	// The semantic index's worker reads tasks: after the task files are set up.
@@ -648,6 +649,7 @@ func newHandler() http.Handler {
 	emailRoutes(mux)
 	usageRoutes(mux)
 	oauthRoutes(mux)
+	importRoutes(mux)
 	return noStalls(checks(visitorGate(mux, usageGate(mux, gzipTasks(viewerGate(mux))))))
 }
 
@@ -783,10 +785,19 @@ func checks(next http.Handler) http.Handler {
 			return
 		}
 		limit := int64(bodyMax)
-		if r.URL.Path == "/api/upload" {
+		switch {
+		case r.URL.Path == "/api/upload":
 			limit = settings().uploadMax()
+		case r.URL.Path == "/import" && r.Method == "POST":
+			// A zip of notes, and the form's few fields (imports.go).
+			limit = settings().uploadMax() + importFormMax
 		}
 		if r.ContentLength > limit {
+			if r.URL.Path == "/import" {
+				http.Error(w, "The zip is too large: an upload may be at most "+formatSize(settings().uploadMax())+
+					" (upload-max in the wiki's settings).", http.StatusRequestEntityTooLarge)
+				return
+			}
 			tooLargeError(w, limit)
 			return
 		}
@@ -831,7 +842,8 @@ func checks(next http.Handler) http.Handler {
 }
 
 // A request's body is at most bodyMax (a page, a task, an MCP call), an
-// upload's upload-max (100 MB unless set; Settings.uploadMax): a bigger one
+// upload's upload-max (100 MB unless set; Settings.uploadMax), an import's zip
+// upload-max and its form (importFormMax): a bigger one
 // gets 413 before it is read, or, sent without a length, a read error at
 // the limit (tooLarge).
 const bodyMax = 16 << 20
