@@ -7,10 +7,9 @@ You see what will come over before anything is written, and one click undoes the
 
 1. Zip the folder: on a Mac, right-click it and choose **Compress**; on Windows, **Send to** › **Compressed (zipped) folder**; on Linux, `zip -r my-vault.zip "My Vault"`.
 2. Open **Import pages**: press `Ctrl+P` (`⌘P` on a Mac), type "import" and choose **Import pages**.
-   Or click **New page** on your private home or a group's home, and **Import pages…** on the **New Page** form: the pages are then for whom that form says.
 3. Choose the zip under **Zip file**.
    **Folder** is where the pages go: leave it empty for a new folder named after the zip (`My Vault.zip` becomes `my-vault`).
-   With users, **For** says who sees them, as for a new page: everyone, a group you are in, or only you.
+   With users, **For** says who sees them: everyone, a group you are in, or only you.
 4. Click **Upload**.
 
 The folder must be a new one: a folder that is there already is refused, so nothing an import writes clashes with what you have.

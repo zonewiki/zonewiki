@@ -29,7 +29,7 @@ A file name starting with `_` (`_notes`, `a/_notes`) is still a page.
 | POST   | `/api/save/<slug>`    | Write page content to disk silently (no git commit, no redirect); used by auto-save; its answers below |
 | POST   | `/api/toggle-checkbox/<slug>` | Toggle the Nth checkbox in a page (`idx` param, with its line's `key`); see Ticking a checkbox, below |
 | POST   | `/api/preview`        | Render posted markdown to HTML (for live editor preview); `?page=` the page being edited (your own private page: its links to new shared pages are marked) |
-| GET    | `/new`                | A form for a new page's name and, with users, whom it is for (New page on a group's home and on the private home lead here; `for=group:<name>` or `for=private`: where For starts); its **Import pages…** opens `/import` with For as chosen |
+| GET    | `/new`                | A form for a new page's name and, with users, whom it is for (`for=group:<name>` or `for=private`: where For starts); no page links to it: a page is made from a link to it, and this is the way without JavaScript |
 | POST   | `/new`                | Create `<slug>.md` and redirect to it; `private=1` or `for=private` (with users): in your private folder; `for=group:<name>`: in the folder of a group you are in |
 | POST   | `/link-new`           | A new page a link on a private page or a group's asks for, made in that folder instead of shared (`linkNewOp`); see below |
 | POST   | `/relink`             | A missing page's link pointed at a page of its name elsewhere, the editor's Did you mean (`relinkOp`); see below |

@@ -1494,7 +1494,7 @@ Tags go across lists: `[[tasks: tag=sam]]` on Sam's page shows every task tagged
 **New list…** (`#list-new-dialog`; `POST /tasks/new-list`, `createListOp` in `go/tasklists.go`) asks for the list's name and makes it: an entry in the registry, in one commit (`Create list #shop`).
 A name can't hold `[ ] , | = / "`, a backslash or a control character (`checkListName`; a space or line break becomes `-`).
 No page is written.
-With users the dialog has **For**, as New page has (`list_for_select`): **Everyone who uses this wiki**, each group you are in ("@dev: its members see it": A group's lists), or **Only you** (a private list).
+With users the dialog has **For**, as `/new` and Import pages have (`list_for_select`): **Everyone who uses this wiki**, each group you are in ("@dev: its members see it": A group's lists), or **Only you** (a private list).
 Then the list opens (`/tasks?list=<name>`).
 Nothing else changes by it: new tasks still go to the Inbox, and the tasks there stay.
 

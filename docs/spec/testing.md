@@ -276,7 +276,7 @@ Prefer an API test when the behaviour shows through a route, a Go test when it d
 | `test_editor.py` | editor.md | Auto-save, Done, preview, list continuation, the Task list dialog, slow saves |
 | `test_figures.py` | rendering.md | Math and Mermaid from the vendored copies |
 | `test_fold.py` | rendering.md | Folding sections |
-| `test_import.py` | editor.md | Import pages from the New Page form: a zip uploaded, its report, Import, the folder's index, undone from Changes |
+| `test_import.py` | editor.md | Import pages from the search list: a zip uploaded, its report, Import, the folder's index, undone from Changes |
 | `test_format_bar.py` | editor.md | The formatting bar |
 | `test_groups.py` | users.md | Groups: Share…, the switcher, making and renaming, name pills, the narrowing question |
 | `test_layout.py` | routes.md | Side columns, no horizontal scroll at phone width, copy-link icons |

@@ -80,7 +80,7 @@ Link your private pages from it: a link to a page that doesn't exist yet opens t
 Other ways to make a private page:
 
 - Link to it by its path from any page you write, for example `[[private/anna/diary]]`.
-- Click **New page** on your private home: it is set to make a page only you see (**For** "Only you", or the **Private** box if you're in no group).
+- Write a link on your private home and click it: the editor offers **Make it private**.
 - File a note into your private folder ([Notes](notes.md)).
 
 On a private page, a link to a new page is marked 🌐 ("Creates a shared page"), because a page made from it would be shared.
@@ -97,7 +97,7 @@ Files you upload to a private page are private too.
 A group has a folder, `groups/<name>/`, that only its members see and change.
 If you're in a group, it has a pill in the module switcher (`g g`), which opens the group's home page.
 
-Make a page for the group with **New page** beside the group on **Groups**, or from a link on one of its pages: there `[[` offers "New page for @dev".
+Make a page for the group from a link on one of its pages: there `[[` offers "New page for @dev", and a red link's editor offers **Make it a page of @dev**.
 A group's pages show **👥 dev** beside their title, and files you upload to them stay with the group.
 
 ### Private tasks and lists
@@ -125,7 +125,7 @@ A group can also be made of other groups.
 
 **Settings** in the user menu, then the **Groups** tab, opens the Groups page (so does **All your groups** in the group pill's menu).
 It lists the groups you are in or own: who is in each, its owners and how many pages it has.
-Beside each are **New page** and **New list**, for a page or task list only that group sees.
+Beside each is **New list**, for a task list only that group sees.
 
 ### Making a group
 

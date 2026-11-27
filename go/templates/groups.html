@@ -20,7 +20,7 @@
     <span class="group-pages">{{if not .G.Member}}{{if .G.Folder}}<span title="Its folder groups/{{.G.Name}}/, which only its members see">has pages</span>{{end}}{{else if .G.Pages}}{{.G.Pages}} page{{if ne .G.Pages 1}}s{{end}}{{else}}no page yet{{end}}</span>
     {{- /* What a group is for: a page only its members see, a task list only they see. */}}
     {{- if and .G.Member .Writes}}
-    <span class="group-new"><a class="btn" href="/new?for=group:{{.G.Name}}" title="A page only {{.G.Name}} sees">New page</a> <a class="btn" href="/tasks?newlist_for=@{{.G.Name}}" title="A task list only {{.G.Name}} sees">New list</a></span>
+    <span class="group-new"><a class="btn" href="/tasks?newlist_for=@{{.G.Name}}" title="A task list only {{.G.Name}} sees">New list</a></span>
     {{- end}}
     {{- if .G.Leaves}}
     <details class="group-manage group-leave">

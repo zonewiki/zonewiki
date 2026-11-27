@@ -125,7 +125,7 @@ func groupsDone(user asker, done, group, left string) string {
 	}
 	switch done {
 	case "made":
-		return "Made the group " + group + ": only its people see its pages and the task lists that are for it. New page and New list beside it start one."
+		return "Made the group " + group + ": only its people see its pages and the task lists that are for it. New list beside it starts a list for it, and a link on its home a page."
 	case "renamed":
 		return "The group is called " + group + " now. Its people see its pages and its lists as before: what was for it is for @" + group + " (its folder is " + groupsDir + "/" + group + "/)."
 	case "people", "includes":

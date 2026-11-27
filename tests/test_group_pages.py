@@ -833,29 +833,28 @@ def test_an_assistant_is_told_who_sees_a_page(client, wiki):
     assert "A move to fewer readers (an admin, or its sharer while unchanged): narrow." in described["rename_page"]
 
 
-def test_a_group_has_ways_to_start_a_page_and_a_list(client, wiki):
-    """Where a group's page and its list are started: New page on the
-    group's home and beside it on Groups (/new with For at the group), New
-    list on Groups (the dialog open, For at the group). A viewer and who is
-    not in the group have none."""
+def test_a_group_has_a_way_to_start_a_list_and_no_new_page_button(client, wiki):
+    """A group's list is started with New list on Groups (the dialog open,
+    For at the group); a page of the group from a link on its pages (the
+    editor offers its folder), never a New page button: not on its home,
+    not on Groups, not on the private home. /new still takes For, for a
+    browser without JavaScript. Who is not in the group has no New list."""
     sign_in(client, "alice")
     home = client.get("/page/groups/dev/index", headers=HOST)
     if home.status_code != 200:                                  # made on the first visit
         client.get("/groups/dev", headers=HOST)
         home = client.get("/page/groups/dev/index", headers=HOST)
-    assert 'href="/new?for=group%3adev" class="btn new-page-here">New page</a>' in home.get_data(as_text=True), re.findall(r'<a[^>]*new-page-here[^>]*>', home.get_data(as_text=True))
-    assert "new-page-here" not in client.get("/page/groups/dev/diary", headers=HOST).get_data(as_text=True)   # the home only
+    assert "/new?" not in home.get_data(as_text=True) and ">New page<" not in home.get_data(as_text=True)
     form = client.get("/new?for=group:dev", headers=HOST).get_data(as_text=True)
     assert '<option value="group:dev" selected>' in form
     for other in ("group:ops", "group:nosuch", "nonsense"):       # not her group: For starts at everyone
         assert " selected>" not in client.get(f"/new?for={other}", headers=HOST).get_data(as_text=True)
     assert '<option value="private" selected>' in client.get("/new?for=private", headers=HOST).get_data(as_text=True)
     groups = client.get("/groups", headers=HOST).get_data(as_text=True)
-    assert 'href="/new?for=group:dev"' in groups and 'href="/tasks?newlist_for=@dev"' in groups
+    assert "/new?" not in groups and 'href="/tasks?newlist_for=@dev"' in groups
     tasks = client.get("/tasks?newlist_for=@dev", headers=HOST).get_data(as_text=True)
     assert 'data-params="newlist_error newlist_name newlist_for" data-open' in tasks and '<option value="group:dev" selected>' in tasks
-    # Her private home starts a private page.
     client.get("/private", headers=HOST)
-    assert 'href="/new?for=private"' in client.get("/page/private/alice/index", headers=HOST).get_data(as_text=True)
+    assert "/new?" not in client.get("/page/private/alice/index", headers=HOST).get_data(as_text=True)
     sign_in(client, "bob")                                        # in no group
-    assert "/new?for=group:dev" not in client.get("/groups", headers=HOST).get_data(as_text=True)
+    assert "newlist_for=@dev" not in client.get("/groups", headers=HOST).get_data(as_text=True)

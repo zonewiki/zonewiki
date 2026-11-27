@@ -1358,8 +1358,7 @@ A team inside a larger wiki keeps there what only the team should read.
 ### Using a group's folder
 
 Make a group on **Groups** (`/groups`, a tab of the user menu's **Settings**: a name and who is in it; you own it and say who else joins), or have an admin put the people in one (`zonewiki user group anna +dev`, or the Users tab; a group can be made of other groups, so `groups/product/` is for whoever is in dev or in design: Groups, above).
-From then on `groups/dev/` is theirs: make a page there with **New page** on the group's home or beside the group on Groups (`/new` with For at the group),
-from a link on one of its pages (`[[` offers "New page for @dev"; a link to a page there isn't asks, Make it a page of @dev),
+From then on `groups/dev/` is theirs: make a page there from a link on one of its pages (`[[` offers "New page for @dev"; a link to a page there isn't asks, Make it a page of @dev),
 by sharing one of your private pages with it (Share…),
 or through an assistant (`write_page` with that slug).
 **New list** beside the group on Groups opens New list… with For at the group (`/tasks?newlist_for=@dev`).

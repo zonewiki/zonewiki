@@ -1,4 +1,4 @@
-"""Import pages in a browser: from the New Page form, a vault's zip
+"""Import pages in a browser: found in the search list, a vault's zip
 uploaded, its report read, Import, the folder's index opened, and the
 whole import undone from Changes."""
 
@@ -9,9 +9,11 @@ from tests.e2e.conftest import SCREENSHOT_DIR
 
 
 def test_upload_report_import_and_undo(page, wiki):
-    page.goto("/new")
-    page.get_by_role("button", name="Import pages…").click()
-    page.wait_for_url("**/import?**")
+    page.goto("/page/index")
+    page.keyboard.press("Control+p")
+    page.locator("#modal-filter").fill("import")
+    page.locator("#modal-page-list a", has_text="Import pages").first.click()
+    page.wait_for_url("**/import")
     expect(page.get_by_role("heading", name="Import pages")).to_be_visible()
     page.get_by_label("Zip file").set_input_files({"name": "My Vault.zip", "mimeType": "application/zip",
                                                     "buffer": notes_zip(NOTES)})

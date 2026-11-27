@@ -43,7 +43,7 @@ On a phone only the last of these is at the top right, your initial or the three
 Search is in the tab bar there.
 
 There are no "new" buttons here: a new note is `c n` and a new task `c t`.
-A new page comes from a link to it (see [Pages](pages.md)); the home page of a group and your private home also have a **New page** button.
+A new page comes from a link to it (see [Pages](pages.md)).
 
 Next to these buttons, a count of uncommitted changes may appear: pages changed outside Zonewiki, or not saved as a version yet.
 [History and undo](history.md) explains what to do with them.

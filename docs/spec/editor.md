@@ -320,8 +320,8 @@ The server's own rules come to it as callbacks (`Options`): which part a page's 
 
 ### Importing a zip in the browser
 
-1. **Import pages…** on the New Page form (`/new`) opens `/import`, with whom the pages are for as the form had it.
-   The form asks for a zip, the folder the pages go into, and, with users, whom they are for (everyone, a group of yours, only you), as New Page does.
+1. **Import pages** in the search list (`Ctrl+P`, type "import") opens `/import`, its one way in: no button or menu leads there.
+   The form asks for a zip, the folder the pages go into, and, with users, whom they are for (everyone, a group of yours, only you; `for=` and `private=1` set where it starts).
    It asks for no format: a folder of markdown notes and an Obsidian vault are one kind of zip.
 2. **Upload** sends the zip.
    The folder is the one typed, or one named after the zip (`My Vault.zip` → `my-vault`), in the place chosen (`private/<you>/my-vault`, `groups/<group>/my-vault`).

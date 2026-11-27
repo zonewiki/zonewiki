@@ -250,7 +250,7 @@ func importFailed(w http.ResponseWriter, r *http.Request, v *importView, err err
 	showImport(w, newReq(r), pe.kind.status(), v)
 }
 
-// importForm: GET /import, the form (Import pages… on the New Page form).
+// importForm: GET /import, the form (Import pages in the search list).
 func importForm(w http.ResponseWriter, r *http.Request) {
 	sweepImports()
 	user := userOf(r)

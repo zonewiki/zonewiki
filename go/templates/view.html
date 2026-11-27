@@ -15,8 +15,6 @@
     <a href="/uncommitted" class="btn">← Uncommitted</a>
   {{- else}}
     {{- if not .ReadOnly}}
-    {{- /* A group's home, the private home: where a page of that place is started. */}}
-    {{- with .NewPageFor}}<a href="/new?for={{.}}" class="btn new-page-here">New page</a>{{end}}
     <a href="{{url "edit" .Slug}}" class="btn">Edit</a>
     {{- end}}
     {{template "menu_button"}}

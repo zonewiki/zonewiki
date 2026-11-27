@@ -38,13 +38,12 @@ func pageRoutes(mux *http.ServeMux) {
 		if writes {
 			groups = groupsFor(userOf(r))
 		}
-		// for: where the page starts (the New page button of a group's home, of the private home).
+		// for: where the page starts (for=private, for=group:<name>).
 		who := r.URL.Query().Get("for")
 		if g, ok := strings.CutPrefix(who, "group:"); who != "private" && !(ok && slices.Contains(groups, g)) {
 			who = ""
 		}
-		page(w, newReq(r), http.StatusOK, "new.html", "New Page", shell{}, &newPageView{Groups: groups, For: who,
-			CanImport: writes && userOf(r).Name != visitor})
+		page(w, newReq(r), http.StatusOK, "new.html", "New Page", shell{}, &newPageView{Groups: groups, For: who})
 	})
 	mux.HandleFunc("POST /new", writesPages(createPage))
 	mux.HandleFunc("POST /link-new", writesPages(linkNew))
@@ -256,14 +255,7 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 		article = htmlOf(renderMd(rq, mdtext.StripH1(content), RenderOpts{Page: slug, HideTags: true, HideTldr: true,
 			EditSlug: slug, SectionKeys: sectionKeys(content, headings), SectionTasks: tasks, TOC: &toc, Links: &links}))
 	}
-	// A place's home is where its pages are started: New page, with For at that place.
-	newFor := ""
-	if g := placeOf(slug).group(); g != "" && isGroupHome(slug) {
-		newFor = "group:" + g
-	} else if isPrivateHome(slug) && placeOf(slug).own(rq.user) {
-		newFor = "private"
-	}
-	page(w, rq, http.StatusOK, "view.html", title, shell{wide: true}, &pageView{Title: title, Slug: slug, NewPageFor: newFor,
+	page(w, rq, http.StatusOK, "view.html", title, shell{wide: true}, &pageView{Title: title, Slug: slug,
 		FromUncommitted: fromUncommitted, Private: placeOf(slug).user() != "", Group: placeOf(slug).group(), GroupTitle: groupTitle(slug), ReadOnly: readOnly(rq.user, slug), TaskKeys: strings.Join(taskLineKeys(content), ","),
 		BreadcrumbHTML: bc, DeleteDialogHTML: buildDeleteDialog(slug, title), RailTocHTML: railToc(toc),
 		MetaRowHTML: metaRow, ArticleHTML: article, LinkSections: sections, Outlinks: outlinks(rq, slug, path), Files: pageFiles(rq, links), Menu: menu})
@@ -276,7 +268,6 @@ type pageView struct {
 	FromUncommitted                                                         bool   // opened from the uncommitted list: Commit instead of Edit
 	Private                                                                 bool   // in a private folder (the lock)
 	Group, GroupTitle                                                       string // in a group's folder: the group, and what its mark says (who sees the page)
-	NewPageFor                                                              string // a place's home: what /new's For starts at for its New page button ("group:<name>", "private"), else ""
 	ReadOnly                                                                bool   // a viewer's view of a shared page: no Edit, ✎ or ticks
 	TaskKeys                                                                string // a key per checkbox (taskLineKeys), comma-separated
 	BreadcrumbHTML, DeleteDialogHTML, RailTocHTML, MetaRowHTML, ArticleHTML template.HTML
@@ -744,9 +735,8 @@ func keepLeftDraft(r *http.Request, s *editorSave) {
 // new page can be made in.
 type newPageView struct {
 	view
-	Groups    []string
-	For       string // what For starts at: "", "private", "group:<name>"
-	CanImport bool   // Import pages… (imports.go): not for a viewer or a visitor
+	Groups []string
+	For    string // what For starts at: "", "private", "group:<name>"
 }
 
 // createPage: /new, the form for a new page's name (pages are made from
@@ -967,7 +957,7 @@ func apiPagesList(w http.ResponseWriter, r *http.Request) {
 		M{"slug": "/notes", "title": "Notes", "href": "/notes", "links": 0, "mtime": 0, "builtin": true},
 		M{"slug": "/help", "title": "Help", "href": "/help", "links": 0, "mtime": 0, "builtin": true})
 	if !changesNothing(rq.user) {
-		// Found by typing, as Help is: the New Page form has the button.
+		// Found by typing, as Help is: the one way to Import pages.
 		out = append(out, M{"slug": "/import", "title": "Import pages", "href": "/import", "links": 0, "mtime": 0, "builtin": true})
 	}
 	writeJSON(w, http.StatusOK, out)

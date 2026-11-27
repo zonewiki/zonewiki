@@ -94,7 +94,7 @@ The page renders the state (`semanticStatus`: on, indexing, failed, off) as `dat
 | Changes | `href: /changes` | git only |
 | "Deleted Pages" | `_deleted` | git only |
 
-Tasks and Notes are modules, linked from the module switcher, Help is in the user menu and the shortcuts dialog, and Import pages on the New Page form, so the empty-query list leaves them out (each is found by typing: Notes matches searches for "notes").
+Tasks and Notes are modules, linked from the module switcher, Help is in the user menu and the shortcuts dialog, and Import pages is rare enough to type for, so the empty-query list leaves them out (each is found by typing: Notes matches searches for "notes").
 Changes and Deleted Pages, also marked `special`, are pinned above the pages whatever the sort, set apart by a stronger rule (`.page-list-special`).
 Typing matches all six like any other entry; "Unlinked only" leaves them out.
 
@@ -266,8 +266,9 @@ The dialog says which list the task goes to (Where a new task goes in `docs/spec
 ### New pages
 
 A new page comes from a link to it (a missing wikilink opens its editor, `docs/spec/rendering.md`), so every page is linked from somewhere; or from a note and its **Move to wiki**, which asks what links to it.
-There is no New page button in the bar and no shortcut (browsers keep Ctrl+N for a new window).
-**A place's home has New page** (a group's home, your private home; `NewPageFor`): `/new` with **For** at that place, since a page of a group or a private one has to say whose it is, which a link from a shared page doesn't.
+There is no New page button anywhere and no shortcut (browsers keep Ctrl+N for a new window), a place's home included:
+a private or a group's page starts from a link on a page of that place, whose editor offers to make it there (**Make it private**, **Make it a page of @group**; Private pages in `docs/spec/users.md`), or from `[[` completion's offer of a page there.
+`/new`, the form for a page's name, is left for a browser without JavaScript; nothing links to it.
 
 ### Action bar
 

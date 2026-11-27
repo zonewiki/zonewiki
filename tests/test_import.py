@@ -118,12 +118,11 @@ def test_a_viewer_neither_sees_the_form_nor_uploads(client, wiki):
     sign_in(client, "carol")
     assert client.get("/import", headers=HOST).status_code == 403
     assert upload(client).status_code == 403 and waiting(wiki) == {}
-    assert "Import pages…" not in client.get("/new", headers=HOST).get_data(as_text=True)
     assert "/import" not in {p["slug"] for p in client.get("/api/pages-list", headers=HOST).get_json()}
     sign_in(client, "bob")
-    new = client.get("/new", headers=HOST, query_string={"for": "private"}).get_data(as_text=True)
-    assert 'formaction="/import"' in new and "Import pages…" in new
+    # The search list is the one way in: no button on the New Page form, nor elsewhere.
     assert "/import" in {p["slug"] for p in client.get("/api/pages-list", headers=HOST).get_json()}
+    assert "/import" not in client.get("/new", headers=HOST, query_string={"for": "private"}).get_data(as_text=True)
     form = client.get("/import", headers=HOST, query_string={"private": "1"}).get_data(as_text=True)
     assert 'enctype="multipart/form-data"' in form and 'name="private" value="1" checked' in form
 

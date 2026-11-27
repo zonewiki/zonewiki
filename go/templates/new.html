@@ -22,10 +22,6 @@
   {{- end}}
   <div class="new-page-actions">
     <button type="submit" class="btn btn-primary">Create</button>
-    {{- if .CanImport}}
-    {{- /* Import pages…: the form for a zip of notes, For carried over (no slug needed). */}}
-    <button type="submit" class="btn" formaction="/import" formmethod="get" formnovalidate>Import pages…</button>
-    {{- end}}
   </div>
 </form>
 {{end}}

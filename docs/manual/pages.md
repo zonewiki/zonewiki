@@ -101,8 +101,7 @@ This way every page is linked from somewhere and easy to find again.
 Two other ways in:
 
 - From a note: **Move to wiki…** in the note's ⋯ menu turns it into a page (see [Notes](notes.md)).
-- Your private home and a group's home have a **New page** button.
-  It asks for the page's name and, if you're in a group, whom it is **For**: everyone, one of your groups, or only you.
+- From a zip of notes, an Obsidian vault for one: **Import pages** in the search list (see [Importing notes](importing.md)).
 
 ## Linking pages
 

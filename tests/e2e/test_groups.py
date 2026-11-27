@@ -138,16 +138,6 @@ def test_a_new_shared_page_from_a_groups_page_says_so(alice, wiki):
     expect(banner).to_have_count(0)
 
 
-def test_new_page_on_a_groups_home_starts_a_page_of_the_group(alice, wiki):
-    alice.goto("/groups/dev")
-    alice.get_by_role("link", name="New page", exact=True).click()
-    alice.wait_for_url("**/new?for=group**")
-    expect(alice.locator("#page-for")).to_have_value("group:dev")
-    alice.locator("#page-name").fill("Road Map")
-    alice.get_by_role("button", name="Create").click()
-    alice.wait_for_url("**/edit/groups/dev/road-map")
-
-
 # ── The way in ───────────────────────────────────────────────────────────────
 
 def test_groups_in_the_switcher_leads_to_the_groups_home(alice, wiki):
