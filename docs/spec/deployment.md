@@ -314,6 +314,7 @@ How to use one is in the manual (With the binary in `docs/manual/self-hosting.md
 A tag is the version the binary says: `v0.5.0` for `const version = "0.5.0"` in `go/config.go` (so the tagged commit is the one without `-dev`).
 CI's test job fails a `v*` tag that isn't (`./run.sh test`, from `GITHUB_REF`), and with it nothing of the tag is released: the image, the binaries and Forgejo's push to GitHub wait for the checks.
 A release's notes are its tag's message: the tag is annotated (`git tag -a`), and the release job makes the GitHub release with them (`gh release create --notes-from-tag`), since there are no pull requests to generate notes from.
+GitHub reads a bare `@word` in a release's notes as a mention of the account of that name, notifies it and lists it among the release's contributors, so the test job refuses a `v*` tag that isn't annotated or whose message mentions anyone outside code (`scripts/check-tag-message.sh`, which also checks a tag before it is pushed: `scripts/check-tag-message.sh v0.7.0`).
 
 ### What a release binary is
 
@@ -337,7 +338,7 @@ It passes git `safe.directory`, so the build string comes from the checkout even
 Run in a git worktree, the container can't reach the repository's own `.git`, and the build string is `unknown`.
 
 GitHub's **release** job (CI (GitHub Actions), below) runs on a `v*` tag once the checks pass:
-it runs `./run.sh binaries`, makes the tag's release when it has none (`gh release create --verify-tag`, titled `Zonewiki <version>`, with GitHub's generated notes)
+it runs `./run.sh binaries`, makes the tag's release when it has none (`gh release create --verify-tag`, titled `Zonewiki <version>`, with the tag's message as its notes)
 and attaches `dist/*` to it (`gh release upload --clobber`, so a run again replaces them),
 with `gh`, which GitHub's runners have, and the workflow's token (`contents: write`): no action of a third party, no secret.
 A release already made for the tag (by hand, with notes of its own) is kept, and gets the files.

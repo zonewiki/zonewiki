@@ -252,6 +252,10 @@ def test_a_tag_releases_the_binaries():
     tests = run_sh[run_sh.index("\n  test)\n"):run_sh.index("\n  bench)\n")]
     assert 'grep -qxF "const version = \\"${GITHUB_REF#refs/tags/v}\\"" go/config.go' in tests
     assert tests.index("refs/tags/v*)") < tests.index("build_image")
+    # Its message, the release's notes, mentions no one (tests/test_tag_message.py),
+    # read from the tag as it is, since actions/checkout may leave it lightweight.
+    fetch = tests.index('git fetch -q --no-tags origin "+$GITHUB_REF:$GITHUB_REF"')
+    assert fetch < tests.index('scripts/check-tag-message.sh "${GITHUB_REF#refs/tags/}"') < tests.index("build_image")
     assert re.search(r'^const version = "\d+\.\d+\.\d+(-dev)?"$', (REPO / "go" / "config.go").read_text(encoding="utf-8"), re.M)
     for workflow in (ci, (REPO / ".forgejo" / "workflows" / "ci.yml").read_text(encoding="utf-8")):
         assert "check: [test, e2e, leaks]" in workflow

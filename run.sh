@@ -301,6 +301,9 @@ case "${1:-up}" in
     # In CI on a v* tag (GITHUB_REF, GitHub's and Forgejo's): the tag is the
     # version the binary says (go/config.go), or nothing is released, since
     # the image, the binaries and the push to GitHub all wait for the checks.
+    # And its message, the release's notes, mentions no one on GitHub
+    # (scripts/check-tag-message.sh). actions/checkout may leave the tag
+    # lightweight, without its message: it is fetched as it is first.
     case "${GITHUB_REF:-}" in
       refs/tags/v*)
         if ! grep -qxF "const version = \"${GITHUB_REF#refs/tags/v}\"" go/config.go; then
@@ -308,6 +311,8 @@ case "${1:-up}" in
                "raise the version in a commit, then tag that commit." >&2
           exit 1
         fi
+        git fetch -q --no-tags origin "+$GITHUB_REF:$GITHUB_REF" || true
+        scripts/check-tag-message.sh "${GITHUB_REF#refs/tags/}"
         ;;
     esac
     image=$(build_image zonewiki-tools -f Containerfile.tools)
