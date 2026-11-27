@@ -43,6 +43,7 @@ def test_watch_a_page_and_see_what_changed(alice, wiki):
     alice.goto("/page/index")
     expect(dot).to_have_text("1")
     alice.locator(".top-updates").click()
+    wait_ready(alice)                     # a link followed: the menu opens once the page's script is there
     row = alice.locator(".updates-watch")
     expect(row.locator(".updates-row-page")).to_have_text(["Roadmap"])
     expect(row.locator(".updates-row-what")).to_have_text("bob changed it")
