@@ -96,7 +96,7 @@ func Unpack(src Source, dir string, rules Rules) (int64, error) {
 			return written, fmt.Errorf("the archive is cut off or damaged: %v", err)
 		}
 		if rules.MaxEntries > 0 && entries > rules.MaxEntries {
-			return written, fmt.Errorf("%s: it holds more than %d entries", rules.Not, rules.MaxEntries)
+			return written, &TooManyError{rules.Not, rules.MaxEntries}
 		}
 		parts, err := nameParts(e.Name, rules.Not)
 		if err != nil {

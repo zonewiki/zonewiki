@@ -37,6 +37,18 @@ const ConfigMax = 4 << 20
 // ErrTooBig: the archive unpacks to more than Read was given.
 var ErrTooBig = errors.New("the archive holds more than fits")
 
+// TooManyError: the archive holds more entries than Rules.MaxEntries, in
+// its words ("not a zip of notes: it holds more than 20000 entries"),
+// for a caller who says it in its own (errors.As).
+type TooManyError struct {
+	Not string
+	Max int
+}
+
+func (e *TooManyError) Error() string {
+	return fmt.Sprintf("%s: it holds more than %d entries", e.Not, e.Max)
+}
+
 // Write writes dir, a clone of a wiki with its settings file, to w as an
 // archive. Only files and folders go in: anything else in dir (a link, a
 // device) is an error, since a reader refuses it.

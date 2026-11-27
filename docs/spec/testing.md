@@ -264,7 +264,7 @@ Prefer an API test when the behaviour shows through a route, a Go test when it d
 | `tests/test_tasks_core.py` (Node) | tasks.md | `public/tasks-core.js`: dates, filter, order, `@` words, the case files |
 | `tests/test_text_parity.py` (Node) | rendering.md | Guard (above) |
 
-`tests/bench_tasks.py` is no test module (Suites and runs).
+`tests/bench_tasks.py` and `tests/bench_import.py` are no test modules (Suites and runs).
 
 ### Browser (`tests/e2e/`)
 
@@ -325,7 +325,7 @@ The `*_cases.json` files are edited by hand: add the case, then change both side
 | `./run.sh test` | gofmt, go vet, `go test -race ./...`, then the API tests (pytest), in the tools image with the repo mounted; extra args go to pytest |
 | `./run.sh e2e` | The browser tests and the Node tests (`tests/test_tasks_core.py`) in the tools image |
 | `./run.sh flaky [N] [pytest args]` | The chosen browser tests N times each (20) on a machine made busy |
-| `./run.sh bench` | `tests/bench_tasks.py` with its budgets, then against a race-built server |
+| `./run.sh bench` | `tests/bench_tasks.py` with its budgets, then against a race-built server; then `tests/bench_import.py` with its budgets |
 | `./run.sh retrieval` | Search on `tests/retrieval/` by keywords and by meaning, in the app's image with the model |
 | `./run.sh leaks` | gitleaks over the git history |
 | `(cd go && go test ./...)` | The Go tests with a local Go |
@@ -387,6 +387,9 @@ Its parts:
 - **A large group** (`test_a_large_group`): 2,000 shared pages and a group's folder of 2,000, a member and someone outside it.
   It measures a member's search after an edit in the group's folder, and after a start the first search of someone outside the group, of a member and of a member with nobody before:
   they guard that an edit in a group costs its one page and that a start reads the group's index from its files (A group's index files in `docs/spec/search.md`).
+- **A big vault imported** (`tests/bench_import.py`, its own module, run by `./run.sh bench` after the tasks): a generated Obsidian vault of 5,000 notes in 50 folders (linked to each other by name, some by a heading, with tags, callouts, task lists, frontmatter) and 500 pictures of 60 KB (random bytes, as a photo's are to zip), zipped, uploaded through Import pages and imported.
+  It measures the upload and its report, Import, the files in its commit and how the repository grew, the folder's index and the home page after it, the first search (5,000 pages indexed) and one after it, the page list, the server's memory at most and after, the import undone and that undo undone.
+  `ZONE_BENCH_SIZE=limit` (not CI's) runs it near the zip's limit of entries, 18,000 notes and 1,800 smaller pictures, for the numbers behind the limits (What an upload may be).
 - **A long history** (`test_a_long_history`): a wiki given 100,000 commits before its server starts (with `git fast-import`: pages in folders edited, made and deleted, task-like files changed more often, a page renamed twice), so the start writes its commit-graph (The commit-graph in `docs/spec/deployment.md`).
   It measures how long that takes, a page's history, a renamed page's, a link to a page that never was (Zonewiki asks whether it was deleted) and the deleted pages a second time (the first look, which reads every commit, is printed).
   A history read with `--follow`, or without the graph, passes the budgets many times over.

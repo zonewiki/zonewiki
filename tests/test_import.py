@@ -165,6 +165,17 @@ def test_too_big_a_zip_is_refused_and_says_so(client, wiki, monkeypatch):
     assert waiting(wiki) == {}
 
 
+def test_too_many_files_are_refused_and_it_says_what_to_do(client, wiki):
+    """More entries than one import takes (importMaxEntries, 20,000): the
+    refusal says how to import it anyway, and what that costs."""
+    sign_in(client, "alice")
+    resp = upload(client, notes_zip({f"n{i}.md": "" for i in range(20001)}))
+    body = resp.get_data(as_text=True)
+    assert resp.status_code == 413, body[:2000]
+    assert "more than 20000 files and folders" in body and "Import its folders in parts" in body
+    assert waiting(wiki) == {}
+
+
 def test_a_full_wiki_refuses_the_upload(client, wiki, monkeypatch):
     (wiki / "big.md").write_text("# Big\n\n" + "x" * 5000)
     monkeypatch.setattr(settings, "CONFIG_FILE", "storage-max = 6KB\n")

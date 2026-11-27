@@ -13,7 +13,8 @@ You see what will come over before anything is written, and one click undoes the
 4. Click **Upload**.
 
 The folder must be a new one: a folder that is there already is refused, so nothing an import writes clashes with what you have.
-The zip may be as large as an upload (100 MB unless whoever runs the wiki set another limit).
+The zip may be as large as an upload (100 MB unless whoever runs the wiki set another limit) and hold up to 20,000 files and folders.
+A vault of 5,000 notes takes a few seconds to upload and a few more to import; a very big one can take a minute, so wait for the page to answer.
 
 ## The report
 

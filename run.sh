@@ -329,12 +329,15 @@ case "${1:-up}" in
     # built with the race detector, for what that reports (no budgets: it is
     # several times slower). ZONE_BENCH_SLACK=3 allows three times the time
     # budgets (CI's runners are slower and noisier than a desk's machine).
+    # Then a big vault imported (tests/bench_import.py: 5,000 notes).
     image=$(build_image zonewiki-tools -f Containerfile.tools)
     say "Measuring the tasks at a team's size in the tools image (tests/bench_tasks.py)…"
     in_image "$image" ${ZONE_BENCH_SLACK:+-e ZONE_BENCH_SLACK="$ZONE_BENCH_SLACK"} ${ZONE_BENCH_SIZE:+-e ZONE_BENCH_SIZE="$ZONE_BENCH_SIZE"} -- sh -c \
       'python3 -m pytest -q -p no:cacheprovider -n 0 -s tests/bench_tasks.py "$@" || exit 1
        echo; echo "The same against a server built with the race detector (no budgets):"
-       ZONE_TEST_RACE=1 python3 -m pytest -q -p no:cacheprovider -n 0 tests/bench_tasks.py "$@"' -- "${@:2}"
+       ZONE_TEST_RACE=1 python3 -m pytest -q -p no:cacheprovider -n 0 tests/bench_tasks.py "$@" || exit 1
+       echo; echo "A big vault imported (tests/bench_import.py, with its budgets):"
+       python3 -m pytest -q -p no:cacheprovider -n 0 -s tests/bench_import.py' -- "${@:2}"
     ;;
   e2e)
     needs_checkout e2e

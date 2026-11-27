@@ -345,13 +345,15 @@ A note that would become a folder's guide (`AGENTS.md`, `CLAUDE.md`: a guide is 
 |---|---|
 | The zip at most upload-max (100 MB unless set; Request bodies in `docs/spec/security.md`) | "The zip is too large: an upload may be at most 100 MB" (413) |
 | What it unpacks to at most four times upload-max, and at most what the wiki has room for under storage-max | "The zip holds too much" (413), "The wiki has no room for what the zip holds" (507) |
-| At most 20,000 entries | Unpack's words: "not a zip of notes: it holds more than 20000 entries" |
+| At most 20,000 entries, kept or not (`importMaxEntries`) | "The zip holds more than 20000 files and folders, more than one import takes. Import its folders in parts, each into a folder of its own; links between the parts then lead nowhere until you point them again." (413) |
 | Every name inside the folder unpacked into (no `..`, no `/` first, no backslash or control character, UTF-8), only files and folders, no file twice | "not a zip of notes: the name … in it" (400) |
 | Not a zip at all, or cut off | "not a zip of notes (a zip): …" (400) |
 | No `.md` file in it | "The zip holds no markdown notes" (400) |
 | What the plan writes has room under storage-max | "The wiki is full" (507) |
 
-The four-times rule and the entries' number are to be measured on real vaults and set from that.
+The limits are measured (`tests/bench_import.py`, The bench in `docs/spec/testing.md`): a vault of 5,000 notes and 500 pictures (a 35 MB zip) uploads in some 3 s and imports in 5 s on a desktop, and one of 20,000 entries in 11 s and 19 s, with 350 MB of the server's memory at most; a NAS takes several times as long, which a proxy's timeout may cut short while the import goes on.
+Fewer entries would split a big vault, and an import keeps the links of its own notes only: a slow import is the lesser cost.
+A zip of pictures unpacks to some 1.2 times its size, a vault of text alone to 3 or 4: four times upload-max holds that, and stops a zip bomb.
 
 ### The waiting import
 

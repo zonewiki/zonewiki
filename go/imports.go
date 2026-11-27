@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -36,7 +37,12 @@ const importsDirName = "imports"
 var importWait = time.Hour
 
 // What an upload may unpack to: entries, kept or not, and bytes, as so
-// many times upload-max (a zip's notes pack small). To be measured.
+// many times upload-max. Measured (tests/bench_import.py): an import of
+// 20,000 entries takes some 30 s and 350 MB on a desktop, several times
+// longer on a NAS, which a proxy's timeout may cut short (the import
+// goes on); fewer would split big vaults, whose links between the parts
+// an import can't keep. Pictures unpack to 1.2 times the zip, a vault of
+// text alone to 3 or 4: four times holds that and stops a zip bomb.
 const (
 	importMaxEntries = 20000
 	importUnpackRate = 4
@@ -458,7 +464,14 @@ func unpackImport(wi *waitingImport, zip string, size int64, zipName string) err
 		MaxBytes:   max,
 		MaxEntries: importMaxEntries,
 	})
+	var tooMany *wikiarchive.TooManyError
 	switch {
+	case errors.As(err, &tooMany):
+		// Said so it can be done: an import in parts loses the links
+		// between them (each part's notes are all an import resolves).
+		return refuseAs(refusedTooLarge, "The zip holds more than "+strconv.Itoa(tooMany.Max)+
+			" files and folders, more than one import takes. Import its folders in parts, each into a folder of its own; "+
+			"links between the parts then lead nowhere until you point them again.")
 	case errors.Is(err, wikiarchive.ErrTooBig) && full:
 		return refuseAs(refusedFull, "The wiki has no room for what the zip holds: it has room for "+formatSize(max)+" more.")
 	case errors.Is(err, wikiarchive.ErrTooBig):
