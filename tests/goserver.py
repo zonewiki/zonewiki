@@ -206,10 +206,23 @@ class LiveServer:
             self.server = None
 
 
-def free_port() -> int:
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
+def session_port() -> int:
+    """A port for a worker's session, which its servers start and stop on,
+    test after test. Not one the kernel hands out for port 0 (Linux's
+    ephemeral range starts at 32768): between two tests the port is free,
+    and a server on port 0, another worker's, or Chromium's connection
+    could take it, failing every test the worker has left. Each worker has
+    a block of its own (gw3: 20300…20399), the first free port in it."""
+    worker = os.environ.get("PYTEST_XDIST_WORKER", "gw0").removeprefix("gw")
+    start = 20000 + 100 * (int(worker) if worker.isdigit() else 0)
+    for port in range(start, start + 100):
+        with socket.socket() as s:
+            try:
+                s.bind(("127.0.0.1", port))
+            except OSError:
+                continue
+            return port
+    raise RuntimeError(f"no free port in {start}…{start + 99}")
 
 
 class _Cookie:

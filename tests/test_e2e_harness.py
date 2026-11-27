@@ -25,3 +25,28 @@ def test_browser_tests_measure_with_box_of():
     assert len(raw) == 1 and raw[0].startswith("conftest.py:"), (
         "measure with box_of(locator) from conftest.py, not locator.bounding_box() "
         "(box_of(locator, moving=True) to measure while something moves):\n" + "\n".join(raw))
+
+
+def test_a_workers_port_is_its_own_and_never_one_for_port_0(monkeypatch):
+    """Each worker's browser tests start and stop their servers on one port
+    (session_port): free between two tests, so one the kernel hands out
+    for port 0 could be taken meanwhile, by a server of another test or
+    worker or by Chromium, and every test the worker had left failed (two
+    workers' 512 tests, once). It lies below Linux's ephemeral range, in a
+    block of the worker's own."""
+    import socket
+
+    from tests.goserver import session_port
+    low = int(Path("/proc/sys/net/ipv4/ip_local_port_range").read_text().split()[0])
+    ports = {}
+    for worker in ("gw0", "gw1", "gw7"):
+        monkeypatch.setenv("PYTEST_XDIST_WORKER", worker)
+        ports[worker] = session_port()
+    assert all(p < low for p in ports.values()), (ports, low)
+    assert ports["gw0"] // 100 != ports["gw1"] // 100 != ports["gw7"] // 100
+    # One taken: the next of the block.
+    monkeypatch.setenv("PYTEST_XDIST_WORKER", "gw7")
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", ports["gw7"]))
+        s.listen()
+        assert session_port() == ports["gw7"] + 1

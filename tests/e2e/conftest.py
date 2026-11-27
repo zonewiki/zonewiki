@@ -26,7 +26,7 @@ pytest.importorskip("playwright.sync_api", reason="playwright not installed (use
 from playwright.sync_api import Error as PlaywrightError, expect, sync_playwright  # noqa: E402
 
 from tests import settings  # noqa: E402
-from tests.goserver import LiveServer, free_port  # noqa: E402
+from tests.goserver import LiveServer, session_port  # noqa: E402
 
 SCREENSHOT_DIR = Path(__file__).parent / "_screenshots"
 
@@ -99,8 +99,9 @@ settings.__class__ = _WatchedSettings
 
 @pytest.fixture(scope="session")
 def base_url():
-    # One port for the session; each test's wiki fixture starts a server on it.
-    yield f"http://127.0.0.1:{free_port()}"
+    # One port for the session (session_port: never one the kernel hands out
+    # for port 0); each test's wiki fixture starts a server on it.
+    yield f"http://127.0.0.1:{session_port()}"
 
 
 @pytest.fixture()

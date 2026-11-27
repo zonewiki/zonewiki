@@ -28,6 +28,8 @@ The browser tests' `wiki` fixture builds on `git_wiki_dir`.
 The `client` fixture is a `GoClient`: it takes the calls of Flask's test client (get/post/put/delete with headers, data, json, query_string; cookies) and sends them over HTTP to a server started on the test's wiki,
 answering with werkzeug's `TestResponse` (`get_json()`, `get_data(as_text=True)`, `status_code`, `headers`).
 The browser tests' `wiki` fixture starts one on a port fixed for the session.
+That port is below the range the kernel hands out for port 0, in a block of the worker's own (`session_port` in `goserver.py`: `gw3` has 20300–20399):
+between two tests it is free, and a port taken by another server, another worker or Chromium would fail every test the worker has left.
 
 The settings a test changes in `tests/settings.py` (`monkeypatch.setattr(settings, "PASSWORD", …)`: `HOSTS`, `LOCALE`, `NOSHARE_TAGS`, `GIT_ENABLED` (a `PATH` without git) …) reach the server in its settings file,
 `.zone/config` (`config_text` in `goserver.py`: the settings that differ from Zonewiki's defaults, passwords and tokens as their hashes, then `settings.CONFIG_FILE`, more of the file's text, then the users as `[user …]` sections;
