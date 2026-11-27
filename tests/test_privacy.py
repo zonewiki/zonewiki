@@ -1421,8 +1421,7 @@ EXEMPT = {
     "GET /assistant", "POST /assistant/token", "POST /assistant/revoke",   # the caller's own MCP token, no page (test_assistant.py)
     "GET /password", "POST /password",   # the caller's own password, no page (test_password.py)
     # the caller's own mail address, no page; an admin's: a user's address (test_email.py)
-    "GET /email", "POST /email", "POST /email/resend", "GET /email/confirm/{token}", "POST /email/confirm/{token}",
-    "POST /email/digest",          # a viewer's own morning's mail, no page (test_email.py)
+    "GET /notifications", "POST /notifications", "POST /email", "POST /email/resend", "GET /email/confirm/{token}", "POST /email/confirm/{token}",
     "POST /admin/users/{name}/email",
     "GET /usage",                   # counts of the wiki's use, for admins: numbers and user names, no page (test_usage.py)
     # OAuth: the caller's own connections, no page (test_oauth.py)

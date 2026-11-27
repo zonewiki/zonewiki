@@ -1,8 +1,10 @@
-{{- /* /email: Your mail address (email.go, docs/spec/users.md, Mail
-    addresses). A user sets and removes their own address, with their
+{{- /* /notifications: Settings, Notifications (email.go, docs/spec/users.md,
+    Notifications). A user's mail address (set and removed with their
     password; no mail goes to it until its owner confirmed it by the link
-    Zonewiki mails. The same template is the link's page
-    (/email/confirm/…): one button, or why the link doesn't work. */ -}}
+    Zonewiki mails), and under it what Zonewiki mails them: a box a kind
+    (mailChoices in notify.go), none ticked until they tick it. The same
+    template is the link's page (/email/confirm/…): one button, or why the
+    link doesn't work. */ -}}
 {{define "body"}}
 {{.BreadcrumbHTML}}
 <div class="sheet email-page">
@@ -13,34 +15,27 @@
 {{- end}}
 {{- if .Dead}}
 <p>This link doesn't work for <strong>{{.User}}</strong>: it is a day old, it was used, the address was changed since, or it was sent for another user.</p>
-<p>Your mail address, and a new link, are on <a href="/email">Settings, Mail</a>.</p>
+<p>Your mail address, and a new link, are on <a href="/notifications">Settings, Notifications</a>.</p>
 {{- else}}
-<p>Zonewiki may mail <strong>{{.User}}</strong> at <strong>{{.Confirm}}</strong>: what you turn on in My tasks' settings, and nothing else.</p>
+<p>Zonewiki may mail <strong>{{.User}}</strong> at <strong>{{.Confirm}}</strong>: what you turn on under Settings, Notifications, and nothing else.</p>
 <form method="post" class="password-form">
   <button type="submit" class="btn btn-primary">Confirm</button>
 </form>
 {{- end}}
 {{- else}}
 {{- template "settings_tabs" .Shell}}
-<h1>Your mail address</h1>
-{{- if .Shared}}
-{{- with .Error}}
-<p class="users-error" role="alert">{{.}}</p>
-{{- else}}
-<p><strong>{{.User}}</strong> is an account several people sign in to: its mail address is set by whoever runs this wiki, not here.</p>
-{{- end}}
-{{- else}}
-{{- if .Viewer}}
-<p>Zonewiki mails you only what you turn on below: each morning, the pages you watch that changed. No mail goes to an address until you confirmed it by the link Zonewiki sends there.</p>
-{{- else}}
-<p>Zonewiki mails you only what you turn on: about your tasks, in <a href="/tasks?mine=1">My tasks</a>, its menu, List settings. No mail goes to an address until you confirmed it by the link Zonewiki sends there.</p>
-{{- end}}
+<h1>Notifications</h1>
+<p>Zonewiki mails you only what you turn on here, and only at an address you confirmed by the link it sends there.</p>
 {{- with .Done}}
 <p class="users-done" role="status">{{.}}</p>
 {{- end}}
 {{- with .Error}}
 <p class="users-error" role="alert">{{.}}</p>
 {{- end}}
+<h2>Mail address</h2>
+{{- if .Shared}}
+<p class="email-state"><strong>{{.User}}</strong> is an account several people sign in to: its mail address is set by whoever runs this wiki, not here.{{with .Email}} It is <strong>{{.}}</strong>.{{end}}</p>
+{{- else}}
 {{- if .Pending}}
 <div class="email-state email-pending">
   <p><strong>{{.Pending}}</strong> isn't confirmed yet. Check your mail to confirm this address: the link works for a day.</p>
@@ -64,20 +59,41 @@
     {{- end}}
   </div>
 </form>
-{{- if .Viewer}}
-<h2>The morning's mail</h2>
-<form method="post" action="/email/digest" class="digest-form">
-  {{- if .Digest}}
-  <p>Each morning Zonewiki mails you the <a href="/changes?watched=1">pages you watch</a> that changed since the last mail{{if not .Email}}, once your address is confirmed{{end}}. A morning with no change sends nothing.</p>
-  <input type="hidden" name="digest" value="off">
-  <button type="submit" class="btn">Stop the morning's mail</button>
-  {{- else}}
-  <p>Zonewiki can mail you each morning the <a href="/changes?watched=1">pages you watch</a> that changed since the last mail. A morning with no change sends nothing.</p>
-  <input type="hidden" name="digest" value="on">
-  <button type="submit" class="btn btn-primary">Mail me each morning</button>
-  {{- end}}
-</form>
 {{- end}}
+{{- if .Choices}}
+<h2>Mail me when</h2>
+<form method="post" action="/notifications" class="notify-form">
+  {{- if .Viewer}}
+  {{- with .Has "digest"}}
+  <label class="notify-check"><input type="checkbox" name="mail" value="digest"{{if .On}} checked{{end}}> <span><a href="/changes?watched=1">pages I watch</a> changed: one mail in the morning</span></label>
+  <p class="notify-hint">A morning with no change sends nothing.</p>
+  {{- end}}
+  {{- else}}
+  <fieldset>
+    <legend>Tasks</legend>
+    {{- with .Has "assigned"}}
+    <label class="notify-check"><input type="checkbox" name="mail" value="assigned"{{if .On}} checked{{end}}> <span>a task is given to me</span></label>
+    {{- end}}
+    {{- with .Has "mentioned"}}
+    <label class="notify-check"><input type="checkbox" name="mail" value="mentioned"{{if .On}} checked{{end}}> <span>someone mentions me (@name)</span></label>
+    {{- end}}
+    {{- with .Has "comments"}}
+    <label class="notify-check"><input type="checkbox" name="mail" value="comments"{{if .On}} checked{{end}}> <span>someone comments on a task I have, gave or follow</span></label>
+    {{- end}}
+  </fieldset>
+  {{- with .Has "digest"}}
+  <fieldset>
+    <legend>Each morning</legend>
+    <label class="notify-check"><input type="checkbox" name="mail" value="digest"{{if .On}} checked{{end}}> <span>the day starts: what is new on my tasks, which <a href="/changes?watched=1">pages I watch</a> changed, and what is due today</span></label>
+    <p class="notify-hint">One mail, and only on a morning that has something.</p>
+  </fieldset>
+  {{- end}}
+  {{- end}}
+  {{- if not .Email}}
+  <p class="notify-hint">Nothing is sent until you have a confirmed mail address.</p>
+  {{- end}}
+  <button type="submit" class="btn btn-primary">Save</button>
+</form>
 {{- end}}
 {{- end}}
 </div>

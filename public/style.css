@@ -1843,13 +1843,21 @@ kbd {
 }
 .user-email-form input:focus { color: var(--fg); }
 .user-email-form.saves-when-edited:not(.edited) [type=submit] { display: none; }
-/* Settings, Mail (templates/email.html): the address and its state. */
+/* Settings, Notifications (templates/email.html): the address and its state. */
 .email-page a { color: var(--link); }
 .email-page :is(.users-done, .users-error) { margin: 1rem 0; }
 .email-state { margin: 1rem 0; }
 .email-pending { padding: .5rem .75rem; border-radius: 6px; background: var(--code-bg); }
 .email-pending p { margin: 0 0 .5rem; }
 .email-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+/* Mail me when: a box a kind of mail, the kinds of an area in a fieldset. */
+.email-page h2 { margin-top: 2rem; }
+.notify-form { display: flex; flex-direction: column; gap: .7rem; align-items: flex-start; margin: 1rem 0; }
+.notify-form fieldset { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: .4rem; }
+.notify-form legend { padding: 0; margin-bottom: .4rem; font-size: .8rem; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.notify-check { display: flex; align-items: baseline; gap: .5rem; font-size: .95rem; }
+.notify-check input { flex: none; margin: 0; }
+.notify-hint { margin: 0; font-size: .85rem; color: var(--muted); }
 /* The Wiki tab's offer of the browser's timezone (admin_wiki.html): gone once it is taken. */
 .timezone-form .btn[hidden] { display: none; }
 .user-disabled .user-name { color: var(--muted); text-decoration: line-through; }

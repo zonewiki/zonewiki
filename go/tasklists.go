@@ -11,6 +11,7 @@ package main
 import (
 	"cmp"
 	"errors"
+	"maps"
 	"net/url"
 	"slices"
 	"strconv"
@@ -318,9 +319,8 @@ func scopeFilter(user asker, scope string, lists map[string]ListInfo) func(*Task
 	return func(t *Task) bool { return inScope(t, scope, lists) }
 }
 
-// mineSettingKeys: what My tasks' settings dialog sets. mail: the kinds of
-// mail about tasks the user turned on, "," between (mailKinds in notify.go).
-var mineSettingKeys = []string{"view", "group", "limit", "labels", "mail"}
+// mineSettingKeys: what My tasks' settings dialog sets.
+var mineSettingKeys = []string{"view", "group", "limit", "labels"}
 
 // mineOwner: whose registry holds user's settings of My tasks: their own,
 // without users the wiki's.
@@ -346,7 +346,11 @@ func mineRegistry(user asker) *taskfiles.Registry {
 // tabs' names), of the scope mine=1. A value that can't be read is left
 // out, the others stay (validSettings).
 func mineParams(user asker) TasksParams {
-	set := validSettings(mineRegistry(user).Mine, mineSettingKeys, taskFiles.ListsPath(mineOwner(user)))
+	mine := maps.Clone(mineRegistry(user).Mine)
+	// What mail a user wants was kept here once; it is in their watch file
+	// now (notify.go), and what is left here says nothing.
+	delete(mine, "mail")
+	set := validSettings(mine, mineSettingKeys, taskFiles.ListsPath(mineOwner(user)))
 	raw := setEmbedArgs("", set)
 	p := parseTasksParams(raw).With("mine", "1")
 	p.src = &embedSrc{-1, raw}
@@ -359,18 +363,9 @@ func setMineParams(user asker, was string, set map[string]string) error {
 	if err := mayWriteTasks(user); err != nil {
 		return err
 	}
-	if _, mail := set["mail"]; mail {
-		// Who wants the morning's mail may have changed, and with it when
-		// Zonewiki asks to be started (.zone/wake): said once the lock
-		// below is given back.
-		defer func() { writeWake(now()) }()
-	}
 	set, err := checkEmbedSettings(set, mineSettingKeys)
 	if err != nil {
 		return err
-	}
-	if set["mail"] != "" && !mineAssigns(user) {
-		return refuse("There is no mail about assigned tasks where no task can be assigned to you")
 	}
 	owner := mineOwner(user)
 	taskFiles.Lock()

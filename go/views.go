@@ -307,7 +307,7 @@ func currentModule(rq *Req) string {
 		return "notes"
 	case "/groups":
 		return "groups"
-	case "/search", "/login", "/assistant", "/password", "/email", "/oauth/authorize":
+	case "/search", "/login", "/assistant", "/password", "/notifications", "/oauth/authorize":
 		return ""
 	}
 	if p == "/admin" || strings.HasPrefix(p, "/admin/") { // in no module
@@ -516,8 +516,8 @@ func mayChangePassword(rq *Req) bool {
 // settingsTabs: the pages about whoever is signed in (with no users, about
 // the wiki), which the menu has as one entry, Settings, and which show each
 // other as a row of tabs (partials/settings_tabs.html): Connect an
-// assistant, Change password where there is one of theirs to change, Mail
-// for a user of a wiki that sends mail (email.go), with users Groups, and Usage for whoever sees it (seesUsage: an admin; with no
+// assistant, Change password where there is one of theirs to change,
+// Notifications for a user of a wiki that sends mail (email.go), with users Groups, and Usage for whoever sees it (seesUsage: an admin; with no
 // users whoever is signed in). Each keeps its own address; the menu's entry
 // opens the first. Nil where there is one page alone (a wiki without users
 // and without a login: Usage is there by its address, and from the help
@@ -531,7 +531,7 @@ func settingsTabs(rq *Req) []settingsTab {
 		tabs = append(tabs, settingsTab{"password", "Password", "/password"})
 	}
 	if hasMailTab(rq) {
-		tabs = append(tabs, settingsTab{"email", "Mail", "/email"})
+		tabs = append(tabs, settingsTab{"notifications", "Notifications", "/notifications"})
 	}
 	if rq.user.Name != "" {
 		tabs = append(tabs, settingsTab{"groups", "Groups", "/groups"})

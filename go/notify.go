@@ -3,8 +3,8 @@
 // task. The task writes call tellAssigned after a write went through
 // (createTask, updateTaskLocked, apiBatchUpdate), with who had each task
 // before. No mail without an SMTP server (mail.go), to a user without an
-// address, or to one who didn't turn that mail on in their My tasks'
-// settings (mails). In the app such a task is marked on its card and
+// address, or to one who didn't turn that mail on (mails; Settings,
+// Notifications). In the app such a task is marked on its card and
 // counted on the Tasks links (newsFor), from the task alone.
 package main
 
@@ -19,27 +19,39 @@ import (
 // write made is not in it.
 type assignedBefore map[string]string
 
-// The kinds of mail a user can turn on (My tasks' settings): a task given
-// to them, a mention of them, a comment on a task they have or gave, and
-// the morning's mail (digest.go: what is new for them and what is due).
-// "mail" in their registry's mine names those turned on, "," between.
-// None is turned on until they do it.
+// The kinds of mail a user can turn on (Settings, Notifications): a task
+// given to them, a mention of them, a comment on a task they have, gave or
+// follow, and the morning's mail (digest.go: what is new for them, the
+// watched pages that changed, what is due). Those turned on are in their
+// watch file (watched.Mail). None is turned on until they do it.
 var mailKinds = []string{"assigned", "mentioned", "comments", "digest"}
 
+// mailChoices: the kinds of mail user can have, in mailKinds' order: all of
+// them for one a task can be given to; the morning's mail alone for a
+// viewer, whom nothing is given (theirs tells of the pages they watch), but
+// not for an account several people sign in to; none for anyone else (a
+// disabled user, one waiting for approval).
+func (s *Settings) mailChoices(user string) []string {
+	switch u := s.Users[user]; {
+	case u == nil:
+		return nil
+	case s.assignable(user):
+		return mailKinds
+	case s.mayViewerDigest(user) && !u.Shared:
+		return []string{"digest"}
+	}
+	return nil
+}
+
 // mails: user gets the mails of kind: the deployment sends mail, they have
-// an address, they aren't disabled, and they turned that kind on, in My
-// tasks' settings. A viewer has the morning's mail alone, turned on on the
-// Mail tab (viewerDigest): nothing is given to a viewer, so the other kinds
-// have nothing to tell.
+// a confirmed address, the kind is one of theirs to have (mailChoices) and
+// they turned it on.
 func mails(s *Settings, user, kind string) bool {
 	u := s.Users[user]
 	if !cfg.Mail.on() || u == nil || u.Email == "" {
 		return false
 	}
-	if s.mayViewerDigest(user) {
-		return kind == "digest" && watchesOf(user).Digest
-	}
-	return s.assignable(user) && slices.Contains(strings.Split(taskFiles.ReadLists(user).Mine["mail"], ","), kind)
+	return slices.Contains(s.mailChoices(user), kind) && slices.Contains(watchesOf(user).Mail, kind)
 }
 
 // mayViewerDigest: user is a viewer who can have the morning's mail, of
@@ -49,21 +61,36 @@ func (s *Settings) mayViewerDigest(user string) bool {
 	return u != nil && u.Role == roleViewer && !u.Disabled && !u.Pending
 }
 
-// setViewerDigest turns a viewer's morning's mail on or off; it writes
-// their watch file, beside the wiki, and makes no commit.
-func setViewerDigest(user string, on bool) {
+// setMails turns on the kinds of mail in on for user, of those they can
+// have, and the others off; it writes their watch file, beside the wiki,
+// and makes no commit. Who wants the morning's mail may have changed, and
+// with it when Zonewiki asks to be started (.zone/wake).
+func setMails(s *Settings, user string, on []string) {
+	var kinds []string
+	for _, k := range s.mailChoices(user) { // in one order, whatever was sent
+		if slices.Contains(on, k) {
+			kinds = append(kinds, k)
+		}
+	}
 	changeWatches(user, func(w *watched) bool {
-		if w.Digest == on {
+		if slices.Equal(w.Mail, kinds) {
 			return false
 		}
-		w.Digest = on
+		w.Mail = kinds
 		return true
 	})
 	writeWake(now())
 }
 
-// mailsAssigned: user gets a mail when a task is assigned to them.
-func mailsAssigned(s *Settings, user string) bool { return mails(s, user, "assigned") }
+// mailFooter: a mail's last line: why Zonewiki sent it (why: "when someone
+// gives you a task") and where its reader turns it off.
+func mailFooter(s *Settings, why string) string {
+	where := "open Settings, then Notifications"
+	if s.BaseURL != "" {
+		where = "open " + s.BaseURL + "/notifications"
+	}
+	return "\n" + appName + " sends this mail " + why + ". To turn it off, " + where + ".\n"
+}
 
 // taskMail: a mail about one task, sent in the background (a task write
 // doesn't wait for a mail server); a failure is logged.
@@ -76,7 +103,7 @@ func taskMail(s *Settings, name, subject, intro string, t *Task, text, kindLine 
 	if text = strings.TrimSpace(text); text != "" {
 		b.WriteString("\n" + runePrefix(text, 2000) + "\n")
 	}
-	b.WriteString("\n" + appName + " sends this mail " + kindLine + ". To turn it off, open My tasks, then its menu, List settings.\n")
+	b.WriteString(mailFooter(s, kindLine))
 	to, body := s.Users[name].Email, b.String()
 	go func() {
 		if err := sendMail(cfg.Mail, to, subject, body); err != nil {
@@ -145,7 +172,7 @@ func tellAssigned(by string, before assignedBefore, tasks ...*Task) {
 	}
 	sort.Strings(names)
 	for _, name := range names {
-		if !mailsAssigned(s, name) {
+		if !mails(s, name, "assigned") {
 			continue
 		}
 		to, subject, body := s.Users[name].Email, "", assignedMail(s, by, given[name])
@@ -185,7 +212,6 @@ func assignedMail(s *Settings, by string, tasks []*Task) string {
 	if s.BaseURL != "" {
 		b.WriteString("\nAll your tasks: " + s.BaseURL + mineHref + "\n")
 	}
-	b.WriteString("\n" + appName + " sends this mail when someone gives you a task. To turn it off, open My tasks, " +
-		"then its menu, List settings.\n")
+	b.WriteString(mailFooter(s, "when someone gives you a task"))
 	return b.String()
 }

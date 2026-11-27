@@ -46,6 +46,11 @@ def kept(wiki_dir, name):
     return json.loads(path.read_text()) if path.exists() else None
 
 
+def watching(wiki_dir, name):
+    """What name watches, None for nothing: their file stays while they have a mail turned on (test_email.py)."""
+    return (kept(wiki_dir, name) or {}).get("watch") or None
+
+
 def as_user(client, name, slug, text):
     """name saves the page; alice is signed in afterwards."""
     login(client, name)
@@ -71,12 +76,12 @@ def test_watch_and_unwatch_are_the_users_and_no_commit(alice, wiki_dir):
     assert ">Unwatch</button>" in alice.get("/page/roadmap", headers=HOST).get_data(as_text=True)
     assert commit_messages(wiki_dir) == before                   # nothing in the wiki changed
     assert "roadmap" not in (wiki_dir / "roadmap.md").read_text().replace("# Roadmap", "")
-    assert kept(wiki_dir, "bob") is None                         # hers alone
+    assert watching(wiki_dir, "bob") is None                         # hers alone
     # Listed with the watched changes, where it is unwatched too.
     listed = alice.get("/changes?watched=1", headers=HOST).get_data(as_text=True)
     assert "You watch 1 thing" in listed and '<a href="/page/roadmap">roadmap</a>' in listed
     assert watch(alice, on=False, page="roadmap", back="/changes?watched=1").headers["Location"] == "/changes?watched=1"
-    assert kept(wiki_dir, "alice") is None                       # the file goes with the last watch
+    assert watching(wiki_dir, "alice") is None                       # gone with the last watch
     assert ">Watch</button>" in alice.get("/page/roadmap", headers=HOST).get_data(as_text=True)
     # Back only to Zonewiki.
     assert watch(alice, page="roadmap", back="https://evil.example/").headers["Location"] == "/page/roadmap"
@@ -163,7 +168,7 @@ def test_a_watched_folder_has_its_pages_and_those_made_later(alice, wiki_dir):
     assert alice.get("/page/projects/leaf", headers=HOST).status_code == 200
     assert count(alice) == 1
     watch(alice, on=False, folder="projects")
-    assert count(alice) == 0 and kept(wiki_dir, "alice") is None
+    assert count(alice) == 0 and watching(wiki_dir, "alice") is None
 
 
 def test_a_watch_follows_a_rename_and_a_folders_move(alice, wiki_dir):
@@ -198,7 +203,7 @@ def test_nothing_of_a_page_you_may_not_see(alice, wiki_dir):
     assert watch(alice, page="no-such-page").status_code == 404
     assert watch(alice, page="../etc/passwd").status_code == 404
     assert watch(alice, folder="_tasks").status_code == 404
-    assert kept(wiki_dir, "alice") is None
+    assert watching(wiki_dir, "alice") is None
     # A folder is watched whatever is in it, and tells nothing of what she doesn't see.
     assert watch(alice, folder="private/bob").status_code == 303
     watch(alice, page="plan")

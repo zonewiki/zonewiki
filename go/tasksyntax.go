@@ -167,11 +167,11 @@ func renameTagInText(text, old, name string) string {
 // Not list=: which list an embed shows is the page's to say, and a list is
 // renamed by renameListOp. A list's own settings are listSettingKeys.
 // paramOrder: the order new params are written in (setEmbedArgs), wherever
-// they are written: an embed, All tasks', My tasks' (mail is its own).
+// they are written: an embed, All tasks', My tasks'.
 var (
 	embedSettingKeys = []string{"tag", "assignee", "view", "group"}
 	allSettingKeys   = []string{"new", "view", "group", "limit", "labels"}
-	paramOrder       = []string{"tag", "assignee", "new", "view", "group", "limit", "labels", "mail"}
+	paramOrder       = []string{"tag", "assignee", "new", "view", "group", "limit", "labels"}
 	embedValueRE     = regexp.MustCompile(`^[^\[\]` + "`" + `]*$`)
 )
 
@@ -215,21 +215,6 @@ func checkEmbedSettings(set map[string]string, keys []string) (map[string]string
 				if v = strings.ToLower(v); v != "off" {
 					return nil, refuse("home is off (the list's tasks are left out of My tasks) or not set")
 				}
-			case "mail":
-				// The kinds of mail turned on, "," between (mailKinds).
-				asked := strings.Split(strings.ToLower(v), ",")
-				for _, k := range asked {
-					if k != "" && !slices.Contains(mailKinds, k) {
-						return nil, bad()
-					}
-				}
-				var kinds []string
-				for _, k := range mailKinds { // in one order, whatever was sent
-					if slices.Contains(asked, k) {
-						kinds = append(kinds, k)
-					}
-				}
-				v = strings.Join(kinds, ",")
 			case "new":
 				v = strings.Join(taskmodel.CleanTags(strings.Split(v, ",")), ",")
 			case "assignee":

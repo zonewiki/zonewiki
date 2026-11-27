@@ -27,15 +27,26 @@ Once signed in, the round button with your initial at the top right opens your *
 **Settings** opens three pages that are tabs of each other: **Assistant** ([connect an assistant](assistants.md)), **Password** and **Groups**.
 On a phone the same round button is at the top right, beside the page's breadcrumb, and opens the same menu (without **Sharing mode**).
 
+### Notifications
+
+Zonewiki mails you only what you ask for, and only at an address you confirmed.
+Where your wiki sends mail, open the user menu, **Settings**, then the **Notifications** tab.
+Under **Mail me when**, tick what you want and click **Save**:
+
+- **Tasks**: a task is given to me, someone mentions me (@name), someone comments on a task I have, gave or follow ([News about your tasks](tasks.md#news-about-your-tasks)).
+- **Each morning**: one mail when the day starts, with what is new on your tasks, which of [the pages you watch](history.md#watching-pages) changed, and what is due today.
+  A morning with nothing new sends nothing.
+
+None is on until you tick it, and nothing is sent until you have a mail address you confirmed.
+Every mail's last line leads back to this page, where you turn it off.
+
 ### Your mail address
 
-Zonewiki mails you only what you ask for, about your tasks ([News about your tasks](tasks.md#news-about-your-tasks)), and only at an address you confirmed.
-Where your wiki sends mail, open the user menu, **Settings**, then the **Mail** tab.
+Your address is at the top of the same tab.
 
 1. Type your address and your password, and click **Save and send the link**.
 2. Open the link in the mail Zonewiki sent you, signed in as yourself, and click **Confirm**.
-   The link works for a day; **Send the link again** on the Mail tab sends a new one.
-3. In **My tasks**, open its menu, **List settings…**, and tick what you want to be mailed about.
+   The link works for a day; **Send the link again** sends a new one.
 
 **Remove my address**, with your password, stops all mail.
 A new address replaces the old one at once, and waits for its own confirmation.
@@ -223,7 +234,7 @@ Each user has a role:
 | viewer | read everything shared, and change nothing, not even private pages or notes |
 
 A viewer sees no Edit button, no Private or Notes, and no New task.
-A viewer can still watch pages, and have a mail each morning of those that changed: **Settings**, **Mail**, **Mail me each morning**.
+A viewer can still watch pages, and have a mail each morning of those that changed: **Settings**, **Notifications**.
 Someone who needs notes or tasks of their own should be an editor.
 
 An admin is not a superuser.

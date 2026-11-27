@@ -526,7 +526,7 @@ A setting is kept where it belongs: what the tasks shown are with them (a list's
 | A list (`/tasks?list=`, or a page that shows it) | all but the filter on `/tasks?list=`; on a page the tab, the grouping and the filter are the page's (the list's own fields only for who manages it) | everyone who sees the list, or only you for a private list |
 | An embed of no list, of My tasks or of the Inbox (`[[tasks: tag=work]]`) | Opens on, The Open tab shows and the filter, written in its `[[tasks: …]]`; the rest is All tasks' (My tasks' for `mine=1`), set there | everyone who sees the page |
 | All tasks (`/tasks`) | Opens on, The Open tab shows, WIP limit, Tab names, Tags of a new task | everyone |
-| My tasks (`/tasks?mine=1`) | Opens on, The Open tab shows, WIP limit, Tab names, and **Mail me when** | you alone |
+| My tasks (`/tasks?mine=1`) | Opens on, The Open tab shows, WIP limit, Tab names | you alone |
 
 The dialog shows what is changed most: Opens on and The Open tab shows.
 The other fields show only when set as the dialog opens (`[data-field]`, `showField` in `settingsForm`);
@@ -569,7 +569,7 @@ The app says where its settings go in `data-settings-*` on `.tasks-app`, from `b
 
 My tasks' dialog says "For My tasks: yours alone." (without users "For My tasks.")
 Unset, it opens on Today, with Plan on the Open tab and no limit.
-`"mail"` in `mine` names the kinds of mail you turned on (**Mail me when**: a task is given to me, someone mentions me, someone comments on a task I have, gave or follow; three boxes, none ticked until you tick it, shown where Zonewiki could mail you: `data-settings-mail`; where it sends mail but has no confirmed address of yours, a line says where to set one, `data-settings-mailask`; Mail, under News on your tasks).
+What Zonewiki mails you about your tasks is not a setting of My tasks or of any list: it is on the **Notifications** tab of your Settings (Mail, under News on your tasks).
 
 ### Saving settings
 
@@ -1368,22 +1368,24 @@ Not built: the name as a chip in the text, and completing it while typing.
 
 ### Mail
 
-Mail goes where you asked for it (`mails`, `mailKinds`): four kinds, each a box in My tasks' settings dialog (there where Zonewiki could mail you: the deployment's mail server, `ZONE_SMTP_*`, or its mail folder, Mail in `docs/spec/deployment.md`, and your `email` in `.zone/config`: an address you confirmed, on the **Mail** tab of Settings, or one sign-up or an admin's `zonewiki user email NAME ADDRESS` set, Mail addresses in `docs/spec/users.md`; without one the dialog says "Zonewiki can mail you about your tasks: set your mail address first."), **none ticked until you tick it**:
+Mail goes where you asked for it (`mails`, `mailKinds`): four kinds, each a box under **Mail me when** on the **Notifications** tab of your Settings (Notifications in `docs/spec/users.md`: the page, who has which boxes, where the choice is kept), **none ticked until you tick it**.
+The tab is there where Zonewiki sends mail (the deployment's mail server, `ZONE_SMTP_*`, or its mail folder: Mail in `docs/spec/deployment.md`), and a mail goes out only to your `email` in `.zone/config`: an address you confirmed on the same tab, or one sign-up or an admin's `zonewiki user email NAME ADDRESS` set (Mail addresses in `docs/spec/users.md`).
 
 | Box | Mail | |
 |-----|------|---|
 | a task is given to me | `tellAssigned`: "bob gave you a task: <title>" | several given in one write one mail, "bob gave you N tasks" |
 | someone mentions me (@name) | `tellMentioned`: "bob mentioned you: <title>" | with the text |
 | someone comments on a task I have, gave or follow | `tellComment`: "bob commented: <title>" | with the comment; not to who it mentions, who gets that mail |
-| the day starts: a summary of what is new and what is due | The morning's mail, below | once a morning, and only one that has something |
+| the day starts: what is new on my tasks, which pages I watch changed, and what is due today | The morning's mail, below | once a morning, and only one that has something |
 
 The first three come with the task's link where Zonewiki knows its address (`base-url`), sent in the background (a write doesn't wait for the mail server; a failure is in Zonewiki's log), never for what you did yourself.
-The kinds are kept as `"mail": "assigned,comments,digest"` in your registry's `mine` (the kinds turned on, in that order).
-A viewer, to whom no task is given, has none of them.
+Each mail's last line says why it was sent and where to turn it off: the Notifications tab, by its link where Zonewiki knows its address (`mailFooter`).
+A viewer, to whom no task is given, has none of the first three.
 
 ### The morning's mail
 
-One mail a morning with what a day starts with, for who ticked **the day starts: a summary of what is new and what is due**.
+One mail a morning with what a day starts with, for who ticked **the day starts** under **Each morning** on their Notifications tab.
+It is not about tasks alone: it has the pages you watch that changed, too.
 It works beside the other three: who wants one mail a day and no more unticks those.
 
 | Part | Holds |
@@ -1407,15 +1409,13 @@ A user whose address is confirmed in the morning, or who turns the mail on then,
 
 #### A viewer's morning's mail
 
-A viewer can't change My tasks' settings, and nothing is given to them, so the other three kinds have nothing to tell; the morning's mail does: the pages they watch that changed.
-They turn it on on **Settings, Mail**, below their address: **Mail me each morning**, and **Stop the morning's mail** turns it off.
-No password is asked again: like watching a page, it is their own and changes nothing of the wiki.
-Their mail holds **Pages you watch** alone, never a task (every list counts as a viewer's in My tasks, so what is due would be the whole wiki's), and goes out only on a morning a watched page changed; its last line sends them to Settings, Mail.
+Nothing is given to a viewer, so the other three kinds have nothing to tell them; the morning's mail does: the pages they watch that changed.
+They tick it where anyone does, on the **Notifications** tab of their Settings, which has that one box for them: **pages I watch changed: one mail in the morning**.
+Their mail holds **Pages you watch** alone, never a task (every list counts as a viewer's in My tasks, so what is due would be the whole wiki's), and goes out only on a morning a watched page changed.
 It goes to a confirmed address, as every mail, and not to a viewer who is disabled or waiting for approval.
 
-How: the choice is `digest` in the viewer's watch file, `.zone/watch/<user>.json` (Watching pages in `docs/spec/navigation.md`), beside the watches it is about, not in their task registry, which is in git and which a viewer writes nothing to (`setViewerDigest`, `mayViewerDigest` in `go/notify.go`; `POST /email/digest`, `viewerDigestRoute` in `go/email.go`).
-`mails` asks it for a viewer's kind `digest`, and `digestFor` leaves the tasks out for whoever can't be given one.
-A viewer made an editor chooses their mail in My tasks' settings from then on, and an editor made a viewer has none until they turn it on on the Mail tab.
+How: the choice is kept as anyone's (How the choices are kept in `docs/spec/users.md`); `mailChoices` gives a viewer the kind `digest` alone (`mayViewerDigest` in `go/notify.go`).
+`digestFor` leaves the tasks out for whoever can't be given one.
 
 #### How the morning's mail works
 

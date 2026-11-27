@@ -1,4 +1,7 @@
-// A user's mail address (/email, docs/spec/users.md, Mail addresses): a
+// Settings, Notifications (/notifications, docs/spec/users.md,
+// Notifications): a user's mail address, and what Zonewiki mails them
+// (mailKinds in notify.go: about their tasks, each morning), all of it in
+// one place, for a viewer as for anyone. The address: a
 // user sets and removes their own in the browser, with their password
 // again, as their password and token are changed (password.go,
 // assistant.go); an admin sets anyone's on the Users tab. No mail goes to
@@ -42,10 +45,10 @@ const (
 )
 
 func emailRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("GET /email", emailPage)
+	mux.HandleFunc("GET /notifications", emailPage)
+	mux.HandleFunc("POST /notifications", mailChoicesRoute)
 	mux.HandleFunc("POST /email", emailRoute)
 	mux.HandleFunc("POST /email/resend", emailResendRoute)
-	mux.HandleFunc("POST /email/digest", viewerDigestRoute)
 	mux.HandleFunc("GET /email/confirm/{token}", emailConfirmRoute)
 	mux.HandleFunc("POST /email/confirm/{token}", emailConfirmRoute)
 	mux.HandleFunc("POST /admin/users/{name}/email", adminOnly(userEmailRoute))
@@ -64,9 +67,27 @@ type emailView struct {
 	// link is for; Dead: the link doesn't work for who is signed in.
 	Confirm string
 	Dead    bool
-	// A viewer's morning's mail, on this page (Viewer: the box is shown;
-	// Digest: it is on): theirs is set here, not in My tasks' settings.
-	Viewer, Digest bool
+	// Mail me when: the kinds of mail the user can have (mailChoices), each
+	// with whether it is on; none: the page has the address alone.
+	// Viewer: theirs is the morning's mail of the pages they watch.
+	Choices []mailChoice
+	Viewer  bool
+}
+
+// mailChoice: a kind of mail on the page, a box.
+type mailChoice struct {
+	Kind string
+	On   bool
+}
+
+// Has: the page offers the kind of mail (a template's question).
+func (v *emailView) Has(kind string) *mailChoice {
+	for i := range v.Choices {
+		if v.Choices[i].Kind == kind {
+			return &v.Choices[i]
+		}
+	}
+	return nil
 }
 
 // emailOwner: whose address the request is about, as the latest settings
@@ -81,8 +102,8 @@ func emailOwner(r *http.Request) (s *Settings, u *User, ok bool) {
 	return s, u, u != nil
 }
 
-// hasMailTab: the settings pages have a Mail tab for who asks: a user of a
-// wiki that sends mail.
+// hasMailTab: the settings pages have a Notifications tab for who asks: a
+// user of a wiki that sends mail.
 func hasMailTab(rq *Req) bool {
 	return cfg.Mail.on() && settings().Users[rq.user.Name] != nil
 }
@@ -98,45 +119,51 @@ func showEmail(w http.ResponseWriter, r *http.Request, status int, u *User, done
 	if latest := latestSettings().Users[u.Name]; latest != nil {
 		u = latest
 	}
+	s := latestSettings()
 	v := &emailView{User: u.Name, Shared: u.Shared, Email: u.Email, Pending: u.EmailPending, Done: done, Error: refused,
-		Viewer: latestSettings().mayViewerDigest(u.Name) && !u.Shared, Digest: watchesOf(u.Name).Digest,
-		BreadcrumbHTML: breadcrumb(rq, settingsCrumb(rq, "Mail"), "", false, "", "")}
-	page(w, rq, status, "email.html", "Your mail address", shell{settings: "email"}, v)
+		Viewer:         s.mayViewerDigest(u.Name),
+		BreadcrumbHTML: breadcrumb(rq, settingsCrumb(rq, "Notifications"), "", false, "", "")}
+	on := watchesOf(u.Name).Mail
+	for _, kind := range s.mailChoices(u.Name) {
+		v.Choices = append(v.Choices, mailChoice{kind, slices.Contains(on, kind)})
+	}
+	page(w, rq, status, "email.html", "Notifications", shell{settings: "notifications"}, v)
 }
+
+// notificationsHref: the page, where the address routes come back to.
+const notificationsHref = "/notifications"
 
 // emailDone: what ?done= says the change before did, from a fixed set (a
 // link can't make the page say anything else).
 var emailDone = map[string]string{
-	"sent":       "Check your mail: Zonewiki sent a link to confirm the address.",
-	"unsent":     "The address is kept, but Zonewiki sent no link: too many were sent lately. Send the link again later.",
-	"failed":     "The address is kept, but Zonewiki couldn't send the link. Send the link again later.",
-	"removed":    "Your mail address is removed: Zonewiki sends you no mail.",
-	"confirmed":  "Your mail address is confirmed.",
-	"same":       "That is your address already.",
-	"digest-on":  "Zonewiki mails you each morning when pages you watch changed.",
-	"digest-off": "Zonewiki sends you no morning's mail any more.",
+	"sent":      "Check your mail: Zonewiki sent a link to confirm the address.",
+	"unsent":    "The address is kept, but Zonewiki sent no link: too many were sent lately. Send the link again later.",
+	"failed":    "The address is kept, but Zonewiki couldn't send the link. Send the link again later.",
+	"removed":   "Your mail address is removed: Zonewiki sends you no mail.",
+	"confirmed": "Your mail address is confirmed.",
+	"same":      "That is your address already.",
+	"saved":     "Saved.",
 }
 
-// viewerDigestRoute: POST /email/digest, a viewer turns their morning's
-// mail on (digest=on) or off. As watching a page, it is their own and
-// changes nothing of the wiki: no password again, no commit. Anyone but a
-// viewer gets a 404: their mail is chosen in My tasks' settings.
-func viewerDigestRoute(w http.ResponseWriter, r *http.Request) {
+// mailChoicesRoute: POST /notifications, a user says which mail they want:
+// mail names each kind turned on (a ticked box), the others of theirs are
+// off. As watching a page, it is their own and changes nothing of the wiki:
+// no password again, no commit. A 404 for who has no kind to choose.
+func mailChoicesRoute(w http.ResponseWriter, r *http.Request) {
 	s, u, ok := emailOwner(r)
-	if !ok || !s.mayViewerDigest(u.Name) || u.Shared {
+	if !ok || len(s.mailChoices(u.Name)) == 0 {
 		http.NotFound(w, r)
 		return
 	}
-	on := r.PostFormValue("digest") == "on"
-	setViewerDigest(u.Name, on)
-	done := "digest-off"
-	if on {
-		done = "digest-on"
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "Bad Request", http.StatusBadRequest)
+		return
 	}
-	http.Redirect(w, r, "/email?done="+done, http.StatusSeeOther)
+	setMails(s, u.Name, r.PostForm["mail"])
+	http.Redirect(w, r, notificationsHref+"?done=saved", http.StatusSeeOther)
 }
 
-// emailPage: GET /email.
+// emailPage: GET /notifications.
 func emailPage(w http.ResponseWriter, r *http.Request) {
 	_, u, ok := emailOwner(r)
 	if !ok {
@@ -196,7 +223,7 @@ func emailRoute(w http.ResponseWriter, r *http.Request) {
 		showEmail(w, r, http.StatusBadRequest, u, "", "That isn't a mail address. Write it as name@example.org.")
 		return
 	case email == u.Email:
-		http.Redirect(w, r, "/email?done=same", http.StatusSeeOther)
+		http.Redirect(w, r, notificationsHref+"?done=same", http.StatusSeeOther)
 		return
 	}
 	if err := setPending(u.Name, u.Name, email); err != nil {
@@ -204,10 +231,10 @@ func emailRoute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if remove {
-		http.Redirect(w, r, "/email?done=removed", http.StatusSeeOther)
+		http.Redirect(w, r, notificationsHref+"?done=removed", http.StatusSeeOther)
 		return
 	}
-	http.Redirect(w, r, "/email?done="+mailConfirm(s, r, u.Name, email), http.StatusSeeOther)
+	http.Redirect(w, r, notificationsHref+"?done="+mailConfirm(s, r, u.Name, email), http.StatusSeeOther)
 }
 
 // emailResendRoute: POST /email/resend mails the link for the address that
@@ -219,7 +246,7 @@ func emailResendRoute(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	http.Redirect(w, r, "/email?done="+mailConfirm(s, r, u.Name, u.EmailPending), http.StatusSeeOther)
+	http.Redirect(w, r, notificationsHref+"?done="+mailConfirm(s, r, u.Name, u.EmailPending), http.StatusSeeOther)
 }
 
 // confirmToken: the token of a link that confirms email as name's until
@@ -310,7 +337,7 @@ func emailConfirmRoute(w http.ResponseWriter, r *http.Request) {
 		show(http.StatusConflict)
 		return
 	}
-	http.Redirect(w, r, "/email?done=confirmed", http.StatusSeeOther)
+	http.Redirect(w, r, notificationsHref+"?done=confirmed", http.StatusSeeOther)
 }
 
 // userEmailRoute: POST /admin/users/{name}/email: an admin sets a user's

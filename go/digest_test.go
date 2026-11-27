@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -40,10 +41,7 @@ func digestWiki(t *testing.T) (*fakeSMTP, time.Time) {
 
 func mailOn(t *testing.T, name, kinds string) {
 	t.Helper()
-	user := asUser(name)
-	if err := setMineParams(user, mineParams(user).src.raw, map[string]string{"mail": kinds}); err != nil {
-		t.Fatal(err)
-	}
+	setMails(settings(), name, strings.Split(kinds, ","))
 }
 
 func digestTaskBy(t *testing.T, by string, fields map[string]string) *Task {
@@ -112,7 +110,7 @@ func TestTheMorningsMail(t *testing.T) {
 		"What changed: https://wiki.example.org/changes?watched=1\n",
 		"DUE TODAY\n\n  Call the bank\n",
 		"OVERDUE\n\n  File the taxes\n  due " + isoDay(morning.AddDate(0, 0, -3)) + "\n",
-		"To turn it off, open My tasks, then its menu, List settings.\n",
+		"To turn it off, open https://wiki.example.org/notifications.\n",
 	} {
 		if !strings.Contains(mail, want) {
 			t.Errorf("the mail lacks %q:\n%s", want, mail)
@@ -170,10 +168,10 @@ func TestTheMorningsMailIsForWhoSeesIt(t *testing.T) {
 	if d := digestFor("bob", morning.Add(-24*time.Hour), morning); d.worthSending() || d.OlderPages+len(d.Overdue) > 0 {
 		t.Errorf("bob's mail has something of alice's: %+v", d)
 	}
-	// A viewer doesn't turn it on in My tasks' settings (on the Mail tab:
-	// TestAViewersMorningsMail), and one who is disabled gets none.
-	if err := setMineParams(asUser("vera"), mineParams(asUser("vera")).src.raw, map[string]string{"mail": "digest"}); err == nil {
-		t.Error("a viewer turned the mail on in My tasks' settings")
+	// A viewer has no mail about tasks to turn on (theirs is the morning's
+	// alone: TestAViewersMorningsMail), and one who is disabled gets none.
+	if setMails(settings(), "vera", []string{"assigned", "comments"}); len(watchesOf("vera").Mail) > 0 {
+		t.Errorf("a viewer turned on %v", watchesOf("vera").Mail)
 	}
 	settings().Users["alice"].Disabled = true
 	digestState.Lock()
@@ -309,7 +307,7 @@ func TestAViewersMorningsMail(t *testing.T) {
 	if mails(s, "vera", "digest") {
 		t.Fatal("a viewer has the mail before turning it on")
 	}
-	setViewerDigest("vera", true)
+	setMails(s, "vera", []string{"digest", "assigned"})
 	for _, kind := range []string{"assigned", "mentioned", "comments"} {
 		if mails(s, "vera", kind) {
 			t.Errorf("a viewer gets the mail %q", kind)
@@ -324,7 +322,7 @@ func TestAViewersMorningsMail(t *testing.T) {
 		t.Fatalf("%d mails", n)
 	}
 	for _, want := range []string{"To: vera@example.org\n", "Subject: Zonewiki: 1 watched page changed\n", "PAGES YOU WATCH\n\n  handbook, changed by bob\n",
-		"To turn it off, open Settings, then Mail."} {
+		"To turn it off, open https://wiki.example.org/notifications."} {
 		if !strings.Contains(mail, want) {
 			t.Errorf("no %q in:\n%s", want, mail)
 		}
@@ -340,7 +338,7 @@ func TestAViewersMorningsMail(t *testing.T) {
 	// Off; and off for a viewer who is disabled. The choice stays with
 	// their watches when they watch nothing any more.
 	setWatch(asUser("vera"), "handbook", false)
-	if !watchesOf("vera").Digest {
+	if !slices.Equal(watchesOf("vera").Mail, []string{"digest"}) {
 		t.Error("the choice went with the last watch")
 	}
 	settings().Users["vera"].Disabled = true
@@ -348,7 +346,7 @@ func TestAViewersMorningsMail(t *testing.T) {
 		t.Error("a disabled viewer has the mail")
 	}
 	settings().Users["vera"].Disabled = false
-	setViewerDigest("vera", false)
+	setMails(settings(), "vera", nil)
 	if mails(settings(), "vera", "digest") || exists(watchPath("vera")) {
 		t.Errorf("off: %v, file %v", mails(settings(), "vera", "digest"), exists(watchPath("vera")))
 	}

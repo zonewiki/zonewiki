@@ -510,9 +510,9 @@ def test_a_task_someone_gave_you_is_marked_new(alice):
     expect(card(alice, "From bob").locator(".task-new")).to_have_count(0)
 
 
-def test_my_tasks_settings_turn_the_mails_on(page, wiki, monkeypatch):
-    # Where Zonewiki could mail her, My tasks' settings have a box for each kind
-    # of mail, none ticked: mail is for who asks for it.
+def test_notifications_turn_the_mails_on(page, wiki, monkeypatch):
+    # Settings, Notifications has a box for each kind of mail, none ticked:
+    # mail is for who asks for it. My tasks' settings have none of it.
     monkeypatch.setattr(settings, "USERS", {name: ("pw", "") for name in ("alice", "bob")})
     monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"email": "alice@example.org"}})
     monkeypatch.setattr(settings, "ENV", {"ZONE_SMTP_HOST": "127.0.0.1", "ZONE_SMTP_PORT": "9", "ZONE_SMTP_TLS": "none",
@@ -523,57 +523,50 @@ def test_my_tasks_settings_turn_the_mails_on(page, wiki, monkeypatch):
     more_menu(page)
     page.get_by_role("menuitem", name="List settings…").click()
     dialog = page.locator("#task-settings-modal")
-    box = dialog.locator("[name=mail_assigned]")
-    expect(dialog.locator(".task-settings-mail label")).to_have_text(
-        ["a task is given to me", "someone mentions me (@name)", "someone comments on a task I have, gave or follow",
-         "the day starts: a summary of what is new and what is due"])
-    for name in ("mail_assigned", "mail_mentioned", "mail_comments", "mail_digest"):
-        expect(dialog.locator(f"[name={name}]")).not_to_be_checked()
-    box.check()
-    dialog.locator("[name=mail_comments]").check()
-    dialog.locator("[name=mail_digest]").check()         # the morning's mail
-    with page.expect_navigation():
-        dialog.get_by_role("button", name="Save").click()
-    assert '"mine": {"mail": "assigned,comments,digest"}' in (wiki.root / "private/alice/_tasks/lists.json").read_text()
-    more_menu(page)
-    page.get_by_role("menuitem", name="List settings…").click()
-    expect(box).to_be_checked()
-    expect(dialog.locator("[name=mail_digest]")).to_be_checked()
-    expect(dialog.locator("[name=mail_mentioned]")).not_to_be_checked()
-    box.uncheck()
-    dialog.locator("[name=mail_comments]").uncheck()
-    dialog.locator("[name=mail_digest]").uncheck()
-    with page.expect_navigation():
-        dialog.get_by_role("button", name="Save").click()
-    assert '"mail"' not in (wiki.root / "private/alice/_tasks/lists.json").read_text()
-    # bob has no address: no box.
-    page.request.post("/login", form={"username": "bob", "password": "pw"})
-    page.goto("/tasks?mine=1")
-    more_menu(page)
-    page.get_by_role("menuitem", name="List settings…").click()
     expect(dialog).to_be_visible()
-    expect(box).to_be_hidden()
-    # The dialog says where he sets one (Settings, Mail), and there he does:
-    # the address waits for the link Zonewiki mails (no server here: it says so).
-    ask = dialog.locator(".task-settings-mailask")
-    expect(ask).to_have_text("Zonewiki can mail you about your tasks: set your mail address first.")
-    ask.get_by_role("link", name="set your mail address").click()
-    expect(page).to_have_url(re.compile(r"/email$"))
-    expect(page.locator(".settings-tabs [aria-current=page]")).to_have_text("Mail")
+    expect(dialog).not_to_contain_text("Mail me")
+    page.goto("/notifications")
+    expect(page.locator(".settings-tabs [aria-current=page]")).to_have_text("Notifications")
+    expect(page.locator(".email-state")).to_have_text("alice@example.org is confirmed: Zonewiki mails you there.")
+    form = page.locator(".notify-form")
+    expect(form.locator("legend")).to_have_text(["Tasks", "Each morning"])
+    expect(form.locator(".notify-check")).to_have_text(
+        ["a task is given to me", "someone mentions me (@name)", "someone comments on a task I have, gave or follow",
+         "the day starts: what is new on my tasks, which pages I watch changed, and what is due today"])
+    boxes = form.locator("[name=mail]")
+    for i in range(4):
+        expect(boxes.nth(i)).not_to_be_checked()
+    form.get_by_label("a task is given to me").check()
+    form.get_by_label("someone comments on a task").check()
+    form.get_by_label("the day starts").check()             # the morning's mail
+    form.get_by_role("button", name="Save").click()
+    expect(page.locator(".users-done")).to_have_text("Saved.")
+    assert json.loads((wiki.root / ".zone/watch/alice.json").read_text())["mail"] == ["assigned", "comments", "digest"]
+    expect(form.get_by_label("a task is given to me")).to_be_checked()
+    expect(form.get_by_label("the day starts")).to_be_checked()
+    expect(form.get_by_label("someone mentions me")).not_to_be_checked()
+    for i in range(4):
+        boxes.nth(i).uncheck()
+    form.get_by_role("button", name="Save").click()
+    expect(page.locator(".users-done")).to_have_text("Saved.")
+    assert not (wiki.root / ".zone/watch/alice.json").exists()
+    # bob has no address: the boxes are there and say that nothing goes out
+    # yet, and above them he sets one: it waits for the link Zonewiki mails
+    # (no server here: it says so).
+    page.request.post("/login", form={"username": "bob", "password": "pw"})
+    page.goto("/")
+    page.locator(".top-user").click()
+    page.get_by_role("menuitem", name="Settings").click()
+    page.locator(".settings-tabs").get_by_role("link", name="Notifications").click()
+    expect(page).to_have_url(re.compile(r"/notifications$"))
     expect(page.locator(".email-state")).to_have_text("You have no mail address here: Zonewiki sends you no mail.")
+    expect(form).to_contain_text("Nothing is sent until you have a confirmed mail address.")
     page.get_by_label("Mail address").fill("bob@example.org")
     page.get_by_label("Your password").fill("pw")
     page.get_by_role("button", name="Save and send the link").click()
     expect(page.locator(".email-pending")).to_contain_text("bob@example.org isn't confirmed yet")
     expect(page.get_by_role("button", name="Send the link again")).to_be_visible()
     assert "email-pending = bob@example.org" in (wiki.root / ".zone/config").read_text()
-    # alice, who has an address, has no such line.
-    page.request.post("/login", form={"username": "alice", "password": "pw"})
-    page.goto("/tasks?mine=1")
-    more_menu(page)
-    page.get_by_role("menuitem", name="List settings…").click()
-    expect(box).to_be_visible()
-    expect(ask).to_be_hidden()
 
 
 def test_the_tasks_link_says_that_something_is_new_for_you(alice):

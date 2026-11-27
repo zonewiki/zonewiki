@@ -144,7 +144,7 @@ def test_without_users_nobody_follows(client, wiki_dir):
 
 def test_a_comment_is_mailed_to_who_follows_and_asked_for_it(alice, smtp):
     task = new(alice, title="Offer for Acme", assignee="dan")       # dan has no address
-    mail_on(alice, "bob", "assigned,comments", was="mail=assigned")
+    mail_on(alice, "bob", "assigned,comments")
     comment(alice, task, "First")
     mails(smtp, 0)                                                  # bob doesn't follow it yet
     login(alice, "bob")

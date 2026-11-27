@@ -196,7 +196,7 @@ EXEMPT = {
     "POST /assistant/token", "POST /assistant/revoke",  # their own MCP token (test_assistant.py)
     "POST /password",                                   # their own password (test_password.py)
     "POST /email", "POST /email/resend", "POST /email/confirm/{token}",   # their own mail address (test_email.py)
-    "POST /email/digest",                               # a viewer's own morning's mail, beside their watches: nothing of the wiki (test_email.py)
+    "POST /notifications",                              # which mail they want, beside their watches: nothing of the wiki (test_email.py)
     "POST /watch", "POST /watch/read",                  # what they watch and have seen of it: theirs, nothing of the wiki (test_watch.py)
     # OAuth (test_oauth.py): a connection of their own, read-only as their token; a client's calls carry no session;
     # what one of theirs may see, never to read and change (TestChange)

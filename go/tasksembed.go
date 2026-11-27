@@ -60,8 +60,6 @@ type embedSettingsAt struct {
 	Raw          string
 	Embed        bool // an embed on a page, whose params can be written there
 	Mine         bool // My tasks on /tasks: its settings are the user's (mineParams)
-	MailAsk      bool // My tasks: Zonewiki sends mail, but has no confirmed address of the user: the dialog says where to set one (/email)
-	Mail         bool // My tasks: Zonewiki could mail the user about a task assigned to them (it sends mail, they have an address): the dialog has the box
 	List         string
 	ListSettings string
 	Home         bool // the list can be left out of the user's My tasks (its setting home)
@@ -127,10 +125,6 @@ func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless bool, p
 			at.Page, at.Index, at.Raw, at.Embed = page, src.index, src.raw, true
 		case src != nil && src.index < 0 && page == "" && mayWriteTasks(user) == nil:
 			at.Raw, at.Mine = src.raw, paramsScope(params) == mineScope
-			if u := settings().Users[user.Name]; at.Mine && cfg.Mail.on() && u != nil && mineAssigns(user) {
-				// Without a confirmed address the dialog says where to set one.
-				at.Mail, at.MailAsk = u.Email != "", u.Email == "" && !u.Shared
-			}
 		default:
 			at = nil
 		}

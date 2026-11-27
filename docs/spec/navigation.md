@@ -208,7 +208,7 @@ The menu is one template (`module_menu` in `templates/partials/modules.html`) an
 |-----|------|------------|
 | **Assistant** | Connect an assistant: your MCP token and your assistants' connections (`/assistant`, `docs/spec/mcp.md`) | everyone |
 | **Password** | Change password (`/password`, Signing in in `docs/spec/users.md`) | whoever signed in with a password of their own: not a shared account, not a wiki without a login |
-| **Mail** | your mail address, set and confirmed (`/email`, Mail addresses in `docs/spec/users.md`) | a user of a wiki that sends mail |
+| **Notifications** | your mail address, set and confirmed, and what Zonewiki mails you (`/notifications`, Notifications in `docs/spec/users.md`) | a user of a wiki that sends mail |
 | **Groups** | your groups, and where you make one (`/groups`, Groups in `docs/spec/users.md`) | with users |
 | **Usage** | how much the wiki is used, as counts a day (`/usage`, Usage in `docs/spec/users.md`) | admins; without users, whoever is signed in |
 
@@ -392,7 +392,7 @@ What an assistant reads for you is no look of yours.
 
 ### How watching works
 
-What you watch is yours, not the page's (`go/watch.go`): `.zone/watch/<user>.json`, out of git, written owner-only, gone with the last watch.
+What you watch is yours, not the page's (`go/watch.go`): `.zone/watch/<user>.json` (with the kinds of mail you turned on: Notifications in `docs/spec/users.md`), out of git, written owner-only, gone with the last watch.
 
 ```json
 {"watch": {"roadmap": 1764061200, "projects/": 1764061260},

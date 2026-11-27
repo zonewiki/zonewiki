@@ -34,7 +34,7 @@ type mailConfig struct {
 }
 
 // on: Zonewiki sends mail, one way or the other. What mail there is (the
-// boxes in My tasks' settings, the Mail tab, sign-up) asks this.
+// Notifications tab of Settings, sign-up) asks this.
 func (m mailConfig) on() bool { return m.Spool || m.Host != "" }
 
 // loadMail reads ZONE_MAIL_SPOOL, or ZONE_SMTP_HOST, _PORT, _USER,

@@ -1,4 +1,5 @@
-"""A user's mail address (/email, docs/spec/users.md, Mail addresses): set
+"""Settings, Notifications (/notifications, docs/spec/users.md,
+Notifications): a user's mail address, set
 in the browser with the password again, by an admin on the Users tab, and
 mailed nothing until its owner confirmed it by the link Zonewiki sends.
 And the mail folder (docs/spec/deployment.md, The mail folder): with
@@ -80,8 +81,9 @@ def set_address(client, email, password="bob-pw", **more):
 
 
 def mail_on(client, kinds="assigned"):
-    resp = client.post("/api/tasks/settings", headers=HOST, json={"mine": True, "was": "", "set": {"mail": kinds}})
-    assert resp.status_code == 200, resp.get_data(as_text=True)
+    """Whoever is signed in ticks these kinds of mail under Settings, Notifications."""
+    resp = client.post("/notifications", headers=HOST, data={"mail": kinds.split(",")})
+    assert resp.status_code == 303, resp.get_data(as_text=True)
 
 
 def my_tasks(client):
@@ -130,9 +132,9 @@ class TestTheMailFolder:
         for i in range(500):
             (folder / f"20260101T000000.{i:09d}Z-0123456789abcdef.json").write_text("{}")
         resp = set_address(bob, "bob@example.org")
-        assert resp.status_code == 303 and resp.headers["Location"] == "/email?done=failed"
+        assert resp.status_code == 303 and resp.headers["Location"] == "/notifications?done=failed"
         assert len(list(folder.iterdir())) == 500
-        assert "couldn&#39;t send the link" in bob.get("/email?done=failed", headers=HOST).data.decode()
+        assert "couldn&#39;t send the link" in bob.get("/notifications?done=failed", headers=HOST).data.decode()
         assert section(wiki, "bob")["email-pending"] == "bob@example.org"     # kept: Send the link again, later
 
     def test_a_server_and_the_folder_both_set_is_refused_at_start(self, wiki, monkeypatch, tmp_path):
@@ -146,7 +148,7 @@ class TestTheMailFolder:
 
     def test_mail_counts_as_set_up_so_the_boxes_show(self, client, wiki):
         login(client, "alice")                                        # has a confirmed address
-        assert 'data-settings-mail="1"' in my_tasks(client)
+        assert "<h2>Mail me when</h2>" in client.get("/notifications", headers=HOST).data.decode()
 
 
 class TestWhenToBeStarted:
@@ -196,22 +198,25 @@ class TestWhenToBeStarted:
 class TestYourAddress:
 
     def test_the_tab_is_there_where_mail_is(self, bob):
-        body = bob.get("/email", headers=HOST).data.decode()
-        assert "<h1>Your mail address</h1>" in body and '<a href="/email" aria-current="page">Mail</a>' in body
+        body = bob.get("/notifications", headers=HOST).data.decode()
+        assert "<h1>Notifications</h1>" in body and "<h2>Mail address</h2>" in body
+        assert '<a href="/notifications" aria-current="page">Notifications</a>' in body
+        # The boxes are there before the address is: nothing goes out until it is confirmed.
+        assert "<h2>Mail me when</h2>" in body and "Nothing is sent until you have a confirmed mail address." in body
         assert "You have no mail address here" in body and "Remove my address" not in body
-        assert '<a href="/email">Mail</a>' in bob.get("/password", headers=HOST).data.decode()
+        assert '<a href="/notifications">Notifications</a>' in bob.get("/password", headers=HOST).data.decode()
 
     def test_no_page_without_mail_or_without_users(self, client, wiki, monkeypatch):
         monkeypatch.setattr(settings, "ENV", {})
         login(client, "bob")
-        assert client.get("/email", headers=HOST).status_code == 404
+        assert client.get("/notifications", headers=HOST).status_code == 404
         assert set_address(client, "bob@example.org").status_code == 404
-        assert '<a href="/email">Mail</a>' not in client.get("/password", headers=HOST).data.decode()
+        assert '<a href="/notifications">Notifications</a>' not in client.get("/password", headers=HOST).data.decode()
         monkeypatch.setattr(settings, "ENV", {"ZONE_MAIL_SPOOL": "1"})
         monkeypatch.setattr(settings, "USERS", {})
         monkeypatch.setattr(settings, "USER_SETTINGS", {})
         client.cookies.clear()
-        assert client.get("/email", headers=HOST).status_code == 404
+        assert client.get("/notifications", headers=HOST).status_code == 404
 
     def test_it_takes_the_password_again(self, bob, wiki):
         resp = set_address(bob, "bob@example.org", password="wrong")
@@ -226,10 +231,10 @@ class TestYourAddress:
 
     def test_an_address_waits_until_its_owner_confirmed_it(self, bob, wiki):
         resp = set_address(bob, "Bob@Example.org")
-        assert resp.status_code == 303 and resp.headers["Location"] == "/email?done=sent"
+        assert resp.status_code == 303 and resp.headers["Location"] == "/notifications?done=sent"
         keys = section(wiki, "bob")
         assert keys["email-pending"] == "bob@example.org" and "email" not in keys
-        body = bob.get("/email?done=sent", headers=HOST).data.decode()
+        body = bob.get("/notifications?done=sent", headers=HOST).data.decode()
         assert "Check your mail: Zonewiki sent a link to confirm the address." in body
         assert "<strong>bob@example.org</strong> isn't confirmed yet" in body and "Send the link again" in body
         (mail,) = outbox(wiki)
@@ -242,10 +247,10 @@ class TestYourAddress:
         assert "email" not in section(wiki, "bob")
 
         resp = bob.post(link(mail), headers=HOST)
-        assert resp.status_code == 303 and resp.headers["Location"] == "/email?done=confirmed"
+        assert resp.status_code == 303 and resp.headers["Location"] == "/notifications?done=confirmed"
         keys = section(wiki, "bob")
         assert keys["email"] == "bob@example.org" and "email-pending" not in keys
-        body = bob.get("/email?done=confirmed", headers=HOST).data.decode()
+        body = bob.get("/notifications?done=confirmed", headers=HOST).data.decode()
         assert "Your mail address is confirmed." in body and "<strong>bob@example.org</strong> is confirmed" in body
         # Once: the link is used up.
         assert bob.post(link(mail), headers=HOST).status_code == 404
@@ -256,14 +261,14 @@ class TestYourAddress:
         mail_on(client, "assigned,mentioned,comments,digest")
         set_address(client, "bob@example.org")
         (confirm,) = outbox(wiki, 1)
-        # The boxes aren't there yet: the dialog says where the address is set.
-        body = my_tasks(client)
-        assert 'data-settings-mailask="1"' in body and 'data-settings-mail="1"' not in body
+        # The boxes are ticked already, and say that nothing goes out yet.
+        body = client.get("/notifications", headers=HOST).data.decode()
+        assert body.count(" checked>") == 4 and "Nothing is sent until you have a confirmed mail address." in body
         give_bob(client, "Before")
         outbox(wiki, 1, wait=0.6)                                     # the link's mail alone
         assert client.post(link(confirm), headers=HOST).status_code == 303
-        body = my_tasks(client)
-        assert 'data-settings-mail="1"' in body and 'data-settings-mailask="1"' not in body
+        body = client.get("/notifications", headers=HOST).data.decode()
+        assert body.count(" checked>") == 4 and "Nothing is sent until" not in body
         give_bob(client, "After")
         # In the wiki's morning the morning's mail may be there too: it goes out once the address is his.
         for _ in range(150):
@@ -307,7 +312,7 @@ class TestYourAddress:
     def test_a_new_address_takes_the_confirmed_one_at_once(self, client, wiki):
         login(client, "alice")
         resp = set_address(client, "alice@example.org", password="alice-pw")
-        assert resp.headers["Location"] == "/email?done=same" and outbox(wiki) == []
+        assert resp.headers["Location"] == "/notifications?done=same" and outbox(wiki) == []
         set_address(client, "alice@example.net", password="alice-pw")
         keys = section(wiki, "alice")
         assert "email" not in keys and keys["email-pending"] == "alice@example.net"
@@ -321,11 +326,11 @@ class TestYourAddress:
     def test_removing_it(self, bob, wiki):
         set_address(bob, "bob@example.org")
         bob.post(link(outbox(wiki, 1)[0]), headers=HOST)
-        assert "Remove my address" in bob.get("/email", headers=HOST).data.decode()
+        assert "Remove my address" in bob.get("/notifications", headers=HOST).data.decode()
         resp = set_address(bob, "", password="wrong", remove="1")
         assert resp.status_code == 403 and section(wiki, "bob")["email"] == "bob@example.org"
         resp = set_address(bob, "", remove="1")
-        assert resp.status_code == 303 and resp.headers["Location"] == "/email?done=removed"
+        assert resp.status_code == 303 and resp.headers["Location"] == "/notifications?done=removed"
         keys = section(wiki, "bob")
         assert "email" not in keys and "email-pending" not in keys
 
@@ -334,14 +339,14 @@ class TestYourAddress:
         set_address(bob, "bob@example.org")
         for _ in range(2):
             resp = bob.post("/email/resend", headers=HOST)
-            assert resp.status_code == 303 and resp.headers["Location"] == "/email?done=sent"
+            assert resp.status_code == 303 and resp.headers["Location"] == "/notifications?done=sent"
         mails = outbox(wiki, 3)
         assert len({link(m) for m in mails}) >= 1 and all(m["to"] == "bob@example.org" for m in mails)
         resp = bob.post("/email/resend", headers=HOST)
-        assert resp.headers["Location"] == "/email?done=unsent"
-        assert "too many were sent lately" in bob.get("/email?done=unsent", headers=HOST).data.decode()
+        assert resp.headers["Location"] == "/notifications?done=unsent"
+        assert "too many were sent lately" in bob.get("/notifications?done=unsent", headers=HOST).data.decode()
         # Another address is still bob's link: the day's three are his, whatever the address.
-        assert set_address(bob, "robert@example.org").headers["Location"] == "/email?done=unsent"
+        assert set_address(bob, "robert@example.org").headers["Location"] == "/notifications?done=unsent"
         outbox(wiki, 3)
         # The count is kept in a file, owner-only: a Zonewiki that slept starts no new count.
         sent = wiki / ".zone" / "confirms"
@@ -358,7 +363,7 @@ class TestYourAddress:
             login(client, name)
             where.append(client.post("/email", data={"email": f"{name}@example.org", "password": f"{name}-pw"},
                                      headers=HOST).headers["Location"])
-        assert where == ["/email?done=sent"] * 10 + ["/email?done=unsent"]
+        assert where == ["/notifications?done=sent"] * 10 + ["/notifications?done=unsent"]
         outbox(wiki, 10)
 
     def test_a_viewer_has_an_address_too(self, client, wiki):
@@ -370,7 +375,7 @@ class TestYourAddress:
 
     def test_a_shared_accounts_address_is_the_hosts(self, client, wiki):
         login(client, "dan")
-        assert "its mail address is set by whoever runs this wiki, not here" in client.get("/email", headers=HOST).data.decode()
+        assert "its mail address is set by whoever runs this wiki, not here" in client.get("/notifications", headers=HOST).data.decode()
         resp = client.post("/email", data={"email": "dan@example.org", "password": "dan-pw"}, headers=HOST)
         assert resp.status_code == 403 and "email-pending" not in section(wiki, "dan") and outbox(wiki) == []
 
@@ -380,7 +385,7 @@ class TestYourAddress:
             monkeypatch.setattr(settings, "ENV", {"ZONE_SMTP_HOST": "127.0.0.1", "ZONE_SMTP_PORT": str(smtp.server_address[1]),
                                                   "ZONE_SMTP_TLS": "none", "ZONE_MAIL_FROM": "wiki@example.org"})
             login(client, "bob")
-            assert set_address(client, "bob@example.org").headers["Location"] == "/email?done=sent"
+            assert set_address(client, "bob@example.org").headers["Location"] == "/notifications?done=sent"
             (to, text), = smtp.mails
             assert to == "bob@example.org" and "Subject: Confirm your mail address for Zonewiki" in text
             assert client.post(LINK.search(text).group(1), headers=HOST).status_code == 303
@@ -391,45 +396,47 @@ class TestYourAddress:
 
 
 class TestAViewersMorningsMail:
-    """A viewer has the morning's mail of the pages they watch, turned on on
-    the Mail tab (Z6 of zonewiki-cp's tenant mail plan; The morning's mail in
+    """A viewer has the morning's mail of the pages they watch, and no other
+    kind, ticked on the same page as anyone's (The morning's mail in
     docs/spec/tasks.md): their own, beside their watches, no commit."""
 
-    def test_a_viewer_turns_it_on_and_off_on_the_mail_tab(self, client, git_wiki_dir, wiki):
+    def test_a_viewer_turns_it_on_and_off_on_the_same_page(self, client, git_wiki_dir, wiki):
         login(client, "carol")                                   # a viewer
-        body = client.get("/email", headers=HOST).get_data(as_text=True)
-        assert "<h2>The morning's mail</h2>" in body and "Mail me each morning" in body
-        assert "in <a href=\"/tasks?mine=1\">My tasks</a>" not in body   # not where an editor chooses
+        body = client.get("/notifications", headers=HOST).get_data(as_text=True)
+        assert "<h2>Mail me when</h2>" in body and 'name="mail" value="digest">' in body
+        assert body.count('name="mail"') == 1 and "<legend>Tasks</legend>" not in body   # nothing about tasks
         head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=git_wiki_dir, capture_output=True, text=True, env=settings.GIT_ENV).stdout
-        resp = client.post("/email/digest", data={"digest": "on"}, headers=HOST)
-        assert resp.status_code == 303 and resp.headers["Location"] == "/email?done=digest-on"
-        assert json.loads((wiki / ".zone" / "watch" / "carol.json").read_text())["digest"] is True
-        body = client.get("/email?done=digest-on", headers=HOST).get_data(as_text=True)
-        assert "Zonewiki mails you each morning when pages you watch changed." in body
-        assert "Stop the morning's mail" in body and "once your address is confirmed" in body
+        resp = client.post("/notifications", data={"mail": ["digest", "assigned"]}, headers=HOST)
+        assert resp.status_code == 303 and resp.headers["Location"] == "/notifications?done=saved"
+        assert json.loads((wiki / ".zone" / "watch" / "carol.json").read_text())["mail"] == ["digest"]
+        body = client.get("/notifications?done=saved", headers=HOST).get_data(as_text=True)
+        assert 'role="status">Saved.</p>' in body and 'name="mail" value="digest" checked>' in body
+        assert "Nothing is sent until you have a confirmed mail address." in body
         assert subprocess.run(["git", "rev-parse", "HEAD"], cwd=git_wiki_dir, capture_output=True, text=True,
                               env=settings.GIT_ENV).stdout == head
-        assert client.post("/email/digest", data={"digest": "off"}, headers=HOST).status_code == 303
+        assert client.post("/notifications", data={}, headers=HOST).status_code == 303
         assert not (wiki / ".zone" / "watch" / "carol.json").exists()
 
     def test_with_a_confirmed_address_it_asks_to_be_started(self, client, wiki, monkeypatch):
         monkeypatch.setattr(settings, "USER_SETTINGS", {**USER_SETTINGS, "carol": {"role": "viewer", "email": "carol@example.org"}})
         login(client, "carol")
         assert not (wiki / ".zone" / "wake").exists()
-        client.post("/email/digest", data={"digest": "on"}, headers=HOST)
+        client.post("/notifications", data={"mail": "digest"}, headers=HOST)
         assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:00:00Z\n", (wiki / ".zone" / "wake").read_text())
 
-    def test_not_for_anyone_but_a_viewer(self, client, wiki):
-        login(client, "bob")                                     # an editor: My tasks' settings
-        assert client.post("/email/digest", data={"digest": "on"}, headers=HOST).status_code == 404
-        assert "Mail me each morning" not in client.get("/email", headers=HOST).get_data(as_text=True)
-        assert not (wiki / ".zone" / "watch" / "bob.json").exists()
+    def test_not_for_a_shared_account_or_signed_out(self, client, wiki, monkeypatch):
+        monkeypatch.setattr(settings, "USER_SETTINGS", {**USER_SETTINGS, "dan": {**USER_SETTINGS["dan"], "role": "viewer"}})
+        login(client, "dan")                                     # several people's, and a viewer: no kind to choose
+        assert "Mail me when" not in client.get("/notifications", headers=HOST).get_data(as_text=True)
+        assert client.post("/notifications", data={"mail": "digest"}, headers=HOST).status_code == 404
+        assert not (wiki / ".zone" / "watch" / "dan.json").exists()
         client.cookies.clear()
-        assert client.post("/email/digest", data={"digest": "on"}, headers=HOST).status_code in (302, 303, 401, 404)
+        assert client.post("/notifications", data={"mail": "digest"}, headers=HOST).status_code in (302, 303, 401, 404)
+        assert not (wiki / ".zone" / "watch").exists() or not list((wiki / ".zone" / "watch").iterdir())
 
     def test_not_from_another_site(self, client, wiki):
         login(client, "carol")
-        resp = client.post("/email/digest", data={"digest": "on"}, headers={**HOST, "Origin": "https://evil.example"})
+        resp = client.post("/notifications", data={"mail": "digest"}, headers={**HOST, "Origin": "https://evil.example"})
         assert resp.status_code == 403 and not (wiki / ".zone" / "watch" / "carol.json").exists()
 
 
@@ -450,7 +457,7 @@ class TestAnAdminSetsIt:
         # The admin can't confirm it for them.
         assert client.post(link(mail), headers=HOST).status_code == 404
         login(client, "bob")
-        assert "<strong>bob@example.org</strong> isn't confirmed yet" in client.get("/email", headers=HOST).data.decode()
+        assert "<strong>bob@example.org</strong> isn't confirmed yet" in client.get("/notifications", headers=HOST).data.decode()
         assert client.post(link(mail), headers=HOST).status_code == 303
         assert section(wiki, "bob")["email"] == "bob@example.org"
 

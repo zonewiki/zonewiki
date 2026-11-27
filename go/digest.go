@@ -1,5 +1,5 @@
 // The morning's mail (The morning's mail in docs/spec/tasks.md): once a
-// day, to who turned it on in My tasks' settings, what is new for them
+// day, to who turned it on (Settings, Notifications), what is new for them
 // since the last one (updates on their tasks, changes to the pages they
 // watch) and what is due today. A morning with nothing of those sends
 // nothing. It is a listing made of the same rules the app shows by
@@ -411,11 +411,9 @@ func (d digest) mail(s *Settings) (subject, body string) {
 		b.WriteString("\n  Your tasks: " + s.BaseURL + mineHref + "\n")
 	}
 	if s.mayViewerDigest(d.user) {
-		b.WriteString("\n" + appName + " sends this mail on a morning when pages you watch changed. " +
-			"To turn it off, open Settings, then Mail.\n")
+		b.WriteString(mailFooter(s, "on a morning when pages you watch changed"))
 	} else {
-		b.WriteString("\n" + appName + " sends this mail on a morning that has something new for you or due today. " +
-			"To turn it off, open My tasks, then its menu, List settings.\n")
+		b.WriteString(mailFooter(s, "on a morning that has something new for you or due today"))
 	}
 	return subject, b.String()
 }

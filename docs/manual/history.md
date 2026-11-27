@@ -109,7 +109,7 @@ A change is read once you open the page, or open what its latest change did.
 Your own changes are never news; what your assistant changed for you is, so you see what it did.
 
 If you'd rather be told by mail, the morning's mail has the watched pages that changed (see [News about your tasks](tasks.md#news-about-your-tasks)).
-A viewer, who has no tasks, turns it on in **Settings**, **Mail**: **Mail me each morning** ([The morning's mail](../spec/tasks.md#the-mornings-mail)).
+Turn it on in **Settings**, **Notifications** ([Notifications](teams.md#notifications)).
 
 Above the list, **You watch N things** opens the list of what you watch, each with **Unwatch**.
 Watching is yours alone: nobody else sees what you watch, and it changes nothing in the wiki.

@@ -4,6 +4,8 @@ deployment sends mail and you have an address; off in your My tasks'
 settings. In the app such a task's card says "new" (tests/test_tasks_core.py,
 TestGivenToMe)."""
 
+import re
+import json
 import time
 
 import pytest
@@ -42,11 +44,12 @@ def alice(client, wiki_dir, monkeypatch, smtp):
     return client
 
 
-def mail_on(client, name, kinds, was=""):
-    """name turns the kinds of mail on in their My tasks' settings ("": none); alice is signed in afterwards."""
+def mail_on(client, name, kinds):
+    """name turns the kinds of mail on under Settings, Notifications, and the others off ("": none);
+    alice is signed in afterwards."""
     login(client, name)
-    resp = client.post("/api/tasks/settings", headers=HOST, json={"mine": True, "was": was, "set": {"mail": kinds}})
-    assert resp.status_code == 200, resp.get_data(as_text=True)
+    resp = client.post("/notifications", headers=HOST, data={"mail": [k for k in kinds.split(",") if k]})
+    assert resp.status_code == 303 and resp.headers["Location"] == "/notifications?done=saved", resp.get_data(as_text=True)
     login(client, "alice")
 
 
@@ -77,7 +80,7 @@ def test_a_new_task_for_someone_is_mailed_to_them(alice, smtp):
     assert "Subject: alice gave you a task: Check the invoice" in text
     assert "alice assigned this task to you on Zonewiki:" in text and "  Check the invoice\n" in text.replace("\r\n", "\n")
     assert f"{BASE}/tasks?task={task['id']}" in text and f"All your tasks: {BASE}/tasks?mine=1" in text
-    assert "To turn it off, open My tasks, then its menu, List settings." in text
+    assert f"To turn it off, open {BASE}/notifications." in text
 
 
 def test_no_mail_for_what_one_takes_or_what_is_no_ones(alice, smtp):
@@ -132,36 +135,54 @@ def test_an_assistants_assignment_is_mailed_too(alice, smtp):
     assert to == "bob@example.org" and "alice gave you a task: From her assistant" in text
 
 
-def test_the_mail_is_turned_off_in_my_tasks_settings(alice, smtp, wiki_dir):
-    # The dialog has the box where Zonewiki could mail the user (My tasks is
-    # there once the wiki has a list).
-    make_list(alice, "team", headers=HOST)
-    assert 'data-settings-mail="1"' in alice.get("/tasks?mine=1", headers=HOST).get_data(as_text=True)
-    login(alice, "dan")
-    # dan has no address: no box, and a line that says where to set one (test_email.py).
-    body = alice.get("/tasks?mine=1", headers=HOST).get_data(as_text=True)
-    assert 'data-settings-mail="1"' not in body and 'data-settings-mailask="1"' in body
+def test_the_mail_is_turned_on_and_off_under_notifications(alice, smtp, wiki_dir):
+    """Settings, Notifications has a box a kind of mail; what is ticked is in
+    the user's own watch file, not in their task lists' settings."""
+    chosen = lambda name: json.loads((wiki_dir / ".zone" / "watch" / f"{name}.json").read_text())["mail"]
+    boxes = lambda body: {kind: bool(checked) for kind, checked in
+                          re.findall(r'<input type="checkbox" name="mail" value="(\w+)"( checked)?>', body)}
     login(alice, "bob")
-    turn = lambda value, was: alice.post("/api/tasks/settings", headers=HOST,
-                                         json={"mine": True, "was": was, "set": {"mail": value}})
-    assert turn("no", "mail=assigned").status_code == 400
-    assert turn("", "mail=assigned").status_code == 200
-    assert '"mail"' not in (wiki_dir / "private/bob/_tasks/lists.json").read_text()
-    login(alice, "alice")
+    body = alice.get("/notifications", headers=HOST).get_data(as_text=True)
+    assert "<h2>Mail me when</h2>" in body and "<legend>Tasks</legend>" in body and "<legend>Each morning</legend>" in body
+    assert boxes(body) == {"assigned": True, "mentioned": False, "comments": False, "digest": False}
+    # My tasks' settings have none of it any more, and refuse it.
+    make_list(alice, "team", headers=HOST)
+    page = alice.get("/tasks?mine=1", headers=HOST).get_data(as_text=True)
+    assert "data-settings-mine" in page and "Mail me when" not in page and "data-settings-mail" not in page
+    resp = alice.post("/api/tasks/settings", headers=HOST, json={"mine": True, "was": "", "set": {"mail": "assigned"}})
+    assert resp.status_code == 400
+    mail_on(alice, "bob", "")
+    assert not (wiki_dir / ".zone" / "watch" / "bob.json").exists()
+    assert not (wiki_dir / "private/bob/_tasks/lists.json").exists()   # nothing of it in his task lists
     new(alice, title="Quietly", assignee="bob")
     mails(smtp, 0)
-    login(alice, "bob")
-    assert turn("comments,assigned", "").status_code == 200        # the kinds, in Zonewiki's order
-    assert '"mine": {"mail": "assigned,comments"}' in (wiki_dir / "private/bob/_tasks/lists.json").read_text()
-    login(alice, "alice")
+    mail_on(alice, "bob", "comments,assigned,nonsense")           # the kinds Zonewiki knows, in its order
+    assert chosen("bob") == ["assigned", "comments"]
     new(alice, title="Aloud", assignee="bob")
     assert "Aloud" in mails(smtp, 1)[0][1]
     # The morning's mail is a kind like the others (what it says: go/digest_test.go), and sends nothing by itself.
+    mail_on(alice, "bob", "digest,assigned")
+    assert chosen("bob") == ["assigned", "digest"]
     login(alice, "bob")
-    assert turn("digest,assigned", "mail=assigned,comments").status_code == 200
-    assert '"mine": {"mail": "assigned,digest"}' in (wiki_dir / "private/bob/_tasks/lists.json").read_text()
-    assert 'name="mail_digest"' in alice.get("/tasks?mine=1", headers=HOST).get_data(as_text=True)
+    assert boxes(alice.get("/notifications?done=saved", headers=HOST).get_data(as_text=True)) == {
+        "assigned": True, "mentioned": False, "comments": False, "digest": True}
     mails(smtp, 1)
+
+
+def test_a_choice_left_in_my_tasks_settings_says_nothing(alice, smtp, wiki_dir):
+    """What mail a user wanted was once kept with their My tasks' settings:
+    such a line is passed over, and no mail goes out for it."""
+    make_list(alice, "team", headers=HOST)
+    mail_on(alice, "bob", "")
+    path = wiki_dir / "private/bob/_tasks/lists.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text('{"lists": {}, "mine": {"mail": "assigned,digest", "limit": "4"}}\n')
+    login(alice, "bob")
+    page = alice.get("/tasks?mine=1", headers=HOST).get_data(as_text=True)
+    assert 'data-init-limit="4"' in page
+    login(alice, "alice")
+    new(alice, title="Quietly", assignee="bob")
+    mails(smtp, 0)
 
 
 def test_no_mail_without_a_mail_server(client, wiki_dir, monkeypatch):
@@ -170,8 +191,8 @@ def test_no_mail_without_a_mail_server(client, wiki_dir, monkeypatch):
     login(client, "alice")
     make_list(client, "team", headers=HOST)
     assert new(client, title="No server", assignee="bob")["assignee"] == "bob"
-    page = client.get("/tasks?mine=1", headers=HOST).get_data(as_text=True)
-    assert "data-settings-mine" in page and "data-settings-mail" not in page
+    assert client.get("/notifications", headers=HOST).status_code == 404
+    assert ">Notifications</a>" not in client.get("/password", headers=HOST).get_data(as_text=True)
 
 
 def test_the_tasks_links_count_what_is_new_for_you(alice, smtp):
@@ -238,7 +259,7 @@ def test_no_mail_until_it_is_turned_on(alice, smtp, wiki_dir):
     new(alice, title="For carol's colleague", assignee="bob")
     mails(smtp, 1)                                             # bob turned it on (the fixture)
     smtp.mails.clear()
-    mail_on(alice, "bob", "", was="mail=assigned")
+    mail_on(alice, "bob", "")
     new(alice, title="Quiet", assignee="bob")
     mails(smtp, 0)
 
@@ -250,7 +271,7 @@ def test_a_comment_and_a_mention_are_mailed_to_who_asked(alice, smtp):
     mails(smtp, 1)
     smtp.mails.clear()
     url = f"/api/tasks/{task['id']}/comments"
-    mail_on(alice, "bob", "assigned,comments", was="mail=assigned")
+    mail_on(alice, "bob", "assigned,comments")
     assert alice.post(url, json={"text": "Any news?"}, headers=HOST).status_code == 201      # alice, its maker, to bob who has it
     (to, text), = mails(smtp, 1)
     assert to == "bob@example.org" and "alice commented" in text and "Any news?" in text and f"{BASE}/tasks?task={task['id']}" in text
@@ -260,7 +281,7 @@ def test_a_comment_and_a_mention_are_mailed_to_who_asked(alice, smtp):
     assert alice.post(url, json={"text": "Waiting for the contract"}, headers=HOST).status_code == 201
     mails(smtp, 0)
     # A mention reaches who it names, whatever the task: alice turned that on.
-    mail_on(alice, "alice", "assigned,mentioned", was="mail=assigned")
+    mail_on(alice, "alice", "assigned,mentioned")
     login(alice, "bob")
     other = new(alice, title="Nobody's yet")
     assert alice.post(f"/api/tasks/{other['id']}/comments", json={"text": "@alice can you look? not bob@example.org"}, headers=HOST).status_code == 201

@@ -29,11 +29,10 @@ import (
 type watched struct {
 	Watch map[string]int64  `json:"watch"`
 	Seen  map[string]seenAt `json:"seen,omitempty"`
-	// Digest: a viewer has the morning's mail of the watched pages that
-	// changed (viewerDigest in notify.go). Kept with the watches it is
-	// about, not with My tasks' settings, which a viewer can't change:
-	// their file is in git, and a viewer writes nothing there.
-	Digest bool `json:"digest,omitempty"`
+	// Mail: the kinds of mail the user turned on (mailKinds in notify.go),
+	// on Settings, Notifications. Kept here, with what they watch: theirs
+	// alone, no commit, and a viewer's as anyone's.
+	Mail []string `json:"mail,omitempty"`
 }
 
 // seenAt: a commit a user has seen a page up to: its time (unix seconds)
@@ -87,14 +86,14 @@ func loadWatches() {
 			continue
 		}
 		w := &watched{}
-		if json.Unmarshal(raw, w) == nil && len(w.Watch) > 0 {
+		if json.Unmarshal(raw, w) == nil && (len(w.Watch) > 0 || len(w.Mail) > 0) {
 			watchStore.by[user] = w
 		}
 	}
 }
 
 func (w watched) clone() watched {
-	out := watched{Watch: make(map[string]int64, len(w.Watch)), Seen: make(map[string]seenAt, len(w.Seen)), Digest: w.Digest}
+	out := watched{Watch: make(map[string]int64, len(w.Watch)), Seen: make(map[string]seenAt, len(w.Seen)), Mail: slices.Clone(w.Mail)}
 	for k, v := range w.Watch {
 		out.Watch[k] = v
 	}
@@ -130,7 +129,8 @@ func watchers() []string {
 }
 
 // changeWatches changes user's watches under the store's lock and writes
-// their file (none for one who watches nothing any more). change says
+// their file (none for one who watches nothing any more and has no mail
+// turned on). change says
 // whether it changed anything.
 func changeWatches(user string, change func(w *watched) bool) {
 	path := watchPath(user)
@@ -156,7 +156,7 @@ func changeWatches(user string, change func(w *watched) bool) {
 		}
 	}
 	var err error
-	if len(w.Watch) == 0 && !w.Digest {
+	if len(w.Watch) == 0 && len(w.Mail) == 0 {
 		delete(watchStore.by, user)
 		if err = os.Remove(path); os.IsNotExist(err) {
 			err = nil

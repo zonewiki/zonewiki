@@ -162,7 +162,7 @@ The command refuses what isn't a bare address and an address another user has al
 Setting an address with the command takes one that waits away.
 A hand edit works too (`email = bob@example.org` under `[user bob]`): Zonewiki takes it within a second, or refuses the file, naming the line, when it isn't an address.
 An import with `--users-only` brings each user's `email` along as `email-pending`: the host a wiki moves to answers for the mail it sends, so each owner confirms there (`importedSettings` in `go/transfer.go`).
-Without it the user gets no mail about tasks, whatever they tick in My tasks' settings (Mail in `docs/spec/tasks.md`).
+Without it the user gets no mail, whatever they tick on their **Notifications** tab (Notifications, below).
 
 ### A group's keys
 
@@ -477,7 +477,7 @@ What it can't do is what would lock the others out, since each of them knows the
 | In the browser | A shared account |
 |----------------|------------------|
 | **Change password** | No **Password** tab on the settings pages and no link in the shortcuts dialog; `/password` says "… is an account several people sign in to: its password is set by whoever runs this wiki, not here." and has no form; a `POST` is 403 and changes nothing |
-| **Mail**: the address | `/email` says the address "is set by whoever runs this wiki, not here." and has no form; a `POST` is 403 before the password is looked at (`zonewiki user email` sets it) |
+| **Notifications**: the address | `/notifications` says the address "is set by whoever runs this wiki, not here." and has no form; a `POST /email` is 403 before the password is looked at (`zonewiki user email` sets it) |
 | **Connect an assistant**: the token | No **Make a token** and no **Revoke**; both `POST`s are 403. A token set with `zonewiki user token` goes on working |
 | **Connect an assistant**: connections | As for anyone: each assistant that signs in is its own connection, to be changed or ended on the page, by whoever is signed in |
 | The Users tab | A **shared** mark beside the name |
@@ -502,7 +502,7 @@ A viewer reads everything shared (pages, tasks, history, search) and changes not
 They have no private folder in use (no Private, no Notes, `/private` is a 404); one kept from when they were an editor stays on disk and they still see it, but change nothing there either.
 They may change their own password and make their own MCP token, whose assistant only reads.
 They watch pages as anyone does (Watching pages in `docs/spec/navigation.md`): what one watches is one's own, and nothing of the wiki.
-They can have the morning's mail of the pages they watch, turned on on the Mail tab, and no other mail: nothing is given to a viewer (A viewer's morning's mail in `docs/spec/tasks.md`).
+They can have the morning's mail of the pages they watch, ticked on their Notifications tab as anyone's, and no other mail: nothing is given to a viewer (A viewer's morning's mail in `docs/spec/tasks.md`).
 
 #### What a viewer sees
 
@@ -528,7 +528,7 @@ Uploads and tag renames (`renameTagOp`) are refused too.
 
 **The gate** (`viewerGate` in `go/server.go`): a viewer's POST, PUT, PATCH or DELETE to a route not listed in `viewerWrites` is refused (403) before the route runs, whatever it names (another user's folder answers as anywhere else).
 Listed are only those that change nothing of the wiki: sign in and out, the welcome link, the previews, `/mcp` (which refuses a viewer's writing tools itself),
-and what is the viewer's own: their password (`/password`), their mail address (`/email`, `/email/resend`, `/email/confirm/…`), their MCP token (`/assistant/token`, `/assistant/revoke`) and their assistants' connections (OAuth's `/oauth/authorize`, `/oauth/token`, `/oauth/register`, `/oauth/revoke`; End and Change… on Connect an assistant), whose writing tools are refused all the same.
+and what is the viewer's own: their password (`/password`), their mail address (`/email`, `/email/resend`, `/email/confirm/…`) and which mail they want (`/notifications`), their MCP token (`/assistant/token`, `/assistant/revoke`) and their assistants' connections (OAuth's `/oauth/authorize`, `/oauth/token`, `/oauth/register`, `/oauth/revoke`; End and Change… on Connect an assistant), whose writing tools are refused all the same.
 A new write route is so closed to viewers until it is listed.
 
 **MCP**: a viewer's token works for reading: `tools/list` leaves out the tools that write (`writeTool`: those that write pages or tasks in `mcpToolTable`), and calling one answers with the message (`callMCPTool`).
@@ -1082,17 +1082,53 @@ ends every session of the old one,
 so changing a password is how to sign out a stolen session.
 (Sessions from before the stamp count as the old password's: everyone signs in once.)
 
+### Notifications
+
+What Zonewiki tells you by mail is chosen in one place, whatever it is about: the user menu's **Settings**, then the **Notifications** tab (`/notifications`), where the wiki sends mail and has users.
+The page has your mail address at the top (Mail addresses, below) and under it **Mail me when**, a box a kind of mail, **none ticked until you tick it**:
+
+| Under | Box | The mail |
+|-------|-----|----------|
+| **Tasks** | a task is given to me | Mail in `docs/spec/tasks.md` |
+| | someone mentions me (@name) | there |
+| | someone comments on a task I have, gave or follow | there |
+| **Each morning** | the day starts: what is new on my tasks, which pages I watch changed, and what is due today | The morning's mail in `docs/spec/tasks.md`: one mail, and only on a morning that has something |
+
+**Save** keeps what is ticked and turns the rest off; the page says "Saved."
+No password is asked again: like watching a page, the choice is yours alone and changes nothing of the wiki.
+
+| | |
+|---|---|
+| Before your address is confirmed | The boxes are there and can be ticked; the page says "Nothing is sent until you have a confirmed mail address." |
+| A viewer | Has one box, **pages I watch changed: one mail in the morning** (A viewer's morning's mail in `docs/spec/tasks.md`): no task is given to a viewer |
+| A shared account | Has the boxes of its role, but not a viewer's: several people sign in to it, and its address is the host's to set (Shared accounts, above) |
+| A disabled user, one waiting for approval | No boxes, and no mail |
+| Turning a mail off | Untick it and **Save**; every mail's last line names the page (its link, where the wiki knows its own address: `base-url`) |
+| My tasks' settings, a list's settings | Have nothing about mail: a mail is about you, not about a list |
+
+Not built: a mail for a mention on a page (`@name` is told in tasks only), and choosing per page or per list what is mailed.
+
+#### How the choices are kept
+
+`mailKinds` in `go/notify.go` names the kinds (`assigned`, `mentioned`, `comments`, `digest`), and `mailChoices` says which of them a user can have: all four for one a task can be given to, `digest` alone for a viewer who isn't a shared account, none for anyone else.
+The kinds turned on are `"mail": ["assigned", "digest"]` in the user's watch file, `.zone/watch/<user>.json`, beside what they watch (Watching pages in `docs/spec/navigation.md`): theirs alone, out of git, the same for a viewer as for an editor (`setMails`; a file with no watch and no mail is removed).
+`mails` is the one question every mail asks before it goes out: the deployment sends mail, the user has a confirmed address, the kind is one of theirs to have, and they turned it on.
+So a viewer made an editor keeps the morning's mail and can tick the others, and an editor made a viewer keeps the morning's mail alone, whatever their file still names.
+`POST /notifications` (`mailChoicesRoute` in `go/email.go`) takes `mail` once for each box ticked and passes over what is no kind of the user's; it is among the writes a viewer may make (`viewerWrites`), and 404 for who has no kind to choose.
+Like watches, the choices are not in an export (Moving a wiki in `docs/spec/deployment.md`): in the wiki it is brought to, each user ticks theirs again.
+
+Tests: `test_the_mail_is_turned_on_and_off_under_notifications` in `tests/test_task_notify.py`, `TestAViewersMorningsMail` in `tests/test_email.py`, `TestAViewersMorningsMail` in `go/digest_test.go`, `test_notifications_turn_the_mails_on` in `tests/e2e/test_task_assignee.py`.
+
 ### Mail addresses
 
-Zonewiki mails you only what you turn on (Mail in `docs/spec/tasks.md`), and only at an address you confirmed.
-Where the wiki sends mail and has users, the user menu's **Settings** has a **Mail** tab (`/email`):
+Zonewiki mails you only what you turn on (Notifications, above), and only at an address you confirmed.
+The address is at the top of the **Notifications** tab:
 
 1. Type your address and your password, and click **Save and send the link**.
    The page says "Check your mail", and shows the address as not confirmed yet, with **Send the link again**.
 2. Open the link in the mail, signed in as yourself (signed out, the login page comes first and brings you back), and click **Confirm**.
    The page says "Your mail address is confirmed."
-3. Turn on the mail you want in **My tasks**, its menu, **List settings…**: the boxes show once you have a confirmed address.
-   Until then the dialog says "Zonewiki can mail you about your tasks: set your mail address first."
+3. Tick the mail you want under **Mail me when**, below the address (before or after: nothing goes out until the address is confirmed).
 
 **Remove my address**, with your password, takes the address out: Zonewiki sends you no mail.
 A new address takes the place of the one you had at once, also before you confirmed it: what you replaced gets no more mail.
@@ -1102,7 +1138,7 @@ A new address takes the place of the one you had at once, also before you confir
 | Who confirms | The address's owner alone: the link works for the user it was sent for, signed in. An admin who set the address can't confirm it for them |
 | How long the link works | A day, and for the address it was sent to alone; a changed address ends it. Confirming uses it up |
 | Opening the link | Changes nothing (mail scanners open links): the button confirms |
-| An address set by someone else | Not confirmed: an admin's on the Users tab (What an admin changes on a user, above), and one that came with `zonewiki import --users-only`. Its owner confirms as above; after an import by **Send the link again** on their **Mail** tab |
+| An address set by someone else | Not confirmed: an admin's on the Users tab (What an admin changes on a user, above), and one that came with `zonewiki import --users-only`. Its owner confirms as above; after an import by **Send the link again** on their **Notifications** tab |
 | An address set on the host | Confirmed: `zonewiki user email`, a hand edit of the settings file (A user's mail address, above) |
 | An address from sign-up | Confirmed: the account was made from a link sent to it |
 | An address another user has | Is kept as not confirmed, and refused when confirmed ("another user of this wiki has the address … already"): an address is one user's |
@@ -1122,7 +1158,7 @@ The token is when the link ends and a MAC over the user, the address and that ti
 `POST /email/confirm/<token>` writes `email` and takes `email-pending` out, as the user's own change in the log (`emailConfirmRoute`).
 The links sent are counted in `.zone/confirms` (who for and when, a day back; owner-only, not committed), not in memory: a Zonewiki that sleeps when idle would start the count anew with each start (`countConfirm`).
 A viewer has the tab too: their address is theirs, and nothing of the wiki (`viewerWrites`).
-Without mail in the deployment, or without users, `/email` and what is under it are 404.
+Without mail in the deployment, or without users, `/notifications`, `/email` and what is under it are 404.
 
 Tests: `tests/test_email.py` (each door, that no mail goes out before, the link's user and address, the caps), `TestConfirmToken` and `TestCountConfirm` in `go/email_test.go`, `test_users_only_brings_addresses_not_confirmed` in `tests/test_transfer.py`.
 
