@@ -134,7 +134,7 @@ Everything an assistant changes is a normal version in the history, in your name
 On **Changes** (from the search list, a page's History, or "your assistants' changes" on **Connect an assistant**), such a row says **through Claude**, the name the assistant gave when you connected it, or just **assistant** when it used a token.
 When it said where its text came from, the row says so too ("from https://…").
 
-- Tick **Only by an assistant** to see just those changes; **By** narrows it to one person's, **Through** to one assistant's, and **Only text from outside** to what it wrote from a web page, a mail or a file.
+- Under **Filter**, tick **Only by an assistant** to see just those changes; **By** narrows it to one person's, **Through** to one assistant's, and **Only text from outside** to what it wrote from a web page, a mail or a file.
   **its changes** beside a connection on **Connect an assistant** opens that assistant's changes.
 - **Undo** on a row takes that change back whole.
 - On the latest change of an assistant's run of work (its changes through one connection, close together), **Undo all N** takes the whole run back at once, after asking.

@@ -43,7 +43,7 @@ def changes(client, **query):
     rows = []
     for row in re.findall(r'<li class="hist-row changes-row">(.*?)</li>', resp.get_data(as_text=True), re.S):
         what = re.search(r'<span class="changes-what">([^<]*)', row).group(1)
-        who = re.search(r'<span class="hist-by"> · ([^<]*)</span>', row)
+        who = re.search(r'<span class="hist-by">([^<]*)</span>', row)
         items = [(html.unescape(label), html.unescape(href)) for href, label in re.findall(
             r'<(?:a href="([^"]*)"|span)>([^<]*)</(?:a|span)>', row.split('<span class="changes-items">')[1])]
         rows.append((html.unescape(what).strip(), who.group(1) if who else "", "changes-assistant" in row, items))

@@ -74,7 +74,8 @@ You only see changes to pages, tasks and files you're allowed to see: a task you
 
 ### Filtering changes
 
-The filters above the list narrow it down; click **Show** to apply them.
+**Filter**, above the list, opens the filters that narrow it down; click **Show** to apply them.
+What is set stands beside the button ("by ben", "in projects/").
 
 | Filter | Shows |
 |---|---|
@@ -95,7 +96,7 @@ A filtered list has its own address, so you can bookmark "what my assistant did 
 In a wiki with users you can watch a page, and Zonewiki tells you when someone else changes it.
 
 - **Watch a page**: open its **⋯** menu and choose **Watch**. **Unwatch** is in the same place.
-- **Watch a folder**: open **Changes**, type the folder into **In the folder**, click **Show**, then **Watch this folder**.
+- **Watch a folder**: open **Changes**, click **Filter**, type the folder into **In the folder**, click **Show**, then **Watch this folder**.
   You are then told about every page in it, including pages made later.
 
 When a page you watch has changed, the round button with your initial at the top right gets a dot.

@@ -25,10 +25,16 @@ def test_found_filtered_and_opened(page, wiki):
     rows = page.locator(".changes-row")
     expect(rows.first).to_contain_text("Update the long one")
     expect(rows.nth(1).locator(".changes-assistant")).to_be_visible()
+    # The filters are folded away until asked for.
+    expect(page.get_by_label("Only by an assistant")).to_be_hidden()
+    page.locator(".changes-filter-box summary").click()
     page.get_by_label("Only by an assistant").check()
     page.get_by_role("button", name="Show").click()
-    page.wait_for_url("**/changes?assistant=1**")
+    page.wait_for_url("**/changes?**assistant=1**")
     expect(rows).to_have_count(1)
+    # Shut again, and what is set is said beside the button.
+    expect(page.get_by_label("Only by an assistant")).to_be_hidden()
+    expect(page.locator(".changes-on")).to_have_text("by an assistant")
     page.screenshot(path=str(SCREENSHOT_DIR / "changes.png"))
     rows.first.get_by_role("link", name="trips/rome").click()
     page.wait_for_url("**/diff/trips/rome/**")
@@ -41,7 +47,18 @@ def test_fits_a_phone(new_page, wiki):
     pg.goto("/changes")
     expect(pg.locator(".changes-row")).to_have_count(5)   # and the wiki's first two (its files, .zone-format)
     assert horizontal_overflow(pg) <= 0
+    # The list starts right under the Filter button, and a row reads down:
+    # the text, what it changed under it, both beside the time's column.
+    expect(pg.locator(".changes-filter")).to_be_hidden()
+    row = pg.locator(".changes-row").first
+    when, what, items = (row.locator(s).bounding_box() for s in (".hist-when", ".changes-what", ".changes-items"))
+    assert when["x"] + when["width"] <= what["x"] and abs(items["x"] - what["x"]) < 2
+    assert items["y"] >= what["y"] + what["height"] - 1
     pg.screenshot(path=str(SCREENSHOT_DIR / "changes-phone.png"))
+    # Open, the filters are one to a line and fit the screen.
+    pg.locator(".changes-filter-box summary").click()
+    expect(pg.get_by_role("button", name="Show")).to_be_visible()
+    assert horizontal_overflow(pg) <= 0
 
 
 def test_undo_one_change_and_an_assistants_run(page, wiki):

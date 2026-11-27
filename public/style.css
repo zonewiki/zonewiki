@@ -2342,18 +2342,36 @@ body.editor-page main {
 }
 .hist-empty { color: var(--muted); font-size: .875rem; margin-top: 1rem; }
 
-/* Changes (/changes): the wiki's commits by day; a row is when, what (who,
-   and an assistant's mark), then what it changed. */
-.changes-filter {
-  display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem;
-  margin: 0 0 1rem; font-size: .875rem; color: var(--muted);
+/* Changes (/changes): the wiki's commits by day; a row is when, what, who
+   (and an assistant's mark), then what it changed and Undo. The filters are
+   folded behind a button (a <details>), what is set said beside it. */
+.changes-bar { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .75rem; margin: 0 0 .5rem; font-size: .875rem; }
+.changes-filter-box { min-width: 0; }
+.changes-filter-box[open] { flex: 1 1 100%; }
+.changes-filter-box summary {
+  display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .6rem;
+  list-style: none; cursor: pointer; width: fit-content; max-width: 100%;
 }
+.changes-filter-box summary::-webkit-details-marker { display: none; }
+.changes-filter-btn { display: inline-flex; align-items: center; gap: .35rem; padding: .3rem .6rem; font-size: .8rem; }
+.changes-filter-btn svg { width: 14px; height: 14px; }
+.changes-filter-box[open] .changes-filter-btn { border-color: var(--accent); color: var(--accent); }
+.changes-on { display: inline-flex; flex-wrap: wrap; gap: .3rem; }
+.changes-on span {
+  padding: .1rem .5rem; border-radius: 99px; font-size: .78rem; overflow-wrap: anywhere;
+  color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.changes-filter {
+  display: flex; flex-wrap: wrap; align-items: center; gap: .6rem 1rem;
+  margin: .6rem 0 0; padding: .75rem; color: var(--muted);
+  border: 1px solid var(--border); border-radius: 8px;
+}
+.changes-filter label { display: inline-flex; align-items: center; gap: .4rem; }
 .changes-filter select, .changes-filter input[type="text"], .changes-filter input[type="date"] {
   font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--border);
-  border-radius: 6px; padding: .2rem .4rem; max-width: 100%;
+  border-radius: 6px; padding: .2rem .4rem; max-width: 100%; min-width: 0;
 }
-.changes-check { display: inline-flex; align-items: center; gap: .35rem; }
-.changes-all { color: var(--link); }
+.changes-all { color: var(--link); font-size: .8rem; white-space: nowrap; }
 /* The watched changes: a change that is news, what is watched, a folder to watch. */
 .changes-new {
   padding: .05rem .4rem; border-radius: 99px; font-size: .7rem; font-weight: 600; white-space: nowrap;
@@ -2367,10 +2385,17 @@ body.editor-page main {
 .changes-watching li a { color: var(--link); text-decoration: none; }
 .changes-watching li a:hover { text-decoration: underline; }
 .changes-watching li form { margin: 0 0 0 auto; }
-.changes-day { font-size: 1rem; margin: 1.5rem 0 .25rem; }
+/* A day's heading is a label over its rows, not a section of a page. */
+main > .sheet > h2.changes-day {
+  font-family: inherit; font-size: .8rem; font-weight: 600; letter-spacing: .02em; color: var(--muted);
+  margin: 1.5rem 0 0; padding-bottom: .3rem; border-bottom: 1px solid var(--border);
+}
 .changes-row { align-items: baseline; flex-wrap: wrap; gap: .1rem 1rem; padding: .5rem 0; }
-.changes-what { flex: 1 1 16rem; min-width: 0; font-size: .875rem; overflow-wrap: anywhere; }
-.changes-what .hist-by { color: var(--muted); }
+.changes-body { flex: 1 1 16rem; min-width: 0; font-size: .875rem; overflow-wrap: anywhere; }
+/* Who: the name never alone on a line of its own behind a dot. */
+.changes-who { color: var(--muted); }
+.changes-who .hist-by { white-space: nowrap; }
+.changes-who .hist-by::before { content: "· "; }
 .changes-assistant {
   padding: .05rem .45rem; border-radius: 99px; font-size: .72rem; white-space: nowrap;
   color: var(--muted); border: 1px solid var(--border);
@@ -2383,6 +2408,26 @@ body.editor-page main {
 .changes-more { margin-top: 1rem; }
 .changes-undo { display: flex; gap: .4rem; flex: 0 0 auto; }
 .changes-undo form { margin: 0; }
+/* Phones: the time in a narrow column of its own, and beside it the text,
+   who under it, then what it changed with Undo at the right of that line;
+   the filters one to a line, each as wide as the screen. */
+@media (max-width: 640px) {
+  .changes-filter { display: grid; grid-template-columns: 1fr; gap: .65rem; }
+  .changes-filter label:not(.changes-check) { display: grid; grid-template-columns: 6.5rem 1fr; }
+  .changes-filter select, .changes-filter input[type="text"], .changes-filter input[type="date"] { padding: .45rem .5rem; width: 100%; box-sizing: border-box; }
+  .changes-check { min-height: 2rem; }
+  .changes-check input { width: 1.15rem; height: 1.15rem; }
+  .changes-filter .btn { padding-block: .55rem; }
+  .changes-filter-btn { padding: .45rem .75rem; font-size: .875rem; }
+  .changes-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: .2rem .75rem; padding: .65rem 0; }
+  .changes-row .hist-when { color: var(--muted); font-size: .8rem; line-height: 1.6rem; }
+  .changes-body { grid-column: 2 / -1; font-size: .9375rem; }
+  .changes-who { display: block; font-size: .8rem; }
+  .changes-who .hist-by::before { content: none; }
+  .changes-items { grid-column: 2; align-self: center; font-size: .875rem; gap: .25rem .75rem; }
+  .changes-undo { grid-column: 3; align-self: start; }
+  .changes-undo .btn-sm { padding: .4rem .6rem; font-size: .8rem; }
+}
 
 /* ── Diff view ───────────────────────────────────────────────────────────────── */
 

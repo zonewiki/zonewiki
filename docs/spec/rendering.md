@@ -503,7 +503,7 @@ The diff of a rename passes both names (`gitDiff(sha, paths…)`, `-M`), so a pu
 **`/changes`** (Changes, `go/changes.go`) lists the wiki's commits, newest first, under a heading per day (Today, Yesterday, then the date; 50, **Show more** doubles them up to 500, `?n=`).
 Each row shows:
 
-- the time, what the commit says, who made it (with users);
+- the time, what the commit says, who made it (with users; on a phone the name and the assistant's mark stand under the text, what it changed under that with Undo at the right, all beside the time's column);
 - an **assistant** mark where an assistant wrote it (its `Assistant` trailer, `commitMarkOf`, never its message, which a page's name can end in `(MCP)` too; the mark replaces the `(MCP)` an assistant's message ends in, and says **through Claude** where the commit names its connection: Which assistant in `docs/spec/mcp.md`);
 - where its text is from when the assistant said ("from https://…": Where the text is from, there);
 - then what it changed: each page by its slug, a link to what the commit changed on it (`/diff/<slug>/<sha>`), any other file (an upload) by its path, and each task it changed by its title as it is now, a link to the task (`/tasks?task=<id>…`, `taskLink`; The tasks a commit changed, below).
@@ -533,7 +533,8 @@ The tool `history` names them alike, `"Water the beds" (task 1a2b3c4d)`, with th
 
 #### Filtering Changes
 
-**Filters**, a GET form, so a filtered list has an address:
+**Filter**, a button above the list, opens the filters (a `<details>`, shut when the page loads, so the list starts at the top of a phone's screen); what is set stands beside the button (`.changes-on`: "by bob", "in garden/").
+They are a GET form, so a filtered list has an address:
 
 | Filter | Parameter | |
 |---|---|---|
