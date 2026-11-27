@@ -35,6 +35,8 @@ func adminRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /admin/users/invite", adminOnly(inviteRoute))
 	mux.HandleFunc("POST /admin/users/{name}/reset", adminOnly(resetRoute))
 	mux.HandleFunc("POST /admin/users/{name}/revoke", adminOnly(revokeRoute))
+	mux.HandleFunc("GET /admin/wiki", adminOnly(adminWikiPage))
+	mux.HandleFunc("POST /admin/wiki/timezone", adminOnly(timezoneRoute))
 	mux.HandleFunc("GET /welcome/{token}", welcomeRoute)
 	mux.HandleFunc("POST /welcome/{token}", welcomeRoute)
 }
@@ -102,7 +104,7 @@ type userRow struct {
 type adminTab struct{ Key, Label, Href string }
 
 // adminTabs: the admin page's sections, in order; /admin opens the first.
-var adminTabs = []adminTab{{"users", "Users", "/admin/users"}}
+var adminTabs = []adminTab{{"users", "Users", "/admin/users"}, {"wiki", "Wiki", "/admin/wiki"}}
 
 // usersPage: GET /admin/users, the list. ?done= says what the change before did,
 // from a fixed set (a link can't make the page say anything else).
@@ -354,4 +356,87 @@ func userRemoveRoute(w http.ResponseWriter, r *http.Request) {
 	}
 	revokeGrantsOf(u.Name) // their assistants' connections
 	afterChange(w, r, "remove", u.Name)
+}
+
+// adminWikiView: the admin page's Wiki tab (admin_wiki.html): the settings
+// of the wiki an admin sets in the browser. The timezone for now.
+type adminWikiView struct {
+	view
+	Tabs  []adminTab
+	Tab   string
+	Done  string
+	Error string
+	// Timezone: the setting, "" when unset; Typed: what a refused form
+	// said; Now: the wiki's time as it is with it; ServerZone: what unset
+	// means here.
+	Timezone, Typed, Now, ServerZone string
+	Zones                            []string
+	BreadcrumbHTML                   template.HTML
+}
+
+// commonZones: what the timezone field offers to pick from; it takes any
+// name of the IANA database.
+var commonZones = []string{"UTC", "Europe/London", "Europe/Lisbon", "Europe/Dublin", "Europe/Paris", "Europe/Berlin", "Europe/Vienna",
+	"Europe/Zurich", "Europe/Amsterdam", "Europe/Brussels", "Europe/Madrid", "Europe/Rome", "Europe/Stockholm", "Europe/Oslo",
+	"Europe/Copenhagen", "Europe/Prague", "Europe/Warsaw", "Europe/Budapest", "Europe/Helsinki", "Europe/Athens", "Europe/Kyiv",
+	"Europe/Istanbul", "Africa/Cairo", "Africa/Lagos", "Africa/Nairobi", "Africa/Johannesburg", "Asia/Dubai", "Asia/Karachi",
+	"Asia/Kolkata", "Asia/Dhaka", "Asia/Bangkok", "Asia/Jakarta", "Asia/Singapore", "Asia/Hong_Kong", "Asia/Shanghai", "Asia/Seoul",
+	"Asia/Tokyo", "Australia/Perth", "Australia/Adelaide", "Australia/Sydney", "Pacific/Auckland", "Pacific/Honolulu",
+	"America/Anchorage", "America/Los_Angeles", "America/Vancouver", "America/Denver", "America/Phoenix", "America/Chicago",
+	"America/Mexico_City", "America/New_York", "America/Toronto", "America/Bogota", "America/Lima", "America/Halifax",
+	"America/Sao_Paulo", "America/Argentina/Buenos_Aires", "America/Santiago"}
+
+// adminWikiPage: GET /admin/wiki.
+func adminWikiPage(w http.ResponseWriter, r *http.Request) {
+	done := ""
+	if r.URL.Query().Get("done") == "timezone" {
+		if tz := latestSettings().Timezone; tz != "" {
+			done = "The wiki's timezone is " + tz + " now."
+		} else {
+			done = "The wiki has no timezone of its own now: it keeps the server's."
+		}
+	}
+	showAdminWiki(w, r, http.StatusOK, done, "", "")
+}
+
+func showAdminWiki(w http.ResponseWriter, r *http.Request, status int, done, refused, typed string) {
+	s := latestSettings()
+	loc := serverZone()
+	if s.Zone != nil {
+		loc = s.Zone
+	}
+	v := &adminWikiView{Tabs: adminTabs, Tab: "wiki", Done: done, Error: refused, Timezone: s.Timezone, Typed: typed, Zones: commonZones,
+		Now:            time.Now().In(loc).Format("Monday 2 January 2006, 15:04"),
+		ServerZone:     time.Now().In(serverZone()).Format("UTC-07:00"),
+		BreadcrumbHTML: breadcrumb(newReq(r), []crumb{{"Admin", "/admin"}, {"Wiki", ""}}, "", false, "", "")}
+	if typed == "" {
+		v.Typed = s.Timezone
+	}
+	page(w, newReq(r), status, "admin_wiki.html", "Admin · Wiki", shell{}, v)
+}
+
+// timezoneRoute: POST /admin/wiki/timezone: the wiki's timezone from now
+// (timezone = Europe/Vienna; empty: the server's again).
+func timezoneRoute(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimSpace(r.PostFormValue("timezone"))
+	if name != "" {
+		if _, err := loadZone(name); err != nil || len(name) > 64 {
+			showAdminWiki(w, r, http.StatusBadRequest, "",
+				"That isn't a timezone Zonewiki knows. Use a name like Europe/Vienna or America/New_York, or UTC.", name)
+			return
+		}
+	}
+	err := changeSettings(userOf(r).Name, func(f *settingsfile.File) error {
+		if name == "" {
+			f.Unset("", "timezone")
+		} else {
+			f.Set("", "timezone", name)
+		}
+		return nil
+	})
+	if err != nil {
+		showAdminWiki(w, r, http.StatusConflict, "", err.Error(), name)
+		return
+	}
+	http.Redirect(w, r, "/admin/wiki?done=timezone", http.StatusSeeOther)
 }

@@ -21,7 +21,7 @@ import (
 )
 
 // The morning: the mail goes out from digestFrom o'clock, the wiki's time
-// (TZ), and no longer from digestUntil: a Zonewiki that starts in the
+// (its timezone, zone), and no longer from digestUntil: a Zonewiki that starts in the
 // afternoon doesn't send the morning's mail to someone who is at their
 // desk by then.
 const (
@@ -73,9 +73,24 @@ func startDigests() {
 	go func() {
 		for {
 			sendDigests(now())
-			time.Sleep(time.Minute)
+			writeWake(now())
+			select {
+			case <-time.After(time.Minute):
+			case <-digestKick:
+			}
 		}
 	}()
+}
+
+// digestKick: the loop looks again now instead of within the minute: the
+// settings changed (an address was confirmed, the wiki's timezone set).
+var digestKick = make(chan struct{}, 1)
+
+func kickDigests() {
+	select {
+	case digestKick <- struct{}{}:
+	default: // one waits already
+	}
 }
 
 // sendDigests sends the morning's mail of the day t is in to every user
@@ -88,7 +103,14 @@ func sendDigests(t time.Time) {
 		return
 	}
 	digestsRunning.Store(true)
-	defer digestsRunning.Store(false)
+	looked := false
+	defer func() {
+		if looked {
+			// From here a Zonewiki nobody asked counts its minute (exitWhenIdle).
+			idle.last.Store(now().UnixNano())
+		}
+		digestsRunning.Store(false)
+	}()
 	day := isoDay(t)
 	names := make([]string, 0, len(s.Users))
 	for name := range s.Users {
@@ -107,6 +129,7 @@ func sendDigests(t time.Time) {
 			continue
 		}
 		digestState.by[name] = digestSent{Day: day, At: t.Unix()}
+		looked = true
 		text, err := json.MarshalIndent(digestState.by, "", "  ")
 		if err == nil {
 			err = atomicfile.WriteOwnerOnly(digestPath(), string(text)+"\n")
@@ -130,6 +153,79 @@ func sendDigests(t time.Time) {
 			logf("the morning's mail to %s: %v", name, err)
 		}
 	}
+}
+
+// When to be started (.zone/wake; When to be started in
+// docs/spec/deployment.md): a Zonewiki that sleeps while nobody asks sends
+// the morning's mail only if something starts it in the morning. So it says
+// when: one line, the next moment it has something to do by itself, in UTC
+// (2026-11-26T06:00:00Z). That is the next digestFrom o'clock of the wiki
+// while a user has the morning's mail turned on; today's, while one of
+// them still waits for this morning's. With nobody who wants the mail there
+// is no file. It means "from then on": whoever starts Zonewiki sets the pace.
+
+func wakePath() string { return statePath("wake") }
+
+// nextWake: the moment the file names at t, ok false for none.
+func nextWake(s *Settings, t time.Time) (at time.Time, ok bool) {
+	if !cfg.Mail.on() || s.Users == nil {
+		return time.Time{}, false
+	}
+	t = t.In(zone())
+	day := isoDay(t)
+	wants, waits := false, false
+	digestState.Lock()
+	loadDigests()
+	for name := range s.Users {
+		if mails(s, name, "digest") {
+			wants = true
+			waits = waits || digestState.by[name].Day != day
+		}
+	}
+	digestState.Unlock()
+	if !wants {
+		return time.Time{}, false
+	}
+	morning := time.Date(t.Year(), t.Month(), t.Day(), digestFrom, 0, 0, 0, zone())
+	if t.Hour() < digestFrom || (waits && t.Hour() < digestUntil) {
+		return morning, true
+	}
+	return time.Date(t.Year(), t.Month(), t.Day()+1, digestFrom, 0, 0, 0, zone()), true
+}
+
+// wakeWritten: what the file holds, as this Zonewiki last left it ("": no
+// file), so a minute that changes nothing writes nothing.
+var wakeWritten struct {
+	sync.Mutex
+	dir, line string
+	known     bool
+}
+
+// writeWake leaves .zone/wake as nextWake says at t: written when it
+// changes, removed when nobody wants the mail.
+func writeWake(t time.Time) {
+	line := ""
+	if at, ok := nextWake(settings(), t); ok {
+		line = at.UTC().Format(time.RFC3339) + "\n"
+	}
+	wakeWritten.Lock()
+	defer wakeWritten.Unlock()
+	if wakeWritten.known && wakeWritten.dir == cfg.Data && wakeWritten.line == line {
+		return
+	}
+	var err error
+	if line == "" {
+		if err = os.Remove(wakePath()); os.IsNotExist(err) {
+			err = nil
+		}
+	} else {
+		err = atomicfile.WriteOwnerOnly(wakePath(), line)
+	}
+	if err != nil {
+		logf("when to be started: %s could not be written: %v", wakePath(), err)
+		return
+	}
+	wakeWritten.dir, wakeWritten.line, wakeWritten.known = cfg.Data, line, true
 }
 
 // digest: what a morning's mail tells one user.

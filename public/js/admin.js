@@ -80,3 +80,22 @@ for (const field of document.querySelectorAll('.group-form input[name="people"],
     form.classList.add('edited');
   });
 }
+
+// Wiki tab (templates/admin_wiki.html): the timezone field can take this
+// browser's own, which is the admin's guess more often than not. The
+// button names it, and fills the field; Save is still the admin's.
+const zoneButton = document.querySelector('[data-browser-zone]');
+if (zoneButton) {
+  const field = zoneButton.form.elements.timezone;
+  let mine = '';
+  try { mine = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { /* no button */ }
+  if (mine && mine !== field.value) {
+    zoneButton.textContent = `Use this browser's: ${mine}`;
+    zoneButton.hidden = false;
+    zoneButton.addEventListener('click', () => {
+      field.value = mine;
+      zoneButton.hidden = true;
+      field.focus();
+    });
+  }
+}

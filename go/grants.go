@@ -418,7 +418,7 @@ func grantsOf(user string) []grantRow {
 				used = day.Format("2 Jan 2006")
 			}
 			rows = append(rows, grantRow{ID: g.ID, Client: g.Client, Redirect: g.Redirect,
-				Made: g.Made.Local().Format("2 Jan 2006"), Used: used, ReadOnly: g.ReadOnly, Sees: g.sees(), had: g.less})
+				Made: g.Made.In(zone()).Format("2 Jan 2006"), Used: used, ReadOnly: g.ReadOnly, Sees: g.sees(), had: g.less})
 		}
 	}
 	return rows

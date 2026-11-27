@@ -27,8 +27,25 @@ import (
 	"time"
 )
 
-// now is the clock of the throttle and the session (a test sets it).
-var now = time.Now
+// now is Zonewiki's clock, in the wiki's timezone (zone): what day it is,
+// what is due, when the morning is. A test sets it.
+var now = wikiNow
+
+func wikiNow() time.Time { return time.Now().In(zone()) }
+
+// zone: the wiki's timezone, the setting timezone; unset, the process's
+// (TZ). Every time Zonewiki shows, and every day it reckons, is in it:
+// asked here, never as time.Local.
+func zone() *time.Location {
+	if s := current.Load(); s != nil && s.Zone != nil {
+		return s.Zone
+	}
+	return serverZone()
+}
+
+// serverZone: the process's timezone (TZ), which a wiki without the
+// setting keeps.
+func serverZone() *time.Location { return time.Local }
 
 // DNS rebinding: a page on evil.example whose name later resolves to
 // 127.0.0.1 reaches Zonewiki with "Host: evil.example". Only localhost, and the

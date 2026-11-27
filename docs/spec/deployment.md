@@ -176,7 +176,7 @@ With rootless podman, keep-id (`compose.podman.yaml`) runs Zonewiki as the host 
 ### .zone/config
 
 The wiki's own settings and its users
-(a password, MCP tokens, `hosts`, `base-url`, `git-remote`, `noshare`, `locale`, `date-format`, `query-log`, `semantic-min-score`, `trusted-proxies`, `upload-max`, `storage-max`, `external-content`, `notice`, `imprint`, `privacy`, `no-login`, `mcp-oauth`, `signup-domains`, `signup-role`, `signup-approval`),
+(a password, MCP tokens, `hosts`, `base-url`, `git-remote`, `noshare`, `locale`, `date-format`, `timezone`, `query-log`, `semantic-min-score`, `trusted-proxies`, `upload-max`, `storage-max`, `external-content`, `notice`, `imprint`, `privacy`, `no-login`, `mcp-oauth`, `signup-domains`, `signup-role`, `signup-approval`),
 in the wiki,
 kept out of git (it holds the users: back it up with the data folder),
 reloaded when it changes,
@@ -614,8 +614,34 @@ Zonewiki stays up:
 - while it packs the repository (Packing the repository, below): a join of the packs stopped halfway is done again from the start;
 - while the morning's mails go out (below).
 
-**The morning's mail needs Zonewiki up in the morning** (The morning's mail in `docs/spec/tasks.md`): it goes out from 7:00 to noon, the first time Zonewiki looks, and a Zonewiki asleep looks at nothing.
-Whoever holds the socket starts it once in that time, with any request; the healthcheck does (`zonewiki health unix:/run/zone/zone.sock`, or `GET /api/health`), which starts Zonewiki and doesn't keep it up afterwards:
+**A Zonewiki that nobody asked sleeps again after a minute**, not after `ZONE_IDLE_EXIT`: one that no request reached since its start was started for its own work, by a health check or for the morning's mail, and that isn't someone using the wiki (`idleAfter`, `unaskedIdle` in `go/server.go`).
+The minute counts from its start, and anew from when the morning's mails are out; what keeps a Zonewiki up, above, still does.
+A Zonewiki started by a request is as before: the request waits in the socket and is the first thing answered, and from then on the setting's time holds.
+
+**The morning's mail needs Zonewiki up in the morning** (The morning's mail in `docs/spec/tasks.md`): it goes out from 7:00 to noon in the wiki's time, the first time Zonewiki looks, and a Zonewiki asleep looks at nothing.
+So Zonewiki says when it wants to be started (When to be started, below), and whoever holds the socket starts it then, with any request;
+the healthcheck does (`zonewiki health unix:/run/zone/zone.sock`, or `GET /api/health`), which starts Zonewiki and doesn't keep it up afterwards.
+Without a start in the morning the mail goes out on the mornings someone opens the wiki before noon, and on no others.
+
+### When to be started
+
+`.zone/wake` in the wiki's folder is one line: the next moment Zonewiki has something to do by itself, in UTC.
+
+```
+2026-11-26T06:00:00Z
+```
+
+| The file says | When |
+|---------------|------|
+| The next 7:00 of the wiki (its `timezone`: The wiki's timezone in `docs/spec/users.md`) | while a user has the morning's mail turned on and an address to send it to |
+| This morning's 7:00, which may be past | until each of them was looked into today, up to noon |
+| Tomorrow's 7:00 | from then on, and from noon |
+| Nothing: there is no file | nobody wants the morning's mail, or Zonewiki sends no mail |
+
+It means "from then on", not "at": the mail goes out until noon, so whoever starts Zonewiki sets the pace, and a host with many wikis needn't start them all in one minute.
+A start a few minutes late costs nothing; one after noon sends no mail that day.
+
+One wiki on one machine can be started by a timer at the wiki's hour, or by a script that reads the file:
 
 ```ini
 # zone-morning.timer                   # zone-morning.service
@@ -624,7 +650,9 @@ OnCalendar=*-*-* 07:05:00              Type=oneshot
                                        ExecStart=/usr/local/bin/zonewiki health unix:/run/zone/zone.sock
 ```
 
-Without it the mail goes out on the mornings someone opens the wiki before noon, and on no others.
+Zonewiki writes the file when it starts, each minute when it changed, when a user turns the morning's mail on or off, when the settings change (an address confirmed, the timezone), and before it exits for being idle;
+readable by its owner alone, and whole or not there (`writeWake`, `nextWake` in `go/digest.go`).
+Whoever reads it for many wikis reads it as untrusted: a wiki's admin, or whoever writes its files, can say any time.
 
 What an exit loses is what a restart loses: the caches, which are built again, and the texts an editor's save is merged from,
 so a tab left open over a sleep saves as after any restart
@@ -830,6 +858,7 @@ Zonewiki's own state, none of it in git (`.git/info/exclude` has `/.zone/*`, `ex
 - `seen/<user>.json` — what each user has seen of the tasks' news (What you have seen, under News on your tasks in `docs/spec/tasks.md`)
 - `watch/<user>.json` — the pages and folders each user watches, and what they have seen of them (Watching pages in `docs/spec/navigation.md`)
 - `digest.json` — the last morning each user's mail was looked into, and up to when they were told what is new (The morning's mail in `docs/spec/tasks.md`)
+- `wake` — the next moment Zonewiki wants to be started for the morning's mail, one line in UTC; no file when nobody wants it (When to be started, above)
 - `unsaved-files.json` — who pasted the first file for a task not made yet (a new task's dialog before its first Save), whose those files are until then (A task's files in `docs/spec/tasks.md`)
 - `drafts/<user>/` — an editor's text left in a conflict when its tab closed, for its user's next edit, 30 days at most (`docs/spec/editor.md`)
 - `tmp/` — a three-way merge's scratch files, removed after each merge
@@ -923,7 +952,7 @@ The hosted Zonewiki writes the same file (its account page's export) and takes o
 | `zonewiki export --work FOLDER` | Puts the export together in FOLDER, not beside FILE (for stdout: not in the wiki's `.zone/`) |
 | `zonewiki import FILE` | Makes the wiki in `ZONE_DATA` from FILE; `-` is stdin, which is what `./run.sh import` uses |
 | `zonewiki import --max-size SIZE FILE` | Refuses a wiki that would take more than SIZE on disk (`1GB`), its history and its files |
-| `zonewiki import --users-only FILE` | Of the settings file, takes the users, the groups, `locale`, `date-format` and `noshare` only; a user's mail address comes along not confirmed (Mail addresses in `docs/spec/users.md`) |
+| `zonewiki import --users-only FILE` | Of the settings file, takes the users, the groups, `locale`, `date-format`, `timezone` and `noshare` only; a user's mail address comes along not confirmed (Mail addresses in `docs/spec/users.md`) |
 | `zonewiki import --work FOLDER FILE` | Unpacks the archive in FOLDER, not in `ZONE_DATA` |
 
 An import's options come before the file.

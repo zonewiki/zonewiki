@@ -1780,6 +1780,8 @@ kbd {
 .email-pending { padding: .5rem .75rem; border-radius: 6px; background: var(--code-bg); }
 .email-pending p { margin: 0 0 .5rem; }
 .email-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+/* The Wiki tab's offer of the browser's timezone (admin_wiki.html): gone once it is taken. */
+.timezone-form .btn[hidden] { display: none; }
 .user-disabled .user-name { color: var(--muted); text-decoration: line-through; }
 .user-tasks { font-size: .85rem; white-space: nowrap; }
 .user-actions { display: flex; flex-wrap: wrap; gap: .3rem; align-items: flex-start; }

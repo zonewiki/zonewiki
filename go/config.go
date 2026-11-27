@@ -322,7 +322,7 @@ func sourceBuild() string {
 	}
 	build := rev[:7]
 	if t, err := time.Parse(time.RFC3339, at); err == nil {
-		build += " " + t.Local().Format("2006-01-02 15:04")
+		build += " " + t.In(zone()).Format("2006-01-02 15:04")
 	}
 	if dirty {
 		build += " +dirty"

@@ -273,7 +273,7 @@ func importMain(args []string, getenv func(string) string, stdin io.Reader, stdo
 	fl := flag.NewFlagSet("zonewiki import", flag.ContinueOnError)
 	fl.SetOutput(stderr)
 	maxSize := fl.String("max-size", "", "the most the wiki may take on disk, its history and its files, as a `size` (1GB); more is refused")
-	usersOnly := fl.Bool("users-only", false, "of the settings file, take the users, the groups, locale, date-format and noshare only (a host that sets the rest itself)")
+	usersOnly := fl.Bool("users-only", false, "of the settings file, take the users, the groups, locale, date-format, timezone and noshare only (a host that sets the rest itself)")
 	work := fl.String("work", "", "the `folder` to unpack the archive in (default: in ZONE_DATA)")
 	fl.Usage = func() { fmt.Fprintln(stderr, importUsage); printFlags(fl) }
 	if err := fl.Parse(args); err != nil || fl.NArg() != 1 {

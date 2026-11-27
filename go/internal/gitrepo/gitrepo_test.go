@@ -20,7 +20,7 @@ func repo(t *testing.T) Repo {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("no git")
 	}
-	r := Repo{t.TempDir()}
+	r := Repo{Dir: t.TempDir()}
 	if res := r.Run(context.Background(), Call{Timeout: time.Minute}, "init", "-q"); res.Code != 0 {
 		t.Fatalf("git init: %s", res.Stderr)
 	}

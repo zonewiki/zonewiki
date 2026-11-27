@@ -359,6 +359,12 @@ func setMineParams(user asker, was string, set map[string]string) error {
 	if err := mayWriteTasks(user); err != nil {
 		return err
 	}
+	if _, mail := set["mail"]; mail {
+		// Who wants the morning's mail may have changed, and with it when
+		// Zonewiki asks to be started (.zone/wake): said once the lock
+		// below is given back.
+		defer func() { writeWake(now()) }()
+	}
 	set, err := checkEmbedSettings(set, mineSettingKeys)
 	if err != nil {
 		return err

@@ -428,7 +428,7 @@ func listQuicknote(rq *Req) []Quicknote {
 			if m == nil || !inQuicknote(rq.user, slug) || hiddenPage(rq, slug) {
 				continue
 			}
-			ts, err := time.ParseInLocation("2006-01-02_15-04-05", m[1], time.Local)
+			ts, err := time.ParseInLocation("2006-01-02_15-04-05", m[1], zone())
 			if err != nil {
 				continue
 			}
@@ -1469,4 +1469,4 @@ func pageFromInput(raw string) string {
 	return mdtext.ToSlug(raw)
 }
 
-func fmtDate(t time.Time) string { return t.Local().Format("2006-01-02") }
+func fmtDate(t time.Time) string { return t.In(zone()).Format("2006-01-02") }

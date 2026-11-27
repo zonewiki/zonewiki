@@ -211,7 +211,7 @@ A running Zonewiki then keeps the settings it had and says so in its log; a Zone
 |---------|-------|--------------|
 | `ZONE_DATA` | Environment | The wiki folder (default `~/zonewiki`) |
 | `ZONE_INIT` | Environment | `1`: make a folder that holds files a wiki (or `--init`) |
-| `TZ` | Environment | The timezone, such as `Europe/Berlin` (default: the host's) |
+| `TZ` | Environment | The server's timezone, such as `Europe/Berlin` (default: the host's); a wiki with a `timezone` of its own uses that |
 | `ZONE_ALLOW_REMOTE` | Environment | `1`: other devices on the network reach Zonewiki |
 | `ZONE_PUBLIC` | Environment | `view` or `edit`: people read, or edit, without signing in |
 | `ZONE_SIGNUP`, `ZONE_SMTP_*` | Environment | Sign-up and the mail server ([Mail](#mail)) |
@@ -221,6 +221,7 @@ A running Zonewiki then keeps the settings it had and says so in its log; a Zone
 | `git-remote` | `.zone/config` | A remote to push the history to ([Your data](your-data.md#backups)) |
 | `locale` | `.zone/config` | How dates read and when weeks start: `de-AT` |
 | `date-format` | `.zone/config` | `iso`: dates as `2026-11-19` |
+| `timezone` | `.zone/config` | The wiki's timezone: `Europe/Vienna`; an admin sets it in the browser too ([The wiki's timezone](teams.md#the-wikis-timezone)) |
 | `upload-max` | `.zone/config` | The biggest upload (default `100MB`) |
 | `storage-max` | `.zone/config` | How much the wiki may hold (default: no limit) |
 | `external-content` | `.zone/config` | Sites pages may show images and frames from: `upload.wikimedia.org` |

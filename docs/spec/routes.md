@@ -156,6 +156,8 @@ To anyone else such a link says nothing, not even that there is such a group (`g
 | GET    | `/usage`              | Usage: how much the wiki is used, as counts a day, for admins (without users, whoever is let in); 404 for anyone else (Usage in `docs/spec/users.md`) |
 | GET    | `/admin`, `/admin/users` | The admin page, for admins (Managing users in `docs/spec/users.md`): `/admin` opens its first tab, Users; 404 for everyone else |
 | POST   | `/admin/users/<name>/role`, `/groups`, `/disable`, `/enable`, `/remove`, `/reset`, `/revoke`; `/admin/users/invite` | The Users tab's changes, admins only (404 for anyone else) |
+| GET    | `/admin/wiki` | The admin page's Wiki tab: the wiki's timezone, and what time it is there (The wiki's timezone in `docs/spec/users.md`); 404 for everyone but admins |
+| POST   | `/admin/wiki/timezone` | Sets it (`timezone`: a name as `Europe/Vienna`; empty: the server's again); a name that is no timezone is a 400 and the page again |
 | POST   | `/admin/users/<name>/email` | An admin sets a user's mail address (`email`; empty: none), not confirmed until its owner did (Mail addresses in `docs/spec/users.md`) |
 
 `/setup`'s form has `username` (empty for a password without users), `password` and `again`; a form that won't do is 400.

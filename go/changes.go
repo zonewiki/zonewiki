@@ -324,7 +324,7 @@ func changesView(w http.ResponseWriter, r *http.Request) {
 		fresh = freshFor(rq.user, watchNews(rq))
 	}
 	v := &changesPageView{Of: of, Users: users, Vias: changesVias(rq.user, of, entries),
-		Days: changeDays(entries, time.Now(), undoOffers(rq.user, entries, ct), ct, fresh),
+		Days: changeDays(entries, now(), undoOffers(rq.user, entries, ct), ct, fresh),
 		Back: changesURL(of, shown), Undone: q.Get("undone"), UndoError: q.Get("undo_error"),
 		Filtered:       of.Since != "" || of.Under != "" || of.By != "" || of.Via != "" || of.Assistant || of.Outside || of.Watched,
 		Watches:        watches,

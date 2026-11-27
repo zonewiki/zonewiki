@@ -194,3 +194,97 @@ func TestNoMorningsMailWithoutAMailServer(t *testing.T) {
 		t.Error("a morning was noted where no mail can go out")
 	}
 }
+
+func wakeFile(t *testing.T) string {
+	t.Helper()
+	b, err := os.ReadFile(wakePath())
+	if err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+// .zone/wake names the next moment Zonewiki has something to do by itself:
+// this morning's 7:00 while a user who wants the morning's mail still waits
+// for it, tomorrow's after, in UTC whatever the wiki's timezone; with
+// nobody who wants the mail there is no file.
+func TestWhenToBeStarted(t *testing.T) {
+	_, morning := digestWiki(t)
+	stamp := func(at time.Time) string { return at.UTC().Format(time.RFC3339) + "\n" }
+	tomorrow := morning.AddDate(0, 0, 1)
+
+	// Before the morning: today's 7:00.
+	writeWake(morning.Add(-3 * time.Hour))
+	if got := wakeFile(t); got != stamp(morning) {
+		t.Fatalf("before the morning: %q, want %q", got, stamp(morning))
+	}
+	// In the morning, alice still waits for hers: due now, as today's 7:00.
+	writeWake(morning.Add(2 * time.Hour))
+	if got := wakeFile(t); got != stamp(morning) {
+		t.Errorf("in the morning, not sent: %q", got)
+	}
+	// Looked into: tomorrow's.
+	sendDigests(morning.Add(2 * time.Hour))
+	writeWake(morning.Add(2*time.Hour + time.Minute))
+	if got := wakeFile(t); got != stamp(tomorrow) {
+		t.Errorf("after this morning's: %q, want %q", got, stamp(tomorrow))
+	}
+	// The afternoon of a day nobody was looked into: the morning is over.
+	digestState.Lock()
+	digestState.by = map[string]digestSent{}
+	digestState.Unlock()
+	writeWake(morning.Add(6 * time.Hour))
+	if got := wakeFile(t); got != stamp(tomorrow) {
+		t.Errorf("in the afternoon: %q, want %q", got, stamp(tomorrow))
+	}
+	// The file is the owner's alone, and one line.
+	if fi, err := os.Stat(wakePath()); err != nil || fi.Mode().Perm() != 0o600 {
+		t.Errorf("the file: %v, %v", fi, err)
+	}
+	// Nobody wants the mail: no file. Nor without a way to send mail.
+	mailOn(t, "alice", "assigned")
+	writeWake(morning)
+	if got := wakeFile(t); got != "" {
+		t.Errorf("nobody wants the morning's mail: %q", got)
+	}
+	mailOn(t, "alice", "digest")
+	writeWake(morning)
+	if wakeFile(t) == "" {
+		t.Fatal("no file again")
+	}
+	set(t, &cfg.Mail, mailConfig{})
+	writeWake(morning)
+	if got := wakeFile(t); got != "" {
+		t.Errorf("no mail set up: %q", got)
+	}
+}
+
+// The morning is the wiki's timezone's: 7:00 in Vienna is 6:00 UTC in
+// winter and 5:00 in summer, and the day before a clock change says the
+// next morning's hour as it will be.
+func TestWhenToBeStartedInTheWikisTimezone(t *testing.T) {
+	digestWiki(t)
+	text, err := os.ReadFile(configPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := zoneSettings(t, "timezone = Europe/Vienna\n"+string(text))
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := current.Load()
+	current.Store(s)
+	t.Cleanup(func() { current.Store(old) })
+	for at, want := range map[string]string{
+		"2026-01-15T03:00:00Z": "2026-01-15T06:00:00Z", // 4:00 in Vienna: today's 7:00
+		"2026-01-15T14:00:00Z": "2026-01-16T06:00:00Z", // the afternoon: tomorrow's
+		"2026-07-15T23:30:00Z": "2026-07-16T05:00:00Z", // 1:30 on the 16th there, summer time
+		"2026-03-28T14:00:00Z": "2026-03-29T05:00:00Z", // the night the clocks go forward
+	} {
+		t0, _ := time.Parse(time.RFC3339, at)
+		got, ok := nextWake(s, t0)
+		if !ok || got.UTC().Format(time.RFC3339) != want {
+			t.Errorf("at %s: %s (%v), want %s", at, got.UTC().Format(time.RFC3339), ok, want)
+		}
+	}
+}

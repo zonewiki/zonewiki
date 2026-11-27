@@ -232,7 +232,12 @@ const (
 )
 
 // Repo is a repository's working tree.
-type Repo struct{ Dir string }
+type Repo struct {
+	Dir string
+	// Env: what every call in this repository adds to git's environment,
+	// before a call's own (the wiki's timezone, TZ).
+	Env []string
+}
 
 // Result: how a call ended. Code is git's exit code, TimedOut when it ran
 // out of time or its context ended, 1 when it couldn't start.
@@ -256,7 +261,7 @@ func (r Repo) Run(ctx context.Context, call Call, args ...string) Result {
 	ctx, cancel := context.WithTimeout(ctx, call.Timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "git", args...)
-	cmd.Dir, cmd.Env = r.Dir, append(slices.Clone(baseEnv), call.Env...)
+	cmd.Dir, cmd.Env = r.Dir, append(append(slices.Clone(baseEnv), r.Env...), call.Env...)
 	if call.Input != "" {
 		cmd.Stdin = strings.NewReader(call.Input)
 	}
@@ -290,7 +295,7 @@ func (r Repo) Stream(ctx context.Context, call Call, read func(io.Reader) bool, 
 	ctx, cancel := context.WithTimeout(ctx, call.Timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "git", args...)
-	cmd.Dir, cmd.Env = r.Dir, append(slices.Clone(baseEnv), call.Env...)
+	cmd.Dir, cmd.Env = r.Dir, append(append(slices.Clone(baseEnv), r.Env...), call.Env...)
 	if call.Input != "" {
 		cmd.Stdin = strings.NewReader(call.Input)
 	}

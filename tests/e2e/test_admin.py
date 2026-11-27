@@ -140,3 +140,26 @@ def test_a_phone_shows_a_user_in_a_few_lines(new_page, wiki, monkeypatch):
     assert revoke["y"] < who["y"] + who["height"] and revoke["x"] > who["x"]
     assert link.locator(".link-until").evaluate("e => getComputedStyle(e, '::before').content") == '"Works until "'
     assert phone.evaluate("document.documentElement.scrollWidth <= innerWidth")                 # nothing wider than the phone
+
+
+def test_the_wiki_tab_takes_this_browsers_timezone(new_page, wiki, monkeypatch):
+    """Admin, Wiki: the button names the browser's own timezone and fills the
+    field with it; Save sets it, the page says the wiki's time there, and
+    the button is gone once the field says the same."""
+    monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "t1")})
+    monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"role": "admin"}})
+    page = new_page(timezone_id="Pacific/Auckland")
+    page.request.post("/login", form={"username": "alice", "password": "pw"})
+    page.goto("/admin/users")
+    page.get_by_role("link", name="Wiki", exact=True).click()
+    expect(page.locator(".wiki-time")).to_contain_text("no timezone is set")
+    field, mine = page.get_by_label("Timezone"), page.locator("[data-browser-zone]")
+    expect(field).to_have_value("")
+    expect(mine).to_have_text("Use this browser's: Pacific/Auckland")
+    mine.click()
+    expect(field).to_have_value("Pacific/Auckland")
+    expect(mine).to_be_hidden()
+    page.get_by_role("button", name="Save").click()
+    expect(page.get_by_role("status")).to_have_text("The wiki's timezone is Pacific/Auckland now.")
+    expect(page.locator(".wiki-time")).to_contain_text("(Pacific/Auckland)")
+    expect(page.locator("[data-browser-zone]")).to_be_hidden()

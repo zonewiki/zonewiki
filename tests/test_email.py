@@ -9,6 +9,8 @@ import json
 import re
 import stat
 import time
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -146,6 +148,50 @@ class TestTheMailFolder:
         assert 'data-settings-mail="1"' in my_tasks(client)
 
 
+class TestWhenToBeStarted:
+    """.zone/wake (When to be started, docs/spec/deployment.md): the next
+    morning of the wiki while a user wants the morning's mail, for whoever
+    starts a Zonewiki that sleeps."""
+
+    def wake(self, wiki):
+        path = wiki / ".zone" / "wake"
+        return path.read_text() if path.exists() else None
+
+    def test_it_is_there_while_someone_wants_the_mornings_mail(self, client, wiki, monkeypatch):
+        monkeypatch.setattr(settings, "CONFIG_FILE", "timezone = Pacific/Kiritimati\n")
+        login(client, "alice")                      # her address is confirmed
+        my_tasks(client)
+        assert self.wake(wiki) is None              # nobody wants it
+        mail_on(client, "assigned,digest")
+        line = self.wake(wiki)
+        assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:00:00Z\n", line), line
+        at = datetime.fromisoformat(line.strip().replace("Z", "+00:00"))
+        there = at.astimezone(ZoneInfo("Pacific/Kiritimati"))
+        assert (there.hour, there.minute) == (7, 0)                   # the wiki's 7:00, said in UTC
+        assert timedelta(hours=-5) < at - datetime.now(timezone.utc) <= timedelta(hours=24)
+        assert stat.S_IMODE((wiki / ".zone" / "wake").stat().st_mode) == 0o600
+
+    def test_not_for_the_mail_about_tasks(self, client, wiki):
+        login(client, "alice")
+        my_tasks(client)
+        mail_on(client, "assigned,mentioned,comments")
+        assert self.wake(wiki) is None
+
+    def test_an_address_not_confirmed_asks_for_no_start(self, client, wiki):
+        login(client, "bob")
+        my_tasks(client)
+        mail_on(client, "digest")
+        set_address(client, "bob@example.org")
+        (confirm,) = outbox(wiki, 1)
+        assert self.wake(wiki) is None
+        assert client.post(link(confirm), headers=HOST).status_code == 303
+        for _ in range(100):                        # the settings are taken once the request has ended
+            if self.wake(wiki):
+                break
+            time.sleep(0.05)
+        assert self.wake(wiki)
+
+
 class TestYourAddress:
 
     def test_the_tab_is_there_where_mail_is(self, bob):
@@ -218,7 +264,13 @@ class TestYourAddress:
         body = my_tasks(client)
         assert 'data-settings-mail="1"' in body and 'data-settings-mailask="1"' not in body
         give_bob(client, "After")
-        _, mail = outbox(wiki, 2)
+        # In the wiki's morning the morning's mail may be there too: it goes out once the address is his.
+        for _ in range(150):
+            about = [m for m in outbox(wiki) if "gave you a task" in m["subject"]]
+            if about:
+                break
+            time.sleep(0.02)
+        (mail,) = about
         assert mail["to"] == "bob@example.org" and mail["subject"] == "alice gave you a task: After"
         assert f"{BASE}/tasks?task=" in mail["body"]
 

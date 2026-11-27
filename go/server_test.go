@@ -233,6 +233,55 @@ func TestListenOnAHandedSocket(t *testing.T) {
 	}
 }
 
+// A Zonewiki that no request reached since its start (one started for the
+// morning's mail, or by a health check) waits a minute to sleep again, not
+// ZONE_IDLE_EXIT; a health check isn't a request, and the minute counts
+// anew from when the morning's mails are out.
+func TestAZonewikiNobodyAskedSleepsSoon(t *testing.T) {
+	configWiki(t, "")
+	at := clock(t, time.Unix(3_000_000, 0))
+	loginThrottle, mcpThrottle = newThrottle(), newThrottle()
+	idle.asked.Store(false)
+	idle.last.Store(at.UnixNano()) // the start
+	t.Cleanup(func() { idle.asked.Store(false) })
+	h := countRequests(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	ask := func(path string) { h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", path, nil)) }
+	const setting = 15 * time.Minute
+	if idleAfter(setting) != time.Minute || idleAfter(2*time.Second) != 2*time.Second {
+		t.Fatalf("nobody asked: %s, %s", idleAfter(setting), idleAfter(2*time.Second))
+	}
+	ask("/api/health")
+	*at = at.Add(59 * time.Second)
+	if idleLongEnough(idleAfter(setting)) {
+		t.Error("idle before its minute is over")
+	}
+	*at = at.Add(time.Second)
+	if !idleLongEnough(idleAfter(setting)) {
+		t.Error("not idle a minute after a start nobody asked for")
+	}
+	// While the morning's mails go out it stays, and its minute counts from
+	// their end.
+	digestsRunning.Store(true)
+	if idleLongEnough(idleAfter(setting)) {
+		t.Error("idle while the morning's mails go out")
+	}
+	digestsRunning.Store(false)
+	idle.last.Store(at.UnixNano())
+	if idleLongEnough(idleAfter(setting)) {
+		t.Error("idle right after the morning's mails")
+	}
+	// Someone came: the setting's time from then on.
+	ask("/page/index")
+	*at = at.Add(14 * time.Minute)
+	if idleAfter(setting) != setting || idleLongEnough(idleAfter(setting)) {
+		t.Errorf("after a request: %s", idleAfter(setting))
+	}
+	*at = at.Add(time.Minute)
+	if !idleLongEnough(idleAfter(setting)) {
+		t.Error("not idle 15 minutes after the request")
+	}
+}
+
 // Zonewiki is idle long enough to exit when nothing was asked for that long,
 // nothing runs, and no throttle remembers a wrong try; the healthcheck is
 // no request.

@@ -281,6 +281,8 @@ Where a guard is named, it fails for a forgotten step; where none is, only the r
   A new write gets a test through each door in `tests/test_page_writes.py`; no guard catches a miss.
   See How a page write is made in `docs/spec/rendering.md`.
 - **One process**: the locks, caches, throttles and the semantic worker live in memory, so two processes on one wiki lose writes.
+- **The wiki's timezone** (`timezone`; The wiki's timezone in `docs/spec/users.md`): the time is `now()`, the day `today()`, a time to show `t.In(zone())`; never `time.Local` or `.Local()`, which are the process's.
+  Guard: `TestTheZoneIsAskedInOnePlace`.
 - **The data format** (`.zone-format`, `wikiFormat` in `go/wikiformat.go`): a change to what Zonewiki keeps in git that an older Zonewiki would misread raises it, with a start-up step that writes the new number in its own commit (The data format in `docs/spec/deployment.md`).
 - `index.md` always exists and can't be deleted or renamed; a rename re-points every link to the page, on pages and in tasks, in one commit.
 - `ZONE_ALLOW_REMOTE` is the one knob for network access, with `run.sh` and for the binary; unset, the port is bound to loopback (compose's mapping; the binary's `--addr :PORT` on `127.0.0.1`, `listenAddr`).

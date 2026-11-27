@@ -1,0 +1,34 @@
+{{- /* /admin/wiki: the admin page's Wiki tab (admin.go; The wiki's
+    timezone in docs/spec/users.md): what an admin sets of the wiki itself
+    in the browser. A plain form; js/admin.js offers the browser's own
+    timezone to fill in. */ -}}
+{{define "body"}}
+{{.BreadcrumbHTML}}
+<div class="sheet">
+<h1>Admin</h1>
+<nav class="admin-tabs" aria-label="Admin sections">
+  {{- range .Tabs}}
+  <a href="{{.Href}}"{{if eq .Key $.Tab}} aria-current="page"{{end}}>{{.Label}}</a>
+  {{- end}}
+</nav>
+{{- with .Done}}
+<p class="users-done" role="status">{{.}}</p>
+{{- end}}
+{{- with .Error}}
+<p class="users-error" role="alert">{{.}}</p>
+{{- end}}
+<h2>Timezone</h2>
+<p>The wiki's day begins at midnight in its timezone: what is due today, the dates Zonewiki writes, and the morning its mail goes out are reckoned there, for everyone who uses the wiki.</p>
+<p class="wiki-time">In the wiki it is now <strong>{{.Now}}</strong>{{if .Timezone}} ({{.Timezone}}){{else}} (the server's time, {{.ServerZone}}: no timezone is set){{end}}.</p>
+<form method="post" action="/admin/wiki/timezone" class="password-form timezone-form">
+  <label>Timezone
+    <input type="text" name="timezone" value="{{.Typed}}" list="timezones" maxlength="64" placeholder="Europe/Vienna" autocomplete="off" autocapitalize="none" spellcheck="false"></label>
+  <datalist id="timezones">{{range .Zones}}<option value="{{.}}">{{end}}</datalist>
+  <div class="email-actions">
+    <button type="submit" class="btn btn-primary">Save</button>
+    <button type="button" class="btn" data-browser-zone hidden>Use this browser's</button>
+  </div>
+</form>
+<p class="users-help">A name as <code>Europe/Vienna</code> or <code>America/New_York</code>, which follows summer time by itself, or <code>UTC</code>. Empty, the wiki keeps the server's time.</p>
+</div>
+{{end}}

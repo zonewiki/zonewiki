@@ -49,17 +49,17 @@ What each file and folder of the repository is for.
 │   ├── configfile.go       # The settings file .zone/config: its keys, Settings (settings(), reloaded when the file changes), the line edits
 │   ├── storage.go          # upload-max and storage-max: sizes (25MB), what the wiki holds (not .git/, .zone/), checkRoom
 │   ├── commands.go         # zonewiki user (add, passwd, token, role, email, group, disable, enable, invite, reset, remove, list), zonewiki group (includes, owners, list) and zonewiki config (check, set, unset, passwd, token), which edit the settings file (filelock_*.go: one at a time)
-│   ├── security.go         # Host and Origin checks, the page policy, login, signed session (and its user), throttles
+│   ├── security.go         # Host and Origin checks, the page policy, login, signed session (and its user), throttles; the clock in the wiki's timezone (now, zone)
 │   ├── users.go            # Users: roles, groups (who is in which, also by way of a group made of groups), password hashes, sign-in, the password prompt, who a task can be assigned to (assignable, the reserved names me and none)
 │   ├── groups.go           # Groups in the browser (/groups): a group made by whoever may write, who owns it; its owners say who is in it (written on the users, as an admin's change), a member leaves by themselves; a group renamed, its folder, the lists for it and the settings along; an admin's every group there, what each includes (groups made of groups), the folders no one sees; a group ended, its pages moved to the wiki or deleted
-│   ├── admin.go            # The admin page (/admin, admins), its Users tab: roles, each user's groups (of those there are; groups themselves are on /groups), disable, remove, writing the settings file as the commands do
+│   ├── admin.go            # The admin page (/admin, admins), its Wiki tab (the wiki's timezone) and its Users tab: roles, each user's groups (of those there are; groups themselves are on /groups), disable, remove, writing the settings file as the commands do
 │   ├── links.go            # Invite and reset links: .zone/links, /welcome/<token>
 │   ├── signup.go           # Sign-up: /signup, the mail with its link, the account a sign-up link makes, the names it may not take (.zone/removed-users)
 │   ├── mail.go             # Mail through the deployment's SMTP server (ZONE_SMTP_*) or into the mail folder, for sign-up, confirming an address, the tasks' news and the morning's mail
 │   ├── spool.go            # The mail folder (ZONE_MAIL_SPOOL): each mail a file in .zone/outbox/, which the host sends
 │   ├── email.go            # Your mail address (/email): set in the browser with your password, an admin's on the Users tab, confirmed by a mailed link before any mail goes to it; .zone/confirms
 │   ├── notify.go           # A task given to a user is told to them: the mail (tellAssigned, called by the task writes), who gets one; the kinds of mail a user turns on
-│   ├── digest.go           # The morning's mail: once a day, what is new for a user since the last one (their tasks' updates, the pages they watch) and what is due; .zone/digest.json
+│   ├── digest.go           # The morning's mail: once a day, what is new for a user since the last one (their tasks' updates, the pages they watch) and what is due; .zone/digest.json; when Zonewiki asks to be started for it (.zone/wake)
 │   ├── assistant.go        # Connect an assistant (/assistant): your MCP token made and revoked in the browser, with your password again; your assistants' connections changed (less without the password, more with it) or ended
 │   ├── oauth.go            # OAuth for /mcp: the metadata, client registration (nothing kept), the consent page /oauth/authorize, /oauth/token, /oauth/revoke
 │   ├── grants.go           # Connections: the assistants users let in through OAuth, their token hashes in .zone/grants

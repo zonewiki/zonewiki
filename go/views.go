@@ -73,7 +73,7 @@ func init() {
 	for _, name := range []string{"login.html", "view.html", "edit.html", "new.html", "notes.html",
 		"hidden.html", "deleted_page.html", "tasks_page.html", "search.html", "history/changes.html", "history/deleted.html",
 		"history/diff.html", "history/diff_uncommitted.html", "history/history.html",
-		"history/revision.html", "history/uncommitted.html", "users.html", "groups.html", "welcome.html", "signup.html", "assistant.html",
+		"history/revision.html", "history/uncommitted.html", "users.html", "admin_wiki.html", "groups.html", "welcome.html", "signup.html", "assistant.html",
 		"password.html", "email.html", "usage.html", "oauth.html", "help.html",
 		"setup.html"} {
 		views[name] = template.Must(template.Must(partials.Clone()).ParseFS(templateFS, "templates/"+name))
@@ -870,7 +870,7 @@ func lastChanged(slug, path, title string) (*changedView, *commitView) {
 }
 
 func changedAt(t time.Time) *changedView {
-	t = t.In(now().Location())
+	t = t.In(zone())
 	return &changedView{t.Format("2006-01-02 15:04"), t.Format(time.RFC3339), relativeTime(t)}
 }
 

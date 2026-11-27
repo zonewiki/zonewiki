@@ -216,7 +216,7 @@ func openLinks() []linkRow {
 	var rows []linkRow
 	for _, l := range links {
 		rows = append(rows, linkRow{User: l.User, Kind: l.Kind, Role: l.Role, By: l.By,
-			Expires: l.Expires.Local().Format("2 Jan 2006 15:04")})
+			Expires: l.Expires.In(zone()).Format("2 Jan 2006 15:04")})
 	}
 	return rows
 }

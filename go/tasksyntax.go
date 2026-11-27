@@ -525,14 +525,14 @@ func isoDay(t time.Time) string { return t.Format("2006-01-02") }
 
 // parseDay reads YYYY-MM-DD (ASCII digits, a real day).
 func parseDay(s string) (time.Time, bool) {
-	t, err := time.ParseInLocation("2006-01-02", s, time.Local)
+	t, err := time.ParseInLocation("2006-01-02", s, zone())
 	return t, err == nil
 }
 
-// today is the server's date.
+// today is the wiki's date (zone).
 func today() time.Time {
-	n := now()
-	return time.Date(n.Year(), n.Month(), n.Day(), 0, 0, 0, 0, time.Local)
+	n := now().In(zone())
+	return time.Date(n.Year(), n.Month(), n.Day(), 0, 0, 0, 0, zone())
 }
 
 // shortIDLen: [[task:…]] names a task by this many characters of its id.

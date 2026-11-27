@@ -126,7 +126,7 @@ func loadUnsaved() {
 // locked), ok false when there is none or it is too old.
 func unsavedRecord(id string) (unsavedFile, bool) {
 	u, ok := unsavedFiles.by[id]
-	if at, err := time.ParseInLocation("2006-01-02T15:04", u.At, time.Local); !ok || err != nil || now().Sub(at) > unsavedKept {
+	if at, err := time.ParseInLocation("2006-01-02T15:04", u.At, zone()); !ok || err != nil || now().Sub(at) > unsavedKept {
 		return unsavedFile{}, false
 	}
 	return u, true

@@ -21,7 +21,7 @@ func clock(t *testing.T, at time.Time) *time.Time {
 	t.Helper()
 	cur := at
 	now = func() time.Time { return cur }
-	t.Cleanup(func() { now = time.Now })
+	t.Cleanup(func() { now = wikiNow })
 	return &cur
 }
 

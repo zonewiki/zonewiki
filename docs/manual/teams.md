@@ -245,6 +245,16 @@ In each row you can:
 You can't disable or remove yourself here, so you can't lock yourself out; another admin can.
 You can change your own role, as long as another admin remains: a wiki always keeps one admin.
 
+### The wiki's timezone
+
+The Admin page's **Wiki** tab has the wiki's **Timezone**.
+It decides when the wiki's day begins for everyone: what counts as due today in a mail or an assistant's answer, the times in a page's history, and the morning the morning's mail goes out (from 7:00).
+
+Type a name such as `Europe/Vienna` or pick one from the list, or click **Use this browser's** to take the one you are in, then **Save**.
+The page shows what time it is in the wiki, so you see at once whether it is right.
+Save the field empty to go back to the server's time.
+The full rules are in [The wiki's timezone](../spec/users.md#the-wikis-timezone).
+
 ### Usage
 
 **Settings** in the user menu has a **Usage** tab for admins.

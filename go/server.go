@@ -453,6 +453,23 @@ func handedListener(fd string) (net.Listener, error) {
 var idle struct {
 	last atomic.Int64 // UnixNano
 	busy atomic.Int64
+	// asked: a request reached this Zonewiki since it started. One that
+	// nobody asked was started for its own work (the morning's mail, a
+	// health check) and doesn't wait long to sleep again (idleAfter).
+	asked atomic.Bool
+}
+
+// unaskedIdle: how long a Zonewiki that no request reached stays, after
+// its start or after its morning's mails are out.
+const unaskedIdle = time.Minute
+
+// idleAfter: how long without a request before Zonewiki exits: the setting
+// (ZONE_IDLE_EXIT), and no longer than unaskedIdle while nobody asked.
+func idleAfter(after time.Duration) time.Duration {
+	if !idle.asked.Load() {
+		return min(after, unaskedIdle)
+	}
+	return after
 }
 
 // countRequests keeps idle up to date around next.
@@ -463,6 +480,7 @@ func countRequests(next http.Handler) http.Handler {
 			return
 		}
 		idle.busy.Add(1)
+		idle.asked.Store(true)
 		idle.last.Store(now().UnixNano())
 		defer func() {
 			flushUsageSoon()
@@ -498,10 +516,16 @@ func idleLongEnough(after time.Duration) bool {
 func exitWhenIdle(srv *http.Server, after time.Duration) {
 	for {
 		time.Sleep(min(after/4, 15*time.Second))
-		if !idleLongEnough(after) {
+		wait := idleAfter(after)
+		if !idleLongEnough(wait) {
 			continue
 		}
-		logf("no request for %s: exiting; the next one starts Zonewiki again", after)
+		if idle.asked.Load() {
+			logf("no request for %s: exiting; the next one starts Zonewiki again", wait)
+		} else {
+			logf("no request since the start, %s ago or more: exiting; the next one starts Zonewiki again", wait)
+		}
+		writeWake(now())
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		srv.Shutdown(ctx)
 		cancel()

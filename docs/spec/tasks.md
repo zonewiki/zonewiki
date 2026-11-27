@@ -1401,8 +1401,9 @@ What is only overdue, or was told before and not read, comes along with such a m
 A part names 20 tasks or pages and counts the rest.
 Your private tasks are in it, by their titles, as My tasks has them: it is your own mail, to your own address.
 
-**When**: once a day, from 7:00 in the wiki's time (`TZ`, the deployment's timezone: `docs/spec/deployment.md`), the first time Zonewiki looks after that, and no longer from noon: a Zonewiki that starts in the afternoon sends no morning's mail to someone who is at their desk by then.
-A Zonewiki that sleeps while nobody uses it (Started by systemd, asleep when idle, there) sends it when something starts it in the morning, so its host wakes it then.
+**When**: once a day, from 7:00 in the wiki's time (its `timezone`, which an admin sets: The wiki's timezone in `docs/spec/users.md`; unset, the server's), the first time Zonewiki looks after that, and no longer from noon: a Zonewiki that starts in the afternoon sends no morning's mail to someone who is at their desk by then.
+A Zonewiki that sleeps while nobody uses it (Started by systemd, asleep when idle, in `docs/spec/deployment.md`) sends it when something starts it in the morning: it says when in `.zone/wake` (When to be started, there), and sleeps again a minute after the mails are out when nobody came meanwhile.
+A user whose address is confirmed in the morning, or who turns the mail on then, gets that morning's within the minute.
 
 #### How the morning's mail works
 
@@ -1410,6 +1411,7 @@ A Zonewiki that sleeps while nobody uses it (Started by systemd, asleep when idl
 `.zone/digest.json` keeps, a user, the last day looked into and the moment up to which they were told (`{"alice": {"day": "2026-11-25", "at": 1764054000}}`, out of git, owner-only); it is written before the mail goes out, so a mail is rather lost than sent twice, and the first mail tells of the last 24 hours.
 `digestFor` asks everything as the user the mail goes to (`asUser`): `updatesFor` and `newsAll` for the tasks (the rule of Updates), `watchNewsFor` for the pages (the rule of the count), `mineFilter` for what is due; nothing in it that they don't see, and nothing of a task or page they see no longer.
 While the mails go out Zonewiki doesn't exit for being idle (`digestsRunning`, `idleLongEnough`).
+After each look the loop leaves `.zone/wake` as `nextWake` says (`writeWake`); a change to the settings has it look at once (`kickDigests`), and a user's change of which mail they get writes the file itself (`setMineParams`).
 A mail that fails is in Zonewiki's log, and not sent again.
 
 ### What you have seen

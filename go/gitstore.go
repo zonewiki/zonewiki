@@ -29,7 +29,16 @@ const gitTimeout = 60 * time.Second
 type gitResult = gitrepo.Result
 
 // wikiRepo: the wiki as a git repository.
-func wikiRepo() gitrepo.Repo { return gitrepo.Repo{Dir: cfg.Data} }
+func wikiRepo() gitrepo.Repo { return gitrepo.Repo{Dir: cfg.Data, Env: zoneEnv()} }
+
+// zoneEnv: with the wiki's timezone set, git writes a commit's time and
+// reads "local" as that zone's (history's times, --date=format-local).
+func zoneEnv() []string {
+	if s := settings(); s != nil && s.Zone != nil {
+		return []string{"TZ=" + s.Timezone}
+	}
+	return nil
+}
 
 // runGit runs git in the wiki. A git that can't start or times out counts
 // as failed, like a git that exits non-zero.
@@ -729,7 +738,7 @@ func gitLog(path string, max int) []GitEntry {
 		if max > 0 {
 			args = append(args, "-n", strconv.Itoa(max-len(entries)))
 		}
-		args = append(args, "-z", "--raw", "--numstat", "--date=format:%Y-%m-%d %H:%M",
+		args = append(args, "-z", "--raw", "--numstat", "--date=format-local:%Y-%m-%d %H:%M",
 			"--format=\x1e%H\x1f%as\x1f%ar\x1f%ad\x1f%an\x1f"+markFormat+"\x1f%s", from, "--", name)
 		got := parseFileLog(runGit(args...).Stdout, name)
 		cut, old := -1, ""
@@ -852,7 +861,7 @@ func gitLogAll(since string, paths []string, limit int, see func(path string) bo
 	var entries []LogEntry
 	for skip := 0; len(entries) < limit; skip, batch = skip+batch, 2*batch {
 		args := []string{"log", "-z", "-n", strconv.Itoa(batch), "--skip", strconv.Itoa(skip), "--name-status", "--no-renames",
-			"--date=format:%Y-%m-%d %H:%M", "--format=\x1e%H\x1f%ad\x1f%ar\x1f%an\x1f%ct\x1f" + markFormat + "\x1f" + tasksFormat + "\x1f%s"}
+			"--date=format-local:%Y-%m-%d %H:%M", "--format=\x1e%H\x1f%ad\x1f%ar\x1f%an\x1f%ct\x1f" + markFormat + "\x1f" + tasksFormat + "\x1f%s"}
 		if since != "" {
 			args = append(args, "--since="+since+" 00:00")
 		}

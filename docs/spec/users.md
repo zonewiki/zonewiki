@@ -81,6 +81,7 @@ Edit it by hand or with the commands (Commands, below); a running Zonewiki takes
 | `noshare` | Pages hidden in sharing mode (`docs/spec/navigation.md`) | `#tags` and `folders/`; empty: none | `#noshare` |
 | `locale` | How dates read and the day weeks start on (`docs/spec/tasks.md`) | a BCP 47 tag like `de-AT` | US English dates, weeks from Monday |
 | `date-format` | Dates as `YYYY-MM-DD` | `iso` | the locale's |
+| `timezone` | The wiki's timezone: when its day begins, the times it shows, the morning of its mail (The wiki's timezone, below) | a name of the IANA database (`Europe/Vienna`, `America/New_York`, `UTC`) | the server's (`TZ`) |
 | `query-log` | Keep `search_wiki`'s queries in `.zone/queries.jsonl` (`docs/spec/search.md`) | `yes`/`no` (or `1`/`0`, `true`/`false`) | no |
 | `semantic-min-score` | How similar a passage must be to be a semantic hit (`searchFloor`, `docs/spec/search.md`) | -1 to 1 | the model's floor |
 | `trusted-proxies` | Reverse proxies whose `X-Forwarded-For` names the client, for the throttle on wrong passwords (`clientKey`, Throttling in `docs/spec/security.md`) | IP addresses or networks (`172.17.0.1, 10.0.0.0/8`); empty: none | loopback (`127.0.0.0/8, ::1`) |
@@ -236,7 +237,7 @@ The file is kept out of git, as all of `.zone/` is (the session key, caches, the
 Zonewiki never shows it either (The settings file is never shown in `docs/spec/security.md`): `canSeePath` is false for `.zone/` for everyone, so history, the uncommitted list, Commit all and the MCP tools leave it (and a commit of nothing else) out, and `safePath` refuses it to every page route and MCP tool.
 
 A wiki still moves with its users: `zonewiki export` puts the file beside the history in its archive, and `zonewiki import` takes it from there, so everyone signs in where the wiki moves to with the password they had.
-The keys that are a host's (`hosts`, `base-url`, `git-remote`, `trusted-proxies`, `storage-max`, `imprint`, `privacy`) stay in the archive, and with `--users-only` every key but the users, the groups, `locale`, `date-format` and `noshare` (Moving a wiki in `docs/spec/deployment.md`).
+The keys that are a host's (`hosts`, `base-url`, `git-remote`, `trusted-proxies`, `storage-max`, `imprint`, `privacy`) stay in the archive, and with `--users-only` every key but the users, the groups, `locale`, `date-format`, `timezone` and `noshare` (Moving a wiki in `docs/spec/deployment.md`).
 
 **Account data stays out of git**: the file holds the users,
 their password and token hashes,
@@ -761,7 +762,7 @@ A step that is made but for its commit counts as made (`writtenAnyway`): the rem
 
 **The admin page** (`/admin`, `go/admin.go`) is the admins' way to manage the wiki in the browser, as `zonewiki user` is on the host.
 "Admin" in the user menu opens it (on a phone too), shown to admins only; for anyone else, and in a wiki without users, `/admin` and everything under it is a 404, as for a page that isn't there.
-It has section tabs (`adminTabs`), of which **Users** (`/admin/users`, `users.html`) is the one so far: `/admin` opens the first tab.
+It has section tabs (`adminTabs`): **Users** (`/admin/users`, `users.html`), which `/admin` opens, and **Wiki** (`/admin/wiki`, `admin_wiki.html`), which has the wiki's timezone (The wiki's timezone, below).
 
 ### The Users tab
 
@@ -827,6 +828,35 @@ so a change that leaves the wiki without an admin is refused here too.
 A change is taken at once and logged with the admin: after the write Zonewiki reloads the file at once (`changeSettings`), not within the second;
 the change takes effect once the requests running (the admin's own too) have ended (Reloading, above), and the page lists the users as that change has them (`latestSettings`).
 Its line in the log names the admin (`Change settings: bob's role (by alice)`, `settingsAuthor`); the file isn't in git.
+
+## The wiki's timezone
+
+A wiki has one timezone, for everyone who uses it: its day begins at midnight there.
+An admin sets it on the admin page's **Wiki** tab: the field **Timezone** takes a name as `Europe/Vienna` or `America/New_York`, which follows summer time by itself, or `UTC`;
+it offers the common ones to pick from, and **Use this browser's** fills in the one the admin's own browser is in.
+The page says what time it is in the wiki now, so a wrong choice shows.
+**Save** with the field empty takes the setting away: the wiki keeps the server's time again.
+On the host it is `zonewiki config set timezone Europe/Vienna`, or the line `timezone = Europe/Vienna` in the settings file.
+
+### What the timezone decides
+
+| What | Where |
+|------|-------|
+| Which day is today on the server: what is due and overdue in a count, a mail or an assistant's answer, the day a done task and a note are dated | `docs/spec/tasks.md`, `docs/spec/navigation.md` |
+| The morning of the morning's mail, 7:00 to noon, and the moment Zonewiki asks to be started for it | The morning's mail in `docs/spec/tasks.md`, When to be started in `docs/spec/deployment.md` |
+| The times in a page's history, in Changes and under a page | `docs/spec/rendering.md` |
+| The offset a commit Zonewiki makes is written with | git's own |
+
+The Tasks page in a browser reckons today by the browser's own clock, as before: someone travelling sees their own day there, and the wiki's wherever the server says it.
+One timezone for the wiki, not one a user: with one each, "due today" would be a different day for two people looking at the same list.
+
+### How the timezone works
+
+`timezone` is read with the settings (`loadZone` in `go/configfile.go`); a name that is no timezone is an error in the file, as any other, and the Wiki tab refuses it before it is written.
+The binary carries the timezone database (Go's `time/tzdata`), so an image without one knows the names too; `Local` isn't taken, since unset already says that.
+`zone()` in `go/security.go` is the one place that says which timezone holds, and `now()` is the clock in it: code never asks `time.Local` or `.Local()` (`TestTheZoneIsAskedInOnePlace` fails for one that does).
+Git is run with `TZ` set to the timezone (`zoneEnv`), so a commit carries its offset, and history asks git for times in it (`--date=format-local`): a commit made elsewhere, or before the timezone was set, reads in the wiki's time too.
+A change holds at once, as every change to the settings file; an import with `--users-only` takes `timezone` along, as it takes `locale`.
 
 ## Usage
 

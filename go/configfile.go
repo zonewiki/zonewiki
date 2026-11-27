@@ -34,6 +34,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	_ "time/tzdata" // the timezones by name (loadZone), on a host that has no database of them
 	"unicode/utf8"
 	"zonewiki/internal/settingsfile"
 )
@@ -62,10 +63,20 @@ func legalLink(link string) bool {
 
 func configPath() string { return statePath("config") }
 
+// loadZone: the timezone a name of the IANA database means (the binary
+// carries the database, so a host without one knows them too). "Local"
+// isn't one: it would mean the process's again, which is what unset says.
+func loadZone(name string) (*time.Location, error) {
+	if name == "Local" || strings.TrimSpace(name) != name {
+		return nil, fmt.Errorf("%q isn't a timezone", name)
+	}
+	return time.LoadLocation(name)
+}
+
 // configKeys: the keys outside a [user …] section, in the order `zonewiki
 // config check` shows them.
 var configKeys = []string{"password", "mcp-token", "hosts", "base-url", "git-remote", "noshare", "locale",
-	"date-format", "query-log", "semantic-min-score", "trusted-proxies", "upload-max", "storage-max",
+	"date-format", "timezone", "query-log", "semantic-min-score", "trusted-proxies", "upload-max", "storage-max",
 	"external-content", "notice", "imprint", "privacy", "no-login", "mcp-oauth", "signup-domains", "signup-role", "signup-approval"}
 
 // hostKeys: the settings that say where a wiki runs, not what it is: its
@@ -79,7 +90,7 @@ var hostKeys = []string{"hosts", "base-url", "git-remote", "trusted-proxies", "s
 // it lets its people choose. Every other one changes what the host allows
 // (what pages may load, who may sign up, whether there is a login), and is
 // the host's to set.
-var usersOnlyKeys = []string{"noshare", "locale", "date-format"}
+var usersOnlyKeys = []string{"noshare", "locale", "date-format", "timezone"}
 
 // userKeys: the keys of a [user …] section.
 var userKeys = []string{"password", "mcp-token", "role", "disabled", "email", "email-pending", "pending", "groups", "shared"}
@@ -150,6 +161,8 @@ type Settings struct {
 	NoshareFolder    []string
 	Locale           string         // a BCP 47 tag for the browser's Intl
 	DateFormat       string         // "" or "iso"
+	Timezone         string         // an IANA name, as Europe/Vienna; "": the process's (TZ)
+	Zone             *time.Location // Timezone's zone, nil when unset (zone)
 	SemanticMinScore *float64       // the semantic search's floor; nil: the model's
 	TrustedProxies   []netip.Prefix // whose X-Forwarded-For names the client (clientKey); unset: loopback
 	UploadMax        int64          // the biggest upload in bytes; 0: 100 MB (uploadMax)
@@ -252,6 +265,14 @@ func loadSettings(f *settingsfile.File) (*Settings, error) {
 	locale, where, _ := get("locale")
 	if s.Locale = locale; s.Locale != "" && !localeRE.MatchString(s.Locale) {
 		return nil, fmt.Errorf("%s%s isn't a locale. Use a tag like de-AT or en-GB.", where, s.Locale)
+	}
+	timezone, where, _ := get("timezone")
+	if s.Timezone = timezone; s.Timezone != "" {
+		loc, err := loadZone(s.Timezone)
+		if err != nil {
+			return nil, fmt.Errorf("%s%s isn't a timezone. Use a name like Europe/Vienna or America/New_York, or UTC.", where, s.Timezone)
+		}
+		s.Zone = loc
 	}
 	notice, where, _ := get("notice")
 	if s.Notice = strings.TrimSpace(notice); utf8.RuneCountInString(s.Notice) > noticeMax {
@@ -661,6 +682,9 @@ func betweenRequests(s *Settings) {
 func tookSettings(old, s *Settings) {
 	logf("reloaded %s", configName())
 	applySettings(old, s)
+	// Who has an address, and the wiki's timezone, say when the morning's
+	// mail is due: its loop looks again now, and says so in .zone/wake.
+	kickDigests()
 	by := ""
 	if a := settingsAuthor.Swap(nil); a != nil && *a != "" {
 		by = " (by " + *a + ")" // a change on the Users tab (changeSettings)
@@ -804,6 +828,7 @@ func settingsChange(old, s *Settings) string {
 		{"git-remote", old.GitRemote != s.GitRemote},
 		{"noshare", !maps.Equal(old.NoshareTags, s.NoshareTags) || !slices.Equal(old.NoshareFolder, s.NoshareFolder)},
 		{"locale", old.Locale != s.Locale}, {"date-format", old.DateFormat != s.DateFormat},
+		{"timezone", old.Timezone != s.Timezone},
 		{"query-log", old.QueryLog != s.QueryLog},
 		{"semantic-min-score", !sameFloat(old.SemanticMinScore, s.SemanticMinScore)},
 		{"trusted-proxies", !slices.Equal(old.TrustedProxies, s.TrustedProxies)},
