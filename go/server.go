@@ -651,7 +651,7 @@ func newHandler() http.Handler {
 	usageRoutes(mux)
 	oauthRoutes(mux)
 	importRoutes(mux)
-	return noStalls(checks(visitorGate(mux, usageGate(mux, gzipTasks(viewerGate(mux))))))
+	return noStalls(oauthLog(checks(visitorGate(mux, usageGate(mux, gzipTasks(viewerGate(mux)))))))
 }
 
 // visitorRoutes: what a visitor of a public wiki (ZONE_PUBLIC; access.go)

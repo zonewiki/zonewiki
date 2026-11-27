@@ -92,6 +92,7 @@ Edit it by hand or with the commands (Commands, below); a running Zonewiki takes
 | `privacy` | Where its privacy policy is, beside it | as `imprint` | none |
 | `no-login` | The wiki has no login on purpose, though other devices reach it, so Zonewiki shows no first-run page (First run, `docs/spec/security.md`) | `yes`/`no` (as `query-log`) | no |
 | `mcp-oauth` | `no`: assistants connect with a static token only, not by signing in through the browser (Connecting with OAuth, `docs/spec/mcp.md`) | `yes`/`no` (as `query-log`) | yes, with a login |
+| `oauth-log` | A line in Zonewiki's log for each request of an assistant's connect, naming no secret, to see why a client doesn't connect (The OAuth log, `docs/spec/mcp.md`) | `yes`/`no` (as `query-log`) | no |
 | `storage-max` | How much the wiki may hold: past it, nothing new is made (Storage limit, below) | a size (`5GB`) | no limit |
 | `signup-domains` | Sign-up takes only addresses at these domains (Sign-up, below) | domains, comma-separated (`example.org, example.net`), a leading `@` allowed | any address |
 | `signup-role` | The role an account made by sign-up gets | `viewer` or `editor` (never `admin`), any case | `viewer` |
@@ -237,7 +238,7 @@ The file is kept out of git, as all of `.zone/` is (the session key, caches, the
 Zonewiki never shows it either (The settings file is never shown in `docs/spec/security.md`): `canSeePath` is false for `.zone/` for everyone, so history, the uncommitted list, Commit all and the MCP tools leave it (and a commit of nothing else) out, and `safePath` refuses it to every page route and MCP tool.
 
 A wiki still moves with its users: `zonewiki export` puts the file beside the history in its archive, and `zonewiki import` takes it from there, so everyone signs in where the wiki moves to with the password they had.
-The keys that are a host's (`hosts`, `base-url`, `git-remote`, `trusted-proxies`, `storage-max`, `imprint`, `privacy`) stay in the archive, and with `--users-only` every key but the users, the groups, `locale`, `date-format`, `timezone` and `noshare` (Moving a wiki in `docs/spec/deployment.md`).
+The keys that are a host's (`hosts`, `base-url`, `git-remote`, `trusted-proxies`, `storage-max`, `imprint`, `privacy`, `oauth-log`) stay in the archive, and with `--users-only` every key but the users, the groups, `locale`, `date-format`, `timezone` and `noshare` (Moving a wiki in `docs/spec/deployment.md`).
 
 **Account data stays out of git**: the file holds the users,
 their password and token hashes,

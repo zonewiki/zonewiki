@@ -522,6 +522,12 @@ What it has when the change is posted is what it is judged by (Change what a con
 The page policy stays as it is: `form-action 'self'` stays, and the answer after Allow is a page with a `Refresh` header instead of a redirect.
 None of OAuth answers during first run.
 
+**The OAuth log names no secret.**
+`oauth-log = yes` (off by default) writes a line to Zonewiki's log for each request of a connect, to see why a client doesn't connect (The OAuth log in `docs/spec/mcp.md`).
+It writes a value only for the parameters known to carry none; a code, a verifier, a client secret, a token, a password, a `state`, the `Authorization` header's credential and a cookie are written as their length or name alone, a success's body never.
+It goes only to stderr, where Zonewiki's other output goes, and no route serves it.
+`tests/test_oauth.py` (`TestOAuthLog`) holds that a whole connect leaves none of its secrets in the log.
+
 ## Host and Origin
 
 ### The Host check

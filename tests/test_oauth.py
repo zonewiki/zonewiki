@@ -901,3 +901,99 @@ class TestChange:
         assert change(client, gid, may="write", password="wrong").status_code == 403
         assert change(client, gid, may="write", password="one password").status_code == 303
         assert not mcp_error(client, tokens["access_token"], "write_page", slug="x", content="# X\n")[1]
+
+
+def oauth_log(client):
+    """The OAuth log's lines in the server's log, read back as JSON."""
+    return [json.loads(line.split(" oauth-log ", 1)[1]) for line in client.live.log.read_text().splitlines()
+            if " oauth-log " in line]
+
+
+class TestOAuthLog:
+    """oauth-log = yes: a line in the server's log for each request of a
+    connect, naming no secret (The OAuth log in docs/spec/mcp.md)."""
+
+    def test_it_is_off_by_default(self, bob):
+        connect(bob, "bob-pw")
+        assert " oauth-log " not in bob.live.log.read_text()
+
+    def test_a_connect_is_logged_and_no_secret(self, client, users, monkeypatch):
+        monkeypatch.setattr(settings, "CONFIG_FILE", "oauth-log = yes\n")
+        chatgpt = {**HOST, "User-Agent": "openai-mcp/1.0.0", "MCP-Protocol-Version": "2025-06-18"}
+        initialize = {"jsonrpc": "2.0", "id": 0, "method": "initialize", "params": {
+            "protocolVersion": "2025-06-18", "clientInfo": {"name": "openai-mcp", "version": "1.0.0"}, "capabilities": {}}}
+        # The client finds its way: /mcp without a token, the metadata.
+        assert client.post("/mcp", headers=chatgpt, json=initialize).status_code == 401
+        assert client.get("/.well-known/oauth-protected-resource/mcp", headers=chatgpt).status_code == 200
+        assert client.get("/.well-known/oauth-authorization-server", headers=chatgpt).status_code == 200
+        assert client.get("/.well-known/openid-configuration", headers=chatgpt).status_code == 404
+        client_id = register(client, name="ChatGPT")
+        # The user's browser: the question, the login on the way, Allow.
+        params = asking(client_id)
+        resp = client.get("/oauth/authorize", headers=HOST, query_string=params)
+        assert resp.status_code == 302 and resp.headers["Location"].startswith("/login?next=")
+        resp = client.post(resp.headers["Location"], headers=HOST, data={"username": "bob", "password": "bob-pw"})
+        assert resp.status_code == 302
+        session = dict(client.cookies)
+        assert session and client.get("/oauth/authorize", headers=HOST, query_string=params).status_code == 200
+        resp, code = allow(client, params, "bob-pw")
+        assert code
+        # The client's server: the code for tokens, /mcp with them, a refresh, the disconnect.
+        first = exchange(client, client_id, code).get_json()
+        assert mcp(client, first["access_token"])[0] == 200
+        second = token(client, grant_type="refresh_token", refresh_token=first["refresh_token"], client_id=client_id).get_json()
+        assert "access_token" in second
+        assert revoke(client, token=second["refresh_token"], client_id=client_id).status_code == 200
+        assert mcp(client, "alice-token")[0] == 200
+        # A server-side call with an Origin is refused: the log shows it.
+        assert client.post("/mcp", headers={**chatgpt, "Origin": "https://chatgpt.com"}, json=initialize).status_code == 403
+        assert client.get("/page/index", headers=HOST).status_code == 200   # no connect's: no line
+
+        lines = oauth_log(client)
+        assert [(l["method"], l["path"], l["status"]) for l in lines] == [
+            ("POST", "/mcp", 401),
+            ("GET", "/.well-known/oauth-protected-resource/mcp", 200),
+            ("GET", "/.well-known/oauth-authorization-server", 200),
+            ("GET", "/.well-known/openid-configuration", 404),
+            ("POST", "/oauth/register", 201),
+            ("GET", "/oauth/authorize", 302),
+            ("POST", "/login", 302),
+            ("GET", "/oauth/authorize", 200),
+            ("POST", "/oauth/authorize", 200),
+            ("POST", "/oauth/token", 200),
+            ("POST", "/mcp", 200),
+            ("POST", "/oauth/token", 200),
+            ("POST", "/oauth/revoke", 200),
+            ("POST", "/mcp", 200),
+            ("POST", "/mcp", 403),
+        ]
+        text = client.live.log.read_text()
+        secrets = ["bob-pw", code, VERIFIER, first["access_token"], first["refresh_token"], second["access_token"],
+                   second["refresh_token"], "alice-token", "s-123", *session.values()]
+        for secret in secrets:
+            assert secret not in text
+        hello, register_line, allowed, exchanged = lines[0], lines[4], lines[8], lines[9]
+        assert hello["headers"]["User-Agent"] == "openai-mcp/1.0.0" and hello["headers"]["MCP-Protocol-Version"] == "2025-06-18"
+        assert hello["body"]["rpc"] == ["initialize protocolVersion=2025-06-18 clientInfo=openai-mcp/1.0.0"]
+        assert hello["answer"]["WWW-Authenticate"] == \
+            f'Bearer resource_metadata="{BASE}/.well-known/oauth-protected-resource/mcp", scope="mcp"'
+        assert register_line["body"]["fields"] == {"client_name": "ChatGPT", "redirect_uris": [CALLBACK]}
+        assert lines[5]["query"]["code_challenge_method"] == "S256" and lines[5]["query"]["state"] == "(hidden, 5 bytes)"
+        assert lines[5]["query"]["resource"] == BASE + "/mcp"
+        assert lines[6]["body"]["fields"] == {"username": "(hidden, 3 bytes)", "password": "(hidden, 6 bytes)"}
+        assert lines[6]["answer"]["Set-Cookie"].startswith("names: ")
+        assert allowed["body"]["fields"]["answer"] == "allow"
+        assert allowed["answer"]["Refresh"].startswith("0; url=" + CALLBACK + "?code=(hidden, ")
+        assert exchanged["body"]["fields"]["grant_type"] == "authorization_code"
+        assert exchanged["body"]["fields"]["code_verifier"] == f"(hidden, {len(VERIFIER)} bytes)"
+        assert exchanged["body"]["fields"]["redirect_uri"] == CALLBACK
+        assert lines[10]["headers"]["Authorization"] == f"Bearer (hidden, {len(first['access_token'])} bytes)"
+        assert lines[14]["headers"]["Origin"] == "https://chatgpt.com"
+
+    def test_a_refusal_says_why(self, client, users, monkeypatch):
+        monkeypatch.setattr(settings, "CONFIG_FILE", "oauth-log = yes\n")
+        client_id = register(client)
+        assert exchange(client, client_id, "not-a-code").status_code == 400
+        line = oauth_log(client)[-1]
+        assert line["status"] == 400 and line["answer"]["error"] == "invalid_grant"
+        assert "not-a-code" not in client.live.log.read_text()

@@ -77,13 +77,14 @@ func loadZone(name string) (*time.Location, error) {
 // config check` shows them.
 var configKeys = []string{"password", "mcp-token", "hosts", "base-url", "git-remote", "noshare", "locale",
 	"date-format", "timezone", "query-log", "semantic-min-score", "trusted-proxies", "upload-max", "storage-max",
-	"external-content", "notice", "imprint", "privacy", "no-login", "mcp-oauth", "signup-domains", "signup-role", "signup-approval"}
+	"external-content", "notice", "imprint", "privacy", "no-login", "mcp-oauth", "oauth-log", "signup-domains", "signup-role",
+	"signup-approval"}
 
 // hostKeys: the settings that say where a wiki runs, not what it is: its
-// names, its proxies, its room, its remote, who answers for it. An import
-// leaves them in the archive (transfer.go): the host a wiki moves to has
-// its own.
-var hostKeys = []string{"hosts", "base-url", "git-remote", "trusted-proxies", "storage-max", "imprint", "privacy"}
+// names, its proxies, its room, its remote, who answers for it, what its
+// host logs (oauth-log). An import leaves them in the archive
+// (transfer.go): the host a wiki moves to has its own.
+var hostKeys = []string{"hosts", "base-url", "git-remote", "trusted-proxies", "storage-max", "imprint", "privacy", "oauth-log"}
 
 // usersOnlyKeys: the settings an import with --users-only still takes,
 // besides the users and the groups: how the wiki reads, which whoever runs
@@ -175,6 +176,7 @@ type Settings struct {
 	SignupRole       string         // the role an account made by sign-up gets: roleViewer (default) or roleEditor
 	SignupApproval   bool           // an account made by sign-up waits for an admin (pending)
 	NoOAuth          bool           // mcp-oauth = no: assistants connect with a static token only (oauth.go)
+	OAuthLog         bool           // oauth-log = yes: a line in the log for each request of an MCP client's connect (oauthlog.go)
 }
 
 // authOn: the wiki has a login gate, a password or users.
@@ -248,6 +250,11 @@ func loadSettings(f *settingsfile.File) (*Settings, error) {
 	s.NoOAuth = set && slices.Contains([]string{"0", "false", "no"}, strings.ToLower(mcpOAuth))
 	if !s.NoOAuth && !truthy(mcpOAuth) && mcpOAuth != "" {
 		return nil, fmt.Errorf("%s%s isn't yes or no.", where, mcpOAuth)
+	}
+	oauthLog, where, _ := get("oauth-log")
+	s.OAuthLog = truthy(oauthLog)
+	if !s.OAuthLog && !slices.Contains([]string{"", "0", "false", "no"}, strings.ToLower(oauthLog)) {
+		return nil, fmt.Errorf("%s%s isn't yes or no.", where, oauthLog)
 	}
 	s.GitRemote, _, _ = get("git-remote")
 	hosts, _, _ := get("hosts")
@@ -839,7 +846,7 @@ func settingsChange(old, s *Settings) string {
 		{"no-login", old.NoLogin != s.NoLogin},
 		{"signup-domains", !slices.Equal(old.SignupDomains, s.SignupDomains)},
 		{"signup-role", old.SignupRole != s.SignupRole}, {"signup-approval", old.SignupApproval != s.SignupApproval},
-		{"mcp-oauth", old.NoOAuth != s.NoOAuth},
+		{"mcp-oauth", old.NoOAuth != s.NoOAuth}, {"oauth-log", old.OAuthLog != s.OAuthLog},
 	} {
 		if c.changed {
 			changes = append(changes, c.key)

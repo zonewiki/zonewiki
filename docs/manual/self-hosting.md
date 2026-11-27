@@ -230,6 +230,7 @@ A running Zonewiki then keeps the settings it had and says so in its log; a Zone
 | `trusted-proxies` | `.zone/config` | A reverse proxy's address, when it isn't on the same machine |
 | `imprint`, `privacy` | `.zone/config` | Links to your imprint and privacy policy under the page, for whoever isn't signed in: `https://example.org/imprint` ([The imprint and privacy links](../spec/users.md#the-imprint-and-privacy-links)) |
 | `notice` | `.zone/config` | A line across the top of every page, for everyone: `Down for maintenance tonight at 22:00` ([The notice](../spec/users.md#the-notice)) |
+| `oauth-log` | `.zone/config` | `yes`: a line in Zonewiki's log for each step of an assistant's connect, to see why one doesn't connect; turn it off after ([When an assistant doesn't connect](assistants.md#when-an-assistant-doesnt-connect)) |
 
 Every environment setting is in `.env.example` with a comment (`ZONE_PORT` is the compose file's alone).
 Every `.zone/config` key is in [The wiki's keys](../spec/users.md#the-wikis-keys).

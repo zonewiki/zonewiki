@@ -109,6 +109,37 @@ An ordinary new password (Change password, `zonewiki user passwd`) leaves them, 
 A client that doesn't call `/oauth/revoke` when its user disconnects it leaves its connection in Zonewiki: End ends it.
 Tested against real clients so far: Claude.
 
+#### The OAuth log
+
+For a client that doesn't connect, whoever runs the wiki can see what it sent and what Zonewiki answered: `oauth-log = yes` in the settings file writes a line to Zonewiki's log for each request of a connect.
+It is off by default.
+
+```bash
+./run.sh config set oauth-log yes     # zonewiki config set oauth-log yes, with the binary
+./run.sh logs | grep oauth-log        # the lines, as the client connects
+./run.sh config unset oauth-log       # off again
+```
+
+- **Taken at once**: a running Zonewiki takes the change within a second, from the next request on (the request that finds the change is logged already), without a restart.
+  On a host that runs Zonewiki in a container per wiki, run the command in a container on that wiki's folder, as the host's other settings are set, and read the unit's journal.
+- **Where the lines go**: where Zonewiki's other output goes, stderr (`./run.sh logs`, a systemd unit's journal), and nowhere else; no route serves them.
+- **What is logged**: every request to `/mcp` (the `401` that says where to sign in, and the calls with a token after it), everything under `/.well-known/`, everything under `/oauth/`, `/authorize`, `/token` and `/register` at the root (where a client looks that missed the metadata), and `/login` on its way to `/oauth/authorize`.
+  A request the request checks refuse (a `Host` not let in, a cross-site `Origin`, a body too large) is logged too, with its answer.
+- **Never a secret**: a code, a `code_verifier`, a `client_secret`, a token, a password, a `state` and a cookie are written as their length or their name alone (What the OAuth log writes, under How OAuth works).
+- **Turn it off after**: it is meant for the hour of a connect that is being looked into; every connected assistant's calls are logged while it is on.
+  An import leaves it out, as a key of the host's (Moving a wiki in `docs/spec/deployment.md`).
+
+A line is `Zonewiki: oauth-log` and a JSON object, for `jq` (`./run.sh logs | sed -n 's/.*oauth-log //p' | jq .`): the request (`time` in UTC, `method`, `path`, `query`, `headers`, `body`), the answer (`status`, `answer`: the headers that send the client on, an OAuth error's `error` and `error_description`) and how long it took (`ms`).
+
+```json
+{"time":"2026-12-05T14:02:11.204Z","method":"POST","path":"/oauth/token",
+ "headers":{"Content-Type":"application/x-www-form-urlencoded","Host":"wiki.example.org","User-Agent":"…"},
+ "body":{"bytes":212,"fields":{"client_id":"zc1.…","code":"(hidden, 64 bytes)","code_verifier":"(hidden, 43 bytes)",
+   "grant_type":"authorization_code","redirect_uri":"https://chatgpt.com/connector_platform_oauth_redirect",
+   "resource":"https://wiki.example.org/mcp"}},
+ "status":200,"answer":{"Content-Type":"application/json"},"ms":3}
+```
+
 ### Read-only connections
 
 A connection given less than its user, chosen on the question or with Change… on Connect an assistant (`ReadOnly` on the grant, `read_only` in `.zone/grants`; `asker.ReadOnly` of who asks with its token, `changesNothing` in `go/access.go`).
@@ -855,6 +886,23 @@ The metadata names it (`revocation_endpoint`).
 Owner-only (0600), written whole, one change at a time (`changeGrants`: a lock in the process and `lockFile` on `.zone/grants.lock`, as a command writes it too), not committed (state, like `.zone/links`), read again when the file changed (`readGrants`).
 Not in the settings file: tokens change by the hour, and a change there is a change of the settings.
 
+#### What the OAuth log writes
+
+The OAuth log (above) is `oauthLog` in `go/oauthlog.go`, around the request checks (`newHandler`), so it sees a request they refuse too; it looks at the settings file first (`reloadSettings`), so a change counts from the request that finds it.
+
+- **Values only where there is no secret**: a parameter's value (of the query, a form, a JSON body's top level, an address's query) is written only for the parameters known to carry none (`oauthLogShown`): `response_type`, `response_mode`, `client_id`, `client_name`, `redirect_uri`, `redirect_uris`, `code_challenge`, `code_challenge_method`, `scope`, `resource`, `audience`, `prompt`, `grant_type`, `grant_types`, `response_types`, `token_endpoint_auth_method`, `token_type_hint`, `application_type`, `client_uri`, `logo_uri`, `software_id`, `software_version`, `iss`, `error`, `error_description`, the login's `next`, Allow's `answer` and `may`, and a JSON-RPC message's `jsonrpc`, `method` and `id`.
+  Every other one is written as its length, `"(hidden, 64 bytes)"`, or for JSON its kind (`"(hidden, object)"`): a `code`, `code_verifier`, `client_secret`, `access_token`, `refresh_token`, a revoke's `token`, a `password`, a `username`, a `state`, and whatever a client sends that Zonewiki doesn't know.
+  The length tells what is wrong often enough (a `code_verifier` shorter than 43).
+- **Addresses** (`Location`, `Refresh`, `Referer`, `redirect_uri`, the login's `next`) go by the same rule for their query, two addresses deep (the login's `next` holds the question's address), deeper ones hidden; a fragment and a user name in one are hidden.
+  So the answer after Allow shows where it sends the browser with `code=(hidden, 64 bytes)`.
+- **Headers**: the request's `Host`, `User-Agent`, `Origin`, `Content-Type`, `Accept`, `MCP-Protocol-Version` and `Referer` as they are; `Authorization` as its scheme (`Bearer`, `Basic` …) and the credential's length, and one that names no scheme it knows as its length alone (it could be the credential itself); `Cookie` as its names; `Mcp-Session-Id` as its length.
+  The answer's `WWW-Authenticate`, `Location`, `Refresh`, `Content-Type`, `Retry-After`, `Allow`, `Access-Control-Allow-Origin`, and `Set-Cookie` as its names.
+- **A body** is read up to 64 KB for its fields (`oauthLogBodyMost`), then handed to the route whole; a longer one is written as its size.
+  For `/mcp` the JSON-RPC methods it calls (`rpc`): `initialize` with the client's `protocolVersion` and `clientInfo`, `tools/call` with the tool's name, never a tool's arguments.
+- **An answer's body** is read only for an error (status 400 and up, JSON): its `error` and `error_description`.
+  A success's never is: it holds the tokens.
+- A value is cut at 300 bytes, and the line is JSON, so nothing a client sends can break it into two.
+
 #### OAuth's tests
 
-`tests/test_oauth.py` plays the client over HTTP (`TestRevoke`: a client's disconnect; `TestChange`: Change… through the tokens a connection has); `tests/e2e/test_oauth.py` holds that Allow and Deny get the browser back to the client under the page policy, and that Change… opens in its dialog and asks for the password only to give more.
+`tests/test_oauth.py` plays the client over HTTP (`TestRevoke`: a client's disconnect; `TestChange`: Change… through the tokens a connection has; `TestOAuthLog`: a whole connect logged, and no secret of it in the log); `go/oauthlog_test.go` holds what each kind of value is written as; `tests/e2e/test_oauth.py` holds that Allow and Deny get the browser back to the client under the page policy, and that Change… opens in its dialog and asks for the password only to give more.

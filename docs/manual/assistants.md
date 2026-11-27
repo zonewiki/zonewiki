@@ -80,6 +80,18 @@ You have one token.
 **Make a new token** replaces it, and the old one stops working; **Revoke the token** ends it.
 Signing out or changing your password doesn't end a token, so keep it like a password.
 
+### When an assistant doesn't connect
+
+Whoever runs the wiki can see each step of a connect in Zonewiki's log: what the assistant asked and what the wiki answered.
+
+1. Turn the log on: `./run.sh config set oauth-log yes` (with the binary, `zonewiki config set oauth-log yes`).
+   It takes effect within a second, without a restart.
+2. Watch it with `./run.sh logs`, and connect the assistant again: each request is a line starting `oauth-log`.
+3. Turn it off when you're done: `./run.sh config unset oauth-log`.
+
+The log never holds a password, a token, a code or a cookie: those are written as their length only.
+What each line holds: The OAuth log, under [Connecting with OAuth](../spec/mcp.md#connecting-with-oauth).
+
 ## What an assistant may do
 
 An assistant acts on behalf of the user who connected it.

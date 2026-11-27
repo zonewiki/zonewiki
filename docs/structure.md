@@ -62,6 +62,7 @@ What each file and folder of the repository is for.
 │   ├── digest.go           # The morning's mail (a viewer's too, of their watched pages): once a day, what is new for a user since the last one (their tasks' updates, the pages they watch) and what is due; .zone/digest.json; when Zonewiki asks to be started for it (.zone/wake)
 │   ├── assistant.go        # Connect an assistant (/assistant): your MCP token made and revoked in the browser, with your password again; your assistants' connections changed (less without the password, more with it) or ended
 │   ├── oauth.go            # OAuth for /mcp: the metadata, client registration (nothing kept), the consent page /oauth/authorize, /oauth/token, /oauth/revoke
+│   ├── oauthlog.go         # The OAuth log (oauth-log = yes): a line on stderr for each request of a connect, its secrets as their length
 │   ├── grants.go           # Connections: the assistants users let in through OAuth, their token hashes in .zone/grants
 │   ├── password.go         # Change password (/password): your password changed in the browser, with the one you have
 │   ├── usage.go            # Usage (/usage): how much the wiki is used, as counts a day (sign-ins, people active, page views, searches, changes, assistants' calls), kept 8 weeks in .zone/usage/ (counts.json without a name, users.json each user's last active day)
