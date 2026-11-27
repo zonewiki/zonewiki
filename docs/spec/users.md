@@ -680,7 +680,8 @@ A new group's name is refused when it is taken (`groupNameTaken`): a group there
 **And a name a group went by before**: the history of `groups/<name>/` (the versions and deleted pages and tasks of a group renamed since, which are read under that path by who is in a group of that name) stays its former group's, so a new group of the name would be shown it: the name stays taken.
 The group that went by it takes it back (`was = apollo` in its section, which a rename writes: the names it had), so a rename can be undone.
 **A name in a group's `was` is taken for every other group**, whether its folder has a history yet or not: a group renamed before it had a page would otherwise leave the name to the next group, and take it back, with that group's past, once that one moved on.
-Two groups that went by one name (written so by hand) take it back neither.
+Two groups that went by one name take it back neither, and nobody else gets it: the folder's history then holds both their pasts, and either would be shown the other's.
+Only the host writes two such `was` (a hand edit, or a group made there of a name another went by, then renamed), never the browser, where a name in a group's `was` is taken for every other; the host's admin settles it by taking the name out of the `was` of the group whose past may be shown to the other.
 On the host nobody is asked: `zonewiki user group` and a hand edit of the file make a group of any name.
 The groups' names are no secret among a wiki's users (the users' Groups field and Groups list them), so "taken" tells nothing new.
 

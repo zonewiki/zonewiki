@@ -175,6 +175,26 @@ def test_a_name_a_group_went_by_is_taken_for_any_other(client, wiki):
     assert section(wiki, "group finance") == ["owners = bob", "was = zzz"]
 
 
+def test_a_name_two_groups_went_by_is_taken_for_both(client, wiki, monkeypatch):
+    """Two groups that went by one name take it back neither, and nobody
+    else makes it: the history of groups/apollo/ holds both their pasts, so
+    either would be shown the other's. Only the host writes two such was
+    (a hand edit; a group made there of a name another went by, renamed
+    since): in the browser a name in a group's was is taken for any other."""
+    monkeypatch.setattr(settings, "CONFIG_FILE", "\n[group artemis]\nowners = alice\nwas = apollo\n"
+                                                 "\n[group hermes]\nowners = bob\nwas = apollo, zeus\n")
+    for who, group in (("alice", "artemis"), ("bob", "hermes")):
+        sign_in(client, who)
+        resp = client.post(f"/groups/{group}/rename", data={"name": "apollo"}, headers=HOST)
+        assert resp.status_code in (400, 409) and "is taken" in html.unescape(resp.get_data(as_text=True)), who
+        resp = make(client, "apollo")
+        assert resp.status_code in (400, 409) and "is taken" in html.unescape(resp.get_data(as_text=True)), who
+    assert section(wiki, "group artemis") == ["owners = alice", "was = apollo"]
+    # A name only one of them went by is still its own to take back.
+    assert client.post("/groups/hermes/rename", data={"name": "zeus"}, headers=HOST).status_code == 303
+    assert section(wiki, "group zeus") == ["owners = bob", "was = apollo, hermes"]
+
+
 def test_a_viewer_makes_no_group_and_a_wiki_without_users_has_none(client, wiki, monkeypatch):
     sign_in(client, "vera")
     before = config(wiki)
