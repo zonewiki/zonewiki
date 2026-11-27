@@ -121,6 +121,23 @@ The words of a link's address, the `(url)` part of `[text](url)`, are not search
 
 For the full rules, see [the spec](../spec/search.md#how-words-match).
 
+## Search by meaning
+
+Search can find pages by what they mean as well as by their words: "restart the router" finds a page that says "reboot the Wi-Fi box".
+It understands German and English, also across the two, so an English question finds a German page.
+Other languages are found by their words only.
+
+It is on when whoever runs Zonewiki has turned it on (how: [Semantic search](../spec/search.md#semantic-search)).
+The search dialog says which way it searches, right of its controls:
+
+| It says | Means |
+|---------|-------|
+| **Keywords + meaning** | Results are found by their words and by meaning |
+| **Meaning: indexing…** | Zonewiki is still reading the wiki for meaning, after it was turned on or after many changes; until then, by words |
+| **Keywords only** | Search by meaning is off, or doesn't work (the log says why) |
+
+With it on, a page also shows **Related**: up to five pages closest to it in meaning, leaving out those it already links to or that link to it.
+
 ## Read the results
 
 Under each result's title is a short line telling similar results apart:

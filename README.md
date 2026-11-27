@@ -118,7 +118,7 @@ echo 'ZONE_DATA=~/zonewiki' > .env      # your wiki folder
 ./run.sh up                            # ./run.sh update for a new version
 ```
 
-In a checkout of the repository, the same `./run.sh up` builds the image from it instead (to change Zonewiki, or for search by meaning): see [From the repository](docs/manual/self-hosting.md#from-the-repository).
+In a checkout of the repository, the same `./run.sh up` builds the image from it instead (to change Zonewiki, or to run a branch): see [From the repository](docs/manual/self-hosting.md#from-the-repository).
 
 ### From source
 

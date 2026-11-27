@@ -10,7 +10,7 @@ There are four ways to run it; pick the first that fits:
 |-----|-----|----------|
 | [With the binary](#with-the-binary) | Your own computer, the quickest start | git; Linux or a Mac (Windows: WSL2) |
 | [With Docker](#with-docker) | Your computer, a server or a NAS, in a container, from the prebuilt image | Docker or Podman, with Compose |
-| [From the repository](#from-the-repository) | The container built from a checkout with `./run.sh`: to change Zonewiki, or for search by meaning | git, and Docker or Podman with Compose |
+| [From the repository](#from-the-repository) | The container built from a checkout with `./run.sh`: to change Zonewiki, or to run a branch | git, and Docker or Podman with Compose |
 | [From source](#from-source) | Building the binary yourself, to change Zonewiki or for another system | Go and git |
 
 Whichever you choose, the wiki is a folder of Markdown files, so you can change the way later and keep the wiki.
@@ -69,7 +69,8 @@ If port 5080 is taken, Zonewiki says so and stops.
 Start Zonewiki on another port, `./zonewiki --addr :5081`, and open <http://localhost:5081>.
 
 `./zonewiki --help` lists its commands and settings, `./zonewiki --version` says which version it is.
-The binary searches by keywords, not by meaning; how it is built is in [Release binaries](../spec/deployment.md#release-binaries).
+With `ZONE_SEMANTIC_SEARCH=on` the binary searches by meaning too ([Search by meaning](search.md#search-by-meaning)): it downloads the model (0.32 GB) the first time it needs it, and takes about 0.4 GB more memory.
+How it is built is in [Release binaries](../spec/deployment.md#release-binaries).
 
 ## With Docker
 
@@ -125,7 +126,7 @@ For a Synology with Container Manager, step by step, see [Synology](../spec/depl
 
 ## From the repository
 
-Zonewiki's image built from a checkout, with `./run.sh`: for changing Zonewiki, for a branch, or for search by meaning, which the prebuilt image lacks for now.
+Zonewiki's image built from a checkout, with `./run.sh`: for changing Zonewiki, or for a branch.
 You need git and Docker with Compose, or Podman with `podman-compose`.
 Zonewiki is tested on Linux, and should work on macOS, and on Windows in WSL2.
 
@@ -216,6 +217,7 @@ A running Zonewiki then keeps the settings it had and says so in its log; a Zone
 | `ZONE_PUBLIC` | Environment | `view` or `edit`: people read, or edit, without signing in |
 | `ZONE_SIGNUP`, `ZONE_SMTP_*` | Environment | Sign-up and the mail server ([Mail](#mail)) |
 | `ZONE_PORT` | Environment | The host's port, in a container (default 5080) |
+| `ZONE_SEMANTIC_SEARCH` | Environment | `on`: search by meaning too ([Search by meaning](search.md#search-by-meaning)); about 0.4 GB more memory, the model in the image or downloaded once (0.32 GB) |
 | `hosts` | `.zone/config` | Names Zonewiki is opened by: `wiki.example.org, nas.local` |
 | `base-url` | `.zone/config` | Zonewiki's address as people know it: `https://wiki.example.org` |
 | `git-remote` | `.zone/config` | A remote to push the history to ([Your data](your-data.md#backups)) |

@@ -400,6 +400,22 @@ and the cache keeps its name `fastembed:<model>`, so it stays valid.
 `TestModelVectorsAreOnnxruntimes` holds the model to vectors onnxruntime gave, where the model's files are (an image with semantic search; skipped elsewhere).
 (An Ollama backend existed and was removed as unused; it is in the git history.)
 
+### Languages
+
+The model knows German and English: it was trained on both, and on pairs across them,
+so a query finds pages in either language, an English question a German page and the other way round, and a page mixing the two is understood as one.
+The retrieval floor holds that (Measuring retrieval, below): a third of the sample wiki is German, and its questions are asked in both languages and across them.
+
+Text in other languages gets a vector too, but a poor one: the model's vocabulary (61,056 word pieces) is built for German and English,
+so other languages are cut into small fragments it has seen little of in training.
+Their similarities are mostly noise, which the floors (Scoring by meaning) mostly drop, so such a page is found by its words alone, as it is with semantic search off.
+That is said from how such models work, not measured: nothing in the retrieval floor is in a third language.
+Keyword search works for every language (How words match).
+
+Jina published models of the same architecture for other pairs, Spanish and English (`jina-embeddings-v2-base-es`) and Chinese and English (`jina-embeddings-v2-base-zh`);
+`go/internal/encoder` should run them with their own weights and tokenizer, untried (the Chinese tokenizer may need more than ours does).
+A model for many languages (jina-embeddings-v3, multilingual-e5) is another architecture, and larger.
+
 ### Running the model
 
 `go/internal/encoder` is the model's network in Go: a BERT encoder with ALiBi attention (a bias by distance in place of position embeddings) and a gated GELU feed-forward (JinaBERT),
