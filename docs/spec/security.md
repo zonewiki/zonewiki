@@ -505,7 +505,7 @@ What keeps it safe, and isn't to be weakened:
 - **Allow takes the password again** and is behind the Origin check.
 - **The consent page names the client only as a claim** and shows where the answer goes, its host in ASCII (punycode), so a look-alike name can't pass for another.
 
-`/oauth/token`, `/oauth/revoke`, `/oauth/register` and the metadata under `/.well-known/oauth-*` need no session and skip the Origin check (`oauthOpen`).
+`/oauth/token`, `/oauth/revoke`, `/oauth/register` and the metadata under `/.well-known/oauth-*` need no session and skip the Origin check (`oauthOpen`), as does `/.well-known/openid-configuration`, which is a 404.
 A client's server calls them, and they act on nothing a cookie gives.
 `/oauth/revoke` only ends the connection of a token it is sent, and answers the same for one that is none (A client's disconnect in `docs/spec/mcp.md`).
 Registration keeps nothing (the client id is signed), so strangers can't fill the wiki.

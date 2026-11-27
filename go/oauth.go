@@ -43,10 +43,13 @@ func oauthOn(s *Settings) bool { return s.authOn() && !s.NoOAuth }
 
 // oauthOpen: the OAuth routes a client's server calls with no session and
 // from any origin: they act on nothing a cookie gives (a code and its
-// verifier, a refresh token, a token to end, or nothing).
+// verifier, a refresh token, a token to end, or nothing). OpenID's
+// configuration is none of Zonewiki's: a client that looks for it there
+// (as the MCP spec has it, after the OAuth metadata) gets a 404, not the
+// login page.
 func oauthOpen(path string) bool {
 	return path == "/oauth/token" || path == "/oauth/revoke" || path == "/oauth/register" ||
-		strings.HasPrefix(path, "/.well-known/oauth-")
+		strings.HasPrefix(path, "/.well-known/oauth-") || path == "/.well-known/openid-configuration"
 }
 
 // oauthScope: the one scope. What an assistant may do is its user's role.

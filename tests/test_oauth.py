@@ -135,6 +135,8 @@ class TestDiscovery:
         assert server["token_endpoint_auth_methods_supported"] == ["none"]
         assert server["grant_types_supported"] == ["authorization_code", "refresh_token"]
         assert "client_id_metadata_document_supported" not in server   # not yet: clients register
+        # OpenID's configuration isn't Zonewiki's: a 404, not the login page.
+        assert client.get("/.well-known/openid-configuration", headers=HOST).status_code == 404
 
     def test_a_wrong_token_is_told_too_and_no_token_is_no_guess(self, client, users):
         for _ in range(8):   # a client finding its way isn't throttled

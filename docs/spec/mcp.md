@@ -791,6 +791,7 @@ A call with no `Authorization` header at all is no guess and isn't counted again
 
 No login needed: `GET /.well-known/oauth-protected-resource/mcp` and `/.well-known/oauth-protected-resource` (RFC 9728: `resource`, the address of `/mcp`; `authorization_servers`, Zonewiki's own address) and `GET /.well-known/oauth-authorization-server` (RFC 8414: the endpoints below, `code_challenge_methods_supported: ["S256"]`, `token_endpoint_auth_methods_supported: ["none"]`).
 The addresses are on `base-url`, else on the address the request came in on (`siteURL`): behind a proxy set `base-url`, or `resource` won't be the address the user typed and the client refuses it.
+Zonewiki is no OpenID provider: `/.well-known/openid-configuration`, where a client may look after the OAuth metadata, is a 404 without a login, not the login page (`oauthOpen`); so is any other path under `/.well-known/oauth-` (the path-inserted `/.well-known/oauth-authorization-server/mcp`: the issuer is the wiki's address, which has no path).
 
 #### Registration
 
