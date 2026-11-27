@@ -74,7 +74,7 @@ func init() {
 		"hidden.html", "deleted_page.html", "tasks_page.html", "search.html", "history/changes.html", "history/deleted.html",
 		"history/diff.html", "history/diff_uncommitted.html", "history/history.html",
 		"history/revision.html", "history/uncommitted.html", "users.html", "groups.html", "welcome.html", "signup.html", "assistant.html",
-		"password.html", "oauth.html", "help.html",
+		"password.html", "usage.html", "oauth.html", "help.html",
 		"setup.html"} {
 		views[name] = template.Must(template.Must(partials.Clone()).ParseFS(templateFS, "templates/"+name))
 	}
@@ -410,6 +410,7 @@ type pageShell struct {
 	SettingsTab string
 	User        string // who is signed in, with users
 	Admin       bool   // they are an admin: the user menu offers Admin
+	Usage       bool   // they see the wiki's usage (seesUsage): the help dialog links to it
 	Viewer      bool   // they are a viewer: nothing to make (no New note, New task)
 	// Visitor: nobody is signed in, and the wiki is public (access.go): the
 	// wiki's pages alone, no tasks or notes; SignIn: where they sign in, to
@@ -450,6 +451,7 @@ func page(w http.ResponseWriter, rq *Req, status int, name, title string, o shel
 		sh.SignIn = "/login?next=" + url.QueryEscape(rq.r.URL.Path)
 	}
 	sh.Settings, sh.SettingsTab = settingsTabs(rq), o.settings
+	sh.Usage = seesUsage(rq)
 	if !o.editor {
 		sh.Module = currentModule(rq)
 	}
@@ -497,10 +499,12 @@ func mayChangePassword(rq *Req) bool {
 // settingsTabs: the pages about whoever is signed in (with no users, about
 // the wiki), which the menu has as one entry, Settings, and which show each
 // other as a row of tabs (partials/settings_tabs.html): Connect an
-// assistant, Change password where there is one of theirs to change, and
-// with users Groups. Each keeps its own address; the menu's entry opens the
-// first. Nil where there is one page alone (a wiki without users and
-// without a login), which the menu names instead, and for a visitor.
+// assistant, Change password where there is one of theirs to change, with
+// users Groups, and Usage for whoever sees it (seesUsage: an admin; with no
+// users whoever is signed in). Each keeps its own address; the menu's entry
+// opens the first. Nil where there is one page alone (a wiki without users
+// and without a login: Usage is there by its address, and from the help
+// dialog), which the menu names instead, and for a visitor.
 func settingsTabs(rq *Req) []settingsTab {
 	if rq == nil || rq.r == nil || rq.user.Name == visitor {
 		return nil
@@ -511,6 +515,9 @@ func settingsTabs(rq *Req) []settingsTab {
 	}
 	if rq.user.Name != "" {
 		tabs = append(tabs, settingsTab{"groups", "Groups", "/groups"})
+	}
+	if seesUsage(rq) && settings().authOn() {
+		tabs = append(tabs, settingsTab{"usage", "Usage", "/usage"})
 	}
 	if len(tabs) < 2 {
 		return nil

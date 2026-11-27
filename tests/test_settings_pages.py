@@ -1,6 +1,7 @@
 """The settings pages (docs/spec/navigation.md, The settings pages): the
-menu has one entry, Settings, for Connect an assistant, Change password and
-Groups, which show each other as a row of tabs. Each keeps its address."""
+menu has one entry, Settings, for Connect an assistant, Change password,
+Groups and (for an admin) Usage, which show each other as a row of tabs.
+Each keeps its address."""
 import re
 
 import pytest
@@ -74,6 +75,13 @@ class TestWithUsers:
         # The row is above the page's heading, on the sheet.
         assert text.index('class="admin-tabs settings-tabs"') < text.index(f"<h1>{heading}</h1>")
 
+    def test_an_admin_has_usage_too(self, client, users):
+        login(client, "alice")
+        assert tabs(body(client, "/assistant")) == (ALL + [("/usage", "Usage")], "Assistant")
+        text = body(client, "/usage")
+        assert tabs(text) == (ALL + [("/usage", "Usage")], "Usage") and crumbs(text) == ["Settings"]
+        assert text.index('class="admin-tabs settings-tabs"') < text.index("<h1>Usage</h1>")
+
     def test_the_breadcrumb_says_settings(self, client, users):
         login(client, "bob")
         for path in ("/assistant", "/password"):
@@ -104,14 +112,15 @@ class TestWithUsers:
 
 class TestWithoutUsers:
 
-    def test_with_a_password_settings_has_two_tabs(self, client, monkeypatch):
+    def test_with_a_password_settings_has_three_tabs(self, client, monkeypatch):
         monkeypatch.setattr(settings, "PASSWORD", "one password")
         assert client.post("/login", data={"password": "one password"}, headers=HOST).status_code == 302
-        two = [("/assistant", "Assistant"), ("/password", "Password")]
+        three = [("/assistant", "Assistant"), ("/password", "Password"), ("/usage", "Usage")]
         text = body(client, "/assistant")
-        assert tabs(text) == (two, "Assistant")
+        assert tabs(text) == (three, "Assistant")
         assert menu(text) == [("/assistant", "Settings"), ("", "Sharing mode"), ("/help", "Help"), ("", "Sign out")]
-        assert tabs(body(client, "/password")) == (two, "Password")
+        assert tabs(body(client, "/password")) == (three, "Password")
+        assert tabs(body(client, "/usage")) == (three, "Usage")
 
     def test_without_a_login_the_menu_names_the_one_page(self, client):
         text = body(client, "/assistant")
@@ -120,3 +129,7 @@ class TestWithoutUsers:
         assert entries[0] == ("/assistant", "Connect an assistant") and entries[1][1] == "Set a login"
         assert "Settings" not in [label for _, label in entries]
         assert crumbs(text) == ["Assistant"]
+        # Usage is a page by its address, which the help dialog links to.
+        assert ' · <a href="/usage">Usage</a></p>' in text
+        text = body(client, "/usage")
+        assert tabs(text) == ([], None) and crumbs(text) == ["Usage"] and "<h1>Usage</h1>" in text

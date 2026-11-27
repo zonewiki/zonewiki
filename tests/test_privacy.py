@@ -1401,6 +1401,7 @@ EXEMPT = {
     "POST /groups/includes",        # an admin's: what a group is made of, names only, no page (test_groups_own.py)
     "GET /assistant", "POST /assistant/token", "POST /assistant/revoke",   # the caller's own MCP token, no page (test_assistant.py)
     "GET /password", "POST /password",   # the caller's own password, no page (test_password.py)
+    "GET /usage",                   # counts of the wiki's use, for admins: numbers and user names, no page (test_usage.py)
     # OAuth: the caller's own connections, no page (test_oauth.py)
     "GET /.well-known/oauth-protected-resource", "GET /.well-known/oauth-protected-resource/mcp",
     "GET /.well-known/oauth-authorization-server", "POST /oauth/register", "GET /oauth/authorize",

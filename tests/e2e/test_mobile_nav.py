@@ -912,7 +912,7 @@ def test_the_user_button_opens_the_account_menu_on_a_phone(new_page, wiki, monke
     menu.get_by_role("menuitem", name="Settings").tap()
     phone.wait_for_url("**/assistant")
     tabs = phone.get_by_role("navigation", name="Settings").get_by_role("link")
-    expect(tabs).to_have_text(["Assistant", "Password", "Groups"])
+    expect(tabs).to_have_text(["Assistant", "Password", "Groups", "Usage"])   # Usage: an admin's
     tabs.nth(2).tap()
     phone.wait_for_url("**/groups")
     expect(phone.get_by_role("button", name="Make the group")).to_be_visible()

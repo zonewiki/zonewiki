@@ -258,6 +258,7 @@ func main() {
 				"a password in the browser before it shows anything (/setup)", ln.Addr())
 		}
 	}
+	startUsage() // what the start itself committed is no one's use
 	srv := &http.Server{
 		Handler: countRequests(newHandler()),
 		// A slow or idle client doesn't hold a connection for long: the
@@ -461,6 +462,7 @@ func countRequests(next http.Handler) http.Handler {
 		idle.busy.Add(1)
 		idle.last.Store(now().UnixNano())
 		defer func() {
+			flushUsageSoon()
 			idle.last.Store(now().UnixNano())
 			idle.busy.Add(-1)
 		}()
@@ -499,6 +501,7 @@ func exitWhenIdle(srv *http.Server, after time.Duration) {
 		srv.Shutdown(ctx)
 		cancel()
 		commitDrafts()
+		flushUsage()
 		os.Exit(0)
 	}
 }
@@ -613,8 +616,9 @@ func newHandler() http.Handler {
 	signupRoutes(mux)
 	assistantRoutes(mux)
 	passwordRoutes(mux)
+	usageRoutes(mux)
 	oauthRoutes(mux)
-	return noStalls(checks(visitorGate(mux, gzipTasks(viewerGate(mux)))))
+	return noStalls(checks(visitorGate(mux, usageGate(mux, gzipTasks(viewerGate(mux))))))
 }
 
 // visitorRoutes: what a visitor of a public wiki (ZONE_PUBLIC; access.go)
@@ -778,6 +782,7 @@ func checks(next http.Handler) http.Handler {
 				if renew {
 					renewSession(w, r)
 				}
+				usageActive(user)
 				r = withUser(r, user)
 			case publicMode() != "":
 				// A public wiki: a visitor, for the routes visitorGate lets

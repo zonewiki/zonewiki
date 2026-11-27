@@ -193,6 +193,8 @@ func handleMCP(message json.RawMessage, user asker, callTool func(name string, a
 				return rpcError(id, -32602, "arguments must be an object"), nil
 			}
 		}
+		countUsage(func(d *usageDay) { d.MCPCalls++ })
+		usageActive(user.Name)
 		content, err := callTool(name, args)
 		isError := false
 		if err != nil {

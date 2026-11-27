@@ -205,6 +205,14 @@ var commitMu sync.Mutex
 // authors, so a later commit still names them.
 func gitCommit(user, message string, paths ...string) error {
 	if !cfg.GitEnabled {
+		// No history: a write still counts as one (usage.go), by its paths.
+		var rels []string
+		for _, p := range paths {
+			if rel, ok := wikiRel(p); ok {
+				rels = append(rels, rel)
+			}
+		}
+		usageCommit(message, rels)
 		return nil
 	}
 	commitMu.Lock()
@@ -286,6 +294,7 @@ func gitCommit(user, message string, paths ...string) error {
 		return failed("commit", r)
 	}
 	forgetDrafts(rels...) // committed: no one's draft now
+	usageCommit(message, changed)
 	packSoon()
 	// The commit it made ("[main 3b1b793] Update task"), for the mark of
 	// the task files (tasksetup.go).

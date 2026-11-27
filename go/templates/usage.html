@@ -1,0 +1,49 @@
+{{- /* /usage: how much the wiki is used (usage.go, docs/spec/users.md,
+    Usage), for its admins: counts over the last week, month and all that
+    is kept, the days that counted something, and with users the day each
+    was last active. It only shows. */ -}}
+{{define "body"}}
+{{.BreadcrumbHTML}}
+<div class="sheet">
+{{- template "settings_tabs" .Shell}}
+<h1>Usage</h1>
+<p>How much this wiki is used, as numbers a day. Zonewiki counts no page, no task and no search's words, only how many.</p>
+<table class="usage-table usage-sums">
+  <thead><tr><th></th>{{range .Spans}}<th>{{.}}</th>{{end}}</tr></thead>
+  <tbody>
+  {{- range .Rows}}
+  <tr><th scope="row">{{.Label}}{{with .Hint}} <span class="usage-hint">{{.}}</span>{{end}}</th>{{range .Counts}}<td>{{.}}</td>{{end}}</tr>
+  {{- end}}
+  </tbody>
+</table>
+{{- if .Users}}
+<h2>Last active</h2>
+<p>The last day each user asked for something, signed in or through their assistant. A day, not a time.</p>
+<table class="usage-table usage-users">
+  <thead><tr><th>Name</th><th>Last active</th></tr></thead>
+  <tbody>
+  {{- range .Users}}
+  <tr><th scope="row">{{.Name}}</th><td>{{if .Last}}<time datetime="{{.Last}}">{{.Last}}</time>{{else}}<span class="usage-none">Not in the last {{$.Weeks}} weeks</span>{{end}}</td></tr>
+  {{- end}}
+  </tbody>
+</table>
+{{- end}}
+<h2>By day</h2>
+{{- if .Days}}
+<div class="usage-scroll">
+<table class="usage-table usage-days">
+  <thead><tr><th>Day</th><th>People</th><th>Sign-ins</th><th>Pages shown</th><th>Searches</th><th>Page changes</th><th>Task changes</th><th>Assistant changes</th><th>Assistant calls</th></tr></thead>
+  <tbody>
+  {{- range .Days}}
+  <tr><th scope="row"><time datetime="{{.Day}}">{{.Day}}</time></th><td>{{.Users}}</td><td>{{.Logins}}</td><td>{{.PageViews}}</td><td>{{.Searches}}</td><td>{{.PageEdits}}</td><td>{{.TaskEdits}}</td><td>{{.AssistantEdits}}</td><td>{{.MCPCalls}}</td></tr>
+  {{- end}}
+  </tbody>
+</table>
+</div>
+{{- else}}
+<p class="usage-none">Nothing counted yet.</p>
+{{- end}}
+<h2>What is kept</h2>
+<p>The counts are kept for {{.Weeks}} weeks, in the wiki's folder <code>.zone/usage/</code>, outside its history: <code>counts.json</code> holds the numbers on this page and no name, <code>users.json</code> the day each user was last active. Whoever runs the server this wiki is on can read the first to see how much it is used. <a href="/help/teams#usage">More in the manual</a>.</p>
+</div>
+{{end}}

@@ -8,7 +8,7 @@ Everything in the wiki is shared and editable by every user, except each user's 
 Users are `[user NAME]` sections of the wiki's settings file, `.zone/config` (below).
 Without them none of this applies: one password (or none) and one MCP token, and Zonewiki commits as itself.
 
-This file says first how the settings file and its commands are used, then roles, groups, the admin page, links, sign-up and signing in, then private pages, group pages, who may move a page, private tasks, assigning tasks and who made a change; how each works follows its use.
+This file says first how the settings file and its commands are used, then roles, groups, the admin page, usage, links, sign-up and signing in, then private pages, group pages, who may move a page, private tasks, assigning tasks and who made a change; how each works follows its use.
 
 ## In short
 
@@ -790,6 +790,77 @@ so a change that leaves the wiki without an admin is refused here too.
 A change is taken at once and logged with the admin: after the write Zonewiki reloads the file at once (`changeSettings`), not within the second;
 the change takes effect once the requests running (the admin's own too) have ended (Reloading, above), and the page lists the users as that change has them (`latestSettings`).
 Its line in the log names the admin (`Change settings: bob's role (by alice)`, `settingsAuthor`); the file isn't in git.
+
+## Usage
+
+**Usage** (`/usage`, `go/usage.go`) shows an admin how much the wiki is used: numbers a day, never what was read or written.
+It is a tab of **Settings** (The settings pages in `docs/spec/navigation.md`).
+
+### What the Usage page shows
+
+Three tables, and a line on what is kept:
+
+- **The counts** over the last 7 days, the last 30 days and the last 8 weeks (all that is kept), a row each (What is counted, below).
+- **Last active**, with users: each user and the last day they asked for something, signed in or through their assistant, the latest first;
+  "Not in the last 8 weeks" for who wasn't.
+  A day, never a time.
+- **By day**: the days that counted something, the newest first, a column for each count.
+
+The page only shows: there is nothing to set, and no way to turn the counting off.
+
+### Who sees the usage
+
+| Wiki | Who |
+|------|-----|
+| With users | admins: the **Usage** tab of Settings, and a link in the shortcuts dialog; for anyone else `/usage` is a 404, as for a page that isn't there |
+| One password, no users | whoever is signed in: the same tab |
+| No login | anyone who reaches the wiki, by the address `/usage` and the shortcuts dialog's link (there are no Settings there) |
+
+A visitor of a public wiki never sees it (`/usage` sends them to sign in), and no MCP tool reads it.
+`seesUsage` in `go/usage.go` is the one place that says so.
+
+### What is counted
+
+| Count | What adds one |
+|-------|---------------|
+| **People active** | a user's first request of the day while signed in, or their assistant's first call; a wiki with one password counts as one person |
+| **Sign-ins** | a session begun: the login page, a welcome link, the first run's form |
+| **Pages shown** | a page view that showed a page (`/page/…`, status 200), a visitor's too |
+| **Searches** | a search request from the browser with words in it (`/search`, `/api/search`); the search dialog asks as you type, so one search is often several |
+| **Changes to pages** | a commit by a person that changed a page or a file |
+| **Changes to tasks** | a commit by a person that changed only tasks |
+| **Changes by assistants** | a commit an assistant wrote (its `Assistant:` trailer), pages and tasks alike |
+| **Calls by assistants** | a tool an assistant called over MCP, reading included |
+
+A change is what **Changes** lists as one: the editor's auto-save is none until **Done** commits it.
+A wiki without git counts each write that would have been a commit.
+What Zonewiki commits itself when it starts, and what a command on the host does (`zonewiki user`, `zonewiki import`), is nobody's use and isn't counted.
+People active over several days is the number of users whose last active day is within them, not the days' sum.
+
+### What usage keeps and where
+
+Two files in `.zone/usage/`, out of git as all of `.zone/` is, each holding 8 weeks (`usageDays`): older days are dropped at each write.
+
+| File | Holds | For |
+|------|-------|-----|
+| `counts.json` | `days` (the counts of each day, by date), `last_active` (for each day, how many users were last active on it) and `written` (when); no name, no page, no task, no search's words | the Usage page, and whoever runs the server the wiki is on: a host may read this file to see how much a wiki is used |
+| `users.json` | each user's last active day, by name; written for Zonewiki's user alone (0600) | the Usage page's **Last active** |
+
+A user who is removed is dropped from `users.json` at the next write.
+Neither file is in an export (`zonewiki export`), and a wiki that loses them counts from nothing.
+
+### How usage is counted
+
+The counts live in memory (`usageStats`) and are read from the files at the first count after a start.
+Each is taken where the thing happens, once for every door:
+a signed-in request in `checks` (`usageActive`), a session in `setSessionHash`, a commit in `gitCommit` (`usageCommit`), an assistant's call in `handleMCP`, and page views and searches by their route (`usageGate`, `usagePatterns`).
+They count only in the process that serves the wiki (`startUsage`).
+
+They are written at the end of a request when the last write is a minute ago (`flushUsageSoon`), and at an idle exit (`ZONE_IDLE_EXIT`), so nothing runs for them while nobody asks;
+a Zonewiki that is killed loses the counts of under a minute's use.
+A file that can't be read counts from nothing, one that can't be written is logged once and the counts stay in memory.
+
+Tests: `tests/test_usage.py` (who sees it, each count through its door, the files, that no name is in `counts.json`), `go/usage_test.go` (a commit's kind, the 8 weeks, a user's last day, the minute between writes).
 
 ## Invite and reset links
 

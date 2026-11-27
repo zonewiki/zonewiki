@@ -1854,6 +1854,20 @@ kbd {
   .assistant-connections :is(th, td):last-child { text-align: left; }
   .assistant-form, .assistant-form input { width: 100%; }
 }
+/* Usage (/usage, usage.go): counts in tables, the numbers to the right in
+   figures of one width; the days scroll sideways on a narrow screen. */
+.usage-table { border-collapse: collapse; margin: 1rem 0; width: 100%; }
+.usage-table th, .usage-table td { padding: .4rem .5rem; border-bottom: 1px solid var(--border); text-align: right; font-variant-numeric: tabular-nums; }
+.usage-table thead th { font-size: .8rem; font-weight: 500; color: var(--muted); vertical-align: bottom; }
+.usage-table th:first-child { text-align: left; font-weight: 400; }
+.usage-table tbody th { font-weight: 500; }
+.usage-users th, .usage-users td { text-align: left; }
+.usage-users { width: auto; min-width: 50%; }
+.usage-hint { display: block; font-size: .8rem; font-weight: 400; color: var(--muted); }
+.usage-none { color: var(--muted); }
+.usage-scroll { overflow-x: auto; }
+.usage-days { font-size: .9rem; }
+.usage-days tbody th, .usage-days td { white-space: nowrap; }
 .users-invite { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin: .5rem 0 0; }
 .users-invite input { font: inherit; font-size: .9rem; padding: .3rem .5rem; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--fg); min-width: 12rem; }
 .users-table select, .users-invite select { font: inherit; font-size: .85rem; padding: .2rem; }

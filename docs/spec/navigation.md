@@ -185,14 +185,16 @@ The menu is one template (`module_menu` in `templates/partials/modules.html`) an
 | **Assistant** | Connect an assistant: your MCP token and your assistants' connections (`/assistant`, `docs/spec/mcp.md`) | everyone |
 | **Password** | Change password (`/password`, Signing in in `docs/spec/users.md`) | whoever signed in with a password of their own: not a shared account, not a wiki without a login |
 | **Groups** | your groups, and where you make one (`/groups`, Groups in `docs/spec/users.md`) | with users |
+| **Usage** | how much the wiki is used, as counts a day (`/usage`, Usage in `docs/spec/users.md`) | admins; without users, whoever is signed in |
 
 Settings opens the first, Connect an assistant: the one a new user looks for.
-The breadcrumb of Connect an assistant and Change password says Settings; Groups is also the Groups module's page (The Groups pill), and keeps its own.
+The breadcrumb of Connect an assistant, Change password and Usage says Settings; Groups is also the Groups module's page (The Groups pill), and keeps its own.
 Sharing mode, Help and Sign out are not settings and stay in the menu, as Admin does: it is about the wiki's people, not about you.
 
 How it works: each tab is a page of its own at the address it always had, so a link to one, the back button and a browser without JavaScript need nothing new, and there is no `/settings` route.
 `settingsTabs` in `go/views.go` says which pages who asks has; the page shell carries them (`Settings`) for the menu, and the view that is one of them says which (`shell{settings: …}`, `SettingsTab`), for the row (`settings_tabs` in `templates/partials/settings_tabs.html`, the admin page's `.admin-tabs`).
 With fewer than two pages there is no row and no Settings: the menu names the one page.
+A wiki without a login is that case: its Usage page has no tab, and is reached by its address and from the shortcuts dialog.
 Tests: `tests/test_settings_pages.py`, and from the menu in a browser in `tests/e2e/test_private.py`.
 
 ### Current module

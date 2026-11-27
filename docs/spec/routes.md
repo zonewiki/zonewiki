@@ -148,6 +148,7 @@ To anyone else such a link says nothing, not even that there is such a group (`g
 | GET, POST | `/signup`          | Sign-up (`email`): mails a link that makes the account (Sign-up in `docs/spec/users.md`); 404 while sign-up is off, a redirect to `/` for whoever is signed in |
 | GET/POST | `/welcome/<token>`  | An invite or reset link's page: choose a password, once (no login needed) |
 | GET, POST | `/password`        | Change password: whoever is signed in sets a new one (without users, the wiki's), with the one they have (Signing in in `docs/spec/users.md`); 404 without a login |
+| GET    | `/usage`              | Usage: how much the wiki is used, as counts a day, for admins (without users, whoever is let in); 404 for anyone else (Usage in `docs/spec/users.md`) |
 | GET    | `/admin`, `/admin/users` | The admin page, for admins (Managing users in `docs/spec/users.md`): `/admin` opens its first tab, Users; 404 for everyone else |
 | POST   | `/admin/users/<name>/role`, `/groups`, `/disable`, `/enable`, `/remove`, `/reset`, `/revoke`; `/admin/users/invite` | The Users tab's changes, admins only (404 for anyone else) |
 

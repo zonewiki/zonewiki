@@ -341,6 +341,7 @@ func setSessionHash(w http.ResponseWriter, r *http.Request, user, hash string) {
 		stamp = stampOf(hash)
 	}
 	writeSession(w, r, session{User: user, Pw: stamp, ID: newToken()[:16]})
+	countUsage(func(d *usageDay) { d.Logins++ })
 }
 
 // renewSession: the request's session with a new date, still the same one.

@@ -61,6 +61,7 @@ What each file and folder of the repository is for.
 │   ├── oauth.go            # OAuth for /mcp: the metadata, client registration (nothing kept), the consent page /oauth/authorize, /oauth/token, /oauth/revoke
 │   ├── grants.go           # Connections: the assistants users let in through OAuth, their token hashes in .zone/grants
 │   ├── password.go         # Change password (/password): your password changed in the browser, with the one you have
+│   ├── usage.go            # Usage (/usage): how much the wiki is used, as counts a day (sign-ins, people active, page views, searches, changes, assistants' calls), kept 8 weeks in .zone/usage/ (counts.json without a name, users.json each user's last active day)
 │   ├── signout.go          # Sessions signed out: .zone/signed-out
 │   ├── stalls.go           # A request body or response that stands still for a minute fails (noStalls)
 │   ├── setup.go            # The first-run page: /setup, a first login for a wiki other devices reach

@@ -231,6 +231,20 @@ In each row you can:
 You can't disable or remove yourself here, so you can't lock yourself out; another admin can.
 You can change your own role, as long as another admin remains: a wiki always keeps one admin.
 
+### Usage
+
+**Settings** in the user menu has a **Usage** tab for admins.
+It shows how much the wiki is used over the last 7 days, the last 30 days and the last 8 weeks:
+people active, sign-ins, pages shown, searches, changes to pages and to tasks, and what assistants changed and called.
+**Last active** lists each user with the last day they used the wiki, themselves or through their assistant.
+**By day** has the same counts for each day.
+
+Zonewiki counts how many, never what: no page, no task and no search's words are kept, and of a user only that day.
+The counts go back 8 weeks and are kept in the wiki's `.zone/usage/` folder, outside its history.
+Whoever runs the server your wiki is on can read the numbers (not the names) to see how much it is used.
+In a wiki without users the tab is there for whoever is signed in; in one without a login the page is at `/usage`.
+What each count means is in [What is counted](../spec/users.md#what-is-counted).
+
 ### Adding users
 
 Add people with an invite link, or let them sign up themselves.

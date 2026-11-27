@@ -45,6 +45,7 @@ They are plain text, in git like the pages, and readable by any script.
 - `secret_key`, the key that keeps people signed in.
 - `grants` and `links`: assistants connected by signing in, and open invite and reset links.
 - `index/`: the search indexes, which Zonewiki can always build again.
+- `usage/`: how much the wiki is used, as counts a day for 8 weeks ([Usage](teams.md#usage)).
 
 Zonewiki never shows this folder in the browser, in history or to an assistant.
 It holds password hashes and keys, so treat it as confidential.

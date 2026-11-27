@@ -785,6 +785,7 @@ Zonewiki's own state, none of it in git (`.git/info/exclude` has `/.zone/*`, `ex
 - `removed-users` — the names of the users removed, which no one takes by signing up (Sign-up in `docs/spec/users.md`)
 - `grants` — the assistants' OAuth connections, their tokens as hashes (`docs/spec/mcp.md`)
 - `config.lock`, `links.lock`, `grants.lock`, `removed-users.lock` — empty files the writers of those four lock (`lockFile`, flock), so two writers take turns
+- `usage/counts.json`, `usage/users.json` — how much the wiki is used, as counts a day for 8 weeks, and the day each user was last active (Usage in `docs/spec/users.md`); `counts.json` holds no name and is the one file here a host may read
 - `seen/<user>.json` — what each user has seen of the tasks' news (What you have seen, under News on your tasks in `docs/spec/tasks.md`)
 - `unsaved-files.json` — who pasted the first file for a task not made yet (a new task's dialog before its first Save), whose those files are until then (A task's files in `docs/spec/tasks.md`)
 - `drafts/<user>/` — an editor's text left in a conflict when its tab closed, for its user's next edit, 30 days at most (`docs/spec/editor.md`)
@@ -824,7 +825,7 @@ A change to what Zonewiki keeps in git that an older Zonewiki would misread rais
 Readers stay lenient all the same: the number says which steps Zonewiki ran, not that every file is as Zonewiki wrote it (a file edited by hand or pulled from elsewhere is read as before).
 The settings file and the rest of `.zone/` aren't covered: they are no wiki data (What is in .zone/, above).
 
-What holds users' words or secrets is written readable by Zonewiki's user alone (0600), whatever the umask: `config`, `secret_key`, `signed-out`, `links`, `grants`, `seen/`, `unsaved-files.json`, `drafts/`, the index files (the groups' in `index/groups/` among them, with their pages' words), `index/tasks/` (private tasks' titles among them), `embeddings.json` (every page's slug) and `queries.jsonl` (every user's queries and what they found) (`atomicfile.WriteOwnerOnly`; a file from before is made so at its next write).
+What holds users' words or secrets is written readable by Zonewiki's user alone (0600), whatever the umask: `config`, `secret_key`, `signed-out`, `links`, `grants`, `seen/`, `usage/users.json`, `unsaved-files.json`, `drafts/`, the index files (the groups' in `index/groups/` among them, with their pages' words), `index/tasks/` (private tasks' titles among them), `embeddings.json` (every page's slug) and `queries.jsonl` (every user's queries and what they found) (`atomicfile.WriteOwnerOnly`; a file from before is made so at its next write).
 The pages themselves, in the wiki, keep the umask's mode, as a file made in an editor does.
 
 ### A git remote
@@ -904,6 +905,7 @@ Unpacked, it is a wiki's folder: whoever leaves Zonewiki has the pages as files 
 | `.zone/grants` | an assistant connected by signing in connects again (the address changes anyway); a static MCP token works as before |
 | `.zone/links` | open invite and reset links don't work |
 | `.zone/index/` | search's indexes are built again when first needed |
+| `.zone/usage/` | the Usage page counts from nothing |
 | `.zone/seen/`, `drafts/`, `removed-users`, `queries.jsonl` | the tasks' news shows again; a text left in a conflict is gone; a removed user's name is still not a stranger's to sign up with where a private folder, a commit or a task names it (Sign-up in `docs/spec/users.md`) |
 | What isn't committed | lost: see Text that is not committed, below |
 | The host's settings: `hosts`, `base-url`, `git-remote`, `trusted-proxies`, `storage-max` | set them again where they are needed (`zonewiki config set`); the import names the ones it left out |

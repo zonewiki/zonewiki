@@ -235,6 +235,7 @@ Prefer an API test when the behaviour shows through a route, a Go test when it d
 | `tests/test_section_editing.py` | editor.md | Section editing over HTTP: a stale ✎, Keep mine |
 | `tests/test_semantic.py` | search.md | Semantic search through the server with the fake embedder |
 | `tests/test_settings_pages.py` | navigation.md | The menu's Settings and the settings pages' tabs |
+| `tests/test_usage.py` | users.md | Usage: who sees the page, each count through its door, the files in `.zone/usage/` |
 | `tests/test_setup.py` | security.md | The first-run page (`/setup`) |
 | `tests/test_signup.py` | users.md | Sign-up against `FakeSMTP`, approval |
 | `tests/test_socket.py` | deployment.md | Zonewiki on a Unix socket and one handed over, idle exit |
