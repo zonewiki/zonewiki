@@ -3,7 +3,7 @@ form, a page's link to what the commit changed, and its fit on a phone."""
 
 from playwright.sync_api import expect
 
-from tests.e2e.conftest import PHONE, SCREENSHOT_DIR
+from tests.e2e.conftest import PHONE, SCREENSHOT_DIR, box_of
 from tests.e2e.test_layout import horizontal_overflow
 
 
@@ -51,7 +51,7 @@ def test_fits_a_phone(new_page, wiki):
     # the text, what it changed under it, both beside the time's column.
     expect(pg.locator(".changes-filter")).to_be_hidden()
     row = pg.locator(".changes-row").first
-    when, what, items = (row.locator(s).bounding_box() for s in (".hist-when", ".changes-what", ".changes-items"))
+    when, what, items = (box_of(row.locator(s)) for s in (".hist-when", ".changes-what", ".changes-items"))
     assert when["x"] + when["width"] <= what["x"] and abs(items["x"] - what["x"]) < 2
     assert items["y"] >= what["y"] + what["height"] - 1
     pg.screenshot(path=str(SCREENSHOT_DIR / "changes-phone.png"))
