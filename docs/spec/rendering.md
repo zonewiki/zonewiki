@@ -463,7 +463,7 @@ Every save of a page is a git commit, so each page has a history of versions, an
 
 ### How a page write is made
 
-Every page write is an operation in `go/pageops.go`: delete, rename, restore, create, a save, Keep mine and Set aside after a conflict, a replace across pages, a link pointed at a new page's folder, a task tag's rename, an undo from Changes;
+Every page write is an operation in `go/pageops.go`: delete, rename, restore, create, a save, Keep mine and Set aside after a conflict, a replace across pages, a link pointed at a new page's folder, a task tag's rename, an undo from Changes, a markdown import;
 a note's move and append are in `go/quicknotes.go`, and a list's rename (`renameListOp` in `go/tasklists.go`) writes pages too, the embeds and links that name the list.
 An operation checks access itself and keeps text not yet in git: `keepPending` before a write that replaces or removes a page's text, `commitOthersDraft` before one that continues it.
 The routes and MCP tools only parse their input and turn the result or the refusal into their answer, so a new write is a new operation, with a test through each door in `tests/test_page_writes.py`.
@@ -480,6 +480,14 @@ one there already must be the asker's to write (`writablePage`), and what it hel
 `checkRoom` asks for the new pages' text (a replacement adds nothing), and what is written new is counted (`added`).
 One page that isn't the asker's or isn't as it was said to be (a new one there already, one there already missing, a page named twice), or a wiki without room, refuses the whole write: nothing is written or committed, not even the text kept first.
 `createPageOp` (a new page in the browser, `write_page`) is a call of it with one new page, `replacePagesOp` (`replace_in_pages`) with pages all there already, so the rules of making a page are written once.
+
+A markdown import (`importOp`) writes the converter's plan (`mdimport.Plan`) into a folder that isn't there yet: its files into the place's uploads, then its pages, the folder's index and a line on the place's home page (`index`, `private/<user>/index`, `groups/<group>/index`) that links the index, in one commit, "Import 214 pages and 87 files from my-vault".
+The pages go through `writePagesOp`, new, with the home there already (its text not yet in git kept first, "Save index"), and the files' paths in its commit (`pagesWrite.also`); a home not there yet is made first in its own commit, as a visit makes it, so the import's undo never deletes a home.
+Who may: anyone who may write pages in the folder (`checkImportFolder`: the shared wiki, their private folder, a group's they are in; not a place's own folder; a viewer or visitor nowhere) and upload to its place (`uploadPlace`); another user's folder answers as missing, a folder that is there is refused, so nothing clashes.
+Under the uploads' lock (`uploadMu`, after the task files' lock, before `commitMu`) each file's name is checked again: one taken since the plan was made refuses the import, as the pages' links name it (an upload is never overwritten nor an imported file renamed).
+It is refused whole, with nothing written, for a page outside the folder, a name that is no upload's or is given twice, a source that is no file, or a wiki without room for the files and the pages together (`checkRoom`); files written for pages `writePagesOp` then refuses are removed again.
+Undo takes the import back whole, as a change of pages and uploads: the pages and files go, the home loses its line.
+The converter's callbacks come from `importOptions` (the folder checked as for the import; a file's name free in the place's uploads and not given twice in one import, `freeImportName`; its link `uploadURL`).
 
 A page is written with `writeText` (UTF-8, through `atomicfile.Write`: a link written through, a new file 0666 less the umask), after `safePath()` and `os.MkdirAll` for its folder.
 `gitCommit` returns an error, which the write returns (`notCommitted`); links a move couldn't re-point are no failure (`linksLeft`: logged, and the MCP tools say so).
@@ -604,7 +612,7 @@ Changes shows the buttons from what the list knows (`undoOffers`: the kinds of f
 #### Uploads undone
 
 **An upload is undone like a page**: a file straight in a place's `_assets/` (the shared `_assets/`, `private/<user>/_assets/`, `groups/<group>/_assets/`: `uploadOf`) that the change added is deleted again, one it replaced or deleted is written back as it was before the change, byte for byte (`gitBlob`: `git cat-file blob`, not the text a page's undo reads, which would make a picture's CR LF a LF).
-So a file uploaded by mistake is taken away from Changes, and a change that adds pages and files together goes back whole.
+So a file uploaded by mistake is taken away from Changes, and a change that adds pages and files together (a markdown import, How a page write is made) goes back whole.
 
 - **Who**: whoever sees the file and may upload there (`mayUndoUpload`: the place's rule, as `uploadPlace` asks of an upload; a viewer or a read-only connection none).
   Another user's private file is no change to anyone else, answered as one that isn't there.

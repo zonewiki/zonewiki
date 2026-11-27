@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -19,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"zonewiki/internal/mdimport"
 	"zonewiki/internal/mdtext"
 	"zonewiki/internal/taskfiles"
 	"zonewiki/internal/taskmodel"
@@ -187,8 +189,9 @@ type pageWrite struct {
 // pagesWrite: what writePagesOp writes, in one commit.
 type pagesWrite struct {
 	pages   []pageWrite
-	message string // the commit's message, its suffix included
-	what    string // names the pages in "Save <what>", the commit of text kept first
+	message string   // the commit's message, its suffix included
+	what    string   // names the pages in "Save <what>", the commit of text kept first
+	also    []string // other files to commit along, written by the caller (an import's uploads)
 }
 
 // writePagesOp writes pages, each new or there already, in one commit:
@@ -200,7 +203,8 @@ type pagesWrite struct {
 // text (checkRoom; replacing a page's text never asks). What the pages
 // there already held uncommitted is committed first (keepPendingPages:
 // what, as the note about it names the pages), so the commit holds only
-// this write. Returns how many pages had text kept.
+// this write; also's files go into it too. Returns how many pages had text
+// kept.
 func writePagesOp(user asker, w pagesWrite) (kept int, err error) {
 	paths := make([]string, len(w.pages))
 	var there []string
@@ -248,7 +252,7 @@ func writePagesOp(user asker, w pagesWrite) (kept int, err error) {
 			added(int64(len(p.text)))
 		}
 	}
-	return kept, notCommitted(gitCommit(user.Name, w.message, paths...))
+	return kept, notCommitted(gitCommit(user.Name, w.message, append(paths, w.also...)...))
 }
 
 // setAsideOp: the editor's text mine, which lost to theirs (what the page
@@ -756,6 +760,317 @@ func renameTagOp(user asker, tag, newName string, merge bool, suffix string) (*t
 		failed = errors.Join(failed, notCommitted(gitCommit(user.Name, msg, written...)))
 	}
 	return done, failed
+}
+
+// importInto: where an import into a folder goes (checkImportFolder): the
+// folder, the home page of its place, which gets the line that links the
+// folder's index, and the place whose uploads take the files.
+type importInto struct {
+	folder, home string
+	up           place
+}
+
+// checkImportFolder: folder is one user may import notes into (the
+// markdown import, importOp): a folder of pages they may write (the shared
+// wiki, their private folder, a group's they are in; a viewer or a
+// read-only connection nowhere), inside its place but not the place's own
+// folder (private/alice itself holds her home), whose uploads they may add
+// to (uploadPlace), and not there yet, so nothing an import writes clashes
+// with what is there. One that isn't theirs answers as missing, as
+// notWritable does.
+func checkImportFolder(user asker, folder string) (importInto, error) {
+	for _, part := range strings.Split(folder, "/") {
+		if part == "" || part == "." || part == ".." {
+			return importInto{}, refuse(strconv.Quote(folder) + " can't be a folder's name: name one like my-notes or projects/my-notes")
+		}
+	}
+	probe := folder + "/index"
+	file := safePath(probe)
+	if file == "" {
+		if msg := nameRefused(folder); msg != "" {
+			return importInto{}, refuse(msg)
+		}
+		return importInto{}, refuse("“" + folder + "”: pages can't go in folders starting with '_' or '.'")
+	}
+	if changesNothing(user) {
+		return importInto{}, refuseAs(refusedReadOnly, noChangeMsg(user))
+	}
+	if !canWrite(user, probe) {
+		return importInto{}, notWritable(user, probe, "“"+folder+"”: "+notYoursFolder(folder))
+	}
+	up, ok := uploadPlace(user, probe)
+	if !ok {
+		return importInto{}, refuseAs(refusedNotFound, "“"+folder+"”: "+notYoursFolder(folder))
+	}
+	to := importInto{folder: folder, home: "index", up: up}
+	switch {
+	case up.user() != "":
+		to.home = privateHomeSlug(user)
+	case up.group() != "":
+		to.home = groupHomeSlug(up.group())
+	}
+	if strings.EqualFold(folder, up.folder()) {
+		return importInto{}, refuse("“" + folder + "” holds the place's other pages: import into a new folder inside it")
+	}
+	if _, err := os.Lstat(filepath.Dir(file)); !errors.Is(err, os.ErrNotExist) {
+		return importInto{}, refuseAs(refusedExists, "A folder named “"+folder+"” is there already: import into a new one, so nothing clashes")
+	}
+	return to, nil
+}
+
+// importOptions: what the converter needs to plan an import into folder
+// for user (mdimport.Options), the folder checked first (checkImportFolder):
+// a page's part as safePath takes it (pagePart), a file's name one an
+// upload can have (uploadName) that is free in the place's uploads and not
+// given to another file of this import (freeImportName), and its link the
+// place's (uploadURL).
+func importOptions(user asker, folder string) (mdimport.Options, error) {
+	to, err := checkImportFolder(user, folder)
+	if err != nil {
+		return mdimport.Options{}, err
+	}
+	given := map[string]bool{}
+	return mdimport.Options{
+		Folder:   folder,
+		PagePart: pagePart,
+		FileName: func(want string) string {
+			name := freeImportName(to.up, uploadName(want), given)
+			if name != "" {
+				given[strings.ToLower(name)] = true
+			}
+			return name
+		},
+		FileURL: func(name string) string { return uploadURL(to.up, name) },
+	}, nil
+}
+
+// importNameTries: how many names freeImportName tries for a file.
+const importNameTries = 1000
+
+// freeImportName: name, or with a number before its extension (deck-2.pdf,
+// deck-3.pdf …), as freeUploadName gives it: free in the place's uploads
+// (uploadPath, no file there) and not given (by its lower case: two names
+// that differ only in case are one file where file names ignore it). ""
+// for name "" or none found.
+func freeImportName(up place, name string, given map[string]bool) string {
+	if name == "" {
+		return ""
+	}
+	ext := suffix(name)
+	stem := strings.TrimSuffix(name, ext)
+	for n := 1; n <= importNameTries; n++ {
+		try := name
+		if n > 1 {
+			try = stem + "-" + strconv.Itoa(n) + ext
+		}
+		if given[strings.ToLower(try)] {
+			continue
+		}
+		if p, ok := uploadPath(up, try); ok {
+			if _, err := os.Lstat(p); errors.Is(err, os.ErrNotExist) {
+				return try
+			}
+		}
+	}
+	return ""
+}
+
+// importOp writes an import's plan (the converter's, of the folder src)
+// into folder, which isn't there yet (checkImportFolder): the files into
+// the place's uploads, then the pages and the folder's index as new pages,
+// and a line on the place's home page that links the index (every new page
+// needs a link, and the index links the others), in one commit, "Import
+// 214 pages and 87 files from my-vault" (from: what was imported; the
+// folder's name if ""). Undo takes it back whole: the pages and files
+// away, the line off the home. The home's text not yet in git is
+// committed first (writePagesOp); a home not there yet is made first, in
+// its own commit, as a visit makes it, so the import's undo never deletes
+// a home (it stays, should writePagesOp then refuse the pages).
+//
+// It is refused whole, with nothing written, for a page outside folder, a
+// file's name that is no upload's, named twice or taken now (the plan's
+// names are in its pages' links, so one uploaded meanwhile refuses the
+// import rather than being overwritten or the file renamed), a source that
+// is no file, and a wiki without room for the files and the pages together
+// (checkRoom). Files written for pages writePagesOp then refuses are
+// removed again. Returns how many pages had text kept (the home).
+func importOp(user asker, folder string, plan *mdimport.Plan, src fs.FS, from, suffix string) (kept int, err error) {
+	to, err := checkImportFolder(user, folder)
+	if err != nil {
+		return 0, err
+	}
+	if plan == nil || plan.Index.Slug == "" {
+		return 0, refuse("There is nothing to import")
+	}
+	var pages []pageWrite
+	var room int64
+	for _, p := range append(slices.Clone(plan.Pages), plan.Index) {
+		if !strings.HasPrefix(p.Slug, folder+"/") {
+			return 0, refuse("Nothing was imported: “" + p.Slug + "” isn't in " + folder + "/")
+		}
+		pages = append(pages, pageWrite{slug: p.Slug, text: p.Text, isNew: true})
+		room += int64(len(p.Text))
+	}
+	// The uploads' lock (after pagesMu and the task files' lock, before
+	// commitMu) from the names' check to the commit: no upload takes one
+	// meanwhile.
+	uploadMu.Lock()
+	defer uploadMu.Unlock()
+	type upload struct{ src, dest string }
+	var files []upload
+	names := map[string]bool{}
+	for _, f := range plan.Files {
+		dest, ok := uploadPath(to.up, f.Name)
+		if !ok || names[strings.ToLower(f.Name)] {
+			return 0, refuse("Nothing was imported: " + strconv.Quote(f.Name) + " can't be an upload's name there")
+		}
+		names[strings.ToLower(f.Name)] = true
+		if _, err := os.Lstat(dest); !errors.Is(err, os.ErrNotExist) {
+			return 0, refuseAs(refusedExists, "Nothing was imported: a file named "+strconv.Quote(f.Name)+
+				" was uploaded there meanwhile. Import again.")
+		}
+		if !fs.ValidPath(f.Src) {
+			return 0, refuse("Nothing was imported: " + strconv.Quote(f.Src) + " is no file of what was imported")
+		}
+		st, err := fs.Stat(src, f.Src)
+		if err != nil || !st.Mode().IsRegular() {
+			return 0, refuse("Nothing was imported: " + strconv.Quote(f.Src) + " is no file of what was imported")
+		}
+		files = append(files, upload{f.Src, dest})
+		room += st.Size()
+	}
+	if err := checkRoom(room); err != nil {
+		return 0, err
+	}
+	home, err := importHome(user, to)
+	if err != nil {
+		return 0, err
+	}
+	dir := uploadDir(to.up)
+	madeDir := !exists(dir)
+	var written []string
+	removeFiles := func() {
+		for _, p := range written {
+			_ = os.Remove(p)
+		}
+		if madeDir {
+			_ = os.Remove(dir) // only when empty: nothing else was put there
+		}
+		forgetUsage()
+	}
+	for _, f := range files {
+		n, err := copyNewFile(src, f.src, f.dest)
+		if err != nil {
+			removeFiles()
+			return 0, err
+		}
+		written = append(written, f.dest)
+		added(n)
+	}
+	pages = append(pages, pageWrite{slug: to.home, text: withLine(home, importLine(folder, plan.Index.Slug, from))})
+	if from == "" {
+		from = baseName(folder)
+	}
+	message := "Import " + counted(len(plan.Pages), "page", "pages")
+	if len(files) > 0 {
+		message += " and " + counted(len(files), "file", "files")
+	}
+	kept, err = writePagesOp(user, pagesWrite{pages: pages, message: message + " from " + from + suffix, what: to.home, also: written})
+	if err != nil && !writtenAnyway(err) {
+		removeFiles()
+	}
+	return kept, err
+}
+
+// importHome: the text of the import's home page, made first when it
+// isn't there, as a visit makes it (ensurePrivateHome, groupRoute,
+// ensureHomePage), in its own commit "Create <slug>".
+func importHome(user asker, to importInto) (string, error) {
+	file := safePath(to.home)
+	if file == "" || !canWrite(user, to.home) {
+		return "", notWritable(user, to.home, "No page "+strconv.Quote(to.home))
+	}
+	if !exists(file) {
+		text := "# Home\n\n"
+		switch {
+		case to.up.user() != "":
+			text = privateHomeText
+		case to.up.group() != "":
+			text = groupHomeText(to.up.group())
+		}
+		if err := writeText(file, text); err != nil {
+			return "", err
+		}
+		added(int64(len(text)))
+		if err := notCommitted(gitCommit(user.Name, "Create "+to.home, file)); err != nil {
+			return "", err
+		}
+	}
+	text, err := currentText(file)
+	if err != nil {
+		return "", err
+	}
+	if text == nil {
+		return "", errors.New(to.home + " is gone")
+	}
+	return *text, nil
+}
+
+// importLine: the line on the home page that links an import's index
+// ("- [[my-vault/index|My Vault]]"): its words what was imported (from),
+// without what would end the link, or else the folder's name.
+func importLine(folder, index, from string) string {
+	label := strings.TrimSpace(strings.Map(func(r rune) rune {
+		if strings.ContainsRune("[]|", r) || r < ' ' || r == 0x7f {
+			return -1
+		}
+		return r
+	}, from))
+	if label == "" {
+		label = baseName(folder)
+	}
+	return "- [[" + index + "|" + label + "]]"
+}
+
+// withLine: text with line added at its end: a list's next item after a
+// list, after a blank line after anything else.
+func withLine(text, line string) string {
+	if text != "" && !strings.HasSuffix(text, "\n") {
+		text += "\n"
+	}
+	lines := strings.Split(strings.TrimRight(text, "\n"), "\n")
+	last := strings.TrimSpace(lines[len(lines)-1])
+	if last != "" && !strings.HasPrefix(last, "- ") && !strings.HasSuffix(text, "\n\n") {
+		text += "\n"
+	}
+	return text + line + "\n"
+}
+
+// copyNewFile copies the file name of src to dest, which must not be
+// there (an upload is never overwritten); returns how many bytes. A copy
+// that fails leaves no file.
+func copyNewFile(src fs.FS, name, dest string) (int64, error) {
+	in, err := src.Open(name)
+	if err != nil {
+		return 0, err
+	}
+	defer in.Close()
+	if err := os.MkdirAll(filepath.Dir(dest), 0o777); err != nil {
+		return 0, err
+	}
+	out, err := os.OpenFile(dest, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o666)
+	if err != nil {
+		return 0, err
+	}
+	n, err := io.Copy(out, in)
+	if cerr := out.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		_ = os.Remove(dest)
+		return 0, err
+	}
+	return n, nil
 }
 
 // undoMost: how many changes one undo takes.
