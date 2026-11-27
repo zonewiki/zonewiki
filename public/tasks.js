@@ -369,7 +369,11 @@ listEl.addEventListener('click', e => {
 listEl.addEventListener('click', e => {
   if (st.lastPointerType !== 'touch') return;
   const card = e.target.closest('.task-item');
-  if (!card || e.target.closest('input, button, a, label, .task-clickable-date')) return;
+  // The card's list is a link, in the line a thumb taps to select: it is
+  // followed on the selected card, and selects any other, as the title does.
+  const listLink = !!card && !pressedSelected && e.target.closest('a.task-tag-list');
+  if (listLink) e.preventDefault();
+  else if (!card || e.target.closest('input, button, a, label, .task-clickable-date')) return;
   const id = card.dataset.id;
   if (pressedSelected) { openEditModal(id); return; }
   setSelected(id);

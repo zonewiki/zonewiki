@@ -60,6 +60,39 @@ def test_first_tap_selects_second_opens_editor(phone):
     expect(phone.locator("#task-edit-title")).to_have_value("Water plants")
 
 
+def test_tap_on_a_cards_list_selects_first_then_opens_the_list(new_page, wiki):
+    # The list on a card is a link, in the line a thumb taps to select: the
+    # first tap selects the card as anywhere else on it, a tap on the
+    # selected card follows the link; in selection mode it only selects.
+    pg = new_page(**TOUCH_PHONE)
+    make_list(pg, "shop")
+    pg.request.post("/api/tasks", data={"title": "Milk", "list": "shop"})
+    pg.request.post("/api/tasks", data={"title": "Eggs", "list": "shop"})
+    here = re.compile(r"/tasks\?view=open&group=none$")
+    pg.goto("/tasks?view=open&group=none")
+    milk, eggs = card(pg, "Milk"), card(pg, "Eggs")
+    expect(milk.locator("a.task-tag-list")).to_have_attribute("href", "/tasks?list=shop")
+    milk.locator("a.task-tag-list").tap()
+    expect(milk).to_contain_class("task-selected")
+    expect(pg.locator("#task-edit-modal")).to_be_hidden()
+    eggs.locator("a.task-tag-list").tap()                               # another card's: selects that one
+    expect(eggs).to_contain_class("task-selected")
+    expect(milk).not_to_contain_class("task-selected")
+    expect(pg).to_have_url(here)
+    touch_drag(pg, milk, milk)                                          # selection mode: a tap adds the card
+    expect(pg.locator(".tasks-app")).to_contain_class("tasks-selecting")
+    expect(pg.locator("#task-selbar .tasks-selbar-count")).to_have_text("1 selected")
+    eggs.locator("a.task-tag-list").tap()
+    expect(pg.locator("#task-selbar .tasks-selbar-count")).to_have_text("2 selected")
+    expect(pg).to_have_url(here)
+    pg.goto("/tasks?view=open&group=none")
+    milk.locator(".task-title").tap()
+    expect(milk).to_contain_class("task-selected")
+    milk.locator("a.task-tag-list").tap()                               # the selected card's: the list opens
+    pg.wait_for_url(re.compile(r"/tasks\?list=shop$"))
+    expect(pg.locator("h1")).to_contain_text("shop")
+
+
 def test_tapping_checkbox_completes_not_edits(phone):
     card(phone, "Water plants").locator("input[type=checkbox]").tap()
     expect(phone.locator("#task-edit-modal")).to_be_hidden()

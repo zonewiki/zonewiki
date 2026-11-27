@@ -191,6 +191,8 @@ Each pill counts what is due today or overdue there.
 When the pills don't fit on the line, swipe or scroll the row sideways; a faded end shows there are more that way.
 On a wider screen (from about 1024 pixels) the lists are a column on the left instead, every list a line, with your pinned lists under **Pinned** ([The list switcher](../spec/tasks.md#the-list-switcher)).
 The pill you pick is remembered: go to the wiki and click Tasks again, and you are back on it.
+A task's card names its list wherever tasks of several lists show (My tasks, a list on a page); click the name to open that list.
+On a phone, tap the task first, then the name.
 
 ### Making a list
 

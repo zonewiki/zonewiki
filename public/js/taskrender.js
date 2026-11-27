@@ -87,10 +87,11 @@ function taskHTML(task, draggable = !!app.ORDERED[st.activeView], extraClass = '
   const urgClass = urgencyClass(task);
   // The list the task is in, first and marked (icon, tint, tooltip), as in
   // the filter; not in a view of that one list, where every card would say it.
+  // A link to the list (a tap follows it on the selected card only: tasks.js).
   const listRef = app.taskList(task);
   // nor By list, where its section does.
   const listChip = listRef && listRef !== app.initList && !(st.activeView === 'plan' && st.cut === 'list')
-    ? `<span class="task-tag task-tag-list" title="${esc(app.listTooltip(listRef))}">${app.listMembers(listRef) ? '👥 ' : ''}${esc(app.listName(listRef))}</span>` : '';
+    ? `<a class="task-tag task-tag-list" href="/tasks?list=${encodeURIComponent(listRef)}" draggable="false" title="${esc(app.listTooltip(listRef))}">${app.listMembers(listRef) ? '👥 ' : ''}${esc(app.listName(listRef))}</a>` : '';
   const tags = listChip + (task.tags || []).map(t => `<span class="task-tag">#${esc(t)}</span>`).join('');
   const recIcon = task.recurrence ? '<span class="task-recurring" title="Recurring">↻</span>'
     : task.keep ? `<span class="task-recurring task-keep" title="Keep: back to ${esc(app.tabLabel('open'))} when ticked off">⟲</span>` : '';

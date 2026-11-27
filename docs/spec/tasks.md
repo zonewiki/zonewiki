@@ -1845,6 +1845,11 @@ The toast says "3 tasks moved to the new list “shop”"; its undo takes the ta
 
 A list is marked as one wherever it shows: a list icon (an SVG mask in CSS `::before`, `--list-icon`, in the accent colour), a faint blue tint and a tooltip (`listTooltip`: "List", "List (private: only you see it)", "The group hiring's list: only its members (…) see it and its tasks"; the Inbox's "In your Inbox: only you see it", without users "In the Inbox: in no list").
 A card shows its list as such a chip before its tags (`.task-tag-list`), but in a view of that one list and By list, where the section says it.
+On a card the chip is a link to the list (`/tasks?list=<name>`): a click opens the list, Ctrl+click or a middle click opens it in a tab, and it is underlined only under the pointer, so a card stays as calm as its tags.
+Like a link in a title it keeps its own click: it selects nothing, and a double-click on it opens no dialog.
+On touch it sits in the line a thumb taps to select, so the first tap on it selects the card, as a tap on the title does, and a tap on the selected card's chip opens the list (`pressedSelected`, The edit dialog); a swipe or a long press may start on it, as on a date chip.
+In selection mode a tap or click on it adds or drops the card, like any other.
+The chip in the Move to list… dialog is a label, no link.
 In a list's view the filter field holds a chip without × for it (`list:<name>`, shown as its name; `chipField`'s `locked`, `.tag-chip-locked`; Backspace skips it), so the page always shows what it says; an embed's `tag=` and `assignee=` words are locked the same way, and a URL `?tag=` stays removable.
 
 #### When a task leaves the view

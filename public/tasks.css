@@ -293,6 +293,9 @@ div.chip-input:has(> .tag-chip:not(.tag-chip-locked)) > .chip-input-clear { disp
   color: var(--fg);
   background: color-mix(in srgb, var(--link) 7%, var(--code-bg));
 }
+/* On a card it is a link to the list, quiet until the pointer is on it. */
+a.task-tag-list { text-decoration: none; }
+a.task-tag-list:hover, a.task-tag-list:focus-visible { text-decoration: underline; }
 /* The icon is a bulleted list drawn as an SVG mask, so it looks the same in
    every font. Only the icon is in the accent colour. */
 .tag-chip-list::before, .task-tag.task-tag-list::before {

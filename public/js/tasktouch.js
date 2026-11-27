@@ -174,7 +174,8 @@ app.listEl.addEventListener('touchstart', e => {
   const item = e.target.closest('.task-item');
   // A date chip may start a swipe or drag (it sits on the first line, where
   // a thumb starts one); a mere tap on it still opens its date picker.
-  if (!item || e.target.closest('input, button, a')) return;
+  // So may the card's list, a link in that line; a title's link is left alone.
+  if (!item || e.target.closest('input, button, a:not(.task-tag-list)')) return;
   const canDrag = !!st.touchDrop && item.matches('[data-drag]');
   const swipe = swipeActions(st.tasks.find(t => t.id === item.dataset.id));
   const canSwipe = !!(swipe.right || swipe.left);

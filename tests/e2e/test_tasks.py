@@ -282,6 +282,28 @@ def test_list_switcher_goes_between_the_lists_and_keeps_its_counts(page, wiki):
     expect(page.locator(".tasks-places")).to_have_count(0)
 
 
+def test_a_cards_list_is_a_link_to_the_list(page, wiki):
+    # A click on the list a card names opens that list: a real link (so
+    # Ctrl+click opens it in a tab), underlined only under the pointer.
+    make_list(page, "shop")
+    page.request.post("/api/tasks", data={"title": "Milk", "list": "shop"})
+    page.request.post("/api/tasks", data={"title": "Loose"})
+    page.goto("/tasks?view=open&group=none")
+    chip = card(page, "Milk").locator("a.task-tag-list")
+    expect(chip).to_have_text("shop")
+    expect(chip).to_have_attribute("href", "/tasks?list=shop")
+    expect(card(page, "Loose").locator("a")).to_have_count(0)
+    assert "underline" not in chip.evaluate("el => getComputedStyle(el).textDecorationLine")
+    chip.hover()
+    assert "underline" in chip.evaluate("el => getComputedStyle(el).textDecorationLine")
+    chip.click()
+    page.wait_for_url(re.compile(r"/tasks\?list=shop$"))
+    expect(page.locator("h1")).to_contain_text("shop")
+    open_tab(page, "open")
+    expect(card(page, "Milk")).to_be_visible()
+    expect(card(page, "Milk").locator(".task-tag-list")).to_have_count(0)   # the list's own view doesn't repeat it
+
+
 def test_tasks_link_shows_my_tasks(page, wiki):
     # The Tasks link opens My tasks, one task app of every task but those of
     # a list left out of it, and counts what it shows; a pin decides nothing
