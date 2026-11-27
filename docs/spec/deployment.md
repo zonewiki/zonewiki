@@ -131,7 +131,7 @@ It works out and exports what compose interpolates:
 
 - A variable it exports wins over `.env`'s in compose's interpolation, so it reads `ZONE_BIND` and `ZONE_UID`/`ZONE_GID` from `.env` itself: what compose without `run.sh` takes from there holds with it too (a NAS whose wiki folder belongs to another user than who runs `run.sh`).
 
-- `TZ` makes "today" on the server (due count, tasks dates, note names, "Last changed") the user's day.
+- `TZ` makes "today" on the server (due count, tasks dates, note names, a page's "Changed …") the user's day.
 - With rootless podman it adds `compose.podman.yaml` (`userns_mode: keep-id`: the host user keeps its UID inside, so Zonewiki runs as you and the wiki's files stay yours); beside `compose.yaml` that file has to be there too, or it says so.
 - With rootless docker, which has no keep-id, `ZONE_UID`/`ZONE_GID` are 0 (the container's root is the host user there; another UID would be a subordinate one).
 

@@ -309,9 +309,15 @@ class TestHistory:
         assert b"/page/_deleted" in resp.data
 
     def test_page_view_shows_last_changed(self, client, wiki_dir):
+        """Only how long ago, short; the day and time on hover."""
         save(client, "p", "# P\n")
         html = client.get("/page/p", headers=HOST).get_data(as_text=True)
-        assert "Last changed" in html
+        m = re.search(r'<div class="page-meta"><span>Changed <time datetime="([^"]+)" title="([^"]+)">([^<]+)</time></span>', html)
+        assert m, html
+        assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(Z|[+-]\d\d:\d\d)", m[1])
+        assert re.fullmatch(r"\d{4}-\d\d-\d\d \d\d:\d\d", m[2]) and m[1].startswith(m[2][:10])
+        assert m[3] == "just now"
+        assert "Last changed" not in html
         assert "— uncommitted" not in html
         assert "commit-file-form" not in html
 
@@ -325,7 +331,7 @@ class TestHistory:
         assert "commit-file-form" in view() and "commit-file-form" in view()
         git(wiki_dir, "commit", "-q", "-m", "by hand", "--", "p.md")
         html = view()
-        assert "Last changed" in html and "commit-file-form" not in html
+        assert "Changed <time" in html and "commit-file-form" not in html
 
     def test_page_view_offers_commit_when_dirty(self, client, wiki_dir):
         save(client, "p", "# P\n")
@@ -674,7 +680,7 @@ class TestGitDisabled:
 
     def test_page_view_has_no_meta(self, nogit):
         html = nogit.get("/page/index", headers=HOST).get_data(as_text=True)
-        assert "Last changed" not in html
+        assert "Changed <time" not in html
 
     def test_no_history_no_deleted_pages(self, nogit, wiki_dir):
         assert history_labels(nogit, "index") == []

@@ -1,7 +1,7 @@
 {{- /* Parts of the page view (view.html) and the editor (edit.html). */ -}}
 
 {{- /* Commit form wired up by js/git.js (posts to /api/commit-file). inline:
-    a link-styled word at the end of "Last changed … — uncommitted". */}}
+    a link-styled word at the end of "Changed … — uncommitted". */}}
 {{define "commit_form" -}}
 <form class="commit-file-form" style="display:inline" data-filepath="{{.filepath}}" data-title="{{.title}}" data-on-success="{{.on_success}}"><button type="submit" class="{{if .inline}}commit-link{{else}}btn btn-primary{{end}}">Commit</button></form>
 {{- end}}
@@ -132,7 +132,7 @@
 </p><code title="{{.Link}}">{{.Link}}</code></div><button type="button" class="btn paste-hint-copy">{{if .Copied}}Copy{{else}}Copy link{{end}}</button><button type="button" class="paste-hint-close" aria-label="Close" title="Close">×</button></div>
 {{- end}}
 
-{{- /* Below the title: tags and the tldr toggle on the left, "Last changed"
+{{- /* Below the title: tags and the tldr toggle on the left, "Changed …"
     (and Commit while uncommitted) on the right. The tldr toggle is a
     checkbox before the row, its label inside, the text after it: as
     siblings the label stays on the tags line while the text takes a
@@ -141,7 +141,7 @@
 {{if or .TagsHTML .Tldr .Changed}}
 {{- if .Tldr}}<input type="checkbox" id="tldr-toggle" class="tldr-toggle">{{end -}}
 <div class="page-meta-wrapper"><div class="page-meta-left">{{.TagsHTML}}{{if .Tldr}}<label class="tldr-label" for="tldr-toggle">tldr</label>{{end}}</div><div class="page-meta-right">
-{{- with .Changed}}<div class="page-meta">Last changed {{.Date}} ({{.Rel}}){{if $.Commit}} — uncommitted{{end}}</div>{{end -}}
+{{- with .Changed}}<div class="page-meta"><span>Changed <time datetime="{{.ISO}}" title="{{.At}}">{{.Rel}}</time></span>{{if $.Commit}} — uncommitted{{end}}</div>{{end -}}
 {{- with .Commit}}{{template "commit_form" (dict "filepath" .Filepath "title" .Title "on_success" "reload" "inline" true)}}{{end -}}
 </div></div>
 {{- if .Tldr}}<p class="page-tldr">{{.Tldr}}</p>{{end}}

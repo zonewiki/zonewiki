@@ -165,7 +165,7 @@ It comes from:
 When there are some, a badge with their number appears at the top right, next to **Search**.
 Click it for **Uncommitted Changes**, the list of those files, with **Diff** to see the change and **View** to open the page.
 **Commit All** commits each file on its own.
-A page with an uncommitted change also says "— uncommitted" after **Last changed**, with a **Commit** link.
+A page with an uncommitted change also says "— uncommitted" after **Changed …**, with a **Commit** link.
 
 You rarely need to do this yourself.
 When someone else saves, renames or deletes a page that holds your uncommitted text, Zonewiki commits it first in your name,

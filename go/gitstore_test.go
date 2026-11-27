@@ -451,7 +451,7 @@ func TestLastChangedAsksGitOnce(t *testing.T) {
 	}
 	gitCommit("", "Add p", path)
 	changed, commit, asked := view()
-	if changed == nil || commit != nil || asked != 1 || changed.Date != now().Format("2006-01-02") || changed.Rel != "just now" {
+	if changed == nil || commit != nil || asked != 1 || !strings.HasPrefix(changed.At, now().Format("2006-01-02 ")) || changed.Rel != "just now" {
 		t.Fatalf("after Zonewiki's commit: %+v %v, asked %d", changed, commit, asked)
 	}
 	for range 3 {

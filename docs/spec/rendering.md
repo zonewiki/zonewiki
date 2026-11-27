@@ -88,7 +88,7 @@ The chevron hangs in the margin left of the heading from 800px wide (the copy-li
 A page is printed, or saved as a PDF, by the browser: **Print…** in the page's ⋯ menu opens the browser's print dialog, where a printer prints it and "Save as PDF" (the destination, in Chrome, Edge, Firefox and Safari alike) makes the file; Ctrl+P does the same.
 Zonewiki makes no PDF itself: no renderer on the server, and the file looks as the page does.
 
-- **What is on the paper** (`@media print` at the end of `style.css`): the page alone, its title, tags, "Last changed", the tldr (shown, not behind its switch) and the text, at the paper's width (`@page` margins 18mm and 16mm).
+- **What is on the paper** (`@media print` at the end of `style.css`): the page alone, its title, tags, "Changed …" (with its day and time, which a screen shows on hover), the tldr (shown, not behind its switch) and the text, at the paper's width (`@page` margins 18mm and 16mm).
   Not Zonewiki around it: the breadcrumb, the top row and the phone's bar, the side columns, Edit and ⋯, the section ✎ and task chips, what links to the page, the build string; a task list embed shows its tasks without its tabs, toolbar and menus.
   The sheet's border and padding go (the paper is the sheet).
 - **Always light**: the dark variables and dark rules are for screens (`@media screen and (prefers-color-scheme: dark)`), and code is highlighted with the light theme (`media="print, …"` on its stylesheet in `layout.html`), so a dark screen prints dark ink on white.
@@ -290,7 +290,7 @@ A page may start with a leading `---`-fenced block declaring these keys:
 | `sources:` | where the page's facts come from, a list |
 
 Any other key is parsed and ignored.
-Dates aren't fields: the page's history has them ("Last changed", and its revisions).
+Dates aren't fields: the page's history has them ("Changed …" under the title, and its revisions).
 
 ### A tldr over several lines
 
@@ -329,7 +329,7 @@ The live preview pane shows the parsed tldr/tags block (both, at the top of the 
 ### The meta row
 
 **`viewPage` is the exception**: it parses frontmatter itself and renders tags plus a tldr toggle in the `page-meta-wrapper` row below the H1 instead — together in `.page-meta-left` (tags pills then the `tldr` label, left-aligned),
-with "Last changed" right-aligned in `.page-meta-right`,
+with "Changed 3 days ago" right-aligned in `.page-meta-right`,
 followed,
 when the file is uncommitted,
 by a link-styled **Commit** (the `commit_form` template, inline, `.commit-link`) on the same line rather than a separate button row (`justify-content: space-between` on the wrapper).
@@ -341,7 +341,8 @@ It uses a small negative top margin (`margin: -1.1rem 0 1.5rem`) to sit close un
 
 #### Last changed
 
-What git says of the page for that line (`lastChanged` in `go/views.go`: changes not committed, or the last commit's day and time, shown as "3 days ago" in Zonewiki's own words) is kept per page while neither the page's file nor the repository changed (`changeStamp`: the file's time and size, and those of `.git/logs/HEAD` and `.git/index`, which Zonewiki's commits write and so do a commit, pull or checkout in a terminal),
+The line says only how long ago: "Changed 3 days ago", in Zonewiki's own words, in a `<time>` whose `title` holds the day and time (`2026-11-24 14:05`, the server's time zone), shown on hover and, on paper, after the words.
+What git says of the page for that line (`lastChanged` in `go/views.go`: changes not committed, so the file's time, or the last commit's time) is kept per page while neither the page's file nor the repository changed (`changeStamp`: the file's time and size, and those of `.git/logs/HEAD` and `.git/index`, which Zonewiki's commits write and so do a commit, pull or checkout in a terminal),
 so a view of a page seen before starts no git process;
 a repository without a reflog is asked at every view.
 

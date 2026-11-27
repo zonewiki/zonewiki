@@ -347,7 +347,7 @@ class TestViewPage:
         resp = client.get("/page/tagged2", headers=HOST)
         text = resp.data.decode()
         # Tags and the collapsed tldr toggle both live in the page-meta-wrapper
-        # row (same line as "Last changed"), and appear there exactly once —
+        # row (same line as "Changed …"), and appear there exactly once —
         # not duplicated in the article body.
         meta_start = text.index('class="page-meta-wrapper"')
         article_start = text.index('class="page-content"')

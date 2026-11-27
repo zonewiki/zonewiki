@@ -48,6 +48,11 @@ def test_print_shows_the_page_alone(page, wiki):
     expect(page.locator(".page-header h1")).to_be_visible()
     expect(page.locator("article table")).to_be_visible()
     expect(page.locator("article pre code")).to_be_visible()
+    # "Changed … ago" says its day and time on paper, where nothing hovers.
+    changed = page.locator(".page-meta time")
+    expect(changed).to_be_visible()
+    after = changed.evaluate("t => getComputedStyle(t, '::after').content")
+    assert after == '" (' + changed.get_attribute("title") + ')"', after
     # The text takes the sheet's width.
     article, main = box_of(page.locator("article")), box_of(page.locator("main"))
     assert article["width"] >= main["width"] - 2

@@ -2866,6 +2866,8 @@ a.external-image::before { content: "🖼 "; }
   /* The tldr is on the paper, not behind its switch. */
   .tldr-label { display: none; }
   .tldr-toggle ~ .page-tldr { display: block; margin: 0 0 1.5rem; }
+  /* "Changed 3 days ago" says its day and time on paper, where nothing hovers. */
+  .page-meta time::after { content: " (" attr(title) ")"; }
   /* A task list: its tasks, without what works them. */
   .tasks-header, .tasks-footer, .tasks-selbar, .task-actions { display: none !important; }
   .page-content { max-width: none; }

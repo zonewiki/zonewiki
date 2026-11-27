@@ -826,7 +826,7 @@ func pageMenu(rq *Req, slug, title, renameError, promoteError, appendError, rena
 	return m
 }
 
-// lastChanged: for the page's meta row, when it last changed ({date, rel}),
+// lastChanged: for the page's meta row, when it last changed,
 // and while it has uncommitted changes what its Commit needs. nil, nil
 // without git or history.
 // metaRowView: the row below a page's title (meta_row): its tags and tldr,
@@ -838,9 +838,10 @@ type metaRowView struct {
 	Commit   *commitView
 }
 
-// changedView: when a page last changed; commitView: the file its Commit
-// button commits.
-type changedView struct{ Date, Rel string }
+// changedView: when a page last changed (Rel, "3 days ago", shown; At, its
+// day and time, on hover and on paper; ISO, for <time>); commitView: the file
+// its Commit button commits.
+type changedView struct{ At, ISO, Rel string }
 type commitView struct{ Filepath, Title string }
 
 // lastChanged: when a page last changed, and its Commit button while it has
@@ -858,21 +859,24 @@ func lastChanged(slug, path, title string) (*changedView, *commitView) {
 	c := changeOf(slug, path, st)
 	switch {
 	case c.dirty:
-		return &changedView{st.ModTime().Format("2006-01-02"), relativeTime(st.ModTime())},
-			&commitView{slug + ".md", title}
-	case c.date != "":
-		return &changedView{c.date, relativeTime(c.at)}, nil
+		return changedAt(st.ModTime()), &commitView{slug + ".md", title}
+	case !c.at.IsZero():
+		return changedAt(c.at), nil
 	}
 	return nil, nil
 }
 
+func changedAt(t time.Time) *changedView {
+	t = t.In(now().Location())
+	return &changedView{t.Format("2006-01-02 15:04"), t.Format(time.RFC3339), relativeTime(t)}
+}
+
 // changeFacts: what git says of a page: it has changes not committed
-// (dirty), or its last commit's day (as git gives it) and time; neither for
+// (dirty), or its last commit's time; neither for
 // a page git doesn't know. stamp: what they were found under.
 type changeFacts struct {
 	stamp string
 	dirty bool
-	date  string
 	at    time.Time
 }
 
@@ -907,15 +911,12 @@ func changeOf(slug, path string, st os.FileInfo) changeFacts {
 	if r := runGit("--no-optional-locks", "status", "--porcelain", "--untracked-files=all", "--", slug+".md"); strings.TrimSpace(r.Stdout) != "" {
 		c.dirty = true
 	} else if rel, ok := wikiRel(path); ok {
-		// The day as the commit has it (%as, in its own time zone), as History shows it.
 		// The file is as committed under this name, so its latest commit is
 		// this name's (no --follow, which walks the whole history: 0.1 s at
 		// 200,000 commits, where the commit-graph's filters answer in 5 ms).
-		out := strings.TrimSpace(runGit("log", "-n", "1", "--format=%as\x1f%at", "--", rel).Stdout)
-		if day, unix, ok := strings.Cut(out, "\x1f"); ok {
-			if secs, err := strconv.ParseInt(unix, 10, 64); err == nil {
-				c.date, c.at = day, time.Unix(secs, 0)
-			}
+		out := strings.TrimSpace(runGit("log", "-n", "1", "--format=%at", "--", rel).Stdout)
+		if secs, err := strconv.ParseInt(out, 10, 64); err == nil {
+			c.at = time.Unix(secs, 0)
 		}
 	}
 	// The stamp is from before git was asked: a change meanwhile makes it

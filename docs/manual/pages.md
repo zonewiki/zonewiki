@@ -38,7 +38,7 @@ At the top of every page are its title, an **Edit** button (or press `e`) and a 
 | **Rename…** | gives the page a new name or folder (below) |
 | **Delete…** | deletes the page after asking (also Ctrl+Delete) |
 
-Under the title, a row shows the page's tags, a **tldr** switch for its summary, and **Last changed** with the date.
+Under the title, a row shows the page's tags, a **tldr** switch for its summary, and when it last changed (**Changed 3 days ago**; point at it for the day and time).
 A private page shows 🔒 beside its title, a group's page 👥 and the group's name.
 
 ### Copying a link
