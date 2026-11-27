@@ -28,7 +28,10 @@ def test_the_model_is_the_one_the_server_checks():
     a = args(stage("semantic"))
     assert f'defaultModel  = "{a["MODEL"]}"' in embed
     assert f'modelRevision = "{a["MODEL_REVISION"]}"' in embed
-    assert f'{{"onnx/model.onnx", "{a["MODEL_ONNX_SHA256"]}"}}' in embed
+    assert f'{{"model.safetensors", "{a["MODEL_WEIGHTS_SHA256"]}"}}' in embed
+    # The weights as the model's authors publish them (float16), not the
+    # ONNX export of them, twice the size for the same numbers.
+    assert f'"$base/model.safetensors"' in stage("semantic") and "onnx" not in stage("semantic")
     assert f'{{"tokenizer.json", "{a["MODEL_VOCAB_SHA256"]}"}}' in embed
 
 

@@ -1,7 +1,8 @@
 // Package encoder runs the embedding model, jina-embeddings-v2-base-de, in
 // Go: a BERT encoder with ALiBi attention and a gated GELU feed-forward
-// (JinaBERT), its weights read from the model's ONNX file. Nearly all the
-// work is matrix multiplication, done with Go's simd package (matmul.go).
+// (JinaBERT), its weights read from the model's safetensors file and kept
+// as it has them, in float16. Nearly all the work is matrix
+// multiplication, done with Go's simd package (matmul.go).
 package encoder
 
 import (
@@ -9,14 +10,11 @@ import (
 	"fmt"
 	"math"
 	"os"
-	"regexp"
-	"strconv"
 )
 
 type norm struct{ w, b []float32 }
 
-// linear: x·w + b, w (in×out, as ONNX's MatMul takes it) packed for the
-// kernel, with its bias.
+// linear: x·w + b, w (in×out) packed for the kernel, with its bias.
 type linear struct {
 	w       packed
 	in, out int
@@ -34,7 +32,7 @@ type layer struct {
 // goroutines at once.
 type Model struct {
 	// mem holds the big weights outside Go's heap (arena.go): the garbage
-	// collector lets a heap grow to twice what is live in it, and 0.64 GB
+	// collector lets a heap grow to twice what is live in it, and 0.3 GB
 	// of weights there would let as much garbage pile up beside them.
 	mem    arena
 	closed bool
@@ -42,7 +40,7 @@ type Model struct {
 	dim, heads, ff int
 	vocab          int
 	eps            float32
-	word           []float32 // vocab×dim
+	word           []uint16  // vocab×dim, float16
 	typ0           []float32 // token type 0's embedding (all tokens are type 0)
 	embLN          norm
 	layers         []layer
@@ -51,10 +49,8 @@ type Model struct {
 
 func (m *Model) Dim() int { return m.dim }
 
-var matmulRE = regexp.MustCompile(`^/encoder/layer\.(\d+)/(attention/self/query|attention/self/key|attention/self/value|attention/output/dense|mlp/gated_layers|mlp/wo)/MatMul_output_0$`)
-
-// Load reads the model from its ONNX file. The file is never in memory as
-// a whole: its big tensors are read where they are in it, a megabyte at a
+// Load reads the model from its safetensors file. The file is never in
+// memory as a whole: a tensor is read where it is in it, a megabyte at a
 // time, straight into what the model keeps, so loading takes little more
 // memory than the loaded model.
 func Load(path string) (*Model, error) {
@@ -67,12 +63,12 @@ func Load(path string) (*Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	g, err := parseModelFile(f, st.Size())
+	src, err := openTensors(f, st.Size())
 	if err != nil {
 		return nil, err
 	}
 	m := &Model{heads: 12, eps: 1e-12}
-	if err := m.load(g, &tensorReader{r: f}); err != nil {
+	if err := m.load(src); err != nil {
 		m.Close()
 		return nil, err
 	}
@@ -87,78 +83,67 @@ func (m *Model) Close() {
 	m.mem.free()
 }
 
-// load fills the model from the file's graph and its tensors. The big
-// ones (the word embeddings, the layers' matrices) go into m.mem, outside
-// the garbage collector's heap.
-func (m *Model) load(g *graph, src *tensorReader) error {
+// load fills the model from the file's tensors. The big ones (the word
+// embeddings, the layers' matrices) stay float16, as the file has them,
+// and go into m.mem, outside the garbage collector's heap; the small ones
+// (biases, norms) are widened to float32 here.
+func (m *Model) load(src *tensorFile) error {
 	vec := func(name string, n int) ([]float32, error) {
-		t := g.weights[name]
-		if t == nil || t.dtype != 1 || t.count() != n {
-			return nil, fmt.Errorf("encoder: %s: missing or not %d floats", name, n)
+		h := make([]uint16, n)
+		if err := src.read(name, []int{n}, h, 0); err != nil {
+			return nil, err
 		}
 		out := make([]float32, n)
-		return out, src.read(t, out, 0)
+		for i, x := range h {
+			out[i] = half(x)
+		}
+		return out, nil
 	}
-	word := g.weights["embeddings.word_embeddings.weight"]
-	if word == nil || len(word.dims) != 2 || word.dtype != 1 {
+	const wordName = "embeddings.word_embeddings.weight"
+	shape := src.shape(wordName)
+	if len(shape) != 2 || shape[0] < 1 || shape[1] < 1 {
 		return fmt.Errorf("encoder: no word embeddings")
 	}
-	m.vocab, m.dim = word.dims[0], word.dims[1]
-	m.word = m.mem.floats(m.vocab * m.dim)
-	if err := src.read(word, m.word, 0); err != nil {
+	m.vocab, m.dim = shape[0], shape[1]
+	d := m.dim
+	if d%m.heads != 0 {
+		return fmt.Errorf("encoder: %d dimensions for %d heads", d, m.heads)
+	}
+	m.word = m.mem.halves(m.vocab * d)
+	if err := src.read(wordName, shape, m.word, 0); err != nil {
 		return err
 	}
-	typ, err := vec("embeddings.token_type_embeddings.weight", 2*m.dim)
-	if err != nil {
+	// Two token types, the first for every token: only its row is kept.
+	h := make([]uint16, d)
+	if err := src.read("embeddings.token_type_embeddings.weight", []int{2, d}, h, 0); err != nil {
 		return err
 	}
-	m.typ0 = typ[:m.dim]
-	if m.embLN, err = loadNorm(vec, "embeddings.LayerNorm", m.dim); err != nil {
+	m.typ0 = make([]float32, d)
+	for i, x := range h {
+		m.typ0[i] = half(x)
+	}
+	var err error
+	if m.embLN, err = loadNorm(vec, "embeddings.LayerNorm", d); err != nil {
 		return err
 	}
 
-	// The MatMul weights have no names of their own (onnx::MatMul_1704):
-	// the node that uses one says which it is.
-	type key struct {
-		layer int
-		role  string
-	}
-	mats := map[key]*tensor{}
-	nlayers := 0
-	for _, n := range g.nodes {
-		if n.op != "MatMul" || len(n.inputs) != 2 || len(n.outputs) != 1 {
-			continue
-		}
-		sm := matmulRE.FindStringSubmatch(n.outputs[0])
-		w := g.weights[n.inputs[1]]
-		if sm == nil || w == nil {
-			continue
-		}
-		l, _ := strconv.Atoi(sm[1])
-		mats[key{l, sm[2]}] = w
-		nlayers = max(nlayers, l+1)
-	}
-	if nlayers == 0 {
-		return fmt.Errorf("encoder: no layers")
-	}
-	lin := func(l int, role, bias string, in, out int) (linear, error) {
-		w := mats[key{l, role}]
-		if w == nil || w.dtype != 1 || len(w.dims) != 2 || w.dims[0] != in || w.dims[1] != out {
-			return linear{}, fmt.Errorf("encoder: layer %d %s: missing or not %d×%d", l, role, in, out)
-		}
-		// Packed some rows at a time, as they come from the file.
-		r := linear{w: newPackedIn(m.mem.floats, in, out), in: in, out: out}
-		block := max(1, (1<<18)/out)
-		rows := make([]float32, block*out)
-		for p := 0; p < in; p += block {
-			n := min(block, in-p)
-			if err := src.read(w, rows[:n*out], p*out); err != nil {
+	// lin: a layer's matrix, in the file as PyTorch keeps a Linear's, out×in
+	// (the transpose of what the product takes), packed some of its rows at
+	// a time, as they come from the file.
+	lin := func(l int, name string, bias bool, in, out int) (linear, error) {
+		name = fmt.Sprintf("encoder.layer.%d.%s", l, name)
+		r := linear{w: newPackedHalf(m.mem.halves, in, out), in: in, out: out}
+		block := max(1, (1<<18)/in)
+		rows := make([]uint16, block*in)
+		for j := 0; j < out; j += block {
+			n := min(block, out-j)
+			if err := src.read(name+".weight", []int{out, in}, rows[:n*in], j*in); err != nil {
 				return linear{}, err
 			}
-			r.w.setRows(p, n, rows, out)
+			r.w.setColumnHalves(j, n, rows)
 		}
-		if bias != "" {
-			b, err := vec(fmt.Sprintf("encoder.layer.%d.%s.bias", l, bias), out)
+		if bias {
+			b, err := vec(name+".bias", out)
 			if err != nil {
 				return linear{}, err
 			}
@@ -166,20 +151,29 @@ func (m *Model) load(g *graph, src *tensorReader) error {
 		}
 		return r, nil
 	}
-	if gw := mats[key{0, "mlp/gated_layers"}]; gw != nil && len(gw.dims) == 2 {
-		m.ff = gw.dims[1] / 2
+	nlayers := 0
+	for src.shape(fmt.Sprintf("encoder.layer.%d.attention.self.query.weight", nlayers)) != nil {
+		nlayers++
 	}
-	d, ff := m.dim, m.ff
+	if nlayers == 0 {
+		return fmt.Errorf("encoder: no layers")
+	}
+	gate := src.shape("encoder.layer.0.mlp.gated_layers.weight")
+	if len(gate) != 2 || gate[0] < 2 || gate[0]%2 != 0 {
+		return fmt.Errorf("encoder: no feed-forward")
+	}
+	m.ff = gate[0] / 2
+	ff := m.ff
 	for l := 0; l < nlayers; l++ {
 		var L layer
 		var err error
 		steps := []func() error{
-			func() error { L.q, err = lin(l, "attention/self/query", "attention.self.query", d, d); return err },
-			func() error { L.k, err = lin(l, "attention/self/key", "attention.self.key", d, d); return err },
-			func() error { L.v, err = lin(l, "attention/self/value", "attention.self.value", d, d); return err },
-			func() error { L.o, err = lin(l, "attention/output/dense", "attention.output.dense", d, d); return err },
-			func() error { L.gate, err = lin(l, "mlp/gated_layers", "", d, 2*ff); return err },
-			func() error { L.down, err = lin(l, "mlp/wo", "mlp.wo", ff, d); return err },
+			func() error { L.q, err = lin(l, "attention.self.query", true, d, d); return err },
+			func() error { L.k, err = lin(l, "attention.self.key", true, d, d); return err },
+			func() error { L.v, err = lin(l, "attention.self.value", true, d, d); return err },
+			func() error { L.o, err = lin(l, "attention.output.dense", true, d, d); return err },
+			func() error { L.gate, err = lin(l, "mlp.gated_layers", false, d, 2*ff); return err },
+			func() error { L.down, err = lin(l, "mlp.wo", true, ff, d); return err },
 			func() error {
 				L.ln1, err = loadNorm(vec, fmt.Sprintf("encoder.layer.%d.attention.output.LayerNorm", l), d)
 				return err
@@ -195,9 +189,6 @@ func (m *Model) load(g *graph, src *tensorReader) error {
 			}
 		}
 		m.layers = append(m.layers, L)
-	}
-	if d%m.heads != 0 {
-		return fmt.Errorf("encoder: %d dimensions for %d heads", d, m.heads)
 	}
 	m.slopes = alibiSlopes(m.heads)
 	return nil
@@ -310,7 +301,7 @@ func (m *Model) forwardIn(texts [][]int, ws *workspace) ([]float32, error) {
 			}
 			row, w := x[r*d:(r+1)*d], m.word[id*d:(id+1)*d]
 			for j := range row {
-				row[j] = w[j] + m.typ0[j]
+				row[j] = half(w[j]) + m.typ0[j]
 			}
 			r++
 		}

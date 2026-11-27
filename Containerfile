@@ -72,7 +72,7 @@ FROM ${UBUNTU} AS semantic
 ARG ZONE_SEMANTIC_SEARCH=
 ARG MODEL=jinaai/jina-embeddings-v2-base-de
 ARG MODEL_REVISION=3f9eede875721714945b6a99a3198299243cf2be
-ARG MODEL_ONNX_SHA256=51654b7441fbfcfef6598b01cbd1ea925ca0f0cad81202fcd36fee325783f1b0
+ARG MODEL_WEIGHTS_SHA256=0ffca9240c502ef64a63917baf0e60648a7a438dfd49a4f91ad4d5dab3428cf8
 ARG MODEL_VOCAB_SHA256=376c53a06d6911569afc19f584002a11dbcd6b871afb6d96b8600eb3c4e7e7a7
 RUN mkdir -p /opt/zonewiki-model \
  && case "$(echo "$ZONE_SEMANTIC_SEARCH" | tr '[:upper:]' '[:lower:]' | tr -d ' ')" in \
@@ -83,10 +83,9 @@ RUN mkdir -p /opt/zonewiki-model \
  && apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates curl \
  && base="https://huggingface.co/${MODEL}/resolve/${MODEL_REVISION}" \
- && mkdir -p /opt/zonewiki-model/onnx \
- && curl -sSfL -o /opt/zonewiki-model/onnx/model.onnx "$base/onnx/model.onnx" \
+ && curl -sSfL -o /opt/zonewiki-model/model.safetensors "$base/model.safetensors" \
  && curl -sSfL -o /opt/zonewiki-model/tokenizer.json "$base/tokenizer.json" \
- && printf '%s  %s\n' "$MODEL_ONNX_SHA256" /opt/zonewiki-model/onnx/model.onnx \
+ && printf '%s  %s\n' "$MODEL_WEIGHTS_SHA256" /opt/zonewiki-model/model.safetensors \
       "$MODEL_VOCAB_SHA256" /opt/zonewiki-model/tokenizer.json | sha256sum -c - \
  && chmod -R a+rX /opt/zonewiki-model \
  && rm -rf /var/lib/apt/lists/*

@@ -195,8 +195,8 @@ const (
 )
 
 var modelFiles = []struct{ name, sha256 string }{
-	{"onnx/model.onnx", "51654b7441fbfcfef6598b01cbd1ea925ca0f0cad81202fcd36fee325783f1b0"},
-	{"tokenizer.json", "376c53a06d6911569afc19f584002a11dbcd6b871afb6d96b8600eb3c4e7e7a7"}, // gitleaks:allow
+	{"model.safetensors", "0ffca9240c502ef64a63917baf0e60648a7a438dfd49a4f91ad4d5dab3428cf8"}, // gitleaks:allow
+	{"tokenizer.json", "376c53a06d6911569afc19f584002a11dbcd6b871afb6d96b8600eb3c4e7e7a7"},    // gitleaks:allow
 }
 
 // Similarity floors per model, (search, related, tasks):

@@ -6,6 +6,6 @@ package encoder
 // in Go's heap (arena_mmap.go says what that costs).
 type arena struct{}
 
-func (a *arena) floats(n int) []float32 { return make([]float32, n) }
-func (a *arena) free()                  {}
-func (a *arena) held() int              { return 0 }
+func (a *arena) halves(n int) []uint16 { return make([]uint16, n) }
+func (a *arena) free()                 {}
+func (a *arena) held() int             { return 0 }

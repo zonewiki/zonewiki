@@ -35,6 +35,17 @@ func kernel1(c, a, bp []float32) {
 	}
 }
 
+// widen: dst is src's float16s as float32s. src is in rows of 2·width,
+// a row's two halves by turns (halfSlot).
+func widen(dst []float32, src []uint16) {
+	const pw = 2 * width
+	for r := 0; r+pw <= len(src); r += pw {
+		for i := 0; i < width; i++ {
+			dst[r+i], dst[r+width+i] = half(src[r+2*i]), half(src[r+2*i+1])
+		}
+	}
+}
+
 // scaleAddMax: s[j] = s[j]·scale + add[j] for all j, and the largest of
 // them (attention's scores, scaled, with their ALiBi bias).
 func scaleAddMax(s, add []float32, scale float32) float32 {

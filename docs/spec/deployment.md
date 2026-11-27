@@ -314,7 +314,7 @@ CI's test job fails a `v*` tag that isn't (`./run.sh test`, from `GITHUB_REF`), 
 
 - Zonewiki's server with its own files built in (What the binary holds, above): the browser code, Help's docs, the licenses (`zonewiki licenses`).
 - Built without cgo (`CGO_ENABLED=0`), so statically linked on Linux, and with Go's `simd` experiment (the tools image's `GOEXPERIMENT=simd`).
-  Semantic search works in it as in the image (`ZONE_SEMANTIC_SEARCH=on`): the binary runs the model itself and downloads its files (0.64 GB, checked against their hashes) to `~/.cache/zonewiki/` when first used.
+  Semantic search works in it as in the image (`ZONE_SEMANTIC_SEARCH=on`): the binary runs the model itself and downloads its files (0.32 GB, checked against their hashes) to `~/.cache/zonewiki/` when first used.
 - 24 to 26 MB each (`-trimpath -ldflags="-s -w"`); the build string is the tagged commit and its date, from `go build`'s own record of the checkout (`sourceBuild`, Version below).
 - It needs git at run time, for the wiki's history: Zonewiki looks for it on `PATH` at start (`exec.LookPath`) and without it runs with no history, versions or undo.
 - Started with nothing set, the wiki is `~/zonewiki`, made at the first start (Data directory, below), and it listens on port 5080 of localhost only (`127.0.0.1:5080`), printing where to open it.

@@ -28,7 +28,10 @@ type packed struct {
 	pw     int
 	panels int
 	data   []float32 // panels × k × pw
-	bias   []float32 // panels × pw: what a product starts from; nil for zero
+	// half: instead of data, the same in float16 (a layer's weights;
+	// half.go), each row's two vectors with their halves by turns.
+	half []uint16
+	bias []float32 // panels × pw: what a product starts from; nil for zero
 }
 
 func panelsFor(m int) (pw, panels int) {
@@ -128,11 +131,20 @@ func gemm(c, a mat, B *packed, i0, i1, p0, p1 int) {
 	}
 	chunk := max(8, chunkBytes/(pw*4))
 	var tmp [4 * maxPanel]float32
+	// wide: a chunk of float16 weights as float32, for the kernel: made
+	// once per chunk and panel, used for every row of the job.
+	var wide [chunkBytes / 4]float32 // chunk·pw floats at most
 	for k0 := 0; k0 < k; k0 += chunk {
 		k1 := min(k, k0+chunk)
 		for pn := p0; pn < p1; pn++ {
 			j := pn * pw
-			bp := B.data[(pn*k+k0)*pw : (pn*k+k1)*pw]
+			var bp []float32
+			if B.half != nil {
+				bp = wide[:(k1-k0)*pw]
+				widen(bp, B.half[(pn*k+k0)*pw:(pn*k+k1)*pw])
+			} else {
+				bp = B.data[(pn*k+k0)*pw : (pn*k+k1)*pw]
+			}
 			if j+pw > B.m {
 				// The last panel, not full: by way of tmp.
 				cols := B.m - j

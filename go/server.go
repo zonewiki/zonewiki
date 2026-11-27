@@ -65,7 +65,7 @@ Environment:
   ZONE_BIND                  the address the container's port is published on (compose sets it): not
                              localhost's, and no login yet, Zonewiki asks for a password in the browser first
   ZONE_HOST_DATA             the wiki's folder as the host sees it, for the MCP tools' file: lines
-  ZONE_SEMANTIC_SEARCH       on: semantic search besides keywords (a model of 0.64 GB)
+  ZONE_SEMANTIC_SEARCH       on: semantic search besides keywords (a model of 0.32 GB)
   ZONE_MODEL_DIR             where the semantic model's files are
   ZONE_PUBLIC                view: anyone reads the shared pages without signing in; edit: and edits
                              them (needs users; no tasks, notes or private pages for visitors)

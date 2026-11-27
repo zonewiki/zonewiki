@@ -380,13 +380,13 @@ The search dialog shows whether it is on (Search mode in `navigation.md`).
 Set,
 `run.sh` passes the setting as a build arg and the `Containerfile`'s `semantic` stage fetches the model's files at a fixed revision,
 each checked against its SHA-256 (the same as `modelRevision`, `modelFiles`),
-into `ZONE_MODEL_DIR=/opt/zonewiki-model`: the image grows by about 0.65 GB,
+into `ZONE_MODEL_DIR=/opt/zonewiki-model`: the image grows by about 0.33 GB,
 and the first search doesn't wait for a download.
 That stage copies nothing from the repo, so its layer is rebuilt only when the model changes, not on every code change.
 Without the container (a binary you built or downloaded) the model goes to `~/.cache/zonewiki/`, downloaded on first use (`downloadModel`, the same hashes); nothing else is needed.
 A bad setting or a failing model (its files missing and not to be had, say) is logged (`[semantic] …`) and search falls back to keywords.
 
-The model takes about 0.7 GB of memory once it is loaded (when the wiki is first embedded or searched), and up to about 0.4 GB more while it embeds a batch of long texts, which Go gives back afterwards.
+The model takes about 0.35 GB of memory once it is loaded (when the wiki is first embedded or searched), and up to about 0.4 GB more while it embeds a batch of long texts, which Go gives back afterwards.
 
 ### The model
 
@@ -406,16 +406,19 @@ and the cache keeps its name `fastembed:<model>`, so it stays valid.
 12 layers of 768 dimensions.
 No runtime or library is loaded and nothing is linked: the binary is built without cgo, and semantic search works in every build, the release binaries included.
 
-- **The weights** come from the model's ONNX file, the one whose hash is pinned (`onnxfile.go`, `onnxstream.go`: just enough of the file's protobuf, with no library).
-  The file is never in memory as a whole: nodes and small tensors are read whole, a big tensor a megabyte at a time into what the model keeps (`Load`), so loading takes little more memory than the loaded model.
-  A matrix has no name of its own in the file; the node that multiplies by it says which layer's it is.
+- **The weights** come from the model's `model.safetensors`, the file its authors publish them in and whose hash is pinned (`safetensors.go`: a JSON header saying where each tensor's bytes are).
+  The file is never in memory as a whole: a tensor is read a megabyte at a time into what the model keeps (`Load`), so loading takes little more memory than the loaded model.
+  A header that points outside its file, or says a shape its bytes aren't, is refused when the file is opened.
+- **Float16**: the file's weights are float16, and the model keeps them so (`half.go`), half the memory of float32.
+  A product widens the piece of a matrix it is about to use, exactly, into a buffer that stays in the first cache (`widen`, `gemm`), once for all the rows that go past it, so it costs next to nothing.
+  (The ONNX export of the model, which onnxruntime ran, holds the same numbers as float32, at twice the size.)
 - **The arithmetic** is nearly all matrix products, done in vectors with Go's `simd` package (`kernels_simd.go`): AVX-512, AVX2 or NEON, whichever the machine has, chosen when it runs.
   That package is an experiment of Go 1.27 (`GOEXPERIMENT=simd` at build time), which both Containerfiles set.
   A build without it (a plain `go build`) has the same arithmetic in loops (`kernels_plain.go`): the same vectors within rounding, many times slower, and the log says so when the model loads.
   `./run.sh test` runs the package's tests both ways.
 - **A product** `c = a·B` has `B` (a layer's weights, packed once when loaded; a head's keys and values, packed per layer) laid out in the order the kernel reads it (`packed`, `gemm` in `matmul.go`),
   and is cut into jobs for all CPUs (`product`).
-- **Memory**: the weights (0.64 GB) are outside Go's heap, in memory mapped from the system (`arena_mmap.go`, on Linux and macOS; in the heap elsewhere),
+- **Memory**: the weights (0.31 GB) are outside Go's heap, in memory mapped from the system (`arena_mmap.go`, on Linux and macOS; in the heap elsewhere),
   since the garbage collector lets a heap grow to twice what is live in it: with the weights there, as much garbage again could pile up beside them, from whatever the server does.
   A forward pass's working memory (up to about 170 MB) is a `workspace`'s, kept for the next batch in a pool that lets go of it when the server is idle (`workspace.go`).
 - **A batch's texts** go through the linear layers together, at most 2048 tokens at a time (`batchTokens`), and each attends to its own tokens only (`attention.go`),

@@ -424,7 +424,7 @@ func TestSemanticSettings(t *testing.T) {
 // The model's files are checked against their hashes, and those there are
 // not fetched again.
 func TestDownloadModel(t *testing.T) {
-	files := map[string]string{"onnx/model.onnx": "weights", "tokenizer.json": "vocab"}
+	files := map[string]string{"sub/model.safetensors": "weights", "tokenizer.json": "vocab"}
 	var fetched []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		name := strings.TrimPrefix(r.URL.Path, "/")
@@ -437,22 +437,22 @@ func TestDownloadModel(t *testing.T) {
 	modelURL = func(name string) string { return srv.URL + "/" + name }
 	sum := func(s string) string { h := sha256.Sum256([]byte(s)); return hex.EncodeToString(h[:]) }
 	modelFiles = []struct{ name, sha256 string }{
-		{"onnx/model.onnx", sum("weights")}, {"tokenizer.json", sum("vocab")}}
+		{"sub/model.safetensors", sum("weights")}, {"tokenizer.json", sum("vocab")}}
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "tokenizer.json"), []byte("vocab"), 0o666)
-	if err := downloadModel(dir); err != nil || !reflect.DeepEqual(fetched, []string{"onnx/model.onnx"}) {
+	if err := downloadModel(dir); err != nil || !reflect.DeepEqual(fetched, []string{"sub/model.safetensors"}) {
 		t.Fatalf("fetched %v: %v", fetched, err)
 	}
-	if readFile(t, filepath.Join(dir, "onnx", "model.onnx")) != "weights" || !modelPresent(dir) {
+	if readFile(t, filepath.Join(dir, "sub", "model.safetensors")) != "weights" || !modelPresent(dir) {
 		t.Error("not downloaded")
 	}
 
-	files["onnx/model.onnx"] = "tampered"
+	files["sub/model.safetensors"] = "tampered"
 	dir = t.TempDir()
 	if err := downloadModel(dir); err == nil || !strings.Contains(err.Error(), "SHA-256") {
 		t.Errorf("a changed file: %v", err)
 	}
-	if exists(filepath.Join(dir, "onnx", "model.onnx")) || exists(filepath.Join(dir, "onnx", "model.onnx.part")) {
+	if exists(filepath.Join(dir, "sub", "model.safetensors")) || exists(filepath.Join(dir, "sub", "model.safetensors.part")) {
 		t.Error("a changed file kept")
 	}
 }

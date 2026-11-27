@@ -190,7 +190,7 @@ func TestAlibiSlopes(t *testing.T) {
 }
 
 // BenchmarkHidden: one text of n tokens through the model
-// (ZONE_ENCODER_MODEL=model.onnx).
+// (ZONE_ENCODER_MODEL=model.safetensors).
 func BenchmarkHidden(b *testing.B) {
 	m := testModel(b)
 	r := rand.New(rand.NewSource(4))
@@ -210,7 +210,7 @@ func BenchmarkHidden(b *testing.B) {
 }
 
 // A text's hidden state is the same in a batch as alone, whatever it is
-// batched with (ZONE_ENCODER_MODEL=model.onnx).
+// batched with (ZONE_ENCODER_MODEL=model.safetensors).
 func TestBatchIsEachAlone(t *testing.T) {
 	m := testModel(t)
 	r := rand.New(rand.NewSource(6))

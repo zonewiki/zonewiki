@@ -99,6 +99,27 @@ func kernel1(c, a, bp []float32) {
 	c1.Store(c[w:])
 }
 
+// widen: dst is src's float16s as float32s, exactly (no infinity or NaN
+// among them). src is in rows of two vectors, their halves by turns
+// (halfSlot): read as one vector of 32-bit lanes, a lane's low half is the
+// first vector's float and its high half the second's. A float16's 15
+// bits, moved up 13, are a float32 that is 2^112 too small, subnormals
+// too; the sign goes on after.
+func widen(dst []float32, src []uint16) {
+	w := simd.Float32s{}.Len() // a constant where the compiler makes the function per width
+	mask, sign := simd.BroadcastUint32s(0x7fff), simd.BroadcastUint32s(0x8000)
+	magic := simd.BroadcastFloat32s(0x1p112)
+	dst = dst[:len(src)]
+	for i := 0; i+2*w <= len(src); i += 2 * w {
+		lo := simd.LoadUint16s(src[i:]).ReshapeToUint32s()
+		hi := lo.ShiftAllRight(16)
+		a := lo.And(mask).ShiftAllLeft(13).BitsToFloat32().Mul(magic).ToBits().Or(lo.And(sign).ShiftAllLeft(16)).BitsToFloat32()
+		b := hi.And(mask).ShiftAllLeft(13).BitsToFloat32().Mul(magic).ToBits().Or(hi.And(sign).ShiftAllLeft(16)).BitsToFloat32()
+		a.Store(dst[i:])
+		b.Store(dst[i+w:])
+	}
+}
+
 // expConsts: what exp needs, made once per loop.
 type expConsts struct {
 	lo, log2e, magic, ln2hi, ln2lo simd.Float32s

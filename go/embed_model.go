@@ -1,5 +1,5 @@
 // The model, run by Zonewiki itself (internal/encoder: the model's network
-// in Go, on the weights in its ONNX file), with its tokenizer
+// in Go, on the weights in its safetensors file), with its tokenizer
 // (internal/tokenizer). Nothing else is loaded: no runtime, no library.
 // Until 2026-11 onnxruntime ran it; the vectors are the same to seven
 // digits (a cosine of 0.9999999 and more between the two), so a cache from
@@ -59,7 +59,7 @@ func (e *modelEmbedder) load() (*tokenizer.Tokenizer, *encoder.Model, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	model, err := encoder.Load(filepath.Join(e.folder, "onnx", "model.onnx"))
+	model, err := encoder.Load(filepath.Join(e.folder, "model.safetensors"))
 	if err != nil {
 		return nil, nil, err
 	}

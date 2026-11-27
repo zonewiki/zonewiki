@@ -8,26 +8,26 @@ import (
 	"testing"
 )
 
-// The arena's floats are zeroed, can be written, and are gone with free.
+// The arena's float16s are zeroed, can be written, and are gone with free.
 func TestArena(t *testing.T) {
 	var a arena
-	if a.floats(0) != nil {
-		t.Error("no floats: not nil")
+	if a.halves(0) != nil {
+		t.Error("no float16s: not nil")
 	}
-	x, y := a.floats(1000), a.floats(300_000)
-	for _, s := range [][]float32{x, y} {
+	x, y := a.halves(1000), a.halves(300_000)
+	for _, s := range [][]uint16{x, y} {
 		for i, v := range s {
 			if v != 0 {
 				t.Fatalf("[%d] = %v, not zeroed", i, v)
 			}
-			s[i] = float32(i)
+			s[i] = uint16(i)
 		}
 	}
-	if x[999] != 999 || y[299_999] != 299_999 {
+	if x[999] != 999 || y[299_999] != 299_999%65536 {
 		t.Error("a write is lost")
 	}
 	if runtime.GOOS == "linux" || runtime.GOOS == "darwin" {
-		if got := a.held(); got != 4*(1000+300_000) {
+		if got := a.held(); got != 2*(1000+300_000) {
 			t.Errorf("holds %d bytes", got)
 		}
 	}
@@ -111,7 +111,7 @@ func TestTheModelIsNotInTheHeap(t *testing.T) {
 	}
 	before := heap()
 	m := testModel(t)
-	if got := m.mem.held(); got < 500<<20 {
+	if got := m.mem.held(); got < 250<<20 {
 		t.Errorf("the arena holds %d MB, the weights are more", got>>20)
 	}
 	if grown := int64(heap()) - int64(before); grown > 20<<20 {
