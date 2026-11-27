@@ -151,6 +151,28 @@ def test_the_assistants_tools_take_them(client, wiki):
     assert WORD not in mcp(client, "alice", "search_tasks", query=f"{WORD} is:page", status="all")
 
 
+def close(client, title, **how):
+    tid = next(r["task_id"] for r in search(client, WORD) if r.get("type") == "task" and r["title"].endswith(title))
+    assert client.put(f"/api/tasks/{tid}", json=how or {"completed": True}, headers=HOST).status_code == 200
+
+
+def test_is_open_and_is_done_go_by_a_tasks_status(client, wiki):
+    """is:open keeps the open tasks alone, is:done the done ones and those
+    closed as won't do; -is:done leaves those out and the pages in."""
+    close(client, TASKS["shared"])
+    close(client, TASKS["group"], wont_do=True)
+    done = {TASKS["shared"], TASKS["group"]}
+    assert found(search(client, f"{WORD} is:open")) == {TASKS["private"]}
+    assert found(search(client, f"{WORD} is:done")) == done
+    assert found(search(client, f"{WORD} is:open is:done")) == set(TASKS.values())
+    assert found(search(client, f"{WORD} -is:done")) == ALL_OF_ALICE - done
+    assert found(search(client, f"{WORD} is:done in:dev")) == {TASKS["group"]}
+    assert found(search(client, "is:done")) == done                      # alone: listed, newest first
+    assert TASKS["shared"] in mcp(client, "alice", "search_wiki", query=f"{WORD} is:done")
+    text = mcp(client, "alice", "search_tasks", query="is:open", status="all")
+    assert TASKS["private"] in text and TASKS["shared"] not in text
+
+
 def test_without_users_everything_is_everyones(client, wiki_dir):
     write_page(wiki_dir, "birds", f"# Birds\n\nA {WORD}.\n")
     write_page(wiki_dir, f"2026-10-27_09-00-00_{WORD}", f"# Note\n\nA {WORD}.\n")

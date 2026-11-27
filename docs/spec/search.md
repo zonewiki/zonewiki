@@ -30,6 +30,8 @@ A query is words, and what filters them (`Query`, the same in `/api/search`, `/s
 | `-before:` | = `after:` | `-before:2026-08` |
 | `is:` | Only this kind: `page` (a page that is no note), `task`, `note` | `is:task` |
 | `-is:` | Not this kind | `-is:note` |
+| `is:open`, `is:done` | Only tasks of this status: open, or done (done or won't do) | `is:open` |
+| `-is:open`, `-is:done` | Not tasks of this status; pages stay | `-is:done` |
 | `in:` | Only what is kept there: `everyone`, `private` (your own), a group's name | `in:dev` |
 | `-in:` | Not what is kept there | `-in:private` |
 
@@ -43,9 +45,11 @@ Each such word is compared with every word of the index, so before these limits 
 
 ### Kinds and places
 
-`is:` and `in:` say which docs a search wants, by what they are and where they are kept (`Query.Kinds`, `Places` and their exclusions, parsed by `ParseQuery`; `acceptsWhere` in `go/retrieval.go` asks them of a doc):
+`is:` and `in:` say which docs a search wants, by what they are, where they are kept and, for a task, how far it is (`Query.Kinds`, `Places`, `Statuses` and their exclusions, parsed by `ParseQuery`; `acceptsWhere` in `go/retrieval.go` asks them of a doc):
 
 - **The kind** is a task's for a task, a note's for a page whose slug is a note's (`isQuicknote`: at the top level or at the top of a user's private folder, as the Notes page lists them), a page's for any other page or section.
+- **The status** is a task's alone: `open` while it isn't done (`Task.IsOpen`), `done` once it is done or closed as won't do, as the search's results say it (`taskStatus`).
+  So `is:open` and `is:done` keep tasks only, and `-is:done` leaves the done tasks out and every page in.
 - **The place** is a page's (`placeOf`) or a task's (`ownerPlace`, its list's): `everyone` for what everyone sees (and everything in a wiki without users), `private` for a user's own, the group's name for a group's, nothing for no one's, which no `in:` names.
 - **Several of one are either**: `is:page is:note` keeps pages and notes, `in:dev in:private` the group's and your own.
   A `-` one leaves its kind or place out, whatever else the query says.

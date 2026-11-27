@@ -71,39 +71,48 @@ export function queryWords(raw) {
 }
 
 // The is: and in: filters (kindFilterRE, placeFilterRE in
-// go/internal/textsearch): is:page, is:task, is:note; in:everyone,
-// in:private or a group's name.
-const KIND_FILTER_RE = /^is:(page|task|note)$/i;
+// go/internal/textsearch): is:page, is:task, is:note, and a task's
+// is:open, is:done; in:everyone, in:private or a group's name.
+const KIND_FILTER_RE = /^is:(page|task|note|open|done)$/i;
+const STATUSES = ['open', 'done'];
 const PLACE_FILTER_RE = /^in:([a-z0-9][a-z0-9-]{0,39})$/i;
 
+// whereFilter: the filter a part of a query is: op 'is' (a kind), 'status'
+// (is:open, is:done) or 'in' (a place), and its value; null for none.
 function whereFilter(part) {
   const m = part.match(KIND_FILTER_RE) || part.match(PLACE_FILTER_RE);
-  return m ? { op: part.slice(0, 2).toLowerCase(), value: m[1].toLowerCase() } : null;
+  if (!m) return null;
+  const value = m[1].toLowerCase(), op = part.slice(0, 2).toLowerCase();
+  return { op: op === 'is' && STATUSES.includes(value) ? 'status' : op, value };
 }
 
-// queryWhere: the kinds and places a query keeps and leaves out (is:, in:,
-// -is:, -in:), as textsearch's ParseQuery reads them.
+// queryWhere: the kinds, places and tasks' statuses a query keeps and
+// leaves out (is:, in:, -is:, -in:), as textsearch's ParseQuery reads them.
 export function queryWhere(raw) {
-  const w = { kinds: [], exKinds: [], places: [], exPlaces: [] };
+  const w = { kinds: [], exKinds: [], places: [], exPlaces: [], statuses: [], exStatuses: [] };
+  const lists = { is: ['kinds', 'exKinds'], in: ['places', 'exPlaces'], status: ['statuses', 'exStatuses'] };
   for (const m of cutQuery(raw).matchAll(/(-?)(?:"([^"]+)"|(\S+))/g)) {
     const f = m[3] && whereFilter(m[3]);
     if (!f) continue;
-    const list = f.op === 'is' ? (m[1] ? w.exKinds : w.kinds) : (m[1] ? w.exPlaces : w.places);
+    const list = w[lists[f.op][m[1] ? 1 : 0]];
     if (!list.includes(f.value)) list.push(f.value);
   }
   return w;
 }
 
 // acceptsWhere: a thing of the kind ('page', 'task', 'note') kept in the
-// place ('everyone', 'private', a group's name) passes w (queryWhere), as
+// place ('everyone', 'private', a group's name), a task of the status
+// ('open', 'done'; '' for a page), passes w (queryWhere), as
 // Query.AcceptsWhere says.
-export function acceptsWhere(w, kind, place) {
+export function acceptsWhere(w, kind, place, status = '') {
   return (!w.kinds.length || w.kinds.includes(kind)) && !w.exKinds.includes(kind)
-    && (!w.places.length || w.places.includes(place)) && !(place && w.exPlaces.includes(place));
+    && (!w.places.length || w.places.includes(place)) && !(place && w.exPlaces.includes(place))
+    && (!w.statuses.length || w.statuses.includes(status)) && !(status && w.exStatuses.includes(status));
 }
 
-// withFilter: raw with its is: (op 'is') or in: (op 'in') filters replaced
-// by op:value, at the end; value '' only drops them. The search modal's
+// withFilter: raw with its is: kinds (op 'is') or in: places (op 'in')
+// replaced by op:value, at the end; value '' only drops them. A task's
+// status (is:open) stays. The search modal's
 // chips and Where menu write the query this way.
 export function withFilter(raw, op, value) {
   const kept = [...raw.matchAll(/-?(?:"[^"]+"|\S+)/g)].map(m => m[0])

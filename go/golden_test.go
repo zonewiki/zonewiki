@@ -115,7 +115,7 @@ func TestGolden(t *testing.T) {
 		q := textsearch.ParseQuery(text)
 		check("query_text", text, q.Text, c["query_text"])
 		where := [][]string{}
-		for _, l := range [][]string{q.Kinds, q.ExcludeKinds, q.Places, q.ExcludePlaces} {
+		for _, l := range [][]string{q.Kinds, q.ExcludeKinds, q.Places, q.ExcludePlaces, q.Statuses, q.ExcludeStatus} {
 			where = append(where, append([]string{}, l...))
 		}
 		check("query_where", text, where, c["query_where"])

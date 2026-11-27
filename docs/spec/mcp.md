@@ -202,7 +202,7 @@ Matching tasks are results too, ranked with the sections (Retrieval, under How i
   A folder without pages is a tool error, so the model corrects it.
 - `notes` restricts it to notes (`retrieve(…, quicknote=true)`), no tasks either: "what did I jot down about X".
 - `query` is at most 500 characters, a few words (A query is a few words in `search.md`); a longer one is a tool error (`queryArg`), as for `search_tasks`.
-- `query` takes the search's syntax, `is:` and `in:` too (Kinds and places in `search.md`): `in:dev` for a group's pages and tasks, `is:task` for tasks alone, as the search modal's filters write them.
+- `query` takes the search's syntax, `is:` and `in:` too (Kinds and places in `search.md`): `in:dev` for a group's pages and tasks, `is:task` for tasks alone, `is:open` for open tasks alone, as the search modal's filters write them.
 
 With `query-log = yes` in the settings file each query is logged (Measuring retrieval in `search.md`).
 
@@ -220,7 +220,7 @@ Tasks filtered by these, separate lists included:
 A task with news says in its line of facts what is new, all of it since the user last looked, the oldest first, with the time of the latest, as its card in Updates does: "update: bob commented twice, anna closed it (2026-03-12 09:30)" (`newsAll`, `newsText`; Updates in `docs/spec/tasks.md`); an assistant reading a task doesn't see it for the user: no tool logs `seen`.
 
 With a query (at most 500 characters, as `search_wiki`'s), ranked by BM25 within the filter (fused with semantic hits: Retrieval).
-The query's `in:` keeps the tasks of one place (`in:private`, a group's `in:dev`, `in:everyone`); `is:page` or `is:note` find no task.
+The query's `in:` keeps the tasks of one place (`in:private`, a group's `in:dev`, `in:everyone`); `is:page` or `is:note` find no task; `is:open` and `is:done` say the same as `status`.
 Without, open tasks by deadline, then start date, then title, done ones newest first.
 `order="manual"` lists the open ones in the manual order instead (`sort_order`, the Open view's list, top first: their priority; `manualBefore`), as the Open view shows it: a new task on top.
 Without `list`, the tasks of My tasks come first, in the user's own order as that view shows it (My tasks' own order in `docs/spec/tasks.md`; `mineOrder`): a task new to it on top, so "top first" is the same for the assistant and in the browser; then every other task in the shared order.

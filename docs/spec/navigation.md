@@ -69,6 +69,7 @@ A row under the input (`.search-filters`) narrows the results by kind and by pla
 
 **The query is the filter** (`withFilter`, `queryWhere` in `js/mdtext.js`): a chip or a pick in the menu replaces the query's `is:` (or `in:`) with its own, at the end, and puts the cursor back in the input;
 typing `is:…` or `in:…` presses the chip or picks the place (several kinds press none, a place the menu hasn't leaves it blank).
+A task's status (`is:open`, `is:done`) has no chip and stays when a chip is clicked; with one, the title list is empty, as pages have no status.
 So what filters is in sight, can be typed, and goes along in **All results →**, and the server applies it as any query's (Kinds and places in `docs/spec/search.md`).
 
 **The title list follows it** in the browser: `/api/pages-list` says of each page whether it is a note (`note`), private (`private`) or a group's (`group`), and `acceptsWhere` in `js/mdtext.js` keeps those that pass, as the server's does;

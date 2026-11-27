@@ -41,7 +41,7 @@ const out = texts.map(text => {
     toggle: [0, 1, 2, 3].map(i => T.toggleCheckboxText(text, T.taskCheckboxOffsets(text, true)[i], now)),
     toggle_notes: [0, 1].map(i => T.toggleCheckboxText(text, T.taskCheckboxOffsets(text, false)[i], now)),
     query_words: T.queryWords(text),
-    query_where: (w => [w.kinds, w.exKinds, w.places, w.exPlaces].map(l => [...l].sort()))(T.queryWhere(text)),
+    query_where: (w => [w.kinds, w.exKinds, w.places, w.exPlaces, w.statuses, w.exStatuses].map(l => [...l].sort()))(T.queryWhere(text)),
     clean_list: T.cleanList(text) || null,
     parse_date_word: C.default.parseDateWord(text, today) || null,
   };

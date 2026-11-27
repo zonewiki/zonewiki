@@ -60,7 +60,8 @@ A filter writes itself into the search box: click **Tasks** and `is:task` is add
 You can type these yourself too, and the filters follow what you type.
 Click **All** or pick **Anywhere** to drop the filter again.
 
-With only a filter and no words, such as `is:task in:dev`, you get everything that matches, newest first.
+With only a filter and no words, such as `is:task in:dev` or `is:open`, you get everything that matches, newest first.
+`is:open` and `is:done` aren't chips: type them, as in `invoice is:open`.
 The filters only narrow what you can see anyway: a group you're not in finds nothing.
 
 ## Search syntax
@@ -82,8 +83,9 @@ Add these to narrow a search down:
 | `before:` | Edited before that date | `before:2026-08` (July and earlier) |
 | `-edited:` | Not edited then | `-edited:2026` |
 | `is:` | Only pages, tasks or notes: `is:page`, `is:task`, `is:note` | `roof is:task` |
+| `is:open` `is:done` | Only open tasks, or done ones (won't do counts as done) | `invoice is:open` |
 | `in:` | Only what is everyone's, private or a group's: `in:everyone`, `in:private`, `in:dev` | `budget in:dev` |
-| `-is:` `-in:` | Leave out that kind or place | `garden -is:note` |
+| `-is:` `-in:` | Leave out that kind, status or place | `garden -is:done` |
 
 You can combine them: `budget #work after:2026-09 -draft in:dev`.
 The full rules are in [the spec](../spec/search.md#query-syntax).

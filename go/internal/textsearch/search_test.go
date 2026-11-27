@@ -99,12 +99,40 @@ func TestKindsAndPlaces(t *testing.T) {
 		{"is:task in:dev", KindPage, "dev", false},
 		{"", KindPage, "", true},
 	} {
-		if got := ParseQuery(c.q).AcceptsWhere(c.kind, c.place); got != c.want {
+		if got := ParseQuery(c.q).AcceptsWhere(c.kind, c.place, ""); got != c.want {
 			t.Errorf("%q accepts a %s in %q: %v, want %v", c.q, c.kind, c.place, got, c.want)
 		}
 	}
 	if (&Query{ExcludeKinds: []string{"task"}}).Lists() || ParseQuery("#tag").Lists() {
 		t.Error("only exclusions or only tags list nothing")
+	}
+}
+
+func TestATasksStatus(t *testing.T) {
+	q := ParseQuery(`roof IS:Open -is:done is:task`)
+	if q.Text != "roof" || !slices.Equal(q.Statuses, []string{"open"}) || !slices.Equal(q.ExcludeStatus, []string{"done"}) ||
+		!slices.Equal(q.Kinds, []string{"task"}) {
+		t.Fatalf("got %+v", q)
+	}
+	if !ParseQuery("is:done").Lists() || ParseQuery("-is:done").Lists() {
+		t.Error("a status lists without words, its exclusion alone doesn't")
+	}
+	for _, c := range []struct {
+		q, kind, status string
+		want            bool
+	}{
+		{"is:open", KindTask, StatusOpen, true},
+		{"is:open", KindTask, StatusDone, false},
+		{"is:open", KindPage, "", false}, // a status is a task's
+		{"is:open is:done", KindTask, StatusDone, true},
+		{"-is:done", KindTask, StatusOpen, true},
+		{"-is:done", KindTask, StatusDone, false},
+		{"-is:done", KindNote, "", true}, // pages stay
+		{"is:done is:page", KindPage, "", false},
+	} {
+		if got := ParseQuery(c.q).AcceptsWhere(c.kind, PlaceEveryone, c.status); got != c.want {
+			t.Errorf("%q accepts a %s %q: %v, want %v", c.q, c.kind, c.status, got, c.want)
+		}
 	}
 }
 

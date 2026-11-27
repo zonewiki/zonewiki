@@ -8,7 +8,7 @@
    "properties": {
     "query": {
      "type": "string",
-     "description": "What to look for: words or a question. Also: \"exact phrase\", -word to leave out, #tag / -#tag (a page's frontmatter tags, a task's tags), edited:2026-09 / after:2026-07-01 / before:2026-08 (a page's last edit, a task's last activity), is:page/task/note, in:everyone/private/<group>."
+     "description": "What to look for: words or a question. Also: \"exact phrase\", -word to leave out, #tag / -#tag (a page's frontmatter tags, a task's tags), edited:2026-09 / after:2026-07-01 / before:2026-08 (a page's last edit, a task's last activity), is:page/task/note/open/done, in:everyone/private/<group>."
     },
     "limit": {
      "type": "integer",

@@ -1512,19 +1512,22 @@ func (x *docIndex) filter(q *textsearch.Query, keep func(*SearchDoc) bool) func(
 }
 
 // acceptsWhere: the doc passes the query's is: and in: filters: its kind
-// (a task, a note, any other page) and its place (placeOfDoc) as the query
-// names them. They only narrow what the asker may see, which is left out
+// (a task, a note, any other page), its place (placeOfDoc) and a task's
+// status (open, or done: done or won't do) as the query names them. They only narrow what the asker may see, which is left out
 // before (docHider), so a place of no one's or someone else's never shows
 // through them.
 func acceptsWhere(q *textsearch.Query, d *SearchDoc) bool {
-	kind := textsearch.KindPage
+	kind, status := textsearch.KindPage, ""
 	switch {
 	case d.isTask():
-		kind = textsearch.KindTask
+		kind, status = textsearch.KindTask, textsearch.StatusDone
+		if d.Task.IsOpen() {
+			status = textsearch.StatusOpen
+		}
 	case isQuicknote(d.Slug):
 		kind = textsearch.KindNote
 	}
-	return q.AcceptsWhere(kind, placeName(placeOfDoc(d).place))
+	return q.AcceptsWhere(kind, placeName(placeOfDoc(d).place), status)
 }
 
 // placeName: a place as in: names it: everyone, private (a user's own) or

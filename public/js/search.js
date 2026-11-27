@@ -312,7 +312,7 @@ function applyModalControls() {
   const unlinked = modalUnlinked.checked;
   const where = queryWhere(raw);
   showModalFilters(where);
-  const filtered = where.kinds.length + where.exKinds.length + where.places.length + where.exPlaces.length > 0;
+  const filtered = Object.values(where).some(list => list.length);
   const passes = p => {
     if (!filtered) return true;
     if (p.builtin) return false;

@@ -530,6 +530,15 @@ def test_chips_write_the_kind_into_the_query(page, wiki):
     expect(titles).to_have_count(1)
     expect(titles.first).to_have_attribute("data-slug", "heron")
 
+    # A task's status has no chip: it stays when a chip is clicked, and
+    # empties the title list (pages have none).
+    query.fill("heron is:open")
+    expect(chip("")).to_have_attribute("aria-pressed", "true")
+    expect(titles).to_have_count(0)
+    expect(cards).to_have_count(1)
+    chip("task").click()
+    expect(query).to_have_value("heron is:open is:task")
+
 
 def test_the_where_menu_writes_the_place(page, wiki, monkeypatch):
     monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "t1"), "bob": ("pw", "t2")})
