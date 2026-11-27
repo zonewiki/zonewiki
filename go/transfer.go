@@ -1,13 +1,15 @@
 // Moving a whole wiki (Moving a wiki in docs/spec/deployment.md): zonewiki
 // export writes it to one file, zonewiki import makes a wiki from such a
 // file in an empty folder. The file is a clone of the wiki's git repository
-// with its settings file beside it (internal/wikiarchive), so a wiki moves
-// with its history and with its users, who sign in as before.
+// with its settings file beside it, and what each user keeps beside the wiki
+// (transferstate.go: what they watch, have seen and want mailed), so a wiki
+// moves with its history and with its users, who sign in as before
+// (internal/wikiarchive).
 //
 // An export reads the wiki as a git client would, so it works while Zonewiki
 // runs. An import takes the file for what anyone may have made (a hosted
 // Zonewiki imports its customers' uploads): it reads the history's objects and
-// refs and the settings file, fetches the history into a repository of its
+// refs, the settings file and the users' files, fetches the history into a repository of its
 // own and checks the files out of that, so the archive's hooks, git config
 // and work tree are never used.
 package main
@@ -35,7 +37,8 @@ import (
 
 const exportUsage = `Usage: zonewiki export [--output FILE] [--work FOLDER]
   write the whole wiki in ZONE_DATA to one file, to move it to another Zonewiki (zonewiki import):
-  its pages, uploads, tasks and history, and its settings file with the users.
+  its pages, uploads, tasks and history, its settings file with the users, and what each of them
+  watches, has read and wants mailed.
   It works while Zonewiki runs. The file is as private as the wiki: it holds every user's
   private pages and the hashes of their passwords.`
 
@@ -162,13 +165,24 @@ func exportMain(args []string, getenv func(string) string, stdout, stderr io.Wri
 		return fail("the copy of the repository couldn't be finished: %s", strings.TrimSpace(r.Stderr))
 	}
 	excludeState(clone)
-	hasConfig := false
+	hasConfig, withFiles := false, 0
 	if b, err := os.ReadFile(configPath()); err == nil {
 		// Zonewiki writes the file whole, by a rename: never half of it.
 		if err := settingsfile.Write(filepath.Join(clone, stateDirName, "config"), string(b)); err != nil {
 			return fail("%v", err)
 		}
 		hasConfig = true
+		// What the users keep beside the wiki; of users the file doesn't
+		// name (one removed since) nothing.
+		if f, err := parseConfig(string(b)); err == nil {
+			var names []string
+			for _, u := range f.Users {
+				names = append(names, u.Name)
+			}
+			if withFiles, err = exportUserFiles(clone, names); err != nil {
+				return fail("%v", err)
+			}
+		}
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return fail("%s: %v", configName(), err)
 	}
@@ -190,6 +204,9 @@ func exportMain(args []string, getenv func(string) string, stdout, stderr io.Wri
 	private := "every user's private pages"
 	if hasConfig {
 		what += ", and its settings file with the users"
+		if withFiles > 0 {
+			what += ", and what they watch, have read and want mailed"
+		}
 		private += " and the hashes of their passwords"
 	}
 	where := "to stdout"
@@ -397,6 +414,9 @@ func importMain(args []string, getenv func(string) string, stdin io.Reader, stdo
 			return fail("the archive's settings file: %v", err)
 		}
 	}
+	// What the users kept beside the wiki, read now (the unpacked archive
+	// goes before the wiki's files come) and written with the settings.
+	theirs := readUserFiles(src, users)
 
 	// The history, fetched into a repository made here: what git runs and
 	// reads is this one's config, never the archive's.
@@ -454,6 +474,9 @@ func importMain(args []string, getenv func(string) string, stdin io.Reader, stdo
 			return fail("%v", err)
 		}
 	}
+	if err := theirs.write(wiki); err != nil {
+		return fail("%v", err)
+	}
 	excludeState(wiki)
 	noDeltaForUploads(wiki)
 	note := fmt.Sprintf("Imported by Zonewiki %s on %s.\n", version, time.Now().UTC().Format(time.RFC3339))
@@ -503,6 +526,9 @@ func importMain(args []string, getenv func(string) string, stdin io.Reader, stdo
 	if len(left) > 0 {
 		fmt.Fprintf(stdout, "Not taken from its settings file, as this host has its own: %s (zonewiki config set KEY VALUE).\n",
 			strings.Join(left, ", "))
+	}
+	if n := theirs.users(); n > 0 {
+		fmt.Fprintf(stdout, "What they watch, have read and want mailed came along (%s).\n", counted(n, "user", "users"))
 	}
 	if len(users) > 0 {
 		fmt.Fprintln(stdout, "Everyone signs in again, with the password they had. An assistant that was connected by "+

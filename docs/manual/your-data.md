@@ -160,7 +160,7 @@ The user name and password you give there are yours in the moved wiki: a user of
 
 Afterwards:
 
-- Everyone signs in again.
+- Everyone signs in again. What each person watches, has read and wants mailed moved with the wiki.
 - An assistant that was connected by signing in is connected again, at the new address; one with a token needs only the new address.
 - Set the names the wiki is opened by, if it has any: `./run.sh config set hosts wiki.example.org` ([Running Zonewiki yourself](self-hosting.md)).
 - Open invite and reset links are void: make new ones.

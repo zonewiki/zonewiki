@@ -1115,7 +1115,7 @@ The kinds turned on are `"mail": ["assigned", "digest"]` in the user's watch fil
 `mails` is the one question every mail asks before it goes out: the deployment sends mail, the user has a confirmed address, the kind is one of theirs to have, and they turned it on.
 So a viewer made an editor keeps the morning's mail and can tick the others, and an editor made a viewer keeps the morning's mail alone, whatever their file still names.
 `POST /notifications` (`mailChoicesRoute` in `go/email.go`) takes `mail` once for each box ticked and passes over what is no kind of the user's; it is among the writes a viewer may make (`viewerWrites`), and 404 for who has no kind to choose.
-Like watches, the choices are not in an export (Moving a wiki in `docs/spec/deployment.md`): in the wiki it is brought to, each user ticks theirs again.
+The file moves with the wiki: an export takes it along, and an import reads it as anyone's making and keeps the kinds Zonewiki knows (What each user keeps in `docs/spec/deployment.md`).
 
 Tests: `test_the_mail_is_turned_on_and_off_under_notifications` in `tests/test_task_notify.py`, `TestAViewersMorningsMail` in `tests/test_email.py`, `TestAViewersMorningsMail` in `go/digest_test.go`, `test_notifications_turn_the_mails_on` in `tests/e2e/test_task_assignee.py`.
 

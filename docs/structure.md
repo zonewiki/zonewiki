@@ -92,7 +92,8 @@ What each file and folder of the repository is for.
 │   ├── tasklists.go        # Task lists: the lists a user sees (taskLists, refs), their pins, My tasks (the home view's rule, mineFilter, and its settings), and the list operations (make, rename, delete, share, pin, settings)
 │   ├── tasksetup.go        # What a start does over the task files (filed by month and list, Zonewiki's format, a shared task in no list into #general), and the mark that lets later starts skip it
 │   ├── wikiformat.go       # The format of the wiki's files, .zone-format at its root (in git): read at start, a newer one refused, written into a new wiki
-│   ├── transfer.go         # zonewiki export (the whole wiki in one file: a clone and the settings file) and zonewiki import (a wiki from such a file, in an empty folder: the history fetched into a repository of its own, the host's settings left out)
+│   ├── transferstate.go    # What each user keeps beside the wiki, in an export and an import: their watches, looks and mail choices, read as anyone's making and written anew
+│   ├── transfer.go         # zonewiki export (the whole wiki in one file: a clone, the settings file and the users' own files) and zonewiki import (a wiki from such a file, in an empty folder: the history fetched into a repository of its own, the host's settings left out)
 │   ├── tasksapi.go         # The /api/tasks routes
 │   ├── tasksembed.go       # The [[tasks:]] embed: its HTML, its settings dialog, the counts the Tasks links show
 │   ├── tasklogic.go        # What Zonewiki does with tasks beyond keeping them: a series' next occurrence, completing, history, comments, backlinks, [[task:…]] references; taskFiles, the store, wired to the wiki here

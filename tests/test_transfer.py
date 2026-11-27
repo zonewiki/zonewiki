@@ -1,9 +1,11 @@
 """Moving a whole wiki: zonewiki export writes it to one file, zonewiki
 import makes a wiki from such a file (Moving a wiki in
 docs/spec/deployment.md). The archive is taken for what anyone may have made:
-what it holds besides the history and the settings file is never used."""
+what it holds besides the history, the settings file and the users' own
+files is never used, and those files are written anew from what they hold."""
 
 import io
+import json
 import os
 import shutil
 import stat
@@ -520,3 +522,93 @@ def test_an_export_of_the_hosted_zonewiki_from_before_this_command(source, out):
     assert "with 2 users (alice, bob)" in r.stdout.decode()
     assert git(dest, "rev-parse", "HEAD") == git(source, "rev-parse", "HEAD")
     assert git(dest, "remote") == "" and git(dest, "branch", "-r") == ""
+
+
+class TestWhatUsersKeep:
+    """What each user keeps beside the wiki moves with it: what they watch
+    and want mailed (.zone/watch/), what they have seen of the tasks' news
+    (.zone/seen/). An import reads each file as anyone's making."""
+
+    LOOK = {"at": "2026-11-20T10:00", "after": "0a1b2c3d4e5f", "comment": "-"}
+
+    def keeps(self, wiki, folder, name, value):
+        path = wiki / ".zone" / folder / f"{name}.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(value if isinstance(value, str) else json.dumps(value))
+
+    def kept(self, wiki, folder, name):
+        path = wiki / ".zone" / folder / f"{name}.json"
+        return json.loads(path.read_text()) if path.exists() else None
+
+    def test_watches_looks_and_mail_choices_move(self, source, out, monkeypatch, tmp_path_factory):
+        head = git(source, "rev-parse", "HEAD")
+        watch = {"watch": {"garden/": 1790000001, "garden/roses": 1790000000},
+                 "seen": {"garden/roses": {"at": 1790000002, "sha": head}}, "mail": ["assigned", "digest"]}
+        seen = {"0123abcd-0000-4000-8000-000000000000": self.LOOK}
+        self.keeps(source, "watch", "alice", watch)
+        self.keeps(source, "seen", "alice", seen)
+        self.keeps(source, "watch", "carl", watch)          # removed since: no user of the wiki
+        archive = export(source, out)
+        held = names(archive)
+        assert "wiki/.zone/watch/alice.json" in held and "wiki/.zone/seen/alice.json" in held
+        assert not [n for n in held if "carl" in n]
+        dest = out / "wiki"
+        r = zonewiki("import", archive, data=dest)
+        assert r.returncode == 0, r.stderr
+        assert "What they watch, have read and want mailed came along (1 user)." in r.stdout.decode()
+        assert self.kept(dest, "watch", "alice") == watch and self.kept(dest, "seen", "alice") == seen
+        assert self.kept(dest, "watch", "bob") is None
+        for folder in ("watch", "seen"):
+            assert stat.S_IMODE((dest / ".zone" / folder / "alice.json").stat().st_mode) == 0o600
+        with served(dest, monkeypatch, tmp_path_factory) as c:
+            assert login(c, "alice").status_code == 302
+            assert b">Unwatch</button>" in c.get("/page/garden/roses", headers=HOST).data
+            assert login(c, "bob").status_code == 302
+            assert b">Watch</button>" in c.get("/page/garden/roses", headers=HOST).data
+
+    def test_a_users_file_is_written_anew_from_what_it_holds(self, source, out):
+        self.keeps(source, "watch", "alice", {"watch": {"garden/roses": 5}})
+        archive = export(source, out)
+
+        def change(wiki):
+            self.keeps(wiki, "watch", "alice", {
+                "watch": {"ok/page": 5, "folder/": 6, "../../etc/passwd": 5, "a//b": 5, "/abs": 5, "never": -1, "nul\u0000l": 5},
+                "seen": {"ok/page": {"at": 1, "sha": "zz; rm -rf"}, "folder/in": {"at": 2, "sha": "abcdef12"},
+                         "unwatched": {"at": 1, "sha": "abcdef12"}},
+                "mail": ["digest", "nonsense", "assigned", "digest"], "admin": True, "extra": {"x": ["y"]}})
+            self.keeps(wiki, "watch", "bob", "{not json")
+            self.keeps(wiki, "watch", "mallory", {"watch": {"ok/page": 5}})      # no user of the wiki
+            self.keeps(wiki, "seen", "alice", {
+                "not a task": self.LOOK, "0123abcd": {"at": "yesterday"}, "89abcdef": {**self.LOOK, "after": "<script>"},
+                "4567abcd": {**self.LOOK, "comment": "../x"}, "cdef0123": self.LOOK, "fedc3210": {"at": "2026-11-20T10:00"}})
+            (wiki / ".zone" / "seen" / "bob.json").symlink_to("/etc/hostname")  # a link where a file should be
+            self.keeps(wiki, "other", "alice", {"watch": {"ok/page": 5}})        # no folder of the users' files
+            (wiki / ".zone" / "watch" / "alice.txt").write_text("{}")
+
+        dest = out / "wiki"
+        r = zonewiki("import", rebuilt(archive, change), data=dest)
+        assert r.returncode == 0, r.stderr
+        assert self.kept(dest, "watch", "alice") == {
+            "watch": {"ok/page": 5, "folder/": 6}, "seen": {"folder/in": {"at": 2, "sha": "abcdef12"}},
+            "mail": ["assigned", "digest"]}
+        assert self.kept(dest, "seen", "alice") == {"cdef0123": self.LOOK, "fedc3210": {"at": "2026-11-20T10:00"}}
+        assert sorted(p.name for p in (dest / ".zone" / "watch").iterdir()) == ["alice.json"]
+        assert sorted(p.name for p in (dest / ".zone" / "seen").iterdir()) == ["alice.json"]
+        assert sorted(p.name for p in (dest / ".zone").iterdir()) == ["config", "imported", "seen", "watch"]
+        assert not (dest / ".zone" / "seen" / "alice.json").is_symlink()
+
+    def test_a_users_file_too_big_refuses_the_archive(self, source, out):
+        archive = export(source, out)
+        big = rebuilt(archive, lambda wiki: self.keeps(wiki, "watch", "alice", " " * (1 << 20) + "{}"))
+        dest = out / "wiki"
+        r = zonewiki("import", big, data=dest)
+        assert r.returncode == 1 and "more than fits" in r.stderr
+        assert not dest.exists() or not list(dest.iterdir())
+
+    def test_no_users_no_files(self, source, out):
+        self.keeps(source, "watch", "alice", {"watch": {"garden/roses": 5}})
+        archive = export(source, out)
+        dest = out / "wiki"
+        r = zonewiki("import", rebuilt(archive, lambda wiki: (wiki / ".zone" / "config").unlink()), data=dest)
+        assert r.returncode == 0, r.stderr
+        assert "came along" not in r.stdout.decode() and not (dest / ".zone" / "watch").exists()

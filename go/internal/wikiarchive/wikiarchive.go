@@ -1,11 +1,12 @@
 // Package wikiarchive writes and reads the file a whole wiki moves in
 // (Moving a wiki in docs/spec/deployment.md): a gzipped tar with one folder,
-// wiki/, that holds a clone of the wiki's git repository and, in
-// .zone/config, its settings file.
+// wiki/, that holds a clone of the wiki's git repository, in
+// .zone/config its settings file, and in .zone/watch/ and .zone/seen/ a
+// file a user with what is theirs alone (UserFolders).
 //
 // Reading takes an archive for what anyone may have made: of all it holds,
-// only the repository's history (its objects and refs) and the settings
-// file are written out, as plain files; the repository's config, its hooks
+// only the repository's history (its objects and refs), the settings file
+// and the users' files are written out, as plain files; the repository's config, its hooks
 // and its work tree stay in the archive.
 //
 // What makes reading safe isn't tar's, so it is in two parts (unpack.go,
@@ -33,6 +34,21 @@ const Top = "wiki"
 // ConfigMax: the biggest settings file an archive may hold. Zonewiki's own is a
 // few lines a user.
 const ConfigMax = 4 << 20
+
+// UserFolders: the folders of .zone/ that hold a file a user,
+// <user>.json, with what is that user's alone and not in the wiki's
+// history: what they watch and want mailed, and what they have seen of the
+// tasks' news. UserFileMax: the biggest such file an archive may hold.
+var UserFolders = []string{"watch", "seen"}
+
+const UserFileMax = 1 << 20
+
+// isUserFile: rel (under wiki/) names a user's file: .zone/<one of
+// UserFolders>/<name>.json.
+func isUserFile(rel []string) bool {
+	return len(rel) == 3 && rel[0] == ".zone" && slices.Contains(UserFolders, rel[1]) &&
+		strings.HasSuffix(rel[2], ".json") && !strings.HasPrefix(rel[2], ".")
+}
 
 // ErrTooBig: the archive unpacks to more than Read was given.
 var ErrTooBig = errors.New("the archive holds more than fits")
@@ -108,11 +124,12 @@ type Found struct {
 }
 
 // Read unpacks the archive r into dir/wiki: the repository's history
-// (.git/HEAD, .git/packed-refs, .git/objects/, .git/refs/) and the settings
-// file (.zone/config), and nothing else of it. dir must be the caller's own
+// (.git/HEAD, .git/packed-refs, .git/objects/, .git/refs/), the settings
+// file (.zone/config) and the users' files (UserFolders: whose they are and
+// what they may hold is the caller's to check), and nothing else of it. dir must be the caller's own
 // and empty. max is how many bytes may be written (0: any number); past it
 // Read stops with ErrTooBig. The settings file has a limit of its own
-// (ConfigMax).
+// (ConfigMax), and so has a user's file (UserFileMax).
 //
 // An archive that isn't one of a wiki is an error: something beside wiki/,
 // a name that leads out of it, a link or a device where the history or the
@@ -135,6 +152,8 @@ func Read(r io.Reader, dir string, max int64) (Found, error) {
 			case isConfig:
 				found.Config = true // a link or a device is refused by Unpack
 				return Take{Keep: true, Max: ConfigMax, Private: true}, nil
+			case isUserFile(rel) && kind == File:
+				return Take{Keep: true, Max: UserFileMax, Private: true}, nil
 			case !isHistory(rel):
 				return Take{}, nil // the work tree, the repository's config and hooks: not read
 			case kind == Folder:

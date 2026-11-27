@@ -926,7 +926,7 @@ Zonewiki writes each file whole (a reader never sees half of one), but a copy ta
 
 A wiki moves from one Zonewiki to another in one file: from a computer to a server, from a NAS to the hosted Zonewiki, or back.
 `zonewiki export` writes the file, `zonewiki import` makes a wiki from it.
-What moves is everything in the wiki's history (pages, uploads, tasks, lists) and its users, who sign in as before; a backup is the folder itself (Backups, above).
+What moves is everything in the wiki's history (pages, uploads, tasks, lists), its users, who sign in as before, and what each of them keeps beside the wiki: the pages they watch, what they have read of those and of the tasks' news, and which mail they want (What each user keeps, below); a backup is the folder itself (Backups, above).
 
 ```bash
 ./run.sh export > my-wiki.tar.gz              # on the machine the wiki is on; Zonewiki may be running
@@ -962,6 +962,30 @@ An export doesn't write over a file that is there.
 
 Unpacked, it is a wiki's folder: whoever leaves Zonewiki has the pages as files and the history as a git repository.
 
+### What each user keeps
+
+Two folders of `.zone/` hold a file a user, with what is theirs alone and not in the wiki's history, and an export takes them along for the users the settings file names:
+
+| In the file | Holds | |
+|---|---|---|
+| `.zone/watch/<user>.json` | the pages and folders they watch, what they have seen of them, the kinds of mail they turned on | Watching pages in `docs/spec/navigation.md`, Notifications in `docs/spec/users.md` |
+| `.zone/seen/<user>.json` | the tasks whose news they have read | News on your tasks in `docs/spec/tasks.md` |
+
+So after a move a user watches what they watched, old news is not new again, and the mail they ticked is still ticked (it goes out once the address is confirmed where the wiki now is, if the import was made with `--users-only`).
+An archive without these files (an older export, a wiki nobody watches a page in) imports as before.
+The import says "What they watch, have read and want mailed came along (3 users)."
+
+An import doesn't copy such a file: it reads it and writes what it understood (`importedWatch`, `importedSeen` in `go/transferstate.go`), for a user the imported settings have.
+
+| In an archive | The import |
+|---|---|
+| A file of a name that is no user's | passes it over |
+| A file that isn't JSON, or holds nothing to keep | passes it over: that user starts as new |
+| A watch that could be no page or folder (`..`, an empty part, a control character), a look at what could be no task, a kind of mail Zonewiki doesn't know, any other key | leaves it out, and keeps the rest |
+| More than 5,000 watches or looks in one file | keeps the first 5,000 |
+| A file over 1 MB | refuses the archive, as a settings file over 4 MB |
+| A link or a folder where a file should be, a file of another folder of `.zone/` | not unpacked |
+
 ### What stays behind
 
 | Not in the file | So, where the wiki moves to |
@@ -972,7 +996,7 @@ Unpacked, it is a wiki's folder: whoever leaves Zonewiki has the pages as files 
 | `.zone/index/` | search's indexes are built again when first needed |
 | `.zone/usage/` | the Usage page counts from nothing |
 | `.zone/imports/` | a zip of notes waiting to be imported is uploaded again |
-| `.zone/seen/`, `watch/`, `drafts/`, `removed-users`, `queries.jsonl` | the tasks' news shows again; nobody watches a page, or gets a mail they turned on, until they do it again; a text left in a conflict is gone; a removed user's name is still not a stranger's to sign up with where a private folder, a commit or a task names it (Sign-up in `docs/spec/users.md`) |
+| `.zone/drafts/`, `removed-users`, `queries.jsonl` | a text left in a conflict is gone; a removed user's name is still not a stranger's to sign up with where a private folder, a commit or a task names it (Sign-up in `docs/spec/users.md`) |
 | What isn't committed | lost: see Text that is not committed, below |
 | The host's settings: `hosts`, `base-url`, `git-remote`, `trusted-proxies`, `storage-max`, `imprint`, `privacy` | set them again where they are needed (`zonewiki config set`); the import names the ones it left out |
 
@@ -1011,7 +1035,7 @@ An archive is untrusted input: the hosted Zonewiki imports what its customers up
 So nothing of it is used as it is:
 
 1. **Unpack** (`wikiarchive.Read`), into `.zone-import/` in `ZONE_DATA`:
-   only the repository's history (`.git/HEAD`, `.git/packed-refs`, `.git/objects/`, `.git/refs/`) and `.zone/config` are written out, as plain files.
+   only the repository's history (`.git/HEAD`, `.git/packed-refs`, `.git/objects/`, `.git/refs/`), `.zone/config` and the users' files (`.zone/watch/*.json`, `.zone/seen/*.json`: What each user keeps, above) are written out, as plain files.
    The repository's `config`, its `hooks/`, its `info/`, `objects/info/alternates` and the whole work tree are passed by.
    An entry that isn't a file or a folder where one of those should be (a link, a device), a name with `..`, a leading `/`, a backslash or a control character, anything beside `wiki/`, a file twice, a name that is both a file and a folder: the archive is refused.
    These checks aren't tar's: the package reads entries from a source (a gzipped tar here, or a zip) and unpacks them in one place (`wikiarchive.Unpack`), which its caller tells what to keep, how many bytes it may write (counted as they are written, not as a header states) and how many entries the archive may hold, and in which words to refuse.
@@ -1023,6 +1047,7 @@ So nothing of it is used as it is:
 5. **Take the settings file** through the same parser and checks a start uses (`importedSettings`); one Zonewiki wouldn't start with is refused, with the line.
    The host's keys (`hostKeys` in `go/configfile.go`) are taken out; with `--users-only` every key but the users, the groups and `usersOnlyKeys`.
    It is written 0600.
+   The users' files are written beside it, each anew from what was read of it, for the users these settings have (`readUserFiles`).
 6. **Move into place**: the wiki's entries are renamed up into `ZONE_DATA`, `.git` last, and `.zone-import/` is removed after that.
 
 A failure before step 6 leaves `ZONE_DATA` empty again.
