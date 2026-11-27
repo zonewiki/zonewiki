@@ -449,14 +449,14 @@ type overlay struct {
 }
 
 // Layer: documents to search along with an Index's (View), numbered among
-// themselves from 0: their lengths and what they hold. Made once from their
-// tokens and only read after, so any number of views, of any number of
-// viewers, share one: a group's pages are one layer for all its members.
+// themselves from 0: their lengths and what they hold, in memory (NewLayer)
+// or an index's own, a file's too (Index.Layer), some of them left out
+// (rm). Made once and only read after, so any number of views, of any
+// number of viewers, share one: a group's pages are one layer for all its
+// members.
 type Layer struct {
-	lens     []int
-	total    int
-	postings map[string][]posting
-	vocab    []string // sorted
+	s  store
+	rm *Removed // its documents left out (nil: none): they keep their numbers, and no search reaches them
 
 	mu     sync.Mutex
 	newFor newKey   // which Index, and what is left out of it, newTo is for
@@ -477,7 +477,19 @@ type LayerAt struct {
 
 // NewLayer: the layer of n documents, asking for each one's tokens in turn.
 func NewLayer(n int, tokensOf func(i int) []string) *Layer {
-	l := &Layer{postings: map[string][]posting{}, lens: make([]int, 0, n)}
+	return &Layer{s: newMapStore(n, tokensOf)}
+}
+
+// Layer: ix's documents (an index as it was built or opened, not a view)
+// as a layer of another index's view, numbered as in ix, without those rm
+// (ix.Without) leaves out: a place's index, which may be a file, searched
+// along with the shared one by who sees the place.
+func (ix *Index) Layer(rm *Removed) *Layer { return &Layer{s: ix.base, rm: rm} }
+
+// newMapStore: the store of n documents in memory, asking for each one's
+// tokens in turn and keeping none of them.
+func newMapStore(n int, tokensOf func(i int) []string) *mapStore {
+	l := &mapStore{byTerm: map[string][]posting{}, lens: make([]int, 0, n)}
 	for i := range n {
 		toks := tokensOf(i)
 		tf, order := map[string]int{}, []string{}
@@ -490,15 +502,55 @@ func NewLayer(n int, tokensOf func(i int) []string) *Layer {
 		l.lens = append(l.lens, len(toks))
 		l.total += len(toks)
 		for _, t := range order {
-			l.postings[t] = append(l.postings[t], posting{int32(i), int32(tf[t])})
+			l.byTerm[t] = append(l.byTerm[t], posting{int32(i), int32(tf[t])})
 		}
 	}
-	l.vocab = slices.Sorted(maps.Keys(l.postings))
+	l.vocab = slices.Sorted(maps.Keys(l.byTerm))
 	return l
 }
 
-// Len: how many documents the layer has.
-func (l *Layer) Len() int { return len(l.lens) }
+// Len: how many numbers the layer's documents take, those left out too.
+func (l *Layer) Len() int { return l.s.docCount() }
+
+// count, tokens: the documents a search of the layer is over, and their
+// lengths together.
+func (l *Layer) count() int {
+	if l.rm != nil {
+		return l.s.docCount() - l.rm.count
+	}
+	return l.s.docCount()
+}
+
+func (l *Layer) tokens() int {
+	if l.rm != nil {
+		return l.s.tokenCount() - l.rm.tokens
+	}
+	return l.s.tokenCount()
+}
+
+// df: how many of the layer's documents that are left hold the term.
+func (l *Layer) df(t string) int {
+	df := l.s.df(t)
+	if df > 0 && l.rm != nil {
+		df -= l.rm.df[t]
+	}
+	return df
+}
+
+// terms: the terms the layer's documents that are left hold, from `from`
+// on, sorted.
+func (l *Layer) terms(from string) iter.Seq[string] {
+	if l.rm == nil {
+		return l.s.terms(from)
+	}
+	return func(yield func(string) bool) {
+		for t := range l.s.terms(from) {
+			if !l.rm.gone[t] && !yield(t) {
+				return
+			}
+		}
+	}
+}
 
 // newTerms: the layer's terms that no document left of the index with base
 // (without rm) holds: what typo matching looks through beside the index's
@@ -508,7 +560,7 @@ func (l *Layer) newTerms(base store, rm *Removed) []string {
 	defer l.mu.Unlock()
 	if key := (newKey{base, rm}); l.newFor != key {
 		var out []string
-		for _, t := range l.vocab {
+		for t := range l.terms("") {
 			if base.df(t) == 0 || rm != nil && rm.gone[t] {
 				out = append(out, t)
 			}
@@ -578,8 +630,7 @@ func NewIndex(tokens [][]string) *Index {
 // NewIndexOf: the index of n documents, asking for each one's tokens in turn
 // and keeping none of them: they'd be many times what the index holds.
 func NewIndexOf(n int, tokensOf func(i int) []string) *Index {
-	l := NewLayer(n, tokensOf)
-	return newIndex(&mapStore{total: l.total, lens: l.lens, byTerm: l.postings, vocab: l.vocab})
+	return newIndex(newMapStore(n, tokensOf))
 }
 
 // WithExtra: ix with more documents, numbered after its own.
@@ -625,8 +676,8 @@ func (ix *Index) View(rm *Removed, pos []int32, layers []LayerAt) *Index {
 	for _, at := range layers {
 		o.first = append(o.first, o.end)
 		o.end += at.Layer.Len()
-		o.n += at.Layer.Len()
-		o.total += at.Layer.total
+		o.n += at.Layer.count()
+		o.total += at.Layer.tokens()
 	}
 	cp := *ix
 	cp.over = o
@@ -647,8 +698,13 @@ func (o *overlay) layerOf(doc int) (LayerAt, int) {
 	return o.layers[k], doc - o.first[k]
 }
 
-// isDead: the Index's document doc is left out.
-func (o *overlay) isDead(doc int) bool { return o != nil && o.rm != nil && o.rm.dead[doc] }
+// deadDocs: which documents are left out, by number; nil for none.
+func (rm *Removed) deadDocs() []bool {
+	if rm == nil {
+		return nil
+	}
+	return rm.dead
+}
 
 // DocsWith: the documents holding the term, those With left out too, which no
 // search reaches.
@@ -659,7 +715,7 @@ func (ix *Index) DocsWith(t string) []int {
 	}
 	if ix.over != nil {
 		for k, at := range ix.over.layers {
-			for _, p := range at.Layer.postings[t] {
+			for _, p := range at.Layer.s.postings(t) {
 				docs = append(docs, ix.over.first[k]+int(p.doc))
 			}
 		}
@@ -675,7 +731,7 @@ func (ix *Index) df(t string) int {
 			df -= o.rm.df[t]
 		}
 		for _, at := range o.layers {
-			df += len(at.Layer.postings[t])
+			df += at.Layer.df(t)
 		}
 	}
 	return df
@@ -697,7 +753,7 @@ func (ix *Index) docLen(doc int) int {
 		return ix.base.docLen(doc)
 	}
 	at, i := ix.over.layerOf(doc)
-	return at.Layer.lens[i]
+	return at.Layer.s.docLen(i)
 }
 
 // place: where the document comes in the order equal scores go by.
@@ -746,7 +802,7 @@ func (ix *Index) fuzzyTerms() iter.Seq[string] {
 		terms:
 			for _, t := range at.Layer.newTerms(ix.base, o.rm) {
 				for _, earlier := range o.layers[:k] {
-					if _, has := earlier.Layer.postings[t]; has {
+					if earlier.Layer.df(t) > 0 {
 						continue terms // said already
 					}
 				}
@@ -798,7 +854,7 @@ func (ix *Index) expand(qTokens []string, fuzzy int) []weighted {
 			starting(ix.base.terms(t))
 			if ix.over != nil && len(ix.over.layers) > 0 {
 				for _, at := range ix.over.layers {
-					starting(slices.Values(at.Layer.vocab[sort.SearchStrings(at.Layer.vocab, t):]))
+					starting(at.Layer.terms(t))
 				}
 				sort.Strings(found)
 				found = slices.Compact(found)
@@ -872,13 +928,14 @@ func (ix *Index) SearchWhere(query string, limit int, accept func(doc int) bool)
 	for _, tw := range ix.expand(qTokens, fuzzyWords) {
 		idf := ix.idfOf(tw.term)
 		// first: the number of the postings' document 0 (a layer's; the
-		// index's own, which may be left out, are numbered from 0).
-		score := func(postings []posting, first int) {
+		// index's own are numbered from 0); dead: which of them are left
+		// out, by their number among themselves (nil: none).
+		score := func(postings []posting, first int, dead []bool) {
 			for _, p := range postings {
-				doc := first + int(p.doc)
-				if first == 0 && ix.over.isDead(doc) {
+				if dead != nil && dead[p.doc] {
 					continue
 				}
+				doc := first + int(p.doc)
 				if accept != nil {
 					if asked[doc] == 0 {
 						asked[doc] = 2
@@ -895,11 +952,13 @@ func (ix *Index) SearchWhere(query string, limit int, accept func(doc int) bool)
 				scores[doc] += tw.weight * idf * (f * (bm25K1 + 1) / denom)
 			}
 		}
-		score(ix.base.postings(tw.term), 0)
-		if ix.over != nil {
-			for k, at := range ix.over.layers {
-				score(at.Layer.postings[tw.term], ix.over.first[k])
-			}
+		if ix.over == nil {
+			score(ix.base.postings(tw.term), 0, nil)
+			continue
+		}
+		score(ix.base.postings(tw.term), 0, ix.over.rm.deadDocs())
+		for k, at := range ix.over.layers {
+			score(at.Layer.s.postings(tw.term), ix.over.first[k], at.Layer.rm.deadDocs())
 		}
 	}
 	hits := make([]Hit, 0, len(scores))
@@ -949,7 +1008,7 @@ func (ix *Index) HaveAll(query string, docs []int) map[int]bool {
 			mark(ix.base.postings(tw.term), 0)
 			if ix.over != nil {
 				for k, at := range ix.over.layers {
-					mark(at.Layer.postings[tw.term], ix.over.first[k])
+					mark(at.Layer.s.postings(tw.term), ix.over.first[k])
 				}
 			}
 		}

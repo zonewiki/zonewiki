@@ -789,7 +789,7 @@ Zonewiki's own state, none of it in git (`.git/info/exclude` has `/.zone/*`, `ex
 - `unsaved-files.json` — who pasted the first file for a task not made yet (a new task's dialog before its first Save), whose those files are until then (A task's files in `docs/spec/tasks.md`)
 - `drafts/<user>/` — an editor's text left in a conflict when its tab closed, for its user's next edit, 30 days at most (`docs/spec/editor.md`)
 - `tmp/` — a three-way merge's scratch files, removed after each merge
-- `index/` — search's files: `pages.idx` and `sections.idx` (the BM25 indexes), `tasks/<hash>.gob` (each closed tasks' archive's search docs) and `embeddings.json` (the semantic search cache) (`docs/spec/search.md`)
+- `index/` — search's files: `pages.idx` and `sections.idx` (the BM25 indexes of what is shared), `groups/<group>/` (the same for each group's pages and its lists' tasks, read by its members' searches alone), `tasks/<hash>.gob` (each closed tasks' archive's search docs) and `embeddings.json` (the semantic search cache) (`docs/spec/search.md`)
 - `queries.jsonl` — the query log, only with `query-log = yes`
 - `tasks-checked` — the mark that a start has checked the task files, so later starts skip it while git says they haven't changed (Storage in `docs/spec/tasks.md`)
 - `imported` — a line `zonewiki import` leaves, with its date and version: the folder is a wiki that was moved here (Moving a wiki, below)
@@ -824,7 +824,7 @@ A change to what Zonewiki keeps in git that an older Zonewiki would misread rais
 Readers stay lenient all the same: the number says which steps Zonewiki ran, not that every file is as Zonewiki wrote it (a file edited by hand or pulled from elsewhere is read as before).
 The settings file and the rest of `.zone/` aren't covered: they are no wiki data (What is in .zone/, above).
 
-What holds users' words or secrets is written readable by Zonewiki's user alone (0600), whatever the umask: `config`, `secret_key`, `signed-out`, `links`, `grants`, `seen/`, `unsaved-files.json`, `drafts/`, the index files, `index/tasks/` (private tasks' titles among them), `embeddings.json` (every page's slug) and `queries.jsonl` (every user's queries and what they found) (`atomicfile.WriteOwnerOnly`; a file from before is made so at its next write).
+What holds users' words or secrets is written readable by Zonewiki's user alone (0600), whatever the umask: `config`, `secret_key`, `signed-out`, `links`, `grants`, `seen/`, `unsaved-files.json`, `drafts/`, the index files (the groups' in `index/groups/` among them, with their pages' words), `index/tasks/` (private tasks' titles among them), `embeddings.json` (every page's slug) and `queries.jsonl` (every user's queries and what they found) (`atomicfile.WriteOwnerOnly`; a file from before is made so at its next write).
 The pages themselves, in the wiki, keep the umask's mode, as a file made in an editor does.
 
 ### A git remote

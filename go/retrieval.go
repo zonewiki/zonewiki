@@ -770,14 +770,18 @@ type docIndex struct {
 // docPart: docs of an index, in the order they come in among all docs.
 type docPart struct {
 	docs  []*SearchDoc
-	ids   []int32 // each one's number in the index (nil: first + its place here)
+	ids   []int32 // each one's number in the index, counted from first (nil: its place here)
 	first int
 	pos   []int32 // each one's place among all the docs (nil: the only part)
+	// A place's: its docs by number, counted from first: those of its base
+	// (the ones gone from it too, which no search finds), then the ones
+	// added since.
+	own, added []*SearchDoc
 }
 
 func (p *docPart) id(i int) int {
 	if p.ids != nil {
-		return int(p.ids[i])
+		return p.first + int(p.ids[i])
 	}
 	return p.first + i
 }
@@ -809,7 +813,11 @@ func (x *docIndex) doc(id int) *SearchDoc {
 	for i > 1 && id < x.parts[i].first {
 		i--
 	}
-	return x.parts[i].docs[id-x.parts[i].first]
+	p := &x.parts[i]
+	if id -= p.first; id < len(p.own) {
+		return p.own[id]
+	}
+	return p.added[id-len(p.own)]
 }
 
 // all: every doc it is over with its number, in the order the docs come in
@@ -884,53 +892,72 @@ func (x *docIndex) searchWhereID(text string, limit int, accept func(id int, d *
 // ranking (document frequencies, lengths and the vocabulary typo matching
 // draws on would otherwise show through).
 //
-// A place's docs are one layer (textsearch.Layer), made once from their
-// tokens and kept until one of them changes: every viewer who sees the
-// place searches the same layer, so a group's pages are indexed once, not
-// once per member, and nothing is kept per viewer. A search puts its view
-// together from what is there, which costs a few words: no viewer waits for
-// an index to be made because others searched since.
+// A place's docs have an index of their own (placeDocs), made when someone
+// who sees the place first searches and kept: every viewer who sees the
+// place searches the same one, as a layer of the shared index
+// (textsearch.Layer), so a group's pages are indexed once, not once per
+// member, and nothing is kept per viewer. A search puts its view together
+// from what is there, which costs a few words: no viewer waits for an index
+// to be made because others searched since.
 //
-// A change to a shared page or task doesn't build the index again: it keeps
-// the one made at the last rebuild (base), leaves out the docs that are gone
-// from it (dead) and adds the new ones (delta, one more layer, everyone's),
-// searched with the statistics of what is left, exactly as an index built
-// over that would. Only when the changes pass a few percent of the docs
-// (maxChanges) is it built again. Docs don't keep their tokens, so a change
-// and a rebuild work out the ones they need.
+// A change to a page or task doesn't build its index again, the shared one
+// or its place's (docSet): it keeps the one made at the last rebuild (base),
+// leaves out the docs that are gone from it (dead) and adds the new ones
+// (delta, one more layer), searched with the statistics of what is left,
+// exactly as an index built over that would. Only when the changes pass a
+// few percent of its docs (maxChanges) is it built again. Docs don't keep
+// their tokens, so a change and a rebuild work out the ones they need.
 //
-// The base is a file in .zone/index/ (file), mapped into memory rather than
-// read into Go's heap, and written anew by a rebuild. A start finds it there:
-// the docs whose key (docKey) it has get their numbers back, and the others
-// are changes, as after an edit. Where no file can be written, the base is
-// kept in memory.
+// The shared base is a file in .zone/index/ (file), mapped into memory
+// rather than read into Go's heap, and written anew by a rebuild; a group's
+// places have files of their own in the group's folder there (placePath),
+// which only its members' searches read. What is one user's own is kept in
+// memory. A start finds the files there: the docs whose key (docKey) a file
+// has get their numbers back, and the others are changes, as after an edit.
+// Where no file can be written, a base is kept in memory.
 //
 // The doc caches hand back the same docs until their file changes, so the
 // docs' pointers are the key.
 type indexCache struct {
-	file      string // in .zone/index/
-	mu        sync.Mutex
-	started   bool              // startFile was asked
-	opened    *textsearch.Index // the base's file as a start found it, for load
-	users     string            // who the docs were split for (usersKey)
-	all       []*SearchDoc
-	shared    []*SearchDoc // the shared docs now
-	base      *docIndex    // over the shared docs as they were at the last rebuild
-	baseID    map[*SearchDoc]int
-	reordered bool         // base's docs (from its file) are in another order than now: ties go by the order now
-	dead      []int        // base docs no longer shared docs, by number
-	delta     []*SearchDoc // shared docs that are not in base, in order
+	file    string // in .zone/index/; a group's place's in its folder there (placePath)
+	mu      sync.Mutex
+	started bool                         // startFiles was asked
+	found   map[string]*textsearch.Index // the files as a start found them, by path, for load
+	swept   bool                         // the files of places that are gone were removed (sweep)
+	users   string                       // who the docs were split for (usersKey)
+	all     []*SearchDoc
+	docSet  // the shared docs: their base is the index every view is of
 
 	// What every viewer's index is put together from, made when a doc
 	// changes (arrange), not when someone searches.
+	basePos  []int32 // each base doc's place among all the docs, by number
+	deltaPos []int32 // and each of the delta's docs'
+	common   docPart // the shared docs in order, with their numbers
+	places   map[docPlace]*placeDocs
+	order    []docPlace // places' keys, in the order their first docs come
+}
+
+// docSet: an index over docs that change, without building it again for
+// each change: the one made at the last rebuild (base, a file where path
+// names one, else in memory), the docs gone from it since (dead) and the new
+// ones (delta, searched as one more layer). The shared docs are one, and so
+// are the docs of each place.
+type docSet struct {
+	path      string            // the base's file ("": it is kept in memory)
+	opened    *textsearch.Index // the file as a start found it, for load
+	kept      bool              // a place's: its task docs' tokens are kept from one making to the next (viewTokens)
+	docs      []*SearchDoc      // the docs now, in order
+	base      *docIndex         // over the docs as they were at the last rebuild
+	baseID    map[*SearchDoc]int
+	reordered bool         // base's docs (from its file) are in another order than now: ties go by the order now
+	dead      []int        // base docs no longer among docs, by number
+	delta     []*SearchDoc // docs that are not in base, in order
+
 	removed     *textsearch.Removed // dead, as the views leave them out (nil: none)
 	removedOf   *docIndex           // the base and the dead docs removed was made for
 	removedDead []int
-	changes     *docLayer // delta
-	basePos     []int32   // each base doc's place among all the docs, by number
-	common      docPart   // the shared docs in order, with their numbers
-	places      map[docPlace]*docLayer
-	order       []docPlace // places' keys, in the order their first docs come
+	changes     *textsearch.Layer // delta's layer, made on first use
+	changesOf   []*SearchDoc      // the docs changes was made of
 }
 
 // docPlace: whose docs that aren't everyone's are: the place of a page
@@ -950,21 +977,59 @@ func placeOfDoc(d *SearchDoc) docPlace {
 	return docPlace{place: placeOf(d.Slug)}
 }
 
-// docLayer: the docs of a place (or the delta), in order, with their layer:
-// made when someone who sees them first searches, kept while the docs are
-// the same ones. pos is each one's place among all the docs now.
-type docLayer struct {
-	docs  []*SearchDoc
-	pos   []int32
-	layer *textsearch.Layer
+// placeDocs: the docs of a place, in order, with their index: made when
+// someone who sees them first searches, and kept: a doc that changes after
+// is a change to it (docSet), not a reason to make it again. pos is each
+// doc's place among all the docs now.
+type placeDocs struct {
+	docSet
+	pos     []int32
+	current bool // the base, dead and delta are those of docs as they are
+	ready   bool // and so are part and layers
+
+	part    docPart              // the docs with their numbers, counted from the place's first
+	layers  []textsearch.LayerAt // the base's docs without the dead ones, then the delta's
+	layer   *textsearch.Layer    // the base as a layer
+	layerOf *docIndex            // the base and what is left out of it that layer was made for
+	layerRm *textsearch.Removed
 }
 
-// index: the layer over the docs, made on first use (under the cache's lock).
-func (l *docLayer) index() *textsearch.Layer {
-	if l.layer == nil {
-		l.layer = textsearch.NewLayer(len(l.docs), func(i int) []string { return viewTokens.of(l.docs[i]) })
+// prepare: the place's index for its docs as they are now (under the
+// cache's lock): on first use the base is made, or read from its file;
+// after a change, only what differs from it is worked out.
+func (p *placeDocs) prepare() {
+	if p.ready {
+		return
 	}
-	return l.layer
+	if !p.current {
+		p.update(false)
+		p.settle()
+		p.current = true
+	}
+	if p.layer == nil || p.layerOf != p.base || p.layerRm != p.removed {
+		p.layer, p.layerOf, p.layerRm = p.base.ix.Layer(p.removed), p.base, p.removed
+	}
+	n := len(p.base.own)
+	deltaID := make(map[*SearchDoc]int32, len(p.delta))
+	for i, d := range p.delta {
+		deltaID[d] = int32(n + i)
+	}
+	basePos := make([]int32, n)
+	var deltaPos []int32
+	ids := make([]int32, len(p.docs))
+	for i, d := range p.docs {
+		if id, ok := p.baseID[d]; ok {
+			basePos[id], ids[i] = p.pos[i], int32(id)
+		} else {
+			deltaPos, ids[i] = append(deltaPos, p.pos[i]), deltaID[d]
+		}
+	}
+	p.layers = []textsearch.LayerAt{{Layer: p.layer, Pos: basePos}}
+	if len(p.delta) > 0 {
+		p.layers = append(p.layers, textsearch.LayerAt{Layer: p.deltaLayer(), Pos: deltaPos})
+	}
+	p.part = docPart{docs: p.docs, ids: ids, pos: p.pos, own: p.base.own, added: p.delta}
+	p.ready = true
 }
 
 // maxChanges: how many docs may differ from the base before it is built
@@ -1009,8 +1074,12 @@ func (c *indexCache) get(rq *Req, docs []*SearchDoc) *docIndex {
 				shared = append(shared, d)
 			}
 		}
-		if usersChanged || !slices.Equal(c.shared, shared) {
-			c.shared = shared
+		if usersChanged || !slices.Equal(c.docs, shared) {
+			c.docs = shared
+			if c.base == nil {
+				c.path = c.indexPath()
+				c.opened = c.takeFound(c.path)
+			}
 			c.update(usersChanged)
 		}
 		c.arrange()
@@ -1018,20 +1087,22 @@ func (c *indexCache) get(rq *Req, docs []*SearchDoc) *docIndex {
 	var layers []textsearch.LayerAt
 	parts := []docPart{c.common}
 	next := len(c.base.own)
-	add := func(l *docLayer) {
-		layers = append(layers, textsearch.LayerAt{Layer: l.index(), Pos: l.pos})
-		next += len(l.docs)
+	if len(c.delta) > 0 {
+		// Its docs are among the shared ones (common), numbered there.
+		layers = append(layers, textsearch.LayerAt{Layer: c.deltaLayer(), Pos: c.deltaPos})
+		next += len(c.delta)
 	}
-	if c.changes != nil {
-		add(c.changes) // its docs are among the shared ones (common), numbered there
-	}
-	for _, p := range c.order {
-		l := c.places[p]
-		if rq != nil && !docVisible(rq.user, l.docs[0]) {
+	for _, at := range c.order {
+		p := c.places[at]
+		if rq != nil && !docVisible(rq.user, p.docs[0]) {
 			continue
 		}
-		parts = append(parts, docPart{docs: l.docs, first: next, pos: l.pos})
-		add(l)
+		p.prepare()
+		part := p.part
+		part.first = next
+		parts = append(parts, part)
+		layers = append(layers, p.layers...)
+		next += len(p.base.own) + len(p.delta)
 	}
 	if len(layers) == 0 && c.removed == nil && !c.reordered {
 		return c.base
@@ -1042,89 +1113,56 @@ func (c *indexCache) get(rq *Req, docs []*SearchDoc) *docIndex {
 // arrange: what the views are put together from, for the docs as they are
 // now (c.all, and the base, dead and delta that update found): each doc's
 // place in the order, the shared docs with their numbers, and the docs that
-// aren't everyone's by their places. A place whose docs are the same ones
-// keeps its layer; one pass over the docs, once per change.
+// aren't everyone's by their places. A place keeps its index: the docs that
+// are other ones now are its changes, found when someone who sees it next
+// searches. One pass over the docs, once per change.
 func (c *indexCache) arrange() {
 	n := len(c.base.own)
 	c.basePos = make([]int32, n)
-	c.common = docPart{docs: make([]*SearchDoc, 0, len(c.shared)), ids: make([]int32, 0, len(c.shared)), pos: make([]int32, 0, len(c.shared))}
+	c.deltaPos = make([]int32, 0, len(c.delta))
+	c.common = docPart{docs: make([]*SearchDoc, 0, len(c.docs)), ids: make([]int32, 0, len(c.docs)), pos: make([]int32, 0, len(c.docs))}
 	deltaID := make(map[*SearchDoc]int, len(c.delta))
 	for i, d := range c.delta {
 		deltaID[d] = n + i
 	}
-	var changes *docLayer
-	if len(c.delta) > 0 {
-		changes = &docLayer{docs: c.delta, pos: make([]int32, 0, len(c.delta))}
-		if c.changes != nil && slices.Equal(c.changes.docs, c.delta) {
-			changes.layer = c.changes.layer
-		}
-	}
-	places, order := map[docPlace]*docLayer{}, []docPlace(nil)
+	places, order := map[docPlace]*placeDocs{}, []docPlace(nil)
 	for i, d := range c.all {
 		at := int32(i)
 		if id, ok := c.baseID[d]; ok {
 			c.basePos[id] = at
 			c.common.docs, c.common.ids, c.common.pos = append(c.common.docs, d), append(c.common.ids, int32(id)), append(c.common.pos, at)
 		} else if id, ok := deltaID[d]; ok {
-			changes.pos = append(changes.pos, at)
+			c.deltaPos = append(c.deltaPos, at) // the delta's docs are in the docs' order
 			c.common.docs, c.common.ids, c.common.pos = append(c.common.docs, d), append(c.common.ids, int32(id)), append(c.common.pos, at)
 		} else {
 			p := placeOfDoc(d)
 			l := places[p]
 			if l == nil {
-				l = &docLayer{}
+				l = &placeDocs{}
 				places[p], order = l, append(order, p)
 			}
 			l.docs, l.pos = append(l.docs, d), append(l.pos, at)
 		}
 	}
 	for p, l := range places {
-		if old := c.places[p]; old != nil && slices.Equal(old.docs, l.docs) {
-			l.layer = old.layer
+		old := c.places[p]
+		if old == nil {
+			l.kept = true
+			l.path = c.placePath(p)
+			l.opened = c.takeFound(l.path)
+			continue
 		}
+		if !slices.Equal(old.docs, l.docs) {
+			old.docs, old.current, old.ready = l.docs, false, false
+		}
+		if !slices.Equal(old.pos, l.pos) {
+			old.pos, old.ready = l.pos, false
+		}
+		places[p] = old
 	}
-	c.changes, c.places, c.order = changes, places, order
-	// What the dead docs take from the base's statistics: a pass over its
-	// postings, so only when they are other docs than last time.
-	if c.removedOf != c.base || !slices.Equal(c.removedDead, c.dead) {
-		dead := make(map[int]bool, len(c.dead))
-		for _, id := range c.dead {
-			dead[id] = true
-		}
-		c.removed, c.removedOf, c.removedDead = c.base.ix.Without(dead), c.base, c.dead
-	}
-}
-
-// update: the shared docs are c.shared now. Finds what differs from the base,
-// or builds it again (rebuild, or when that is more than maxChanges). Without
-// a base yet, it is the file's, when there is one.
-func (c *indexCache) update(rebuild bool) {
-	if c.base == nil {
-		rebuild = !c.load()
-	}
-	if !rebuild {
-		inShared := make(map[*SearchDoc]bool, len(c.shared))
-		for _, d := range c.shared {
-			inShared[d] = true
-		}
-		var dead []int
-		for id, d := range c.base.own {
-			if !inShared[d] {
-				dead = append(dead, id)
-			}
-		}
-		var delta []*SearchDoc
-		for _, d := range c.shared {
-			if _, ok := c.baseID[d]; !ok {
-				delta = append(delta, d)
-			}
-		}
-		if len(dead)+len(delta) <= maxChanges(len(c.base.own)) {
-			c.dead, c.delta = dead, delta
-			return
-		}
-	}
-	c.build()
+	c.sweep(places)
+	c.places, c.order = places, order
+	c.settle()
 }
 
 // indexPath: where the base's file is ("": nowhere, no wiki).
@@ -1135,25 +1173,142 @@ func (c *indexCache) indexPath() string {
 	return statePath("index", c.file)
 }
 
+// groupIndexes: the folder of the groups' index files, a folder a group.
+const groupIndexes = "groups"
+
+// placeFile: the name of the file of a group's pages' index, or of its
+// lists' tasks', in the group's folder.
+func (c *indexCache) placeFile(tasks bool) string {
+	if tasks {
+		return "tasks-" + c.file
+	}
+	return c.file
+}
+
+// placePath: where the index of a place's docs is kept: a group's pages'
+// and its lists' tasks' in the group's folder in .zone/index/groups/, read
+// by its members' searches alone. "": in memory, as what is one user's own
+// always is.
+func (c *indexCache) placePath(p docPlace) string {
+	if c.indexPath() == "" || p.kind != ofGroup || !groupNameRE.MatchString(p.name) {
+		return ""
+	}
+	return statePath("index", groupIndexes, p.name, c.placeFile(p.tasks))
+}
+
+// takeFound: the file at path as a start opened it (nil: it didn't),
+// handed over once.
+func (c *indexCache) takeFound(path string) *textsearch.Index {
+	ix := c.found[path]
+	delete(c.found, path)
+	return ix
+}
+
+// sweep: removes the index files of the groups' places that are gone (a
+// group removed or renamed, a folder emptied, a wiki without users now):
+// those among the places before that aren't among places, and once, after
+// a start, whatever is in the groups' folder for no place. Only this
+// index's files; a group's folder goes with its last one.
+func (c *indexCache) sweep(places map[docPlace]*placeDocs) {
+	if c.indexPath() == "" || !writeIndexFiles {
+		return
+	}
+	drop := func(path string) {
+		if os.Remove(path) == nil {
+			os.Remove(filepath.Dir(path)) // when it is empty
+		}
+	}
+	for p, old := range c.places {
+		if places[p] == nil && old.path != "" {
+			drop(old.path)
+		}
+	}
+	if c.swept {
+		return
+	}
+	c.swept, c.found = true, nil
+	dirs, _ := os.ReadDir(statePath("index", groupIndexes))
+	for _, dir := range dirs {
+		for _, tasks := range []bool{false, true} {
+			if places[docPlace{place{ofGroup, dir.Name()}, tasks}] == nil {
+				drop(statePath("index", groupIndexes, dir.Name(), c.placeFile(tasks)))
+			}
+		}
+	}
+}
+
+// update: the docs are s.docs now. Finds what differs from the base, or
+// builds it again (rebuild, or when that is more than maxChanges). Without
+// a base yet, it is the file's, when there is one.
+func (s *docSet) update(rebuild bool) {
+	if s.base == nil {
+		rebuild = !s.load()
+	}
+	if !rebuild {
+		in := make(map[*SearchDoc]bool, len(s.docs))
+		for _, d := range s.docs {
+			in[d] = true
+		}
+		var dead []int
+		for id, d := range s.base.own {
+			if !in[d] {
+				dead = append(dead, id)
+			}
+		}
+		var delta []*SearchDoc
+		for _, d := range s.docs {
+			if _, ok := s.baseID[d]; !ok {
+				delta = append(delta, d)
+			}
+		}
+		if len(dead)+len(delta) <= maxChanges(len(s.base.own)) {
+			s.dead, s.delta = dead, delta
+			return
+		}
+	}
+	s.build()
+}
+
+// settle: what the dead docs take from the base's statistics: a pass over
+// its postings, so only when they are other docs than last time.
+func (s *docSet) settle() {
+	if s.removedOf != s.base || !slices.Equal(s.removedDead, s.dead) {
+		dead := make(map[int]bool, len(s.dead))
+		for _, id := range s.dead {
+			dead[id] = true
+		}
+		s.removed, s.removedOf, s.removedDead = s.base.ix.Without(dead), s.base, s.dead
+	}
+}
+
+// deltaLayer: the layer over the delta's docs, made on first use (under
+// the cache's lock) and kept while they are the same ones.
+func (s *docSet) deltaLayer() *textsearch.Layer {
+	if s.changes == nil || !slices.Equal(s.changesOf, s.delta) {
+		docs := s.delta
+		s.changes, s.changesOf = textsearch.NewLayer(len(docs), func(i int) []string { return viewTokens.of(docs[i]) }), docs
+	}
+	return s.changes
+}
+
 // writeIndexFiles: false where the wiki is only read (zonewiki eval): a
 // file there is read, but a rebuild stays in memory.
 var writeIndexFiles = true
 
 // goneDoc stands in the base for a doc of its file that is no longer there:
-// it is in no shared docs, so it is left out (dead).
+// it is among no docs, so it is left out (dead).
 var goneDoc = &SearchDoc{}
 
 // load: the base from its file, the docs it still has numbered as there.
 // False when there is none to use: then it is built.
-func (c *indexCache) load() bool {
-	path := c.indexPath()
-	if path == "" {
+func (s *docSet) load() bool {
+	if s.path == "" {
 		return false
 	}
-	ix, err := c.opened, error(nil)
-	c.opened = nil
+	ix, err := s.opened, error(nil)
+	s.opened = nil
 	if ix == nil {
-		ix, err = textsearch.OpenIndex(path)
+		ix, err = textsearch.OpenIndex(s.path)
 	}
 	if err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
@@ -1167,9 +1322,9 @@ func (c *indexCache) load() bool {
 		ids[k] = append(ids[k], id)
 	}
 	docs := make([]*SearchDoc, len(keys))
-	baseID := make(map[*SearchDoc]int, len(c.shared))
+	baseID := make(map[*SearchDoc]int, len(s.docs))
 	last, reordered := -1, false
-	for _, d := range c.shared {
+	for _, d := range s.docs {
 		same := ids[d.key]
 		if len(same) == 0 {
 			continue
@@ -1186,19 +1341,19 @@ func (c *indexCache) load() bool {
 			docs[id] = goneDoc
 		}
 	}
-	c.base, c.baseID, c.dead, c.delta = &docIndex{own: docs, parts: []docPart{{docs: docs}}, ix: ix}, baseID, nil, nil
-	c.reordered = reordered
+	s.base, s.baseID, s.dead, s.delta = &docIndex{own: docs, parts: []docPart{{docs: docs}}, ix: ix}, baseID, nil, nil
+	s.reordered = reordered
 	return true
 }
 
-// build: the base anew over the shared docs, written to its file and mapped,
-// or kept in memory when that fails. With a base from a file, the new file
-// is merged from it (MergeIndex): only the docs it doesn't have are read
-// and tokenized.
-func (c *indexCache) build() {
-	docs := c.shared
+// build: the base anew over the docs, written to its file and mapped, or
+// kept in memory when that fails or there is no file for it. With a base
+// from a file, the new file is merged from it (MergeIndex): only the docs
+// it doesn't have are read and tokenized.
+func (s *docSet) build() {
+	docs := s.docs
 	var ix *textsearch.Index
-	if path := c.indexPath(); path != "" && writeIndexFiles {
+	if s.path != "" && writeIndexFiles {
 		indexDoc := func(d *SearchDoc) textsearch.IndexDoc {
 			if d.file != nil {
 				toks, squashed, same := d.indexed()
@@ -1214,36 +1369,40 @@ func (c *indexCache) build() {
 			return textsearch.IndexDoc{Tokens: d.tokens(), Key: d.key, Text: textsearch.Squash(d.text())}
 		}
 		err := errors.New("no file to merge with")
-		if c.base != nil && c.base.ix.Keys() != nil {
+		if s.base != nil && s.base.ix.Keys() != nil {
 			// The docs the file has already come from it: only the others
 			// are read and tokenized.
-			old := c.base
-			err = textsearch.MergeIndex(path, old.ix, len(docs), func(i int) textsearch.MergeDoc {
-				if id, ok := c.baseID[docs[i]]; ok {
+			old := s.base
+			err = textsearch.MergeIndex(s.path, old.ix, len(docs), func(i int) textsearch.MergeDoc {
+				if id, ok := s.baseID[docs[i]]; ok {
 					return textsearch.MergeDoc{Old: id}
 				}
 				return textsearch.MergeDoc{Old: -1, Doc: indexDoc(docs[i])}
 			})
 		}
 		if err != nil {
-			err = textsearch.WriteIndex(path, len(docs), func(i int) textsearch.IndexDoc { return indexDoc(docs[i]) })
+			err = textsearch.WriteIndex(s.path, len(docs), func(i int) textsearch.IndexDoc { return indexDoc(docs[i]) })
 		}
 		if err == nil {
-			ix, err = textsearch.OpenIndex(path)
+			ix, err = textsearch.OpenIndex(s.path)
 		}
 		if err != nil {
 			logf("search index: %v; kept in memory", err)
 		}
 	}
 	if ix == nil {
-		ix = textsearch.NewIndexOf(len(docs), func(i int) []string { return docs[i].tokens() })
+		tokens := (*SearchDoc).tokens
+		if s.kept {
+			tokens = viewTokens.of
+		}
+		ix = textsearch.NewIndexOf(len(docs), func(i int) []string { return tokens(docs[i]) })
 	}
-	c.base, c.reordered = &docIndex{own: docs, parts: []docPart{{docs: docs}}, ix: ix}, false
-	c.baseID = make(map[*SearchDoc]int, len(docs))
+	s.base, s.reordered = &docIndex{own: docs, parts: []docPart{{docs: docs}}, ix: ix}, false
+	s.baseID = make(map[*SearchDoc]int, len(docs))
 	for id, d := range docs {
-		c.baseID[d] = id
+		s.baseID[d] = id
 	}
-	c.dead, c.delta = nil, nil
+	s.dead, s.delta = nil, nil
 }
 
 // viewTokens: the tokens of the task docs the layers add to the base
@@ -2065,20 +2224,28 @@ func taskHits(q string, tasks map[string]*SearchDoc, limit int) []docScore {
 // their texts (a test's measure).
 var pageReads atomic.Int64
 
-// startFile: the base's file as a start finds it, opened once, so that its
-// docs' metas make the docs (seedPageDocs, seedChunkDocs) and load takes it
-// from there without opening it again. Nil when there is none to read.
-func (c *indexCache) startFile() *textsearch.Index {
+// startFiles: the base's file as a start finds it, and the files of the
+// groups' places beside it, opened once, so that their docs' metas make the
+// docs (seedPageDocs, seedChunkDocs) and load takes each from there without
+// opening it again. None where there is nothing to read.
+func (c *indexCache) startFiles() []*textsearch.Index {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.started {
-		return c.opened
+	if path := c.indexPath(); !c.started && path != "" && c.base == nil {
+		paths := []string{path}
+		dirs, _ := os.ReadDir(statePath("index", groupIndexes))
+		for _, dir := range dirs {
+			paths = append(paths, statePath("index", groupIndexes, dir.Name(), c.file))
+		}
+		c.found = map[string]*textsearch.Index{}
+		for _, p := range paths {
+			if ix, err := textsearch.OpenIndex(p); err == nil { // load says what's wrong with one
+				c.found[p] = ix
+			}
+		}
 	}
 	c.started = true
-	if path := c.indexPath(); path != "" && c.base == nil {
-		c.opened, _ = textsearch.OpenIndex(path) // load says what's wrong with it
-	}
-	return c.opened
+	return slices.Collect(maps.Values(c.found))
 }
 
 // metaVersion: changes when docMeta does, so an older file's metas are
@@ -2163,14 +2330,12 @@ func seedPageDocs() {
 		return
 	}
 	searchDocCache.m = map[string]*pageCached[*SearchDoc]{}
-	ix := searchIndexCache.startFile()
-	if ix == nil {
-		return
-	}
-	for id, key := range ix.Keys() {
-		meta, _ := ix.Meta(id)
-		if d, ok := docFromMeta(meta, key); ok && !d.Section && !d.TaskRefs && key != (textsearch.DocKey{}) {
-			searchDocCache.m[d.Slug] = &pageCached[*SearchDoc]{d.Mtime, d, ""}
+	for _, ix := range searchIndexCache.startFiles() {
+		for id, key := range ix.Keys() {
+			meta, _ := ix.Meta(id)
+			if d, ok := docFromMeta(meta, key); ok && !d.Section && !d.TaskRefs && key != (textsearch.DocKey{}) {
+				searchDocCache.m[d.Slug] = &pageCached[*SearchDoc]{d.Mtime, d, ""}
+			}
 		}
 	}
 }
@@ -2185,10 +2350,6 @@ func seedChunkDocs() {
 		return
 	}
 	chunkDocCache.m = map[string]*pageCached[[]*SearchDoc]{}
-	ix := chunkIndexCache.startFile()
-	if ix == nil {
-		return
-	}
 	var page []*SearchDoc
 	whole := true
 	flush := func() {
@@ -2197,27 +2358,29 @@ func seedChunkDocs() {
 		}
 		page, whole = nil, true
 	}
-	for id, key := range ix.Keys() {
-		meta, _ := ix.Meta(id)
-		d, ok := docFromMeta(meta, key)
-		if !ok || !d.Section {
-			flush()
-			continue
-		}
-		if len(page) > 0 && d.Slug != page[0].Slug {
-			flush()
-		}
-		if int(d.nth) != len(page) || key == (textsearch.DocKey{}) {
-			whole = false
-		}
-		if len(page) > 0 { // what a page's sections share, once
-			first := page[0]
-			if !d.Mtime.Equal(first.Mtime) {
+	for _, ix := range chunkIndexCache.startFiles() {
+		for id, key := range ix.Keys() {
+			meta, _ := ix.Meta(id)
+			d, ok := docFromMeta(meta, key)
+			if !ok || !d.Section {
+				flush()
+				continue
+			}
+			if len(page) > 0 && d.Slug != page[0].Slug {
+				flush()
+			}
+			if int(d.nth) != len(page) || key == (textsearch.DocKey{}) {
 				whole = false
 			}
-			d.Slug, d.Title, d.Tags, d.file = first.Slug, first.Title, first.Tags, first.file
+			if len(page) > 0 { // what a page's sections share, once
+				first := page[0]
+				if !d.Mtime.Equal(first.Mtime) {
+					whole = false
+				}
+				d.Slug, d.Title, d.Tags, d.file = first.Slug, first.Title, first.Tags, first.file
+			}
+			page = append(page, d)
 		}
-		page = append(page, d)
+		flush()
 	}
-	flush()
 }

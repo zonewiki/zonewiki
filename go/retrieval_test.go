@@ -164,6 +164,7 @@ func indexCacheStaysAsIfBuiltAfresh(t *testing.T, file string) {
 	viewers := map[string]*Req{"alice": {user: asUser("alice")}, "bob": {user: asUser("bob")}, "carol": {user: asUser("carol")}, "leaf": nil}
 	c := &indexCache{file: file}
 	rebuilds, corrected, starts := 0, 0, 0
+	placesCorrected, placesFromFiles := 0, 0
 	var lastBase *docIndex
 	for round := 0; round < 60; round++ {
 		if file != "" && round%7 == 3 { // Zonewiki starts again
@@ -227,9 +228,18 @@ func indexCacheStaysAsIfBuiltAfresh(t *testing.T, file string) {
 			corrected++
 		}
 		lastBase = c.base
+		for _, p := range c.places {
+			if p.base != nil && len(p.dead)+len(p.delta) > 0 {
+				placesCorrected++
+			}
+			if p.base != nil && p.base.ix.Keys() != nil {
+				placesFromFiles++
+			}
+		}
 	}
-	if rebuilds < 3 || corrected < 10 || file != "" && starts < 5 {
-		t.Errorf("the test should use every way: %d rebuilds, %d rounds with a corrected base, %d starts", rebuilds, corrected, starts)
+	if rebuilds < 3 || corrected < 10 || placesCorrected < 20 || file != "" && (starts < 5 || placesFromFiles < 20) {
+		t.Errorf("the test should use every way: %d rebuilds, %d rounds with a corrected base, %d starts; places' indexes: %d times corrected, %d times from a file",
+			rebuilds, corrected, starts, placesCorrected, placesFromFiles)
 	}
 }
 
@@ -677,6 +687,214 @@ func TestRebuildReadsOnlyChanges(t *testing.T) {
 	}
 }
 
+// A change in a group's folder is a change to the group's index, as one to
+// a shared page is to the shared one: the next member's search asks only the
+// changed page for its tokens, and finds what an index built anew would.
+// Past maxChanges the group's index is built again, and no one else's.
+func TestAnEditInAGroupReadsOnlyThatPage(t *testing.T) {
+	for _, file := range []string{"", "pages.idx"} {
+		testWiki(t, nil)
+		withGroups(t, nil, "alice:dev", "bob")
+		asked := 0
+		doc := func(slug string, words ...string) *SearchDoc {
+			d := &SearchDoc{Slug: slug, Tokens: func() []string { asked++; return words }}
+			d.key = docKey("test", slug, strings.Join(words, " "))
+			return d
+		}
+		var docs []*SearchDoc
+		for i := range 100 {
+			docs = append(docs, doc(fmt.Sprintf("p%d", i), "apple", fmt.Sprintf("w%d", i%7)))
+			docs = append(docs, doc(fmt.Sprintf("groups/dev/g%d", i), "apple", "pear", fmt.Sprintf("w%d", i%5)))
+		}
+		alice := &Req{user: asUser("alice")}
+		c := &indexCache{file: file}
+		c.get(alice, docs)
+		dev := c.places[docPlace{place: place{ofGroup, "dev"}}]
+		shared, group := c.base, dev.base
+		if asked != len(docs) || group == nil {
+			t.Fatalf("%q: the first search asked %d docs for their tokens, want each of the %d once", file, asked, len(docs))
+		}
+		fresh := func() []*SearchDoc { return newDocIndex(docs).search("apple pear w3 plum", 1000) }
+
+		asked = 0
+		docs[7] = doc("groups/dev/g3", "apple", "plum", "w3")
+		docs = slices.Delete(docs, 21, 22) // groups/dev/g10 is deleted
+		docs = slices.Insert(docs, 40, doc("groups/dev/new", "plum", "plum"))
+		got := c.get(alice, docs).search("apple pear w3 plum", 1000)
+		if asked != 2 || dev.base != group || len(dev.dead) != 2 || len(dev.delta) != 2 || c.base != shared || len(c.dead)+len(c.delta) != 0 {
+			t.Errorf("%q: after three changes in the group: %d docs' tokens asked for (want the 2 new), the group's index made anew: %v, %d dead and %d new in it, %d changes to the shared one",
+				file, asked, dev.base != group, len(dev.dead), len(dev.delta), len(c.dead)+len(c.delta))
+		}
+		asked = 0
+		if want := fresh(); !slices.Equal(got, want) {
+			t.Errorf("%q: after changes in the group: not as if built afresh", file)
+		}
+		// Who is not in the group searches the shared index as it was.
+		asked = 0
+		if bob := c.get(&Req{user: asUser("bob")}, docs); bob != c.base || asked != 0 {
+			t.Errorf("%q: bob's index is not the shared one, or docs were asked for it (%d)", file, asked)
+		}
+
+		edits := 0
+		for i, d := range docs { // past maxChanges: the group's is built again
+			if edits < 40 && strings.HasPrefix(d.Slug, "groups/dev/g") && d.Slug != "groups/dev/g3" {
+				docs[i] = doc(d.Slug, "apple", "quince", fmt.Sprintf("w%d", i%3))
+				edits++
+			}
+		}
+		asked = 0
+		got = c.get(alice, docs).search("apple pear w3 plum", 1000)
+		if dev.base == group || c.base != shared || len(dev.dead)+len(dev.delta) != 0 {
+			t.Errorf("%q: past maxChanges: the group's index built again: %v, the shared one: %v", file, dev.base != group, c.base != shared)
+		}
+		// With its base in a file the rebuild merges from it: only the docs
+		// changed since the file was written are asked for (the 2 before
+		// were in the delta, not in the file).
+		if file != "" && asked != 42 {
+			t.Errorf("the rebuild asked %d docs for their tokens, want the 42 changed since the file was written", asked)
+		}
+		asked = 0
+		if want := fresh(); !slices.Equal(got, want) {
+			t.Errorf("%q: after the rebuild: not as if built afresh", file)
+		}
+	}
+}
+
+// A group's index is a file of its own in the group's folder under
+// .zone/index/groups/ (its pages', and its lists' tasks'), made when a
+// member first searches: the shared file has nothing of the group, a start
+// finds the group's there and asks no doc for its tokens, what is one
+// user's own is in no file, and a group's files go when its docs do.
+func TestAGroupsIndexIsAFileOfItsOwn(t *testing.T) {
+	testWiki(t, nil)
+	withGroups(t, nil, "alice:dev", "bob", "carol:dev")
+	asked := 0
+	doc := func(slug string, task *Task, words ...string) *SearchDoc {
+		d := &SearchDoc{Slug: slug, Task: task, Tokens: func() []string { asked++; return words }}
+		d.key = docKey("test", slug, d.taskID(), strings.Join(words, " "))
+		return d
+	}
+	var docs []*SearchDoc
+	for i := range 20 {
+		docs = append(docs, doc(fmt.Sprintf("p%d", i), nil, "apple", fmt.Sprintf("w%d", i%7)))
+		docs = append(docs, doc(fmt.Sprintf("groups/dev/g%d", i), nil, "apple", "ocelotharp", fmt.Sprintf("w%d", i%5)))
+	}
+	docs = append(docs, doc("private/alice/diary", nil, "apple", "annasword"))
+	docs = append(docs, doc(taskfiles.DirName, &Task{ID: "t1", Owner: taskfiles.GroupOwner("dev")}, "apple", "devtask"))
+	docs = append(docs, doc(taskfiles.DirName, &Task{ID: "t2", Owner: "alice"}, "apple", "ownt"))
+	alice, bob, carol := &Req{user: asUser("alice")}, &Req{user: asUser("bob")}, &Req{user: asUser("carol")}
+	sharedFile, pagesFile, tasksFile := statePath("index", "pages.idx"), statePath("index", "groups", "dev", "pages.idx"), statePath("index", "groups", "dev", "tasks-pages.idx")
+	exists := func(path string) bool { _, err := os.Stat(path); return err == nil }
+
+	// Who is not in the group makes no file of it.
+	c := &indexCache{file: "pages.idx"}
+	c.get(bob, docs)
+	if !exists(sharedFile) || exists(pagesFile) || exists(tasksFile) {
+		t.Fatalf("after bob's search: the shared file %v, the group's %v and %v", exists(sharedFile), exists(pagesFile), exists(tasksFile))
+	}
+	want := c.get(alice, docs).search("apple ocelotharp devtask w3", 1000)
+	if !exists(pagesFile) || !exists(tasksFile) {
+		t.Fatalf("after alice's search: the group's files %v and %v", exists(pagesFile), exists(tasksFile))
+	}
+	// Each file has its place's docs and no other's; what is alice's own is
+	// in none of them.
+	keysOf := func(path string) map[textsearch.DocKey]bool {
+		ix, err := textsearch.OpenIndex(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		keys := map[textsearch.DocKey]bool{}
+		for _, k := range ix.Keys() {
+			keys[k] = true
+		}
+		return keys
+	}
+	files := map[string]map[textsearch.DocKey]bool{sharedFile: keysOf(sharedFile), pagesFile: keysOf(pagesFile), tasksFile: keysOf(tasksFile)}
+	for _, d := range docs {
+		in := ""
+		switch p := placeOfDoc(d); {
+		case p.shared():
+			in = sharedFile
+		case p.kind == ofGroup && p.tasks:
+			in = tasksFile
+		case p.kind == ofGroup:
+			in = pagesFile
+		}
+		for path, keys := range files {
+			if keys[d.key] != (path == in) {
+				t.Errorf("%s %s in %s: %v", d.Slug, d.taskID(), path, keys[d.key])
+			}
+		}
+	}
+	entries, _ := os.ReadDir(statePath("index", "groups"))
+	if len(entries) != 1 {
+		t.Errorf("%d folders in index/groups, want the one of dev", len(entries))
+	}
+	if info, err := os.Stat(pagesFile); err != nil || info.Mode().Perm() != 0o600 {
+		t.Errorf("the group's file is readable by more than Zonewiki's user: %v", info.Mode().Perm())
+	}
+
+	// A start: the group's files are found, no doc of the shared ones or
+	// the group's is asked for its tokens (alice's own two are), and a
+	// member finds the same, another member with her.
+	asked = 0
+	c = &indexCache{file: "pages.idx"}
+	if got := c.get(alice, docs).search("apple ocelotharp devtask w3", 1000); !slices.Equal(got, want) || asked != 2 {
+		t.Errorf("a start: %d docs' tokens asked for (want alice's own 2), the same hits: %v", asked, slices.Equal(got, want))
+	}
+	asked = 0
+	if got := c.get(carol, docs).search("ocelotharp", 1000); len(got) != 20 || asked != 0 {
+		t.Errorf("carol after alice: %d of the group's 20 pages, %d docs' tokens asked for", len(got), asked)
+	}
+	if got := c.get(bob, docs).search("ocelotharp ocelothar devtask", 1000); len(got) != 0 {
+		t.Errorf("bob finds %d of the group's docs", len(got))
+	}
+
+	// A page edited while Zonewiki was down is the one change to the
+	// group's index a start finds.
+	docs[3] = doc("groups/dev/g1", nil, "apple", "ocelotharp", "plum")
+	asked = 0
+	c = &indexCache{file: "pages.idx"}
+	got := c.get(alice, docs).search("plum ocelotharp", 1000)
+	if dev := c.places[docPlace{place: place{ofGroup, "dev"}}]; asked != 3 || len(dev.dead) != 1 || len(dev.delta) != 1 || got[0] != docs[3] {
+		t.Errorf("a start after an edit in the group: %d docs' tokens asked for (want alice's own 2 and the page), %d dead, %d new", asked, len(dev.dead), len(dev.delta))
+	}
+
+	// The group's tasks are gone: their file goes, the pages' stays; then
+	// the pages too, and the folder with them.
+	noTasks := slices.DeleteFunc(slices.Clone(docs), func(d *SearchDoc) bool { return d.taskID() == "t1" })
+	c.get(alice, noTasks)
+	if exists(tasksFile) || !exists(pagesFile) {
+		t.Errorf("the group's tasks gone: their file is there %v, the pages' %v", exists(tasksFile), exists(pagesFile))
+	}
+	none := slices.DeleteFunc(slices.Clone(noTasks), func(d *SearchDoc) bool { return strings.HasPrefix(d.Slug, "groups/") })
+	c.get(alice, none)
+	if exists(pagesFile) || exists(filepath.Dir(pagesFile)) {
+		t.Errorf("the group's pages gone: their file is there %v, its folder %v", exists(pagesFile), exists(filepath.Dir(pagesFile)))
+	}
+
+	// Files left by a group that went while Zonewiki was down go at the
+	// start's first search; another index's files there are left alone.
+	c.get(alice, docs)
+	other := statePath("index", "groups", "dev", "sections.idx")
+	if err := os.WriteFile(other, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	(&indexCache{file: "pages.idx"}).get(bob, none)
+	if exists(pagesFile) || exists(tasksFile) || !exists(other) {
+		t.Errorf("a start without the group: its files are there %v %v, another index's %v", exists(pagesFile), exists(tasksFile), exists(other))
+	}
+
+	// A wiki only read (zonewiki eval) writes and removes none.
+	(&indexCache{file: "pages.idx"}).get(alice, docs)
+	writeIndexFiles = false
+	defer func() { writeIndexFiles = true }()
+	(&indexCache{file: "pages.idx"}).get(alice, none)
+	if !exists(pagesFile) {
+		t.Error("a wiki only read: the group's file was removed")
+	}
+}
+
 // A group's pages are in no index but its members' (docs/spec/search.md,
 // Who searches what): to anyone else the search is, to the last number, that of a
 // wiki without the folder, so neither a ranking nor a typo's suggestion
@@ -703,16 +921,16 @@ func TestAGroupsPagesAreInItsMembersIndexAlone(t *testing.T) {
 	if alice.count() != 6 || !slices.Equal(docsOf(alice), docsOf(carol)) {
 		t.Errorf("alice's index has %d docs, carol's %d: the shared ones and their groups' three", alice.count(), carol.count())
 	}
-	// A group's pages are indexed once, for whoever is in it: two layers
+	// A group's pages are indexed once, for whoever is in it: two indexes
 	// made (dev's and product's), none for the folder nobody is in.
 	made := 0
 	for _, l := range c.places {
-		if l.layer != nil {
+		if l.base != nil {
 			made++
 		}
 	}
-	if dev := c.places[docPlace{place: place{ofGroup, "dev"}}]; made != 2 || len(c.places) != 3 || dev == nil || dev.layer == nil {
-		t.Errorf("%d layers made of %d places, want dev's and product's of three", made, len(c.places))
+	if dev := c.places[docPlace{place: place{ofGroup, "dev"}}]; made != 2 || len(c.places) != 3 || dev == nil || dev.base == nil {
+		t.Errorf("%d indexes made of %d places, want dev's and product's of three", made, len(c.places))
 	}
 	without := newDocIndex(shared)
 	for _, q := range []string{"apple", "pear", "plum", "ocelotharp", "ocelothar", "ocelotharq", "apple pear", "roadmap"} {

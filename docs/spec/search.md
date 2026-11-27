@@ -215,18 +215,25 @@ With users, a search finds what its user may see and nothing else, and what they
   its pages are searched along with the shared ones by its members and nobody else, as a user's private pages are by them
   (`docShared`, `docPlace`, `Index.View`; with the group's lists' tasks, A group's lists in `docs/spec/tasks.md`),
   so a group's words, counts and lengths take part in no one else's ranking, and a typo of a word only the group has suggests nothing to anyone else.
-  The layer is made when a member first searches after a change in the folder, for all of them, and every further member's search finds it there
-  (`TestAMembersIndexOfALargeGroup`; `TestAGroupsPagesAreInItsMembersIndexAlone` in `go/retrieval_test.go`).
+  Its index is made when a member first searches, for all of them, and kept in files of the group's own (A group's index files):
+  every further member's search finds it there, a start too,
+  and a page changed in the folder after is a change to it, not a reason to make it again (Nothing is kept per viewer)
+  (`TestAGroupsPagesAreInItsMembersIndexAlone`, `TestAnEditInAGroupReadsOnlyThatPage`, `TestAGroupsIndexIsAFileOfItsOwn` in `go/retrieval_test.go`).
 - **The semantic index** holds every page's vectors, but a search looks only at the visible ones (pages, sections, tasks, Related, and the pages a new page is compared with).
-- **What is private is in no index file** (The index on disk): a user's own private tasks' words are in their layer,
-  and are kept from one making of it to the next (`viewTokens`, by the docs' keys, up to 400,000 tokens),
-  so their private archives are read for that once, not again whenever one of their tasks changes.
+- **What is one user's own is in no index file** (The index on disk), and a group's is in the group's own files, which only its members' searches read:
+  a user's private pages and private tasks are indexed in memory when they first search after a start,
+  and their tasks' words are kept from one making to the next (`viewTokens`, by the docs' keys, up to 400,000 tokens),
+  so their private archives are read for that once.
 
 ### Nothing is kept per viewer
 
-The docs that aren't everyone's are kept by their place (`indexCache.get`, `arrange`; `docPlace`: a user's private pages, a user's private tasks, a group's folder and its lists' tasks, no one's),
-each place's as one layer (`textsearch.Layer`: its docs' lengths and postings, numbered among themselves),
-made when someone who sees the place first searches and kept until one of its docs changes.
+The docs that aren't everyone's are kept by their place (`indexCache.get`, `arrange`; `docPlace`: a user's private pages, a user's private tasks, a group's folder, a group's lists' tasks, no one's),
+each place's with an index of its own (`placeDocs`, a `docSet` as the shared docs have one: its docs' lengths and postings, numbered among themselves),
+made when someone who sees the place first searches, and kept.
+A doc of the place that changes after is a change to that index, as a shared page's is to the shared one (Keeping the index current):
+the docs gone from it are left out, the new ones are a small layer beside it, and only past `maxChanges` is the place's index built again.
+So an edit in a group's folder costs the next member's search that one page, read and tokenized, whatever the folder's size, and costs no one else anything.
+A view searches a place's index as a layer of the shared one (`Index.Layer`, `textsearch.Layer`: an index's documents, some left out, numbered on from the documents before).
 Who sees one doc of a place sees them all (`canSee` asks the place alone, `canSeeTask` of a private task its owner and of a shared one its list), so a search asks once per place.
 Its view is the base with the layers of the places its viewer sees (`Index.View`), put together per search: a few words, whatever the wiki's size,
 since what the views share (each doc's place in the order, the shared docs with their numbers, what the changed docs take from the base's statistics) is worked out once per change, not per viewer.
@@ -290,7 +297,8 @@ Tasks keep their text.
 Building an index asks for each document's tokens in turn and keeps only the postings,
 a `-word` filter asks the postings (`DocsWith`),
 and leaving out a changed page takes one pass over them (`Without`), once per change.
-What that costs: a page that was edited, or isn't everyone's, is read and tokenized when its layer is made (Nothing is kept per viewer: once per change of that place, not per viewer),
+What that costs: a page that was edited is read and tokenized once, for the changes of its place's index (Nothing is kept per viewer),
+a page that is one user's own once more at each start, when they first search (it is in no file),
 and a rebuild past `maxChanges` reads, splits and tokenizes everything, its tokens and its text squashed from one fold (`indexed`, `TokensAndSquash`).
 
 ### Keeping the index current
@@ -303,6 +311,7 @@ so hits,
 scores and the order of equal scores are exactly those of an index built over them (tests compare the two on random edits);
 a task that didn't change keeps its doc, so only what changed counts.
 Only when the changes pass 2% of the docs (`maxChanges`, at least 32) is it built again, so an edit costs a few percent of a rebuild on average.
+The shared docs' index and each place's are kept this way, each for itself (`docSet`: `update`, `settle`, `build`): a change in one is no change to another.
 
 `iterPages` walks the wiki skipping `_*` and hidden folders (`SkipDir`), instead of walking `.git`'s objects;
 a search lists the pages and their files' mtimes once (`rq.pageStats`), for both its indexes and its results' task lists, instead of walking and checking every file three times.
@@ -490,6 +499,20 @@ A doc whose file changed while a rebuild read it is written under no key, so a s
 A rebuild with its base in a file merges from it (`MergeIndex`): the docs the file has bring their postings, lengths, texts and metas along, only the others are read and tokenized,
 and the file is the very one a rebuild from scratch would write (a test compares their bytes);
 docs in another order than the file's (a task moved in its list) keep their numbers, and equal scores go by the order now (`reordered`).
+
+### A group's index files
+
+A group's docs are in files of the group's own, in its folder `.zone/index/groups/<group>/`:
+`pages.idx` and `sections.idx` for the pages in `groups/<group>/`, `tasks-pages.idx` and `tasks-sections.idx` for its lists' tasks (each index ranks tasks with its docs, so each has the tasks' words).
+They are index files like the shared ones (the same format, written, merged, mapped and checked the same way, readable by Zonewiki's user alone),
+made when a member first searches and written anew when the group's changes pass `maxChanges`.
+The shared files have nothing of a group, and a group's files are opened for its members' searches alone (`placePath`, `placeDocs.prepare`),
+so a group's words stay out of everyone else's ranking and typo matching as they do in memory (Who searches what).
+A start finds them as it finds the shared ones (`startFiles`, `seedPageDocs`): a member's first search reads no page of the group that hasn't changed since,
+and nor does anyone else's (the group's docs come from the files' metas for every search, since listing the docs comes before asking who sees them).
+A phrase is checked in a group's file as in the shared one (`TextHas`).
+The files of a group whose pages or tasks are gone (the group removed or renamed, the folder emptied, users turned off) are removed at the next search, and at a start whatever is there for no group's docs (`sweep`).
+What is one user's own (their private pages and private tasks) has no file: it is small, and a file per user would put their private words on disk a second time for little.
 
 ## Measuring retrieval
 

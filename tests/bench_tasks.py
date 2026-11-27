@@ -576,6 +576,93 @@ def test_pages_and_groups_at_a_teams_size(paged, client):
     report(got)
 
 
+# ── A large group ────────────────────────────────────────────────────────────
+
+# The pages in the one group's folder, beside SHARED_PAGES shared ones.
+LARGE_GROUP = {"small": 200, "team": 2000}[os.environ.get("ZONE_BENCH_SIZE", "team")]
+
+BUDGETS.update({
+    # A group's index is kept, in files of its own (A group's index files in
+    # docs/spec/search.md): an edit in its folder costs the next member's
+    # search that page, and a start reads none of its pages. (Made anew for
+    # each change and each start, as before: 452 ms after an edit, 1,020 a
+    # member's first search after a start, 413 an outsider's.)
+    "a large group: a member's search after an edit there (ms)": 150,                    # measured 45
+    "a large group: an outsider's first search after a start (ms)": 500,                 # 228
+    "a large group: then a member's first (ms)": 150,                                    # 46
+    "a large group: a member's first after a start, nobody before (ms)": 600,            # 221
+})
+
+
+def test_a_large_group(team, monkeypatch, client):
+    """A group with LARGE_GROUP pages beside SHARED_PAGES shared ones: what
+    a member's search costs after an edit in the group's folder, and what the
+    first searches cost after a start, a member's and that of someone who is
+    not in the group."""
+    from tests.goserver import GoClient
+    root, users, lists = team
+    rng = random.Random(13)
+    monkeypatch.setattr(settings, "USER_SETTINGS", {u: {"groups": "big"} for u in users[1:]})
+    vocabulary = WORDS + ["".join(rng.choice("abcdefghijklmnoprstuvw") for _ in range(rng.randint(4, 9))) for _ in range(5000)]
+    page = lambda title, extra="": f"# {title}\n\n" + "\n\n".join(
+        "## Part\n\n" + " ".join(rng.choice(vocabulary) for _ in range(60)).capitalize() + "." for _ in range(5)) + f"\n\n{extra}\n"
+    for i in range(SHARED_PAGES):
+        path = root / f"area{i % 20:02d}/page{i:04d}.md"
+        path.parent.mkdir(exist_ok=True)
+        path.write_text(page(f"Page {i}"), encoding="utf-8")
+    for i in range(LARGE_GROUP):
+        path = root / f"groups/big/f{i % 50:02d}/note{i:05d}.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(page(f"big note {i}", "Only for big: wordbig."), encoding="utf-8")
+    git = lambda *args: subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True)
+    git("add", "-A")
+    git("-c", "user.name=bench", "-c", "user.email=bench@example.org", "commit", "-q", "-m", "The bench's pages")
+
+    def signed_in(user):
+        c = GoClient.__new__(GoClient)
+        c.live, c.cookies = client.live, {}
+        assert c.post("/login", data={"username": user, "password": "pw"}, headers=HOST).status_code == 302
+        return c
+
+    def ms(c, q="invoice+budget"):
+        start = time.perf_counter()
+        resp = c.get(f"/api/search?q={q}", headers=HOST)
+        assert resp.status_code == 200, resp.status_code
+        return (time.perf_counter() - start) * 1000, resp
+
+    def edited(n):
+        """A page of the group written anew, its mtime another than before."""
+        time.sleep(1.1)
+        (root / f"groups/big/f00/note{n * 50:05d}.md").write_text(page("Edited", f"zzedited{n}"), encoding="utf-8")
+
+    got = {}
+    out, member = signed_in(users[0]), signed_in(users[1])
+    got["a large group: the first search, the indexes made (ms)"] = ms(out)[0] + ms(member)[0]
+    times = []
+    for n in range(3):
+        edited(n)
+        took, resp = ms(member, f"zzedited{n}")
+        times.append(took)
+        assert any(r.get("slug", "").startswith("groups/big/") for r in resp.get_json()), "the edit isn't found"
+        assert not ms(out, f"zzedited{n}")[1].get_json(), "found by who is not in the group"
+    got["a large group: a member's search after an edit there (ms)"] = statistics.median(times)
+
+    client.live.stop()
+    out, member = signed_in(users[0]), signed_in(users[1])
+    got["a large group: an outsider's first search after a start (ms)"] = ms(out)[0]
+    got["a large group: then a member's first (ms)"] = ms(member)[0]
+    client.live.stop()
+    member = signed_in(users[1])
+    took, resp = ms(member, "wordbig")
+    got["a large group: a member's first after a start, nobody before (ms)"] = took
+    assert any(r.get("slug", "").startswith("groups/big/") for r in resp.get_json())
+    files = sum(f.stat().st_size for f in (root / ".zone/index/groups").rglob("*.idx")) / 1e6
+    got["a large group: its index files (MB)"] = files
+
+    print(f"\n\nA large group: {LARGE_GROUP} pages in a group's folder beside {SHARED_PAGES} shared ones\n")
+    report(got)
+
+
 # How many commits a team's years leave (test_a_long_history): about a
 # hundred a working day for four years.
 HISTORY = {"small": 10000, "team": 100000}[os.environ.get("ZONE_BENCH_SIZE", "team")]

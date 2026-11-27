@@ -362,6 +362,45 @@ def test_a_group_made_of_groups_has_a_folder_too(client, wiki, monkeypatch):
     assert client.get("/page/groups/product/roadmap", headers=HOST).status_code == 404
 
 
+def test_the_groups_search_index_is_in_files_of_its_own(client, wiki):
+    """A group's pages are indexed in the group's own files under
+    .zone/index/groups/<group>/, made when a member first searches (Who
+    searches what in docs/spec/search.md): the shared files have nothing of
+    the group, a start finds the group's, a change in the folder is found by
+    the next search, and the files go with the group's pages."""
+    index = wiki / ".zone/index"
+    search = lambda q: "".join(client.get(url, query_string={"q": q}, headers=HOST).get_data(as_text=True)
+                               for url in ("/api/search", "/search"))
+    of_group = lambda: sorted(p.relative_to(index).as_posix() for p in index.glob("groups/*/*.idx"))
+    sign_in(client, "bob")
+    assert "Diary" not in search(SECRET)
+    assert (index / "pages.idx").exists() and not of_group(), "who is not in the group makes no file of it"
+    sign_in(client, "carol")
+    assert "Diary" in search(SECRET)
+    assert of_group() and all(f.startswith("groups/dev/") for f in of_group())
+    for f in index.glob("*.idx"):
+        assert SECRET.encode() not in f.read_bytes(), f"{f.name} has the group's word"
+    for f in index.glob("groups/dev/*.idx"):
+        assert SECRET.encode() in f.read_bytes() and f.stat().st_mode & 0o777 == 0o600, f.name
+    assert not git(wiki, "status", "--porcelain", "--", ".zone"), "the index files are not for git"
+    made = {f: (index / f).stat().st_mtime_ns for f in of_group()}
+
+    client.live.stop()      # a start finds the files, and writes none anew
+    sign_in(client, "carol")
+    assert "Diary" in search(SECRET)
+    assert {f: (index / f).stat().st_mtime_ns for f in of_group()} == made
+    (wiki / GROUP / "fresh.md").write_text("# Fresh\n\nA quillfeather for dev.\n")
+    assert "Fresh" in search("quillfeather")
+    assert {f: (index / f).stat().st_mtime_ns for f in of_group()} == made, "one new page is a change, not a new file"
+    sign_in(client, "bob")
+    assert "Fresh" not in search("quillfeather") and "Diary" not in search(SECRET)
+
+    for page in (wiki / GROUP).glob("*.md"):
+        page.unlink()
+    search(SECRET)
+    assert not (index / "groups").exists() or not of_group(), "the group's pages are gone, its index files with them"
+
+
 def test_a_folder_of_no_group_is_seen_by_no_one(client, wiki):
     for rel in ("groups/ghosts/x.md", "groups/loose.md", "groups/Not_A_Group/y.md"):
         (wiki / rel).parent.mkdir(parents=True, exist_ok=True)

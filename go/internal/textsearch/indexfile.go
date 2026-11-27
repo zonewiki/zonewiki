@@ -677,12 +677,18 @@ func (ix *Index) Keys() []DocKey {
 	return keys
 }
 
-// TextHas: whether doc's text in the file holds sub; known is false where
-// there is no such text: a doc not in the file (added by With), an index not
-// read from one.
+// TextHas: whether doc's text in the file holds sub: the index's file, or
+// for a doc of a view's layer that is an index from a file (Index.Layer)
+// that one's; known is false where there is no such text: a doc of a layer
+// in memory (added by With), an index not read from a file.
 func (ix *Index) TextHas(doc int, sub string) (has, known bool) {
-	s, ok := ix.base.(*fileStore)
-	if !ok || doc < 0 || doc >= ix.n {
+	from := ix.base
+	if o := ix.over; o != nil && doc >= ix.n && doc < o.end {
+		at, i := o.layerOf(doc)
+		from, doc = at.Layer.s, i
+	}
+	s, ok := from.(*fileStore)
+	if !ok || doc < 0 || doc >= s.nDocs {
 		return false, false
 	}
 	defer runtime.KeepAlive(s)

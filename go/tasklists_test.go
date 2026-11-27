@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 	"zonewiki/internal/taskfiles"
-	"zonewiki/internal/textsearch"
 )
 
 // writeTasks writes owner's open tasks as a file edited by hand has them.
@@ -1397,24 +1396,26 @@ func TestTheSearchKeepsNothingPerViewer(t *testing.T) {
 		}
 		return
 	}
-	// The layers made, of whichever index the search asks (the sections').
-	layers := func() map[docPlace]*textsearch.Layer {
-		made := map[docPlace]*textsearch.Layer{}
+	// The places' indexes made, of whichever index the search asks (the
+	// sections'), and how many docs each has changed since it was made.
+	changes := map[docPlace]int{}
+	layers := func() map[docPlace]*docIndex {
+		made := map[docPlace]*docIndex{}
 		for _, c := range []*indexCache{&searchIndexCache, &chunkIndexCache} {
 			c.mu.Lock()
 			for p, l := range c.places {
-				if l.layer != nil {
+				if l.base != nil {
 					if made[p] != nil {
 						t.Fatal("both indexes are asked: tell them apart here")
 					}
-					made[p] = l.layer
+					made[p], changes[p] = l.base, len(l.dead)+len(l.delta)
 				}
 			}
 			c.mu.Unlock()
 		}
 		return made
 	}
-	var first map[docPlace]*textsearch.Layer
+	var first map[docPlace]*docIndex
 	for round := 0; round < 2; round++ {
 		for _, u := range names {
 			if own, others := finds(u); own != 1 || others != 0 {
@@ -1435,7 +1436,8 @@ func TestTheSearchKeepsNothingPerViewer(t *testing.T) {
 	if again := layers(); !maps.Equal(first, again) {
 		t.Error("a layer was made again though its tasks are the same")
 	}
-	// One user's new private task makes their layer anew, and only theirs.
+	// One user's new private task is a change to their index, and only to
+	// theirs; none is made anew for it.
 	newTestTask(t, names[3], "Own quillfeather again", true)
 	for _, u := range names {
 		want := 1
@@ -1446,16 +1448,12 @@ func TestTheSearchKeepsNothingPerViewer(t *testing.T) {
 			t.Fatalf("after a new task, %s finds %d of their own and %d of others", u, own, others)
 		}
 	}
-	changed := 0
-	for p, l := range layers() {
-		if first[p] != l {
-			changed++
-			if p.name != names[3] {
-				t.Errorf("the layer of %s was made again for a task of %s", p.name, names[3])
-			}
-		}
+	if again := layers(); !maps.Equal(first, again) {
+		t.Error("an index was made again for one new task")
 	}
-	if changed != 1 {
-		t.Errorf("%d layers made anew, want the one whose tasks changed", changed)
+	for p, n := range changes {
+		if (n > 0) != (p.name == names[3]) {
+			t.Errorf("the index of %s has %d changes after a new task of %s", p.name, n, names[3])
+		}
 	}
 }

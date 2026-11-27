@@ -5,6 +5,7 @@ import (
 	"maps"
 	"math"
 	"math/rand"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"sort"
@@ -551,8 +552,62 @@ func TestWithChangesIsAsIfBuiltOverWhatIsLeft(t *testing.T) {
 			layers = append(layers, LayerAt{NewLayer(to-from, func(i int) []string { return extra[from+i] }), pos[nb+from : nb+to]})
 			from = to
 		}
+		// And as layers that are indexes with documents of their own left
+		// out (a place's index after changes), in memory or from a file:
+		// those keep their numbers, and nothing else of them shows.
+		var places []LayerAt
+		placed := map[int]string{}
+		for i := range base {
+			placed[i] = labelOf[i]
+		}
+		first := nb
+		for from := 0; from < len(extra); {
+			to := from + 1 + r.Intn(len(extra)-from)
+			var toks [][]string
+			var lpos []int32
+			gone := map[int]bool{}
+			for j := from; j < to; j++ {
+				for r.Intn(3) == 0 {
+					gone[len(toks)] = true
+					toks, lpos = append(toks, doc()), append(lpos, 0)
+				}
+				placed[first+len(toks)] = labelOf[nb+j]
+				toks, lpos = append(toks, extra[j]), append(lpos, pos[nb+j])
+			}
+			lix := NewIndex(toks)
+			if round%2 == 0 {
+				path := filepath.Join(t.TempDir(), "place.idx")
+				text := func(i int) string { return strings.Join(toks[i], " ") }
+				if err := WriteIndex(path, len(toks), func(i int) IndexDoc { return IndexDoc{Tokens: toks[i], Text: text(i)} }); err != nil {
+					t.Fatal(err)
+				}
+				var err error
+				if lix, err = OpenIndex(path); err != nil {
+					t.Fatal(err)
+				}
+				// A phrase is looked for in the layer's file, as in the index's.
+				view := ix.View(nil, nil, append(slices.Clone(places), LayerAt{Layer: lix.Layer(nil)}))
+				for i := range toks {
+					if has, known := view.TextHas(first+i, text(i)); !has || !known {
+						t.Fatalf("round %d: a layer's doc's text from its file: has %v, known %v", round, has, known)
+					}
+					if has, known := view.TextHas(first+i, "no such words"); has || !known {
+						t.Fatalf("round %d: a layer's doc has a text it doesn't", round)
+					}
+				}
+			} else if _, known := ix.View(nil, nil, []LayerAt{{Layer: lix.Layer(nil)}}).TextHas(nb, "apple"); known {
+				t.Fatalf("round %d: a layer in memory has no text", round)
+			}
+			places = append(places, LayerAt{lix.Layer(lix.Without(gone)), lpos})
+			first += len(toks)
+			from = to
+		}
 		whole := NewIndex(freshTokens)
-		for _, got := range []*Index{ix.With(dead, extra, pos), ix.View(ix.Without(dead), pos[:nb], layers)} {
+		for k, got := range []*Index{ix.With(dead, extra, pos), ix.View(ix.Without(dead), pos[:nb], layers), ix.View(ix.Without(dead), pos[:nb], places)} {
+			labelOf := labelOf
+			if k == 2 {
+				labelOf = placed
+			}
 			for _, q := range queries {
 				for _, limit := range []int{3, 1000} {
 					var a, b []labelled

@@ -1538,7 +1538,7 @@ Who sees a task is decided by where it is kept (Storage): a group's lists and ta
 What holds every user's tasks (the search index, a task found by its id) asks `canSeeTask`, which asks the task's place (`ownerPlace`); `canSeePath` hides the group's folder in the history, as it hides its pages.
 Renamed with its group, the folder moves with its lists and tasks (`moveGroupFolder`, under the task store's lock); a group that has lists isn't removed until its owners move or delete them (`groupKept`).
 
-In search its tasks are the group's layer, as its pages are (`docShared`, `placeOfDoc` in `go/retrieval.go`; Who searches what in `docs/spec/search.md`): they are in no index but its members', so their words, counts and lengths take part in no one else's ranking and a typo of a word only the group has suggests nothing to anyone else.
+In search its tasks have the group's own index, as its pages have (`docShared`, `placeOfDoc` in `go/retrieval.go`; Who searches what in `docs/spec/search.md`): they are in no index but its members', so their words, counts and lengths take part in no one else's ranking and a typo of a word only the group has suggests nothing to anyone else.
 
 A commit about it that writes what everyone sees too (a list moved into the group writes the shared registry; a rename the pages that show it) names it to its members only (`hideNames` in `go/access.go`): to anyone else it reads "A group's list changed".
 The tasks' word leaves it out for anyone else (`Store.Word(who, …)`): a write to it doesn't make their browser load its lists again.
