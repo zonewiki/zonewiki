@@ -313,7 +313,7 @@ Hidden around the page (`html.sharing` in `style.css`):
 
 - the breadcrumb's trail of visited pages (`js/chrome.js` marks it `.trail-link`/`.trail-sep`; the separator left before the page becomes the divider),
 - the backlinks chip,
-- Backlinks / Linked tasks / Related / Links to (side column and `.page-foot`),
+- Backlinks / Linked tasks / Related / Links to / Files (side column and `.page-foot`),
 - a section's linked-task chips,
 - the status counts (tasks counts on the Tasks links, uncommitted badge).
 

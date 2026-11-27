@@ -222,9 +222,10 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 	var bc, metaRow, article template.HTML
 	var menu *pageMenuView
 	var toc []tocEntry
+	var links []string
 	if fromUncommitted {
 		bc = buildBreadcrumb(rq, "uncommitted", "Uncommitted Changes", chip, "", crumb{title, ""})
-		article = htmlOf(renderMd(rq, mdtext.StripH1(content), RenderOpts{Page: slug, TOC: &toc}))
+		article = htmlOf(renderMd(rq, mdtext.StripH1(content), RenderOpts{Page: slug, TOC: &toc, Links: &links}))
 	} else {
 		qs := ""
 		if r.URL.RawQuery != "" {
@@ -241,7 +242,7 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 		metaRow = macro("meta_row", metaRowView{TagsHTML: htmlOf(renderTagsPillsHTML(meta.Tags)), Tldr: meta.Tldr,
 			Changed: changed, Commit: commit})
 		article = htmlOf(renderMd(rq, mdtext.StripH1(content), RenderOpts{Page: slug, HideTags: true, HideTldr: true,
-			EditSlug: slug, SectionKeys: sectionKeys(content, headings), SectionTasks: tasks, TOC: &toc}))
+			EditSlug: slug, SectionKeys: sectionKeys(content, headings), SectionTasks: tasks, TOC: &toc, Links: &links}))
 	}
 	// A place's home is where its pages are started: New page, with For at that place.
 	newFor := ""
@@ -253,7 +254,7 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 	page(w, rq, http.StatusOK, "view.html", title, shell{wide: true}, &pageView{Title: title, Slug: slug, NewPageFor: newFor,
 		FromUncommitted: fromUncommitted, Private: placeOf(slug).user() != "", Group: placeOf(slug).group(), GroupTitle: groupTitle(slug), ReadOnly: readOnly(rq.user, slug), TaskKeys: strings.Join(taskLineKeys(content), ","),
 		BreadcrumbHTML: bc, DeleteDialogHTML: buildDeleteDialog(slug, title), RailTocHTML: railToc(toc),
-		MetaRowHTML: metaRow, ArticleHTML: article, LinkSections: sections, Outlinks: outlinks(rq, slug, path), Menu: menu})
+		MetaRowHTML: metaRow, ArticleHTML: article, LinkSections: sections, Outlinks: outlinks(rq, slug, path), Files: pageFiles(rq, links), Menu: menu})
 }
 
 // pageView: a page's view (view.html).
@@ -269,6 +270,7 @@ type pageView struct {
 	BreadcrumbHTML, DeleteDialogHTML, RailTocHTML, MetaRowHTML, ArticleHTML template.HTML
 	LinkSections                                                            []linkSection // Backlinks, Linked tasks, Related (linkSections)
 	Outlinks                                                                []pageLink    // the right column's Links to
+	Files                                                                   []shownFile   // Files: the uploads the page links to or shows (pageFiles)
 	Menu                                                                    *pageMenuView // the ⋯ menu (pageMenu); nil from the uncommitted list
 }
 

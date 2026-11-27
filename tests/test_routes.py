@@ -460,6 +460,34 @@ class TestViewPage:
             ("beds", "Beds"), ("roses", "Roses"), ("zinnias", "Zinnias")]
         assert body.count("Links to") == 1
 
+    def test_files_lists_the_uploads_the_page_links_or_shows(self, client, wiki_dir):
+        # Files: the uploads the page's text links to or shows, in its
+        # order, each once, with their sizes; in the column and at the page's
+        # end. Not a file that isn't there, one on another site, one in
+        # code, one in a folder under _assets/, nor a link to a page.
+        (wiki_dir / "_assets/My Deck (v2).pdf").write_bytes(b"%PDF" + b"x" * 2044)
+        (wiki_dir / "_assets/photo.png").write_bytes(b"\x89PNG")
+        (wiki_dir / "_assets/notes.txt").write_bytes(b"hi")
+        (wiki_dir / "_assets/sub").mkdir()
+        (wiki_dir / "_assets/sub/deep.png").write_bytes(b"x")
+        write_page(wiki_dir, "garden", (
+            "# Garden\n\n![Beds](/_assets/photo.png)\n\n"
+            "The [deck](/_assets/My%20Deck%20(v2).pdf), [again](/_assets/My Deck (v2).pdf) and ![](/_assets/photo.png).\n\n"
+            "[Notes](http://localhost:5000/_assets/notes.txt), [elsewhere](https://other.example/_assets/photo.png), "
+            "[gone](/_assets/gone.pdf), [deep](/_assets/sub/deep.png), [[index]].\n\n"
+            "```\n[code](/_assets/notes.txt)\n```\n"))
+        body = client.get("/page/garden", headers=HOST).get_data(as_text=True)
+        files = ('<h3>Files</h3><ul><li><a href="/_assets/photo.png">photo.png</a> <span class="file-size">4 bytes</span></li>'
+                 '<li><a href="/_assets/My%20Deck%20%28v2%29.pdf">My Deck (v2).pdf</a> <span class="file-size">2 KB</span></li>'
+                 '<li><a href="/_assets/notes.txt">notes.txt</a> <span class="file-size">2 bytes</span></li></ul>')
+        right = body.split('<aside class="rail rail-context" aria-label="Links">', 1)[1].split("</aside>", 1)[0]
+        assert '<section class="backlinks page-files" data-id="files">' + files in right
+        foot = body.split('<div class="page-foot">', 1)[1].split("</div>", 1)[0]
+        assert '<section class="backlinks page-files" id="files">' + files in foot
+        # A page without uploads has no Files.
+        write_page(wiki_dir, "paths", "# Paths\n\n[A page](garden), [gone](/_assets/gone.pdf).\n")
+        assert "page-files" not in client.get("/page/paths", headers=HOST).get_data(as_text=True)
+
     def test_side_column_without_toc_is_empty(self, client, wiki_dir):
         # Under three headings: no left column content (a [[toc]] line no
         # longer asks for one); the column stays, so the page keeps its place.

@@ -416,7 +416,19 @@ A column taller than the window scrolls on its own: a fade marks the edge with m
 The right column (`.rail-context`) holds Backlinks,
 Linked tasks and Related (the `link_sections` template with `copy`: the same sections with their ids as `data-id`; the anchors stay with the originals in `.page-foot`),
 and **Links to** (`outlinks`: the existing pages this page links to, A–Z by title; only in the column),
-so a page nothing links to still shows its connections.
+so a page nothing links to still shows its connections,
+and **Files** last (below).
+
+### Files
+
+**Files** (`files_section`, after **Links to** in the column and after the other sections in `.page-foot`, so below 1320px too) lists the uploads the page's text links to or shows, images included, in the page's order, each once, with its size: a link opens the file as its route serves it (inline or as a download).
+A page has no files of its own (File paste and drag & drop in `docs/spec/editor.md`): an upload is the page's while the page links to it, as a page that moves takes along the uploads it links (`shareUploads`).
+Its targets are the links, images and autolinks the render parses (`Env.Links`, `RenderOpts.Links`), so a link in code or in raw HTML is none;
+a target counts when it names a file straight in an `_assets/` folder, as a path or with the wiki's own address before it (`pageFiles` in `go/views.go`), not another site's.
+Only the uploads the reader may open are listed (`uploadFile`, which an assistant's `read_file` asks too: a shared one, their own private ones, a group's they are in, a task's they see),
+and a link to an upload that isn't there is left out just as one to another's, so the list says nothing of files the reader can't open.
+No files, no section.
+Sharing mode hides it with the others.
 
 ### Middle: the text
 

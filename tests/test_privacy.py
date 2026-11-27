@@ -549,6 +549,27 @@ def test_a_link_among_the_uploads_is_no_upload(alice, client, wiki):
     assert (wiki / "private/alice/_assets/photo.png").read_bytes() == SECRET.encode()
 
 
+def test_files_name_only_the_uploads_the_reader_may_open(alice, wiki):
+    """A shared page's Files (pageFiles) list the uploads it links to that
+    the reader may open: alice's private file and her private task's to
+    her, not to bob, for whom they are left out as a file that isn't there
+    is; a symlink among the uploads to nobody."""
+    (wiki / "_assets/map.png").write_bytes(b"map")
+    (wiki / "_assets/leak.png").symlink_to(wiki / "private/alice/_assets/photo.png")
+    (wiki / "shelf.md").write_text(
+        "# Shelf\n\n![](/_assets/map.png) ![](/private/alice/_assets/photo.png) "
+        f"[file](/_tasks/files/{TASK_ID}/_assets/photo.png) ![](/_assets/leak.png) ![](/private/alice/_assets/none.png)\n")
+
+    def files(client):
+        body = client.get("/page/shelf", headers=HOST).get_data(as_text=True)
+        foot = body.split('<div class="page-foot">', 1)[1].split("</div>", 1)[0]
+        return re.findall(r'<li><a href="([^"]+)">', foot.split('id="files"', 1)[1]) if 'id="files"' in foot else []
+
+    assert files(alice) == ["/_assets/map.png", "/private/alice/_assets/photo.png", f"/_tasks/files/{TASK_ID}/_assets/photo.png"]
+    sign_in(alice, "bob")
+    assert files(alice) == ["/_assets/map.png"]
+
+
 def test_new_private_page(alice, wiki):
     assert 'name="private"' in alice.get("/new", headers=HOST).data.decode()
     resp = alice.post("/new", data={"slug": "Gift ideas", "private": "1"}, headers=HOST)

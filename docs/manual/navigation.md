@@ -192,7 +192,7 @@ Sharing mode is for showing your screen to others, in a call or on a projector.
 The page you're on stays as it is, but what would show *other* pages around it is hidden:
 
 - the trail of recent pages;
-- Backlinks, Linked tasks, Related and Links to;
+- Backlinks, Linked tasks, Related, Links to and Files;
 - the Tasks counts and the uncommitted count;
 - the search dialog's list of recent pages (it lists nothing until you type).
 

@@ -592,6 +592,43 @@ func outlinks(rq *Req, slug, path string) []pageLink {
 	return pageLinks(pages)
 }
 
+// shownFile: one of a page's Files: the upload's link, its name and size.
+type shownFile struct{ Href, Name, Size string }
+
+// pageFiles: a page's Files: the uploads its text links to or shows (links
+// and images, the targets its render parsed, in the page's order, each once),
+// those the reader may open (uploadFile, the door an assistant's read_file
+// asks too: a shared upload, their own private ones, a group's they are in,
+// a task's they see). A link to an upload that isn't there, or isn't theirs,
+// is left out alike, so the list says nothing of another's files. A link
+// with the wiki's address before it counts, one to another site doesn't.
+func pageFiles(rq *Req, targets []string) []shownFile {
+	var files []shownFile
+	seen := map[string]bool{}
+	for _, target := range targets {
+		if !strings.Contains(target, "_assets/") {
+			continue
+		}
+		u, err := url.Parse(strings.TrimSpace(target))
+		if err != nil || u.Scheme != "" && u.Scheme != "http" && u.Scheme != "https" ||
+			u.Host != "" && !strings.EqualFold(u.Host, requestHost(rq)) {
+			continue
+		}
+		path, name, ok := uploadFile(u.Path, rq.user)
+		if !ok || seen[path] {
+			continue
+		}
+		seen[path] = true
+		st, err := os.Stat(path)
+		if err != nil {
+			continue
+		}
+		files = append(files, shownFile{Href: pathURL(strings.Split(strings.TrimPrefix(u.Path, "/"), "/")...),
+			Name: name, Size: formatSize(st.Size())})
+	}
+	return files
+}
+
 // pasteHint: the editor's hint after Move to wiki (?paste=<slug>): the
 // moved page's link, copied (copied) or to copy.
 // pasteHintView: the editor's hint after Move to wiki: the moved page's

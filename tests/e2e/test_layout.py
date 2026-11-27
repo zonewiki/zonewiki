@@ -490,6 +490,32 @@ def test_side_columns_on_big_screens(new_page, wiki):
     assert 0 <= box_of(toc)["y"] < 100 and 0 <= box_of(links)["y"] < 100
 
 
+def test_files_in_the_side_column_and_at_the_pages_end(new_page, wiki):
+    # A page's Files: in the right column on a big screen, a long name
+    # wrapping inside it; at the page's end below 1320px.
+    long_name = "Quarterly-report-for-the-garden-committee-2026-final-version.pdf"
+    (wiki.root / "_assets" / long_name).write_bytes(b"%PDF" + b"x" * 5000)
+    (wiki.root / "_assets/beds.png").write_bytes(b"\x89PNG")
+    wiki.write("plans", f"# Plans\n\nThe [report](/_assets/{long_name}) and ![Beds](/_assets/beds.png).\n\nSee [[Release]].\n")
+    wiki.write("release", "# Release\n")
+    page = new_page(viewport=BIG)
+    page.goto("/page/plans")
+    files = page.locator(".rail-context .page-files")
+    expect(files.locator("li")).to_have_count(2)
+    expect(files.locator("a", has_text=long_name)).to_have_attribute("href", f"/_assets/{long_name}")
+    expect(files.locator(".file-size").first).to_have_text("4.9 KB")
+    column = box_of(page.locator(".rail-context"))
+    for li in files.locator("li").all():
+        box = box_of(li)
+        assert box["x"] + box["width"] <= column["x"] + column["width"] + 1
+    page.screenshot(path=str(SCREENSHOT_DIR / "page-files.png"))
+    page.set_viewport_size({"width": 1000, "height": 900})
+    foot = page.locator(".page-foot .page-files")
+    expect(foot).to_be_visible()
+    expect(foot.locator("a", has_text="beds.png")).to_be_visible()
+    page.screenshot(path=str(SCREENSHOT_DIR / "page-files-narrow.png"))
+
+
 def test_side_toc_marks_the_section_being_read(new_page, wiki):
     _side_wiki(wiki)
     page = new_page(viewport=BIG)

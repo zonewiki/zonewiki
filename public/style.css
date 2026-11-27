@@ -318,6 +318,7 @@ main {
 .rail-context .backlinks li + li::before { content: none; }
 .rail-context .backlinks li a { font-size: .82rem; color: var(--fg); }
 .rail-context .backlinks li a:hover { color: var(--link); text-decoration: none; }
+.rail-context .page-files li a { overflow-wrap: anywhere; }   /* a long file name breaks, not the column */
 
 /* A side column, wherever one shows (the Tasks page's lists from 1024px,
    every side column from 1320px): sticky, and scrolling on its own. */
@@ -1445,6 +1446,8 @@ html:not(.sharing) .breadcrumb > .trail-off { display: none; }
   color: var(--muted);
 }
 .backlinks li a:hover { text-decoration: underline; }
+/* Files: a file's size after its name. */
+.page-files .file-size { font-size: .72rem; color: var(--muted); white-space: nowrap; }
 
 /* ── Content matches (pages list search) ────────────────────────────────────── */
 

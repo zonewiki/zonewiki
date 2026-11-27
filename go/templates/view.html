@@ -32,11 +32,12 @@
 <article class="page-content" data-task-keys="{{.TaskKeys}}" data-rendered>
   {{.ArticleHTML}}
 </article>
-<div class="page-foot">{{template "link_sections" (dict "sections" .LinkSections)}}</div>
+<div class="page-foot">{{template "link_sections" (dict "sections" .LinkSections)}}{{template "files_section" (dict "files" .Files)}}</div>
 </div>
 <aside class="rail rail-context" aria-label="Links">
 {{- template "link_sections" (dict "sections" .LinkSections "copy" true)}}
 {{- if .Outlinks}}{{template "link_section" (dict "id" "outlinks" "heading" "Links to" "links" .Outlinks "copy" true)}}{{end -}}
+{{- template "files_section" (dict "files" .Files "copy" true)}}
 </aside>
 </div>
 {{- with .Menu}}{{template "page_menu" .}}{{end}}

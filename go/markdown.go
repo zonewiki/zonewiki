@@ -46,6 +46,10 @@ type Env struct {
 	// TOC: where the render puts the ## and ### headings it parses, for
 	// the side column's "On this page" (railToc); nil: nowhere.
 	TOC *[]tocEntry
+	// Links: where the render puts the targets of the links, images and
+	// autolinks it parses, in the page's order, for the page's Files
+	// (pageFiles); nil: nowhere.
+	Links *[]string
 	// NoStyle: a <style> in the raw HTML shows as text (a task's notes and
 	// comments, renderNotes: they go with the task onto every page that
 	// shows its list, the reader's own among them, where a <style> would
@@ -276,6 +280,8 @@ func (t *zoneTransformer) Transform(doc *ast.Document, reader text.Reader, pc pa
 		case *ast.Image:
 			if t.blockedImage(n) {
 				blocked = append(blocked, n)
+			} else if t.env.Links != nil {
+				*t.env.Links = append(*t.env.Links, string(n.Destination))
 			}
 			// ![alt|300](url): 300px wide, never wider than the text.
 			if last, ok := n.LastChild().(*ast.Text); ok {
@@ -288,9 +294,14 @@ func (t *zoneTransformer) Transform(doc *ast.Document, reader text.Reader, pc pa
 		case *ast.Link:
 			if unsafeLink(n.Destination) {
 				unsafe = append(unsafe, n)
+			} else if t.env.Links != nil {
+				*t.env.Links = append(*t.env.Links, string(n.Destination))
 			}
 			t.external(n, n.Destination)
 		case *ast.AutoLink:
+			if t.env.Links != nil {
+				*t.env.Links = append(*t.env.Links, string(n.URL(src)))
+			}
 			t.external(n, n.URL(src))
 		case *ast.Heading:
 			if n.Level <= 3 {

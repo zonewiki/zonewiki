@@ -53,7 +53,7 @@ On a wide screen (from about 1320 pixels) the page uses the room on either side:
 - **On this page**, on the left, lists the page's `##` and `###` headings once it has at least three.
   The section you're reading is marked, and **↑ Back to top** appears once you scroll down.
 - On the right are the page's connections:
-  **Backlinks** (pages that link here), **Linked tasks**, **Related** and **Links to** (the pages this one links to).
+  **Backlinks** (pages that link here), **Linked tasks**, **Related**, **Links to** (the pages this one links to) and **Files** (the files it links to or shows).
 
 On narrower screens the connections are at the end of the page instead,
 and a `← 3` chip at the right of the top row says how many pages link here.
@@ -65,6 +65,13 @@ Hover it (or tap it on a phone) to see them.
   "No pages link here." when there are none.
 - **Linked tasks** lists the open tasks whose title or description links to this page.
   A task that links to one section also puts a `☑ 1` chip on that section's heading, listing its tasks.
+
+### Files
+
+**Files** lists the files the page links to or shows, images included, each with its size: click one to open or download it.
+A file you put on the page (pasted, dropped or attached in the editor) is listed as soon as the page links to it, and a file stops being listed when its link is gone.
+It lists only files you may open, and none that isn't there; with no files on the page there's no **Files**.
+The full rules are in [Side columns](../spec/routes.md#files).
 
 ### Folding sections
 

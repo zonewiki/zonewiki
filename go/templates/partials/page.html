@@ -97,6 +97,14 @@
 </ul></section>
 {{- end}}
 
+{{- /* A page's Files (pageFiles): the uploads it links to or shows, each
+    with its size. */}}
+{{define "files_section" -}}
+{{if .files}}<section class="backlinks page-files" {{if .copy}}data-id{{else}}id{{end}}="files"><h3>Files</h3><ul>
+{{- range .files}}<li><a href="{{.Href}}">{{.Name}}</a> <span class="file-size">{{.Size}}</span></li>{{end -}}
+</ul></section>{{end}}
+{{- end}}
+
 {{define "link_sections" -}}
 {{range .sections}}{{template "link_section" (dict "id" .ID "heading" .Heading "links" .Links "copy" $.copy)}}{{end}}
 {{- end}}

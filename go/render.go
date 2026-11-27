@@ -88,6 +88,7 @@ type RenderOpts struct {
 	SectionTasks       []TaskLink
 	HeadingIDs         headingIDs  // as data-pid in a preview (Env.HeadingIDs)
 	TOC                *[]tocEntry // where the ## and ### headings go, for the side column (railToc); nil: not wanted
+	Links              *[]string   // where the page's link and image targets go, for its Files (pageFiles); nil: not wanted
 }
 
 // renderMd renders a page's markdown.
@@ -99,7 +100,7 @@ func renderMd(rq *Req, text string, o RenderOpts) string {
 	text, refs := maskTaskRefs(text)
 	text = mdtext.UnmaskCode(escapeWikilinkPipes(text), stash)
 	env := &Env{EditSlug: o.EditSlug, SectionKeys: o.SectionKeys, SectionChips: sectionTaskChips(rq, o.SectionTasks), Host: requestHost(rq),
-		HeadingIDs: o.HeadingIDs, Wikilink: wikilinker(rq, nil, o.Page), TOC: o.TOC}
+		HeadingIDs: o.HeadingIDs, Wikilink: wikilinker(rq, nil, o.Page), TOC: o.TOC, Links: o.Links}
 	result := markdown(text, env, false)
 	result = injectTaskRefs(rq, result, refs)
 	if o.TOC != nil {
