@@ -34,6 +34,7 @@ func oauthRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /oauth/authorize", oauthAuthorize)
 	mux.HandleFunc("POST /oauth/authorize", oauthAuthorize)
 	mux.HandleFunc("POST /oauth/token", oauthToken)
+	mux.HandleFunc("POST /oauth/revoke", oauthRevoke)
 }
 
 // oauthOn: clients may connect through OAuth: the wiki has a login, and
@@ -42,9 +43,10 @@ func oauthOn(s *Settings) bool { return s.authOn() && !s.NoOAuth }
 
 // oauthOpen: the OAuth routes a client's server calls with no session and
 // from any origin: they act on nothing a cookie gives (a code and its
-// verifier, a refresh token, or nothing).
+// verifier, a refresh token, a token to end, or nothing).
 func oauthOpen(path string) bool {
-	return path == "/oauth/token" || path == "/oauth/register" || strings.HasPrefix(path, "/.well-known/oauth-")
+	return path == "/oauth/token" || path == "/oauth/revoke" || path == "/oauth/register" ||
+		strings.HasPrefix(path, "/.well-known/oauth-")
 }
 
 // oauthScope: the one scope. What an assistant may do is its user's role.
@@ -96,10 +98,12 @@ func oauthServerMeta(w http.ResponseWriter, r *http.Request) {
 		"authorization_endpoint":                         at("/oauth/authorize"),
 		"token_endpoint":                                 at("/oauth/token"),
 		"registration_endpoint":                          at("/oauth/register"),
+		"revocation_endpoint":                            at("/oauth/revoke"),
 		"response_types_supported":                       []string{"code"},
 		"grant_types_supported":                          []string{"authorization_code", "refresh_token"},
 		"code_challenge_methods_supported":               []string{"S256"},
 		"token_endpoint_auth_methods_supported":          []string{"none"},
+		"revocation_endpoint_auth_methods_supported":     []string{"none"},
 		"scopes_supported":                               []string{oauthScope},
 		"authorization_response_iss_parameter_supported": true,
 	})
@@ -648,4 +652,31 @@ func grantTokensFor(r *http.Request) (grantTokens, error) {
 		return tokens, err
 	}
 	return none, &tokenRefusal{"unsupported_grant_type", "Use authorization_code or refresh_token."}
+}
+
+// oauthRevoke: POST /oauth/revoke (RFC 7009): a client's disconnect. The
+// token it sends, access or refresh, ends its connection, as End on Connect
+// an assistant does. The answer is the same 200 whether or not the token
+// was one (the RFC's rule), so the route tells a guesser nothing; only a
+// call without a token is told so. A client id sent along must be the
+// token's client: another client's ends nothing.
+func oauthRevoke(w http.ResponseWriter, r *http.Request) {
+	if oauthOff(w, r) {
+		return
+	}
+	token := r.PostFormValue("token")
+	if token == "" {
+		oauthError(w, http.StatusBadRequest, "invalid_request", "Send the token to revoke.")
+		return
+	}
+	clientHash := ""
+	if id := r.PostFormValue("client_id"); id != "" {
+		clientHash = hashToken(id)
+	}
+	if err := endGrantOf(token, clientHash); err != nil {
+		serverError(w, r, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
 }

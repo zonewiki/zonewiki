@@ -129,6 +129,8 @@ class TestDiscovery:
         assert server["authorization_endpoint"] == BASE + "/oauth/authorize"
         assert server["token_endpoint"] == BASE + "/oauth/token"
         assert server["registration_endpoint"] == BASE + "/oauth/register"
+        assert server["revocation_endpoint"] == BASE + "/oauth/revoke"
+        assert server["revocation_endpoint_auth_methods_supported"] == ["none"]
         assert server["code_challenge_methods_supported"] == ["S256"]
         assert server["token_endpoint_auth_methods_supported"] == ["none"]
         assert server["grant_types_supported"] == ["authorization_code", "refresh_token"]
@@ -470,6 +472,72 @@ class TestTokens:
         edit_grants(wiki_dir, used="2020-01-01")
         assert mcp(bob, tokens["access_token"])[0] == 200
         assert grants(wiki_dir)[0]["used"] != "2020-01-01"
+
+
+def revoke(client, **form):
+    return client.post("/oauth/revoke", headers=HOST, data=form)
+
+
+class TestRevoke:
+    """POST /oauth/revoke (RFC 7009): a client's disconnect ends its connection."""
+
+    @pytest.mark.parametrize("which", ["refresh_token", "access_token"])
+    def test_a_clients_disconnect_ends_its_connection(self, bob, wiki_dir, which):
+        client_id, tokens = connect(bob, "bob-pw", name="Leaving")
+        _, others = connect(bob, "bob-pw", name="Another")
+        bob.cookies.clear()   # no session, and from the client's own origin
+        resp = bob.post("/oauth/revoke", headers={**HOST, "Origin": "https://claude.ai"}, data={
+            "token": tokens[which], "token_type_hint": which, "client_id": client_id})
+        assert resp.status_code == 200 and resp.data == b"" and resp.headers["Cache-Control"] == "no-store"
+        assert mcp(bob, tokens["access_token"])[0] == 401
+        resp = token(bob, grant_type="refresh_token", client_id=client_id, refresh_token=tokens["refresh_token"])
+        assert resp.get_json()["error"] == "invalid_grant"
+        assert [g["client"] for g in grants(wiki_dir)] == ["Another"]   # the other one stays
+        assert mcp(bob, others["access_token"])[0] == 200
+        login(bob, "bob")
+        html = bob.get("/assistant", headers=HOST).data.decode()
+        assert "Another" in html and "Leaving" not in html
+
+    def test_the_token_alone_is_enough_and_a_wrong_hint_doesnt_matter(self, bob, wiki_dir):
+        _, tokens = connect(bob, "bob-pw")
+        assert revoke(bob, token=tokens["access_token"], token_type_hint="refresh_token").status_code == 200
+        assert grants(wiki_dir) == []
+
+    def test_an_access_token_past_its_hour_and_the_refresh_token_before(self, bob, wiki_dir):
+        _, tokens = connect(bob, "bob-pw")
+        edit_grants(wiki_dir, access_expires="2020-01-01T00:00:00Z")
+        assert revoke(bob, token=tokens["access_token"]).status_code == 200 and grants(wiki_dir) == []
+        client_id, first = connect(bob, "bob-pw")
+        second = token(bob, grant_type="refresh_token", client_id=client_id, refresh_token=first["refresh_token"]).get_json()
+        assert revoke(bob, token=first["refresh_token"], client_id=client_id).status_code == 200
+        assert grants(wiki_dir) == [] and mcp(bob, second["access_token"])[0] == 401
+
+    def test_a_token_that_is_none_gets_the_same_answer_and_changes_nothing(self, bob, wiki_dir):
+        client_id, tokens = connect(bob, "bob-pw")
+        file = wiki_dir / ".zone" / "grants"
+        before = (file.read_text(), file.stat().st_mtime_ns)
+        right = revoke(bob, token=tokens["access_token"], client_id=register(bob, name="Another"))   # another client's
+        wrong = revoke(bob, token="0" * 64, client_id=client_id)
+        unsigned = revoke(bob, token=tokens["access_token"], client_id="zc1.x.y")
+        for resp in (right, wrong, unsigned):
+            assert resp.status_code == 200 and resp.data == b""
+        assert (file.read_text(), file.stat().st_mtime_ns) == before   # not written either
+        assert mcp(bob, tokens["access_token"])[0] == 200
+        for _ in range(8):   # no count to run up: the answer says nothing
+            assert revoke(bob, token="0" * 64).status_code == 200
+        assert mcp(bob, tokens["access_token"])[0] == 200
+
+    def test_without_a_token_it_says_so(self, bob, wiki_dir):
+        connect(bob, "bob-pw")
+        resp = revoke(bob, client_id="x")
+        assert resp.status_code == 400 and resp.get_json()["error"] == "invalid_request"
+        assert len(grants(wiki_dir)) == 1
+
+    def test_no_route_where_oauth_is_off(self, bob, wiki_dir, monkeypatch):
+        _, tokens = connect(bob, "bob-pw")
+        monkeypatch.setattr(settings, "CONFIG_FILE", "mcp-oauth = no\n")
+        assert revoke(bob, token=tokens["access_token"]).status_code == 404
+        assert len(grants(wiki_dir)) == 1
 
 
 class TestConnections:

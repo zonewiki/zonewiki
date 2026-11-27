@@ -164,6 +164,7 @@ To anyone else such a link says nothing, not even that there is such a group (`g
 | POST   | `/assistant/connections/<id>/change` | Change what one of them may do and see (Allow's choices): less without the password, more only with it |
 | GET    | `/.well-known/oauth-protected-resource`, `/.well-known/oauth-protected-resource/mcp`, `/.well-known/oauth-authorization-server` | OAuth metadata for MCP clients (no login; 404 without a login or with `mcp-oauth = no`; Connecting with OAuth in `docs/spec/mcp.md`) |
 | POST   | `/oauth/register`, `/oauth/token` | An MCP client registers, and turns a code or a refresh token into tokens (no login, any origin) |
+| POST   | `/oauth/revoke` | An MCP client's disconnect: the token it sends ends its connection (no login, any origin) |
 | GET, POST | `/oauth/authorize` | An assistant asks to connect: whoever is signed in allows it, with their password, or denies it |
 
 ### Zonewiki itself

@@ -680,8 +680,8 @@ var viewerWrites = map[string]bool{
 	"POST /api/preview": true, "POST /api/render-notes": true, // render only
 	"POST /assistant/token": true, "POST /assistant/revoke": true, // their own MCP token, whose writing tools are refused
 	"POST /password": true, // their own password
-	// a connection of their own, whose writing tools are refused; the other two carry no session
-	"POST /oauth/authorize": true, "POST /oauth/token": true, "POST /oauth/register": true,
+	// a connection of their own, whose writing tools are refused; the other three carry no session
+	"POST /oauth/authorize": true, "POST /oauth/token": true, "POST /oauth/register": true, "POST /oauth/revoke": true,
 	"POST /assistant/connections/{id}/revoke": true, "POST /assistant/connections/{id}/change": true,
 }
 

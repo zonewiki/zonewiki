@@ -120,6 +120,9 @@ You can change your answers later, without connecting again ([See, change and en
 - **End**: it is refused from then on.
   It can ask again, and you decide again.
 
+Disconnecting Zonewiki in the assistant ends the connection here too, if the assistant tells Zonewiki.
+Not every one does: when it is still listed, click **End**.
+
 Taking something away (**Only read**, unticking your private place or a group) needs no password.
 Giving something back or more (**Read and change**, your private place, a group) asks for your password, as **Allow** does; the field shows when you tick such a choice.
 If you are a viewer, you are asked only what it may see: it only reads ([more](../spec/mcp.md#change-what-a-connection-may-do-and-see)).

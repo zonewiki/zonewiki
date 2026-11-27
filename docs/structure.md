@@ -58,7 +58,7 @@ What each file and folder of the repository is for.
 │   ├── mail.go             # Mail through the deployment's SMTP server (ZONE_SMTP_*), for sign-up and assigned tasks
 │   ├── notify.go           # A task given to a user is told to them: the mail (tellAssigned, called by the task writes), who gets one
 │   ├── assistant.go        # Connect an assistant (/assistant): your MCP token made and revoked in the browser, with your password again; your assistants' connections changed (less without the password, more with it) or ended
-│   ├── oauth.go            # OAuth for /mcp: the metadata, client registration (nothing kept), the consent page /oauth/authorize, /oauth/token
+│   ├── oauth.go            # OAuth for /mcp: the metadata, client registration (nothing kept), the consent page /oauth/authorize, /oauth/token, /oauth/revoke
 │   ├── grants.go           # Connections: the assistants users let in through OAuth, their token hashes in .zone/grants
 │   ├── password.go         # Change password (/password): your password changed in the browser, with the one you have
 │   ├── signout.go          # Sessions signed out: .zone/signed-out

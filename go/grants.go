@@ -310,6 +310,33 @@ func revokeGrants(gone func(g grant) bool) (n int, err error) {
 	return n, err
 }
 
+// endGrantOf ends the connection token belongs to, as its access token or
+// its refresh token (the one before too: a client that lost the answer to a
+// refresh has no newer), also an access token past its hour. clientHash,
+// when the client named itself, must be the connection's. No such
+// connection is no error, and writes nothing.
+func endGrantOf(token, clientHash string) error {
+	hash := hashToken(token)
+	grants, err := readGrants()
+	if err != nil {
+		return err
+	}
+	for _, g := range grants {
+		if !sameHash(g.Access, hash) && !sameHash(g.Refresh, hash) && !sameHash(g.PrevRefresh, hash) ||
+			clientHash != "" && !sameHash(g.ClientHash, clientHash) {
+			continue
+		}
+		n, err := revokeGrants(func(o grant) bool { return o.ID == g.ID })
+		if err != nil {
+			return err
+		}
+		if n > 0 {
+			logf("connection %s (%s, %s): ended by its client", g.ID, g.Client, userLabel(g.User))
+		}
+	}
+	return nil
+}
+
 // revokeGrantsOf ends every connection of user's (they were removed, or
 // set a new password by a reset link); a failure is logged.
 func revokeGrantsOf(user string) int {

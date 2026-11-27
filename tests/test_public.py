@@ -49,6 +49,7 @@ NO_LOGIN = {
     "GET /welcome/{token}", "POST /welcome/{token}", "GET /api/health", "GET /public/{path...}", "/mcp",
     "GET /.well-known/oauth-protected-resource", "GET /.well-known/oauth-protected-resource/mcp",
     "GET /.well-known/oauth-authorization-server", "POST /oauth/register", "POST /oauth/token",
+    "POST /oauth/revoke",
 }
 
 

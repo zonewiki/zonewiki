@@ -1404,7 +1404,7 @@ EXEMPT = {
     # OAuth: the caller's own connections, no page (test_oauth.py)
     "GET /.well-known/oauth-protected-resource", "GET /.well-known/oauth-protected-resource/mcp",
     "GET /.well-known/oauth-authorization-server", "POST /oauth/register", "GET /oauth/authorize",
-    "POST /oauth/authorize", "POST /oauth/token", "POST /assistant/connections/{id}/revoke",
+    "POST /oauth/authorize", "POST /oauth/token", "POST /oauth/revoke", "POST /assistant/connections/{id}/revoke",
     "POST /assistant/connections/{id}/change",
     "GET /setup", "POST /setup",    # the first-run page: only while the wiki has no login (test_setup.py)
     "GET /help", "GET /help/{name...}",   # Zonewiki's manual and spec, from docs/: nothing of the wiki's (test_help.py)

@@ -99,13 +99,14 @@ The question (`GET /oauth/authorize`, signed in: anyone else goes through the lo
 
 #### What ends a connection
 
-End on Connect an assistant; its refresh token expiring or being used twice; its user being removed (the Users tab, `zonewiki user remove`); its user setting a new password by a **reset link** (they may have lost the account to someone; the welcome page says so).
+End on Connect an assistant; the assistant disconnecting, if it tells Zonewiki (`/oauth/revoke`: A client's disconnect, under How OAuth works); its refresh token expiring or being used twice; its user being removed (the Users tab, `zonewiki user remove`); its user setting a new password by a **reset link** (they may have lost the account to someone; the welcome page says so).
 A disabled user's are refused while they are disabled, and work again after.
 An ordinary new password (Change password, `zonewiki user passwd`) leaves them, as it leaves a static token.
 
 #### What OAuth doesn't offer yet
 
-**Not yet**: Client ID Metadata Documents, CORS for clients that run in a browser, `/oauth/revoke` (a client's "disconnect" doesn't end the connection in Zonewiki: End does).
+**Not yet**: Client ID Metadata Documents, CORS for clients that run in a browser.
+A client that doesn't call `/oauth/revoke` when its user disconnects it leaves its connection in Zonewiki: End ends it.
 Tested against real clients so far: Claude.
 
 ### Read-only connections
@@ -813,6 +814,19 @@ The answer: an `access_token` (an hour), a `refresh_token`, `token_type: Bearer`
 
 **One scope**, `mcp`: what an assistant may do is its user's role, as with a static token.
 
+#### A client's disconnect
+
+`POST /oauth/revoke` (RFC 7009; form-encoded; no login, any origin): the `token`, an access or a refresh token, and optionally `client_id` and `token_type_hint`.
+The metadata names it (`revocation_endpoint`).
+
+- Either token ends the whole connection, as End does (`endGrantOf`): both tokens are refused from then on, and it is gone from Connect an assistant.
+  So does an access token past its hour, and the refresh token before the current one (a client that lost the answer to a refresh has no newer).
+- The answer is an empty **200** whether or not the token was one, as the RFC has it, so the route tells a guesser nothing and counts nothing against the client; only a call without `token` is a **400** (`invalid_request`).
+- A `client_id` sent along must be the token's client: another client's, or one Zonewiki didn't sign, ends nothing (200 all the same).
+  Without one the token is enough: whoever holds it could do more with it than end it.
+- `token_type_hint` is not needed: the token is looked for as both.
+- A token that is none writes nothing (`.zone/grants` stays as it is).
+
 #### Where connections are kept
 
 **Connections are kept** in `.zone/grants` (`grants.go`): the id, the user ("" in a wiki without users: the wiki's), the client's name, the hash of its client id, the redirect host, what it was given less than its user (whether it only reads, not their private place, only some of their groups), when it was made, the day it was last used, the token hashes and when they expire.
@@ -821,4 +835,4 @@ Not in the settings file: tokens change by the hour, and a change there is a cha
 
 #### OAuth's tests
 
-`tests/test_oauth.py` plays the client over HTTP (`TestChange`: Change… through the tokens a connection has); `tests/e2e/test_oauth.py` holds that Allow and Deny get the browser back to the client under the page policy, and that Change… opens in its dialog and asks for the password only to give more.
+`tests/test_oauth.py` plays the client over HTTP (`TestRevoke`: a client's disconnect; `TestChange`: Change… through the tokens a connection has); `tests/e2e/test_oauth.py` holds that Allow and Deny get the browser back to the client under the page policy, and that Change… opens in its dialog and asks for the password only to give more.
