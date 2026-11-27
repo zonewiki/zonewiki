@@ -502,6 +502,7 @@ A viewer reads everything shared (pages, tasks, history, search) and changes not
 They have no private folder in use (no Private, no Notes, `/private` is a 404); one kept from when they were an editor stays on disk and they still see it, but change nothing there either.
 They may change their own password and make their own MCP token, whose assistant only reads.
 They watch pages as anyone does (Watching pages in `docs/spec/navigation.md`): what one watches is one's own, and nothing of the wiki.
+They can have the morning's mail of the pages they watch, turned on on the Mail tab, and no other mail: nothing is given to a viewer (A viewer's morning's mail in `docs/spec/tasks.md`).
 
 #### What a viewer sees
 

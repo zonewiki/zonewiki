@@ -223,6 +223,7 @@ Each user has a role:
 | viewer | read everything shared, and change nothing, not even private pages or notes |
 
 A viewer sees no Edit button, no Private or Notes, and no New task.
+A viewer can still watch pages, and have a mail each morning of those that changed: **Settings**, **Mail**, **Mail me each morning**.
 Someone who needs notes or tasks of their own should be an editor.
 
 An admin is not a superuser.

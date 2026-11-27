@@ -30,7 +30,11 @@
 <p><strong>{{.User}}</strong> is an account several people sign in to: its mail address is set by whoever runs this wiki, not here.</p>
 {{- end}}
 {{- else}}
+{{- if .Viewer}}
+<p>Zonewiki mails you only what you turn on below: each morning, the pages you watch that changed. No mail goes to an address until you confirmed it by the link Zonewiki sends there.</p>
+{{- else}}
 <p>Zonewiki mails you only what you turn on: about your tasks, in <a href="/tasks?mine=1">My tasks</a>, its menu, List settings. No mail goes to an address until you confirmed it by the link Zonewiki sends there.</p>
+{{- end}}
 {{- with .Done}}
 <p class="users-done" role="status">{{.}}</p>
 {{- end}}
@@ -60,6 +64,20 @@
     {{- end}}
   </div>
 </form>
+{{- if .Viewer}}
+<h2>The morning's mail</h2>
+<form method="post" action="/email/digest" class="digest-form">
+  {{- if .Digest}}
+  <p>Each morning Zonewiki mails you the <a href="/changes?watched=1">pages you watch</a> that changed since the last mail{{if not .Email}}, once your address is confirmed{{end}}. A morning with no change sends nothing.</p>
+  <input type="hidden" name="digest" value="off">
+  <button type="submit" class="btn">Stop the morning's mail</button>
+  {{- else}}
+  <p>Zonewiki can mail you each morning the <a href="/changes?watched=1">pages you watch</a> that changed since the last mail. A morning with no change sends nothing.</p>
+  <input type="hidden" name="digest" value="on">
+  <button type="submit" class="btn btn-primary">Mail me each morning</button>
+  {{- end}}
+</form>
+{{- end}}
 {{- end}}
 {{- end}}
 </div>

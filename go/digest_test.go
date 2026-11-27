@@ -170,9 +170,10 @@ func TestTheMorningsMailIsForWhoSeesIt(t *testing.T) {
 	if d := digestFor("bob", morning.Add(-24*time.Hour), morning); d.worthSending() || d.OlderPages+len(d.Overdue) > 0 {
 		t.Errorf("bob's mail has something of alice's: %+v", d)
 	}
-	// A viewer can't turn it on, and one who is disabled gets none.
+	// A viewer doesn't turn it on in My tasks' settings (on the Mail tab:
+	// TestAViewersMorningsMail), and one who is disabled gets none.
 	if err := setMineParams(asUser("vera"), mineParams(asUser("vera")).src.raw, map[string]string{"mail": "digest"}); err == nil {
-		t.Error("a viewer turned the mail on")
+		t.Error("a viewer turned the mail on in My tasks' settings")
 	}
 	settings().Users["alice"].Disabled = true
 	digestState.Lock()
@@ -286,5 +287,69 @@ func TestWhenToBeStartedInTheWikisTimezone(t *testing.T) {
 		if !ok || got.UTC().Format(time.RFC3339) != want {
 			t.Errorf("at %s: %s (%v), want %s", at, got.UTC().Format(time.RFC3339), ok, want)
 		}
+	}
+}
+
+// A viewer has the morning's mail of the pages they watch, and of nothing
+// else: no task is given to a viewer, and every list counts as theirs, so
+// what is due would be the whole wiki's. The other kinds stay off.
+func TestAViewersMorningsMail(t *testing.T) {
+	smtp, morning := digestWiki(t)
+	t.Cleanup(func() {
+		watchStore.Lock()
+		watchStore.by = nil
+		watchStore.Unlock()
+	})
+	mailOn(t, "alice", "")
+	digestTaskBy(t, "alice", map[string]string{"title": "Shared and due", "list": "team", "due_date": isoDay(morning)})
+	commitPage(t, "handbook.md", "alice", "Create handbook")
+	setWatch(asUser("vera"), "handbook", true)
+	commitPage(t, "handbook.md", "bob", "Update handbook")
+	s := settings()
+	if mails(s, "vera", "digest") {
+		t.Fatal("a viewer has the mail before turning it on")
+	}
+	setViewerDigest("vera", true)
+	for _, kind := range []string{"assigned", "mentioned", "comments"} {
+		if mails(s, "vera", kind) {
+			t.Errorf("a viewer gets the mail %q", kind)
+		}
+	}
+	if !mails(s, "vera", "digest") {
+		t.Fatal("the morning's mail isn't on")
+	}
+	sendDigests(morning.Add(10 * time.Minute))
+	n, mail := smtp.mailsSent()
+	if n != 1 {
+		t.Fatalf("%d mails", n)
+	}
+	for _, want := range []string{"To: vera@example.org\n", "Subject: Zonewiki: 1 watched page changed\n", "PAGES YOU WATCH\n\n  handbook, changed by bob\n",
+		"To turn it off, open Settings, then Mail."} {
+		if !strings.Contains(mail, want) {
+			t.Errorf("no %q in:\n%s", want, mail)
+		}
+	}
+	if strings.Contains(mail, "Shared and due") || strings.Contains(mail, "DUE TODAY") {
+		t.Errorf("a viewer's mail has tasks:\n%s", mail)
+	}
+	// A morning with a task due and no page changed sends a viewer nothing.
+	later := time.Now().Add(time.Hour) // after the commits, which have git's clock
+	if d := digestFor("vera", later, later.Add(time.Hour)); d.worthSending() {
+		t.Errorf("worth sending without a page changed: %+v", d)
+	}
+	// Off; and off for a viewer who is disabled. The choice stays with
+	// their watches when they watch nothing any more.
+	setWatch(asUser("vera"), "handbook", false)
+	if !watchesOf("vera").Digest {
+		t.Error("the choice went with the last watch")
+	}
+	settings().Users["vera"].Disabled = true
+	if mails(settings(), "vera", "digest") {
+		t.Error("a disabled viewer has the mail")
+	}
+	settings().Users["vera"].Disabled = false
+	setViewerDigest("vera", false)
+	if mails(settings(), "vera", "digest") || exists(watchPath("vera")) {
+		t.Errorf("off: %v, file %v", mails(settings(), "vera", "digest"), exists(watchPath("vera")))
 	}
 }

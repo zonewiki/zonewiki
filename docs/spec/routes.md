@@ -151,6 +151,7 @@ To anyone else such a link says nothing, not even that there is such a group (`g
 | GET/POST | `/welcome/<token>`  | An invite or reset link's page: choose a password, once (no login needed) |
 | GET, POST | `/password`        | Change password: whoever is signed in sets a new one (without users, the wiki's), with the one they have (Signing in in `docs/spec/users.md`); 404 without a login |
 | GET, POST | `/email`           | Your mail address, on the settings pages' **Mail** tab: set (`email`, `password`) or removed (`remove=1`), with your password; it waits until confirmed (Mail addresses in `docs/spec/users.md`); 404 where the wiki sends no mail or has no users |
+| POST   | `/email/digest`       | A viewer's morning's mail on (`digest=on`) or off, kept with their watches, no commit; 404 for anyone but a viewer, whose mail is in My tasks' settings (The morning's mail in `docs/spec/tasks.md`) |
 | POST   | `/email/resend`       | Mails the confirmation link for the address that waits again; 404 when none does |
 | GET, POST | `/email/confirm/<token>` | The link's page: GET shows whose address it confirms, POST confirms it; 404 for a link that doesn't work for who is signed in |
 | GET    | `/usage`              | Usage: how much the wiki is used, as counts a day, for admins (without users, whoever is let in); 404 for anyone else (Usage in `docs/spec/users.md`) |

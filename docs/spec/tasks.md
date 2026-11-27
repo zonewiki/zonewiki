@@ -1405,6 +1405,18 @@ Your private tasks are in it, by their titles, as My tasks has them: it is your 
 A Zonewiki that sleeps while nobody uses it (Started by systemd, asleep when idle, in `docs/spec/deployment.md`) sends it when something starts it in the morning: it says when in `.zone/wake` (When to be started, there), and sleeps again a minute after the mails are out when nobody came meanwhile.
 A user whose address is confirmed in the morning, or who turns the mail on then, gets that morning's within the minute.
 
+#### A viewer's morning's mail
+
+A viewer can't change My tasks' settings, and nothing is given to them, so the other three kinds have nothing to tell; the morning's mail does: the pages they watch that changed.
+They turn it on on **Settings, Mail**, below their address: **Mail me each morning**, and **Stop the morning's mail** turns it off.
+No password is asked again: like watching a page, it is their own and changes nothing of the wiki.
+Their mail holds **Pages you watch** alone, never a task (every list counts as a viewer's in My tasks, so what is due would be the whole wiki's), and goes out only on a morning a watched page changed; its last line sends them to Settings, Mail.
+It goes to a confirmed address, as every mail, and not to a viewer who is disabled or waiting for approval.
+
+How: the choice is `digest` in the viewer's watch file, `.zone/watch/<user>.json` (Watching pages in `docs/spec/navigation.md`), beside the watches it is about, not in their task registry, which is in git and which a viewer writes nothing to (`setViewerDigest`, `mayViewerDigest` in `go/notify.go`; `POST /email/digest`, `viewerDigestRoute` in `go/email.go`).
+`mails` asks it for a viewer's kind `digest`, and `digestFor` leaves the tasks out for whoever can't be given one.
+A viewer made an editor chooses their mail in My tasks' settings from then on, and an editor made a viewer has none until they turn it on on the Mail tab.
+
 #### How the morning's mail works
 
 `go/digest.go`: `startDigests` looks every minute, from the start on (`sendDigests`), for each user who `mails` the kind `digest` and wasn't looked into today.

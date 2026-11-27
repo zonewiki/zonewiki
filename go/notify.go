@@ -27,11 +27,39 @@ type assignedBefore map[string]string
 var mailKinds = []string{"assigned", "mentioned", "comments", "digest"}
 
 // mails: user gets the mails of kind: the deployment sends mail, they have
-// an address, they aren't disabled, and they turned that kind on.
+// an address, they aren't disabled, and they turned that kind on, in My
+// tasks' settings. A viewer has the morning's mail alone, turned on on the
+// Mail tab (viewerDigest): nothing is given to a viewer, so the other kinds
+// have nothing to tell.
 func mails(s *Settings, user, kind string) bool {
 	u := s.Users[user]
-	return cfg.Mail.on() && u != nil && u.Email != "" && s.assignable(user) &&
-		slices.Contains(strings.Split(taskFiles.ReadLists(user).Mine["mail"], ","), kind)
+	if !cfg.Mail.on() || u == nil || u.Email == "" {
+		return false
+	}
+	if s.mayViewerDigest(user) {
+		return kind == "digest" && watchesOf(user).Digest
+	}
+	return s.assignable(user) && slices.Contains(strings.Split(taskFiles.ReadLists(user).Mine["mail"], ","), kind)
+}
+
+// mayViewerDigest: user is a viewer who can have the morning's mail, of
+// the pages they watch: one who isn't disabled or waiting for approval.
+func (s *Settings) mayViewerDigest(user string) bool {
+	u := s.Users[user]
+	return u != nil && u.Role == roleViewer && !u.Disabled && !u.Pending
+}
+
+// setViewerDigest turns a viewer's morning's mail on or off; it writes
+// their watch file, beside the wiki, and makes no commit.
+func setViewerDigest(user string, on bool) {
+	changeWatches(user, func(w *watched) bool {
+		if w.Digest == on {
+			return false
+		}
+		w.Digest = on
+		return true
+	})
+	writeWake(now())
 }
 
 // mailsAssigned: user gets a mail when a task is assigned to them.

@@ -29,6 +29,11 @@ import (
 type watched struct {
 	Watch map[string]int64  `json:"watch"`
 	Seen  map[string]seenAt `json:"seen,omitempty"`
+	// Digest: a viewer has the morning's mail of the watched pages that
+	// changed (viewerDigest in notify.go). Kept with the watches it is
+	// about, not with My tasks' settings, which a viewer can't change:
+	// their file is in git, and a viewer writes nothing there.
+	Digest bool `json:"digest,omitempty"`
 }
 
 // seenAt: a commit a user has seen a page up to: its time (unix seconds)
@@ -89,7 +94,7 @@ func loadWatches() {
 }
 
 func (w watched) clone() watched {
-	out := watched{Watch: make(map[string]int64, len(w.Watch)), Seen: make(map[string]seenAt, len(w.Seen))}
+	out := watched{Watch: make(map[string]int64, len(w.Watch)), Seen: make(map[string]seenAt, len(w.Seen)), Digest: w.Digest}
 	for k, v := range w.Watch {
 		out.Watch[k] = v
 	}
@@ -151,7 +156,7 @@ func changeWatches(user string, change func(w *watched) bool) {
 		}
 	}
 	var err error
-	if len(w.Watch) == 0 {
+	if len(w.Watch) == 0 && !w.Digest {
 		delete(watchStore.by, user)
 		if err = os.Remove(path); os.IsNotExist(err) {
 			err = nil

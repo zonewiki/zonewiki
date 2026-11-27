@@ -45,6 +45,7 @@ func emailRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /email", emailPage)
 	mux.HandleFunc("POST /email", emailRoute)
 	mux.HandleFunc("POST /email/resend", emailResendRoute)
+	mux.HandleFunc("POST /email/digest", viewerDigestRoute)
 	mux.HandleFunc("GET /email/confirm/{token}", emailConfirmRoute)
 	mux.HandleFunc("POST /email/confirm/{token}", emailConfirmRoute)
 	mux.HandleFunc("POST /admin/users/{name}/email", adminOnly(userEmailRoute))
@@ -63,6 +64,9 @@ type emailView struct {
 	// link is for; Dead: the link doesn't work for who is signed in.
 	Confirm string
 	Dead    bool
+	// A viewer's morning's mail, on this page (Viewer: the box is shown;
+	// Digest: it is on): theirs is set here, not in My tasks' settings.
+	Viewer, Digest bool
 }
 
 // emailOwner: whose address the request is about, as the latest settings
@@ -95,6 +99,7 @@ func showEmail(w http.ResponseWriter, r *http.Request, status int, u *User, done
 		u = latest
 	}
 	v := &emailView{User: u.Name, Shared: u.Shared, Email: u.Email, Pending: u.EmailPending, Done: done, Error: refused,
+		Viewer: latestSettings().mayViewerDigest(u.Name) && !u.Shared, Digest: watchesOf(u.Name).Digest,
 		BreadcrumbHTML: breadcrumb(rq, settingsCrumb(rq, "Mail"), "", false, "", "")}
 	page(w, rq, status, "email.html", "Your mail address", shell{settings: "email"}, v)
 }
@@ -102,12 +107,33 @@ func showEmail(w http.ResponseWriter, r *http.Request, status int, u *User, done
 // emailDone: what ?done= says the change before did, from a fixed set (a
 // link can't make the page say anything else).
 var emailDone = map[string]string{
-	"sent":      "Check your mail: Zonewiki sent a link to confirm the address.",
-	"unsent":    "The address is kept, but Zonewiki sent no link: too many were sent lately. Send the link again later.",
-	"failed":    "The address is kept, but Zonewiki couldn't send the link. Send the link again later.",
-	"removed":   "Your mail address is removed: Zonewiki sends you no mail.",
-	"confirmed": "Your mail address is confirmed.",
-	"same":      "That is your address already.",
+	"sent":       "Check your mail: Zonewiki sent a link to confirm the address.",
+	"unsent":     "The address is kept, but Zonewiki sent no link: too many were sent lately. Send the link again later.",
+	"failed":     "The address is kept, but Zonewiki couldn't send the link. Send the link again later.",
+	"removed":    "Your mail address is removed: Zonewiki sends you no mail.",
+	"confirmed":  "Your mail address is confirmed.",
+	"same":       "That is your address already.",
+	"digest-on":  "Zonewiki mails you each morning when pages you watch changed.",
+	"digest-off": "Zonewiki sends you no morning's mail any more.",
+}
+
+// viewerDigestRoute: POST /email/digest, a viewer turns their morning's
+// mail on (digest=on) or off. As watching a page, it is their own and
+// changes nothing of the wiki: no password again, no commit. Anyone but a
+// viewer gets a 404: their mail is chosen in My tasks' settings.
+func viewerDigestRoute(w http.ResponseWriter, r *http.Request) {
+	s, u, ok := emailOwner(r)
+	if !ok || !s.mayViewerDigest(u.Name) || u.Shared {
+		http.NotFound(w, r)
+		return
+	}
+	on := r.PostFormValue("digest") == "on"
+	setViewerDigest(u.Name, on)
+	done := "digest-off"
+	if on {
+		done = "digest-on"
+	}
+	http.Redirect(w, r, "/email?done="+done, http.StatusSeeOther)
 }
 
 // emailPage: GET /email.

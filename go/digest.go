@@ -266,6 +266,10 @@ func digestFor(name string, since, t time.Time) digest {
 	user := asUser(name)
 	d := digest{user: name, since: since}
 	day, sinceMinute := isoDay(t), since.Format("2006-01-02T15:04")
+	// A viewer's is of the pages they watch alone: nothing is given to
+	// them, and every list counts as theirs (mineFilter), so what is due
+	// would be the whole wiki's.
+	tasks := settings().assignable(name)
 	open := taskFiles.Open(user)
 	// Updates: by when their latest news came, the latest first.
 	type update struct {
@@ -274,6 +278,9 @@ func digestFor(name string, since, t time.Time) digest {
 	}
 	var updates []update
 	for _, task := range updatesFor(user, open, recentUpdates(user)) {
+		if !tasks {
+			break
+		}
 		all := newsAll(task, user)
 		if len(all) == 0 {
 			continue
@@ -315,7 +322,7 @@ func digestFor(name string, since, t time.Time) digest {
 	mine := mineFilter(user, taskLists(user))
 	var due []*Task
 	for _, task := range open {
-		if task.DueDate != "" && task.DueDate <= day && mine(task) {
+		if tasks && task.DueDate != "" && task.DueDate <= day && mine(task) {
 			due = append(due, task)
 		}
 	}
@@ -403,7 +410,12 @@ func (d digest) mail(s *Settings) (subject, body string) {
 	if s.BaseURL != "" && len(d.DueToday)+len(d.Overdue) > 0 {
 		b.WriteString("\n  Your tasks: " + s.BaseURL + mineHref + "\n")
 	}
-	b.WriteString("\n" + appName + " sends this mail on a morning that has something new for you or due today. " +
-		"To turn it off, open My tasks, then its menu, List settings.\n")
+	if s.mayViewerDigest(d.user) {
+		b.WriteString("\n" + appName + " sends this mail on a morning when pages you watch changed. " +
+			"To turn it off, open Settings, then Mail.\n")
+	} else {
+		b.WriteString("\n" + appName + " sends this mail on a morning that has something new for you or due today. " +
+			"To turn it off, open My tasks, then its menu, List settings.\n")
+	}
 	return subject, b.String()
 }

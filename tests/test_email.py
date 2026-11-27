@@ -6,6 +6,7 @@ ZONE_MAIL_SPOOL each mail is a file in .zone/outbox/, which these tests
 read instead of a mail server."""
 
 import json
+import subprocess
 import re
 import stat
 import time
@@ -387,6 +388,49 @@ class TestYourAddress:
         finally:
             smtp.shutdown()
             smtp.server_close()
+
+
+class TestAViewersMorningsMail:
+    """A viewer has the morning's mail of the pages they watch, turned on on
+    the Mail tab (Z6 of zonewiki-cp's tenant mail plan; The morning's mail in
+    docs/spec/tasks.md): their own, beside their watches, no commit."""
+
+    def test_a_viewer_turns_it_on_and_off_on_the_mail_tab(self, client, git_wiki_dir, wiki):
+        login(client, "carol")                                   # a viewer
+        body = client.get("/email", headers=HOST).get_data(as_text=True)
+        assert "<h2>The morning's mail</h2>" in body and "Mail me each morning" in body
+        assert "in <a href=\"/tasks?mine=1\">My tasks</a>" not in body   # not where an editor chooses
+        head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=git_wiki_dir, capture_output=True, text=True, env=settings.GIT_ENV).stdout
+        resp = client.post("/email/digest", data={"digest": "on"}, headers=HOST)
+        assert resp.status_code == 303 and resp.headers["Location"] == "/email?done=digest-on"
+        assert json.loads((wiki / ".zone" / "watch" / "carol.json").read_text())["digest"] is True
+        body = client.get("/email?done=digest-on", headers=HOST).get_data(as_text=True)
+        assert "Zonewiki mails you each morning when pages you watch changed." in body
+        assert "Stop the morning's mail" in body and "once your address is confirmed" in body
+        assert subprocess.run(["git", "rev-parse", "HEAD"], cwd=git_wiki_dir, capture_output=True, text=True,
+                              env=settings.GIT_ENV).stdout == head
+        assert client.post("/email/digest", data={"digest": "off"}, headers=HOST).status_code == 303
+        assert not (wiki / ".zone" / "watch" / "carol.json").exists()
+
+    def test_with_a_confirmed_address_it_asks_to_be_started(self, client, wiki, monkeypatch):
+        monkeypatch.setattr(settings, "USER_SETTINGS", {**USER_SETTINGS, "carol": {"role": "viewer", "email": "carol@example.org"}})
+        login(client, "carol")
+        assert not (wiki / ".zone" / "wake").exists()
+        client.post("/email/digest", data={"digest": "on"}, headers=HOST)
+        assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:00:00Z\n", (wiki / ".zone" / "wake").read_text())
+
+    def test_not_for_anyone_but_a_viewer(self, client, wiki):
+        login(client, "bob")                                     # an editor: My tasks' settings
+        assert client.post("/email/digest", data={"digest": "on"}, headers=HOST).status_code == 404
+        assert "Mail me each morning" not in client.get("/email", headers=HOST).get_data(as_text=True)
+        assert not (wiki / ".zone" / "watch" / "bob.json").exists()
+        client.cookies.clear()
+        assert client.post("/email/digest", data={"digest": "on"}, headers=HOST).status_code in (302, 303, 401, 404)
+
+    def test_not_from_another_site(self, client, wiki):
+        login(client, "carol")
+        resp = client.post("/email/digest", data={"digest": "on"}, headers={**HOST, "Origin": "https://evil.example"})
+        assert resp.status_code == 403 and not (wiki / ".zone" / "watch" / "carol.json").exists()
 
 
 class TestAnAdminSetsIt:
