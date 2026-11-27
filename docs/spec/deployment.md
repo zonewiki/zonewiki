@@ -313,6 +313,7 @@ How to use one is in the manual (With the binary in `docs/manual/self-hosting.md
 
 A tag is the version the binary says: `v0.5.0` for `const version = "0.5.0"` in `go/config.go` (so the tagged commit is the one without `-dev`).
 CI's test job fails a `v*` tag that isn't (`./run.sh test`, from `GITHUB_REF`), and with it nothing of the tag is released: the image, the binaries and Forgejo's push to GitHub wait for the checks.
+A release's notes are its tag's message: the tag is annotated (`git tag -a`), and the release job makes the GitHub release with them (`gh release create --notes-from-tag`), since there are no pull requests to generate notes from.
 
 ### What a release binary is
 

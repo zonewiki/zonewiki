@@ -166,8 +166,9 @@ jobs:
     # On a v* tag, once the checks pass: the binaries for Linux and macOS,
     # amd64 and arm64 (./run.sh binaries, in the tools image with its pinned
     # Go, without cgo, with Go's simd experiment), with SHA256SUMS, LICENSE and THIRD_PARTY_LICENSES,
-    # attached to the tag's GitHub release, made here when it has none yet
-    # (Release binaries in docs/spec/deployment.md). With gh, which the
+    # attached to the tag's GitHub release, made here when it has none yet,
+    # with the annotated tag's message as its notes (Release binaries in
+    # docs/spec/deployment.md). With gh, which the
     # runners have, and the workflow's token.
     needs: [checks]
     if: startsWith(github.ref, 'refs/tags/v')
@@ -185,5 +186,5 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           gh release view "$TAG" >/dev/null 2>&1 ||
-            gh release create "$TAG" --verify-tag --title "Zonewiki ${TAG#v}" --generate-notes
+            gh release create "$TAG" --verify-tag --title "Zonewiki ${TAG#v}" --notes-from-tag
           gh release upload "$TAG" dist/* --clobber
