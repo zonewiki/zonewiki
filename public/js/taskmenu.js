@@ -50,18 +50,23 @@ function openTaskMenu(id, anchor, at) {
   const mayDelete = document.body.dataset.users !== '1' || document.body.dataset.admin === '1' ||
     task.private || !task.created_by || task.created_by === people.me;
   // Groups, the same ones in the same order on every task, so a row is
-  // found by its place: the task itself, when it starts (one row), where it
-  // is and whose, and what ends it.
+  // found by its place: Edit… first, then its time (when it starts, one
+  // row, when it is due, this occurrence skipped), where it is and whose,
+  // what ends it, and its link last.
   const users = document.body.dataset.users === '1';
   const open = !task.closed_at;
   const items = grouped([
-    [['edit', 'Edit…', '', 'Enter'], ['copylink', 'Copy link']],
-    [open && { row: 'Start', items: [
-      ['today', 'Today', 'Start today', 'f'],
-      ['tomorrow', 'Tomorrow', 'Start tomorrow', 'F'],
-      ['pick', 'Pick…', 'Pick start date…'],
-      task.start_date && ['unplan', 'Unplan', 'Unplan', '0'],
-    ].filter(Boolean) }],
+    [['edit', 'Edit…', '', 'Enter']],
+    [
+      open && { row: 'Start', items: [
+        ['today', 'Today', 'Start today', 'f'],
+        ['tomorrow', 'Tomorrow', 'Start tomorrow', 'F'],
+        ['pick', 'Pick…', 'Pick start date…'],
+        task.start_date && ['unplan', 'Unplan', 'Unplan', '0'],
+      ].filter(Boolean) },
+      open && ['due', 'Due date…'],
+      open && task.recurrence && ['skip', 'Skip this occurrence'],
+    ],
     [
       open && ['importance', 'Importance…', '', 'i'],
       open && ['list', 'Move to list…', '', 'm'],
@@ -71,12 +76,12 @@ function openTaskMenu(id, anchor, at) {
       follow,
     ],
     open ? [
-      task.recurrence && ['skip', 'Skip this occurrence'],
       ['wontdo', "Won't do", '', 'Del'],
     ] : [
       ['reopen', 'Reopen'],
       mayDelete && ['delete', 'Delete for good…'],
     ],
+    [['copylink', 'Copy link']],
   ]);
   showMenu(plainTitle(task.title), items, action => runTaskAction(task, action, anchor), anchor, at);
 }
@@ -176,6 +181,10 @@ function runTaskAction(task, action, anchor) {
     case 'unplan':   app.startOn([id], null); break;
     case 'pick':
       openDatePicker(task.start_date || '', d => d !== undefined && app.startOn([id], d), anchor, todayStr());
+      break;
+    case 'due':
+      // The picker the card's ⏰ opens, which shows on a card without a due date only under the pointer.
+      openDatePicker(task.due_date || '', d => d !== undefined && app.updateTask(id, { due_date: d }), anchor, todayStr());
       break;
     case 'skip':     app.skipOccurrence(id); break;
     case 'importance': {

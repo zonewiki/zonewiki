@@ -838,20 +838,22 @@ Its rows are in groups with a line between them, the same groups in the same ord
 | Group | Item | On | Does |
 |-------|------|----|------|
 | The task | Edit… | every task | The edit dialog |
-| | Copy link | every task | A task's link |
-| Start | Today, Tomorrow, Pick… | an open task | The start date (A start after the deadline) |
-| | Unplan | an open task with a start date | Clears it |
+| Its time | Start: Today, Tomorrow, Pick… | an open task | The start date (A start after the deadline) |
+| | Start: Unplan | an open task with a start date | Clears it |
+| | Due date… | an open task | The date picker the card's ⏰ opens, for the deadline |
+| | Skip this occurrence | an open recurring task | Won't do and Skip |
 | Where it is, and whose | Importance… | an open task | High, Normal, Low in the menu's place, the task's own ticked (Importance) |
 | | Move to list… | an open task | The move dialog |
 | | Assign… | with users, an open task | Assigning tasks in `docs/spec/users.md`; a private task is yours, and for someone else asks for a shared list |
 | | Follow / Unfollow | with users, a shared task | Following a task |
-| What ends it | Skip this occurrence | an open recurring task | Won't do and Skip |
-| | Won't do | an open task | Won't do and Skip |
+| What ends it | Won't do | an open task | Won't do and Skip |
 | | Reopen | a closed task | Opens it again |
 | | Delete for good… | a closed task you may delete | Deleting a task for good |
+| Its link | Copy link | every task | A task's link |
 
 **Start** is one row: the word, then its dates as small buttons side by side (named Start today, Start tomorrow, Pick start date… and Unplan for a screen reader and in their tooltips).
-A group none of whose items is there has no line either (a closed task's menu has no Start).
+**Due date…** is one row and no such row of buttons: a deadline is set far less often than a start, and a card without one shows its ⏰ only under the pointer, so the menu is where it is always found.
+A group none of whose items is there has no line either (a closed task's menu has nothing of its time).
 
 Where there is a keyboard (a mouse's pointer, hover), a row whose action has a key shows it at its right, dimmed: Enter, **i**, **m**, **a**, Del; the start buttons name theirs in the tooltip (**f**, **F**, **0**).
 **↑**/**↓** go from line to line, the Start row being one line entered at Today, **←**/**→** along that row, **Enter** picks, **Esc** closes.

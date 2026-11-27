@@ -101,15 +101,16 @@ def test_hover_icons_hidden_menu_button_is_a_real_target(phone):
 def test_menu_is_a_bottom_sheet_with_context_items(phone):
     menu = open_menu(phone, "Weekly review")
     items = menu.get_by_role("menuitem")
-    expect(items).to_have_text(["Edit…", "Copy link", "Today", "Tomorrow", "Pick…",
-                                "Importance…", "Move to list…", "Skip this occurrence", "Won't do"])
+    expect(items).to_have_text(["Edit…", "Today", "Tomorrow", "Pick…", "Due date…", "Skip this occurrence",
+                                "Importance…", "Move to list…", "Won't do", "Copy link"])
     box = box_of(menu)
     assert box["x"] == 0 and abs(box["y"] + box["height"] - 844) < 1, box
     assert box["width"] == 390
-    # Its groups: the task, its start, where it is, what ends it.
-    expect(menu.locator(".task-menu-sep")).to_have_count(3)
+    # Its groups: Edit…, its time, where it is, what ends it, its link.
+    expect(menu.locator(".task-menu-sep")).to_have_count(4)
     assert menu.evaluate("m => [...m.children].slice(1).map(c => c.matches('hr') ? '-' : c.matches('.task-menu-row') ? 'row' : c.textContent)") == [
-        "Edit…", "Copy link", "-", "row", "-", "Importance…", "Move to list…", "-", "Skip this occurrence", "Won't do"]
+        "Edit…", "-", "row", "Due date…", "Skip this occurrence", "-", "Importance…", "Move to list…", "-", "Won't do",
+        "-", "Copy link"]
     # The start dates are one line, each a finger's size, inside the sheet.
     row = menu.locator(".task-menu-row")
     expect(row.locator(".task-menu-row-label")).to_have_text("Start")
@@ -154,6 +155,21 @@ def test_menu_pick_date_opens_picker(phone):
     wait_until(phone, lambda: tasks_by_title(phone)["Water plants"]["start_date"] == day(3))
 
 
+def test_menu_due_date_opens_picker(phone):
+    # A card without a due date shows no ⏰ to tap: the menu has it.
+    assert tasks_by_title(phone)["Water plants"]["due_date"] is None
+    open_menu(phone, "Water plants").get_by_role("menuitem", name="Due date…").tap()
+    picker = phone.locator(".tasks-datepicker")
+    expect(picker).to_be_visible()
+    pick_day(picker, day(4))
+    wait_until(phone, lambda: tasks_by_title(phone)["Water plants"]["due_date"] == day(4))
+    assert tasks_by_title(phone)["Water plants"]["start_date"] == day(0)      # the start stays
+    expect(card(phone, "Water plants").locator(".task-due")).not_to_contain_class("task-date-empty")
+    # A task that repeats has it too, with what its time group holds.
+    menu = open_menu(phone, "Weekly review")
+    expect(menu.get_by_role("menuitem", name="Due date…")).to_be_visible()
+
+
 def test_menu_skip_and_wont_do(phone):
     open_menu(phone, "Weekly review").get_by_role("menuitem", name="Skip this occurrence").tap()
     # The series continues: a new instance with a later due date replaces it.
@@ -168,8 +184,8 @@ def test_completed_task_menu(phone):
     phone.reload()
     open_tab(phone, "closed")
     menu = open_menu(phone, "Water plants")
-    expect(menu.get_by_role("menuitem")).to_have_text(["Edit…", "Copy link", "Reopen", "Delete for good…"])
-    expect(menu.locator(".task-menu-sep")).to_have_count(1)
+    expect(menu.get_by_role("menuitem")).to_have_text(["Edit…", "Reopen", "Delete for good…", "Copy link"])
+    expect(menu.locator(".task-menu-sep")).to_have_count(2)
     menu.get_by_role("menuitem", name="Reopen").tap()
     wait_until(phone, lambda: "Water plants" in tasks_by_title(phone))
 
@@ -334,14 +350,16 @@ def test_desktop_menu_popover_and_keyboard(page, wiki):
     assert '"Del"' in menu.get_by_role("menuitem", name="Won't do", exact=True).evaluate(after)
     assert menu.get_by_role("menuitem", name="Copy link", exact=True).evaluate(after) == "none"
     # Down and up go line by line, the start dates being one line; right and left along it.
+    page.keyboard.press("ArrowUp")
+    expect(menu.get_by_role("menuitem", name="Copy link")).to_be_focused()     # the last row
     page.keyboard.press("ArrowDown")
-    expect(menu.get_by_role("menuitem", name="Copy link")).to_be_focused()
+    expect(menu.get_by_role("menuitem", name="Edit…")).to_be_focused()
     page.keyboard.press("ArrowDown")
     expect(menu.get_by_role("menuitem", name="Start today")).to_be_focused()
     page.keyboard.press("ArrowRight")
     expect(menu.get_by_role("menuitem", name="Start tomorrow")).to_be_focused()
     page.keyboard.press("ArrowDown")
-    expect(menu.get_by_role("menuitem", name="Importance…")).to_be_focused()
+    expect(menu.get_by_role("menuitem", name="Due date…")).to_be_focused()
     page.keyboard.press("ArrowUp")
     expect(menu.get_by_role("menuitem", name="Start today")).to_be_focused()
     page.keyboard.press("ArrowLeft")

@@ -150,7 +150,7 @@ Most actions show a notice with **Undo**; **Ctrl+Z** does the same while it show
 
 ### Quick actions
 
-The **⋯** on every card (or a right-click) has, in groups: **Edit…** and **Copy link**; **Start** with **Today**, **Tomorrow**, **Pick…** and **Unplan** beside it; **Importance…**, **Move to list…**, **Assign…** and **Follow** (with several users); **Skip this occurrence** (repeating tasks) and **Won't do**.
+The **⋯** on every card (or a right-click) has, in groups: **Edit…**; the task's time, which is **Start** with **Today**, **Tomorrow**, **Pick…** and **Unplan** beside it, **Due date…** and **Skip this occurrence** (repeating tasks); **Importance…**, **Move to list…**, **Assign…** and **Follow** (with several users); **Won't do**; and **Copy link**.
 With a keyboard, a row shows the key that does the same at its right.
 The ⏰ and 📅 on a card open a date picker with shortcuts: **Today**, **Tmrw**, **+2d**, **Mon**, **+1w**.
 **Copy link** gives a link that opens the list with that task selected, to paste into chat, mail or a page.
