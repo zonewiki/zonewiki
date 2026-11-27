@@ -148,14 +148,19 @@ A user's section, `[user NAME]` (the name: lowercase letters, digits and inner h
 | `disabled` | They can't sign in, their token is refused (`zonewiki user disable`, the Users tab) | `yes`/`no`, `true`/`false`, `1`/`0` | no |
 | `shared` | Several people sign in to this account: its password and token aren't changed in the browser, and it is no admin (Shared accounts, below; `zonewiki user shared`) | as `disabled` | no |
 | `pending` | A sign-up waiting for an admin's approval: disabled until approved (Sign-up, below) | as `disabled` | no |
-| `email` | Their mail address: for task mails (Assigning tasks, below) and to tell sign-ups apart (`zonewiki user email`, sign-up) | a bare address (`name@example.org`, `validEmail`) | none: no mail |
+| `email` | Their mail address, confirmed: for task mails (Assigning tasks, below) and to tell sign-ups apart (`zonewiki user email`, sign-up, the link that confirms an address) | a bare address (`name@example.org`, `validEmail`) | none: no mail |
+| `email-pending` | An address set in the browser that its owner hasn't confirmed yet: no mail goes to it but the link (Mail addresses, below) | as `email` | none |
 
 ### A user's mail address
 
-Sign-up writes `email` (Sign-up, below); for anyone else an admin with access to the host sets it with `zonewiki user email bob bob@example.org` (`./run.sh user email …`; there is no field for it in the browser yet).
+`email` is the address Zonewiki mails, and it is always a confirmed one.
+Sign-up writes it (Sign-up, below: the account was made from a link sent there), and so does the link that confirms an address a user or an admin typed in the browser, which waits as `email-pending` until then (Mail addresses, below).
+On the host an admin sets it with `zonewiki user email bob bob@example.org` (`./run.sh user email …`), confirmed as it is: whoever runs the command owns the server.
 The command refuses what isn't a bare address and an address another user has already (case aside, as sign-up tells accounts apart by it), leaving the file as it was;
-`zonewiki user email bob --remove` takes the address out, and `zonewiki user email bob` alone says it.
+`zonewiki user email bob --remove` takes the address out (one that waits too), and `zonewiki user email bob` alone says it, or the one that waits, "not confirmed by bob yet".
+Setting an address with the command takes one that waits away.
 A hand edit works too (`email = bob@example.org` under `[user bob]`): Zonewiki takes it within a second, or refuses the file, naming the line, when it isn't an address.
+An import with `--users-only` brings each user's `email` along as `email-pending`: the host a wiki moves to answers for the mail it sends, so each owner confirms there (`importedSettings` in `go/transfer.go`).
 Without it the user gets no mail about tasks, whatever they tick in My tasks' settings (Mail in `docs/spec/tasks.md`).
 
 ### A group's keys
@@ -271,7 +276,7 @@ With `run.sh` they are `./run.sh user …`, `./run.sh group …` and `./run.sh c
 | `user passwd NAME` | A new password, asked twice |
 | `user token NAME` | A new MCP token, shown once; the old one stops working at once |
 | `user role NAME ROLE` | Changes a role |
-| `user email NAME ADDRESS` | Sets their mail address, for task mails; `--remove` instead of the address takes it out; NAME alone says it (A user's mail address, above) |
+| `user email NAME ADDRESS` | Sets their mail address, for task mails, confirmed; `--remove` instead of the address takes it out; NAME alone says it (A user's mail address, above) |
 | `user group NAME [+G] [-G]` | Puts them in a group (`+dev`) or takes them out (`-hiring`); alone: their groups |
 | `user disable NAME`, `user enable NAME` | They can't sign in, and their token stops; `enable` undoes it, and approves a sign-up |
 | `user shared NAME` | Several people sign in to this account (a demo's): its password and token are set by these commands only; `--remove` undoes it (Shared accounts, below) |
@@ -471,6 +476,7 @@ What it can't do is what would lock the others out, since each of them knows the
 | In the browser | A shared account |
 |----------------|------------------|
 | **Change password** | No **Password** tab on the settings pages and no link in the shortcuts dialog; `/password` says "… is an account several people sign in to: its password is set by whoever runs this wiki, not here." and has no form; a `POST` is 403 and changes nothing |
+| **Mail**: the address | `/email` says the address "is set by whoever runs this wiki, not here." and has no form; a `POST` is 403 before the password is looked at (`zonewiki user email` sets it) |
 | **Connect an assistant**: the token | No **Make a token** and no **Revoke**; both `POST`s are 403. A token set with `zonewiki user token` goes on working |
 | **Connect an assistant**: connections | As for anyone: each assistant that signs in is its own connection, to be changed or ended on the page, by whoever is signed in |
 | The Users tab | A **shared** mark beside the name |
@@ -520,7 +526,7 @@ Uploads and tag renames (`renameTagOp`) are refused too.
 
 **The gate** (`viewerGate` in `go/server.go`): a viewer's POST, PUT, PATCH or DELETE to a route not listed in `viewerWrites` is refused (403) before the route runs, whatever it names (another user's folder answers as anywhere else).
 Listed are only those that change nothing of the wiki: sign in and out, the welcome link, the previews, `/mcp` (which refuses a viewer's writing tools itself),
-and what is the viewer's own: their password (`/password`), their MCP token (`/assistant/token`, `/assistant/revoke`) and their assistants' connections (OAuth's `/oauth/authorize`, `/oauth/token`, `/oauth/register`, `/oauth/revoke`; End and Change… on Connect an assistant), whose writing tools are refused all the same.
+and what is the viewer's own: their password (`/password`), their mail address (`/email`, `/email/resend`, `/email/confirm/…`), their MCP token (`/assistant/token`, `/assistant/revoke`) and their assistants' connections (OAuth's `/oauth/authorize`, `/oauth/token`, `/oauth/register`, `/oauth/revoke`; End and Change… on Connect an assistant), whose writing tools are refused all the same.
 A new write route is so closed to viewers until it is listed.
 
 **MCP**: a viewer's token works for reading: `tools/list` leaves out the tools that write (`writeTool`: those that write pages or tasks in `mcpToolTable`), and calling one answers with the message (`callMCPTool`).
@@ -778,11 +784,17 @@ The "Seen by no one" note here names the folders in `private/` of a user who is 
 |-----------------|------|
 | Role | a select and Save |
 | **Groups** | pills of the groups there are, as on Groups (`js/namepick.js`), and **Save**; none takes them out of every group; below the field, "also in product" names the groups they are in by way of those (`userRow.Also`) |
+| Mail address | where the wiki sends mail: a field under the name and **Save**; empty takes it out. The address waits, "not confirmed yet", until its owner confirmed it (Mail addresses, below); the admin's own too |
 | **Disable** / **Enable** | Disabled users, above; a pending sign-up has **Approve** instead (Sign-up, below) |
 | **Reset password** | makes a link (Invite and reset links, below) |
 | **Remove…** | a dialog that says what happens, as deleting a page does, then **Remove NAME** |
 
 There is no field to type another user's password: the admin never knows it.
+
+The mail address posts to `POST /admin/users/{name}/email` (`userEmailRoute` in `go/email.go`), the field `email`:
+it writes `email-pending`, takes `email` out, and mails the address its link; the page says "Sent bob a link to confirm the address: no mail goes to it until they did."
+The address as it is changes nothing, and what is no address is refused (400).
+Without mail in the deployment the Users tab shows a confirmed address as text, and has no field.
 
 The Groups field posts to `POST /admin/users/{name}/groups` (`userGroupsRoute`), the field `groups` as the file writes them, `dev, hiring`;
 it takes the groups there are and the folders in `groups/` no one sees, which gives such a folder its people again (`groupChoices`);
@@ -1038,6 +1050,50 @@ or a user removed and added again,
 ends every session of the old one,
 so changing a password is how to sign out a stolen session.
 (Sessions from before the stamp count as the old password's: everyone signs in once.)
+
+### Mail addresses
+
+Zonewiki mails you only what you turn on (Mail in `docs/spec/tasks.md`), and only at an address you confirmed.
+Where the wiki sends mail and has users, the user menu's **Settings** has a **Mail** tab (`/email`):
+
+1. Type your address and your password, and click **Save and send the link**.
+   The page says "Check your mail", and shows the address as not confirmed yet, with **Send the link again**.
+2. Open the link in the mail, signed in as yourself (signed out, the login page comes first and brings you back), and click **Confirm**.
+   The page says "Your mail address is confirmed."
+3. Turn on the mail you want in **My tasks**, its menu, **List settings…**: the boxes show once you have a confirmed address.
+   Until then the dialog says "Zonewiki can mail you about your tasks: set your mail address first."
+
+**Remove my address**, with your password, takes the address out: Zonewiki sends you no mail.
+A new address takes the place of the one you had at once, also before you confirmed it: what you replaced gets no more mail.
+
+| | |
+|---|---|
+| Who confirms | The address's owner alone: the link works for the user it was sent for, signed in. An admin who set the address can't confirm it for them |
+| How long the link works | A day, and for the address it was sent to alone; a changed address ends it. Confirming uses it up |
+| Opening the link | Changes nothing (mail scanners open links): the button confirms |
+| An address set by someone else | Not confirmed: an admin's on the Users tab (What an admin changes on a user, above), and one that came with `zonewiki import --users-only`. Its owner confirms as above; after an import by **Send the link again** on their **Mail** tab |
+| An address set on the host | Confirmed: `zonewiki user email`, a hand edit of the settings file (A user's mail address, above) |
+| An address from sign-up | Confirmed: the account was made from a link sent to it |
+| An address another user has | Is kept as not confirmed, and refused when confirmed ("another user of this wiki has the address … already"): an address is one user's |
+| A shared account | Its address is set on the host, as its password (Shared accounts, above) |
+| How many links | A wiki mails at most 3 confirmation links a user a day and 10 an hour in all, whoever asks; the page then says none was sent, and **Send the link again** works later |
+
+No mail of any kind goes to an address that isn't confirmed (`mails` in `go/notify.go` asks for `email`, which only a confirmation, sign-up or the host writes).
+So a mistyped address, or one typed for someone, gets one mail with a text nobody chose: "Someone, maybe you, gave this address as the mail address of the user bob on Zonewiki …".
+
+#### How an address is kept and confirmed
+
+`go/email.go`, `email.html`.
+`POST /email` (`email`, `password`; `remove=1` takes it out) checks the password as Change password does, counted against the client like a wrong login, and writes the address, lowercase, as the user's `email-pending` in the settings file, taking `email` out (`setPending`).
+`POST /email/resend` mails the link for the address that waits once more; it takes no password, since it sends what was asked for with one, to the address given then.
+The link is `/email/confirm/<token>`, on `base-url`, or where that isn't set on the address the request came in on (which the Host check let in).
+The token is when the link ends and a MAC over the user, the address and that time, made with the session key (`confirmToken`, `sign`): Zonewiki keeps nothing for it, and it stops working with the address it names.
+`POST /email/confirm/<token>` writes `email` and takes `email-pending` out, as the user's own change in the log (`emailConfirmRoute`).
+The links sent are counted in `.zone/confirms` (who for and when, a day back; owner-only, not committed), not in memory: a Zonewiki that sleeps when idle would start the count anew with each start (`countConfirm`).
+A viewer has the tab too: their address is theirs, and nothing of the wiki (`viewerWrites`).
+Without mail in the deployment, or without users, `/email` and what is under it are 404.
+
+Tests: `tests/test_email.py` (each door, that no mail goes out before, the link's user and address, the caps), `TestConfirmToken` and `TestCountConfirm` in `go/email_test.go`, `test_users_only_brings_addresses_not_confirmed` in `tests/test_transfer.py`.
 
 ### Change password
 

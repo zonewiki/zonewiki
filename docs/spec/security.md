@@ -199,6 +199,15 @@ Tests: `TestSigningOut` in `go/security_test.go` and in `tests/test_users.py`.
 A new password is set on the host (`zonewiki user passwd`, `zonewiki config passwd`), by a reset link, or in the browser on Change password (`/password`, `go/password.go`).
 Change password asks for the password one has, throttled as the login is, so a stolen session alone doesn't take the account over (Signing in in `docs/spec/users.md`).
 
+#### A mail address
+
+A user's mail address is where what they are told goes, so it changes as their password does: in the browser only one's own, with the password again (`/email`, `go/email.go`), throttled as the login is.
+And Zonewiki mails no address until its owner confirmed it, by a link that works for that user, signed in, and that address alone, for a day (Mail addresses in `docs/spec/users.md`):
+a mistyped address, or one an admin typed for someone, gets that one link and nothing of the wiki.
+A wiki sends at most 3 such links a user a day and 10 an hour, so the form is no way to flood a stranger's inbox.
+An address set on the host is confirmed as it is; one that came with `zonewiki import --users-only` is not.
+With the mail folder (`ZONE_MAIL_SPOOL`, The mail folder in `docs/spec/deployment.md`) a mail waits in `.zone/outbox/`, owner-only and out of git as all of `.zone/`.
+
 A new password ends sessions, not assistants.
 An MCP token and the OAuth connections a user allowed go on working after Change password, `zonewiki user passwd` or `zonewiki config passwd`, as a token outlasts the session it was made in (Connect an assistant in `docs/spec/mcp.md`).
 So whoever fears an account was taken over also ends its assistants:

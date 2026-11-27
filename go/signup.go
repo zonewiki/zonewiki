@@ -48,7 +48,7 @@ var (
 // address, which the mail's link is on (never the address a request came
 // in on: a forged Host would send the link elsewhere).
 func signupOn(s *Settings) bool {
-	return cfg.Signup && cfg.Mail.Host != "" && s.Users != nil && s.BaseURL != ""
+	return cfg.Signup && cfg.Mail.on() && s.Users != nil && s.BaseURL != ""
 }
 
 // signupOffReason: why sign-up is off though the deployment allows it,

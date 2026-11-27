@@ -165,7 +165,8 @@ Zonewiki itself reads no `.env` file, only its environment: `run.sh` and compose
 | `TZ` | The timezone |
 | `ZONE_SEMANTIC_SEARCH` | Semantic search at build time |
 | `ZONE_PUBLIC` | `view` or `edit`: the wiki is shown, or open to edits, without signing in |
-| `ZONE_SIGNUP`, `ZONE_SMTP_*`, `ZONE_MAIL_FROM` | Sign-up and its mail server (Mail, below) |
+| `ZONE_SIGNUP`, `ZONE_SMTP_*`, `ZONE_MAIL_FROM` | Sign-up and the mail server (Mail, below) |
+| `ZONE_MAIL_SPOOL` | `1`: no mail server; each mail is a file in the wiki, which the host sends (The mail folder, below) |
 | `ZONE_BIND`, `ZONE_UID`/`ZONE_GID` | For compose without `run.sh`; with it, they win over what it works out (run.sh, above) |
 | `ZONE_PORT` | The host's port, for compose (default 5080) |
 
@@ -635,7 +636,7 @@ A Unix socket handed over is treated as one Zonewiki opened (`--addr unix:PATH`,
 
 ## Mail
 
-Zonewiki sends mail for sign-up (Sign-up in `docs/spec/users.md`) and to tell a user that someone gave them a task (Assigning tasks there), mentions them or comments on a task of theirs, and the morning's mail, once a day (Mail and The morning's mail in `docs/spec/tasks.md`; each kind only once the user turns it on),
+Zonewiki sends mail for sign-up (Sign-up in `docs/spec/users.md`), for the link that confirms a user's address (Mail addresses there) and to tell a user that someone gave them a task (Assigning tasks there), mentions them or comments on a task of theirs, and the morning's mail, once a day (Mail and The morning's mail in `docs/spec/tasks.md`; each kind only once the user turns it on),
 through an SMTP server the deployment names in `.env` (`go/mail.go`, Go's `net/smtp`; no dependency):
 
 ```bash
@@ -649,6 +650,32 @@ ZONE_MAIL_FROM=wiki@example.org
 ```
 
 The password is a secret in `.env` (gitignored), as compose hands every setting over (`env_file`).
+
+Mail is set up with a mail server or with the mail folder (below), one of the two:
+where neither is, Zonewiki sends no mail, the **Mail** tab and the boxes in My tasks' settings aren't shown, and sign-up is refused at start.
+
+### The mail folder
+
+`ZONE_MAIL_SPOOL=1` instead of a mail server: Zonewiki sends nothing itself.
+It writes each mail as a file into the wiki's `.zone/outbox/`, and whoever runs the host sends what is there and takes each file away.
+It is for a Zonewiki that has no network of its own (a container without one), or a host with its own relay and its own rules for what goes out.
+
+| | |
+|---|---|
+| The file's name | The time it was written, UTC, to the nanosecond, and 16 random hex digits: `20261125T193248.000000001Z-0123456789abcdef.json`. The oldest sorts first |
+| What it holds | One JSON object with four fields: `to` (one address), `subject` (one line), `body` (plain text, `\n` line ends) and `at` (when it was written, RFC 3339, UTC) |
+| Its rights | The folder is the owner's alone (0700), a file too (0600) |
+| Whole or not there | A mail is written beside the folder (`.zone/outbox-….tmp`) and renamed into it: what is in the folder is a whole mail |
+| At most 500 | With 500 files waiting, a new mail is dropped and the log says which (to whom, its subject): nobody fetching them mustn't fill the wiki |
+
+Whoever sends a file writes the mail's headers (From, Date, Message-ID); Zonewiki says only who it is for and what it says.
+A sender should treat a file as what the wiki's users wrote (a task's title is in a subject), and send it once: Zonewiki never looks at the folder again.
+Zonewiki itself mails only an address its owner confirmed (Mail addresses in `docs/spec/users.md`), and the link that asks them to.
+
+With the folder, mail counts as set up: every kind of mail is there as with a server.
+`.zone/` is out of git and out of an export, so a mail waiting is in neither.
+
+`go/spool.go`; tests: `TestTheMailFolder` in `tests/test_email.py`, `TestSpoolMail` and `TestLoadMailSpool` in `go/email_test.go`.
 
 ### Encrypted
 
@@ -669,7 +696,8 @@ Zonewiki won't start on a mail setting without `ZONE_SMTP_HOST`,
 a port or TLS mode it doesn't know,
 a password without a user,
 a missing or invalid `ZONE_MAIL_FROM` (a bare address, no name),
-or `ZONE_SIGNUP` without a mail server.
+`ZONE_MAIL_SPOOL` beside any `ZONE_SMTP_*` or `ZONE_MAIL_FROM` (one way to send, not both),
+or `ZONE_SIGNUP` without a mail server or the mail folder.
 
 ### Time limits
 
@@ -895,7 +923,7 @@ The hosted Zonewiki writes the same file (its account page's export) and takes o
 | `zonewiki export --work FOLDER` | Puts the export together in FOLDER, not beside FILE (for stdout: not in the wiki's `.zone/`) |
 | `zonewiki import FILE` | Makes the wiki in `ZONE_DATA` from FILE; `-` is stdin, which is what `./run.sh import` uses |
 | `zonewiki import --max-size SIZE FILE` | Refuses a wiki that would take more than SIZE on disk (`1GB`), its history and its files |
-| `zonewiki import --users-only FILE` | Of the settings file, takes the users, the groups, `locale`, `date-format` and `noshare` only |
+| `zonewiki import --users-only FILE` | Of the settings file, takes the users, the groups, `locale`, `date-format` and `noshare` only; a user's mail address comes along not confirmed (Mail addresses in `docs/spec/users.md`) |
 | `zonewiki import --work FOLDER FILE` | Unpacks the archive in FOLDER, not in `ZONE_DATA` |
 
 An import's options come before the file.

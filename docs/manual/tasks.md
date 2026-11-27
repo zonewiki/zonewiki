@@ -296,7 +296,7 @@ You are told what happens on a task you are assigned, made, or follow: someone g
 - **Follow** in a shared task's ⋯ menu or dialog tells you its news without making it yours to do.
 - **Mentions**: `@name` in a comment or description tells that person, even on a task they have nothing else to do with.
 - **Mail**: in My tasks' **List settings…**, **Mail me when** has four boxes: a task is given to me, someone mentions me, someone comments on a task I have, gave or follow, and the day starts.
-  None is on until you tick it, and they show only where Zonewiki can send mail.
+  None is on until you tick it, and they show only where Zonewiki can send mail and you have a mail address you confirmed ([Your mail address](teams.md#your-mail-address)).
 - **A mail every morning**: the last box, **the day starts: a summary of what is new and what is due**, sends one mail a morning with the updates on your tasks and the changes to [the pages you watch](history.md#watching-pages) since the last mail, and what is due today and overdue.
   A morning with nothing new and nothing due today sends no mail.
   The mail marks nothing as read: the news stays in the app until you look.

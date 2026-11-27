@@ -1,6 +1,8 @@
 // Mail (docs/spec/deployment.md, Mail): Zonewiki sends a mail for sign-up
-// (signup.go) and about a task given to a user (notify.go), through the
-// SMTP server the deployment names in ZONE_SMTP_HOST … (.env). Go's net/smtp, no dependency. The connection is
+// (signup.go), to confirm an address (email.go) and about a user's tasks
+// (notify.go, digest.go), through the
+// SMTP server the deployment names in ZONE_SMTP_HOST … (.env), or with
+// ZONE_MAIL_SPOOL into a folder of the wiki (spool.go). Go's net/smtp, no dependency. The connection is
 // encrypted unless ZONE_SMTP_TLS=none says otherwise: STARTTLS, which the
 // server must offer (587), or TLS from the start (465).
 package main
@@ -20,18 +22,33 @@ import (
 	"time"
 )
 
-// mailConfig: the SMTP server Zonewiki sends through.
+// mailConfig: how Zonewiki sends mail: through an SMTP server, or into the
+// wiki's mail folder (spool.go), which whoever runs Zonewiki sends from.
 type mailConfig struct {
-	Host           string // "": Zonewiki sends no mail
+	Spool          bool   // ZONE_MAIL_SPOOL: each mail is a file in .zone/outbox/
+	Host           string // the SMTP server; "" and no Spool: Zonewiki sends no mail
 	Port           int
 	User, Password string // Password only with User: AUTH PLAIN
 	From           string // the sender's address (ZONE_MAIL_FROM)
 	TLS            string // "starttls", "tls" or "none"
 }
 
-// loadMail reads ZONE_SMTP_HOST, _PORT, _USER, _PASSWORD, _TLS and
-// ZONE_MAIL_FROM, or says what is wrong with them.
+// on: Zonewiki sends mail, one way or the other. What mail there is (the
+// boxes in My tasks' settings, the Mail tab, sign-up) asks this.
+func (m mailConfig) on() bool { return m.Spool || m.Host != "" }
+
+// loadMail reads ZONE_MAIL_SPOOL, or ZONE_SMTP_HOST, _PORT, _USER,
+// _PASSWORD, _TLS and ZONE_MAIL_FROM, or says what is wrong with them.
 func loadMail(getenv func(string) string) (mailConfig, error) {
+	if truthy(getenv("ZONE_MAIL_SPOOL")) {
+		for _, key := range []string{"ZONE_SMTP_HOST", "ZONE_SMTP_PORT", "ZONE_SMTP_USER", "ZONE_SMTP_PASSWORD", "ZONE_SMTP_TLS", "ZONE_MAIL_FROM"} {
+			if getenv(key) != "" {
+				return mailConfig{}, fmt.Errorf("ZONE_MAIL_SPOOL and %s are both set: Zonewiki sends mail through a server "+
+					"(ZONE_SMTP_HOST …) or puts it in the wiki's mail folder (ZONE_MAIL_SPOOL), not both", key)
+			}
+		}
+		return mailConfig{Spool: true}, nil
+	}
 	m := mailConfig{Host: strings.TrimSpace(getenv("ZONE_SMTP_HOST")), User: getenv("ZONE_SMTP_USER"),
 		Password: getenv("ZONE_SMTP_PASSWORD"), From: strings.TrimSpace(getenv("ZONE_MAIL_FROM")),
 		TLS: strings.ToLower(strings.TrimSpace(getenv("ZONE_SMTP_TLS")))}
@@ -84,8 +101,12 @@ var (
 	mailTimeout     = time.Minute
 )
 
-// sendMail sends a plain-text mail to the address to.
+// sendMail sends a plain-text mail to the address to: through the SMTP
+// server, or as a file in the wiki's mail folder (spoolMail).
 func sendMail(m mailConfig, to, subject, body string) error {
+	if m.Spool {
+		return spoolMail(to, subject, body)
+	}
 	if m.Host == "" {
 		return errors.New("Zonewiki has no mail server (ZONE_SMTP_HOST)")
 	}

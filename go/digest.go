@@ -84,7 +84,7 @@ func startDigests() {
 // rather lost than sent twice.
 func sendDigests(t time.Time) {
 	s := settings()
-	if cfg.Mail.Host == "" || s.Users == nil || t.Hour() < digestFrom || t.Hour() >= digestUntil {
+	if !cfg.Mail.on() || s.Users == nil || t.Hour() < digestFrom || t.Hour() >= digestUntil {
 		return
 	}
 	digestsRunning.Store(true)

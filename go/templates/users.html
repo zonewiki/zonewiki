@@ -1,7 +1,7 @@
 {{- /* /admin/users: the admin page's Users tab (admin.go, docs/spec/users.md).
     Plain forms: each change is a POST, and the page comes back saying what
     it did or why it didn't. A row's Save shows once its field is
-    edited (js/admin.js); the Groups field takes groups there are, as pills
+    edited (js/admin.js), the mail address under a name too; the Groups field takes groups there are, as pills
     (js/namepick.js); without JavaScript they are there all along. Remove asks first: in the dialog at the end
     (js/admin.js), or without JavaScript in its <details>. */ -}}
 {{define "body"}}
@@ -32,7 +32,16 @@
   <tbody>
   {{- range .Users}}
   <tr{{if .Disabled}} class="user-disabled"{{end}}>
-    <td class="user-name">{{.Name}}{{if .Me}} <span class="user-you">(you)</span>{{end}}{{if .Token}} <span class="user-fact" title="Has an MCP token: an assistant can act as them">MCP</span>{{end}}{{if .Shared}} <span class="user-fact" title="Several people sign in to this account: its password and token are set on the host, not in the browser">shared</span>{{end}}{{with .Email}}<br><span class="user-email">{{.}}</span>{{end}}</td>
+    <td class="user-name">{{.Name}}{{if .Me}} <span class="user-you">(you)</span>{{end}}{{if .Token}} <span class="user-fact" title="Has an MCP token: an assistant can act as them">MCP</span>{{end}}{{if .Shared}} <span class="user-fact" title="Several people sign in to this account: its password and token are set on the host, not in the browser">shared</span>{{end}}
+      {{- /* Their mail address: where the wiki sends mail an admin sets it, and its owner confirms it by the link Zonewiki mails (email.go). */}}
+      {{- if $.Mail}}
+      <form method="post" action="/admin/users/{{.Name}}/email" class="user-role-form user-email-form">
+        <input type="email" name="email" value="{{or .EmailPending .Email}}" aria-label="Mail address of {{.Name}}" placeholder="no mail address" maxlength="254" autocomplete="off" spellcheck="false" size="18">
+        <button type="submit" class="btn" aria-label="Save the mail address of {{.Name}}">Save</button>
+      </form>
+      {{- if .EmailPending}}<span class="user-also" title="No mail goes to an address until its owner confirmed it, by the link Zonewiki mailed there">not confirmed yet</span>{{end}}
+      {{- else}}{{with .Email}}<br><span class="user-email">{{.}}</span>{{end}}
+      {{- end}}</td>
     <td class="user-role">
       <form method="post" action="/admin/users/{{.Name}}/role" class="user-role-form">
         <select name="role" aria-label="Role of {{.Name}}">

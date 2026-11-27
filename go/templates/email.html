@@ -1,0 +1,66 @@
+{{- /* /email: Your mail address (email.go, docs/spec/users.md, Mail
+    addresses). A user sets and removes their own address, with their
+    password; no mail goes to it until its owner confirmed it by the link
+    Zonewiki mails. The same template is the link's page
+    (/email/confirm/…): one button, or why the link doesn't work. */ -}}
+{{define "body"}}
+{{.BreadcrumbHTML}}
+<div class="sheet email-page">
+{{- if or .Confirm .Dead}}
+<h1>Confirm your mail address</h1>
+{{- with .Error}}
+<p class="users-error" role="alert">{{.}}</p>
+{{- end}}
+{{- if .Dead}}
+<p>This link doesn't work for <strong>{{.User}}</strong>: it is a day old, it was used, the address was changed since, or it was sent for another user.</p>
+<p>Your mail address, and a new link, are on <a href="/email">Settings, Mail</a>.</p>
+{{- else}}
+<p>Zonewiki may mail <strong>{{.User}}</strong> at <strong>{{.Confirm}}</strong>: what you turn on in My tasks' settings, and nothing else.</p>
+<form method="post" class="password-form">
+  <button type="submit" class="btn btn-primary">Confirm</button>
+</form>
+{{- end}}
+{{- else}}
+{{- template "settings_tabs" .Shell}}
+<h1>Your mail address</h1>
+{{- if .Shared}}
+{{- with .Error}}
+<p class="users-error" role="alert">{{.}}</p>
+{{- else}}
+<p><strong>{{.User}}</strong> is an account several people sign in to: its mail address is set by whoever runs this wiki, not here.</p>
+{{- end}}
+{{- else}}
+<p>Zonewiki mails you only what you turn on: about your tasks, in <a href="/tasks?mine=1">My tasks</a>, its menu, List settings. No mail goes to an address until you confirmed it by the link Zonewiki sends there.</p>
+{{- with .Done}}
+<p class="users-done" role="status">{{.}}</p>
+{{- end}}
+{{- with .Error}}
+<p class="users-error" role="alert">{{.}}</p>
+{{- end}}
+{{- if .Pending}}
+<div class="email-state email-pending">
+  <p><strong>{{.Pending}}</strong> isn't confirmed yet. Check your mail to confirm this address: the link works for a day.</p>
+  <form method="post" action="/email/resend"><button type="submit" class="btn">Send the link again</button></form>
+</div>
+{{- else if .Email}}
+<p class="email-state"><strong>{{.Email}}</strong> is confirmed: Zonewiki mails you there.</p>
+{{- else}}
+<p class="email-state">You have no mail address here: Zonewiki sends you no mail.</p>
+{{- end}}
+<form method="post" action="/email" class="password-form">
+  <input type="text" name="username" value="{{.User}}" autocomplete="username" hidden>
+  <label>{{if or .Email .Pending}}A new mail address{{else}}Mail address{{end}}
+    <input type="email" name="email" autocomplete="email" maxlength="254" placeholder="name@example.org"></label>
+  <label>Your password
+    <input type="password" name="password" autocomplete="current-password" required></label>
+  <div class="email-actions">
+    <button type="submit" class="btn btn-primary">Save and send the link</button>
+    {{- if or .Email .Pending}}
+    <button type="submit" name="remove" value="1" class="btn" formnovalidate>Remove my address</button>
+    {{- end}}
+  </div>
+</form>
+{{- end}}
+{{- end}}
+</div>
+{{end}}

@@ -35,7 +35,8 @@ type User struct {
 	Disabled                     bool     // can't sign in; sessions and token refused
 	Pending                      bool     // made by sign-up, waiting for an admin's approval (Disabled too)
 	Shared                       bool     // several people sign in as them: password and token are the host's to set (sharedAccount)
-	Email                        string   // their mail address, lowercase; "": none known
+	Email                        string   // their mail address, lowercase, confirmed; "": none Zonewiki mails
+	EmailPending                 string   // an address set in the browser that its owner hasn't confirmed yet (email.go)
 	Groups                       []string // the groups their section names (groups = dev, hiring), A–Z
 	// In: every group they are in, A–Z: those their section names, and the
 	// groups made of those ([group product] includes = dev: joinGroups).

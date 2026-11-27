@@ -70,10 +70,12 @@ Environment:
   ZONE_PUBLIC                view: anyone reads the shared pages without signing in; edit: and edits
                              them (needs users; no tasks, notes or private pages for visitors)
   ZONE_SIGNUP                1: people may make an account at /signup (needs mail, users, base-url)
-  ZONE_SMTP_HOST, _PORT      the mail server Zonewiki sends sign-up mail through (port default 587)
+  ZONE_SMTP_HOST, _PORT      the mail server Zonewiki sends its mail through (port default 587)
   ZONE_SMTP_USER, _PASSWORD  signing in to it (only over TLS, or to this machine)
   ZONE_SMTP_TLS              starttls (default), tls (465) or none
   ZONE_MAIL_FROM             the address Zonewiki's mail comes from
+  ZONE_MAIL_SPOOL            1: no mail server; each mail is a file in the wiki's .zone/outbox/,
+                             which whoever runs the host sends
   ZONE_BUILD                 the build shown next to the version
   ZONE_IDLE_EXIT             15m: exit after that long without a request, for a Zonewiki systemd starts
                              on its socket (--addr fd:3) when the next one comes
@@ -619,6 +621,7 @@ func newHandler() http.Handler {
 	signupRoutes(mux)
 	assistantRoutes(mux)
 	passwordRoutes(mux)
+	emailRoutes(mux)
 	usageRoutes(mux)
 	oauthRoutes(mux)
 	return noStalls(checks(visitorGate(mux, usageGate(mux, gzipTasks(viewerGate(mux))))))
@@ -686,8 +689,9 @@ var viewerWrites = map[string]bool{
 	"POST /login": true, "POST /logout": true, "POST /welcome/{token}": true, "/mcp": true,
 	"POST /api/preview": true, "POST /api/render-notes": true, // render only
 	"POST /assistant/token": true, "POST /assistant/revoke": true, // their own MCP token, whose writing tools are refused
-	"POST /password": true,                           // their own password
-	"POST /watch":    true, "POST /watch/read": true, // what they watch and have seen of it: theirs, nothing of the wiki
+	"POST /password": true,                                                                  // their own password
+	"POST /email":    true, "POST /email/resend": true, "POST /email/confirm/{token}": true, // their own mail address
+	"POST /watch": true, "POST /watch/read": true, // what they watch and have seen of it: theirs, nothing of the wiki
 	// a connection of their own, whose writing tools are refused; the other three carry no session
 	"POST /oauth/authorize": true, "POST /oauth/token": true, "POST /oauth/register": true, "POST /oauth/revoke": true,
 	"POST /assistant/connections/{id}/revoke": true, "POST /assistant/connections/{id}/change": true,

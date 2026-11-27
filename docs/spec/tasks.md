@@ -569,7 +569,7 @@ The app says where its settings go in `data-settings-*` on `.tasks-app`, from `b
 
 My tasks' dialog says "For My tasks: yours alone." (without users "For My tasks.")
 Unset, it opens on Today, with Plan on the Open tab and no limit.
-`"mail"` in `mine` names the kinds of mail you turned on (**Mail me when**: a task is given to me, someone mentions me, someone comments on a task I have, gave or follow; three boxes, none ticked until you tick it, shown where Zonewiki could mail you: `data-settings-mail`; Mail, under News on your tasks).
+`"mail"` in `mine` names the kinds of mail you turned on (**Mail me when**: a task is given to me, someone mentions me, someone comments on a task I have, gave or follow; three boxes, none ticked until you tick it, shown where Zonewiki could mail you: `data-settings-mail`; where it sends mail but has no confirmed address of yours, a line says where to set one, `data-settings-mailask`; Mail, under News on your tasks).
 
 ### Saving settings
 
@@ -1368,7 +1368,7 @@ Not built: the name as a chip in the text, and completing it while typing.
 
 ### Mail
 
-Mail goes where you asked for it (`mails`, `mailKinds`): four kinds, each a box in My tasks' settings dialog (there where Zonewiki could mail you: the deployment's mail server, `ZONE_SMTP_*`, Mail in `docs/spec/deployment.md`, and your `email` in `.zone/config`, which sign-up or an admin's `zonewiki user email NAME ADDRESS` sets), **none ticked until you tick it**:
+Mail goes where you asked for it (`mails`, `mailKinds`): four kinds, each a box in My tasks' settings dialog (there where Zonewiki could mail you: the deployment's mail server, `ZONE_SMTP_*`, or its mail folder, Mail in `docs/spec/deployment.md`, and your `email` in `.zone/config`: an address you confirmed, on the **Mail** tab of Settings, or one sign-up or an admin's `zonewiki user email NAME ADDRESS` set, Mail addresses in `docs/spec/users.md`; without one the dialog says "Zonewiki can mail you about your tasks: set your mail address first."), **none ticked until you tick it**:
 
 | Box | Mail | |
 |-----|------|---|

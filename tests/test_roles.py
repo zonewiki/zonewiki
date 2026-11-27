@@ -189,6 +189,7 @@ EXEMPT = {
     "POST /api/preview", "POST /api/render-notes",      # render only
     "POST /assistant/token", "POST /assistant/revoke",  # their own MCP token (test_assistant.py)
     "POST /password",                                   # their own password (test_password.py)
+    "POST /email", "POST /email/resend", "POST /email/confirm/{token}",   # their own mail address (test_email.py)
     "POST /watch", "POST /watch/read",                  # what they watch and have seen of it: theirs, nothing of the wiki (test_watch.py)
     # OAuth (test_oauth.py): a connection of their own, read-only as their token; a client's calls carry no session;
     # what one of theirs may see, never to read and change (TestChange)
@@ -197,7 +198,7 @@ EXEMPT = {
     "POST /assistant/connections/{id}/change",
     # admins only (test_admin.py); two are probed above
     "POST /admin/users/{name}/disable", "POST /admin/users/{name}/enable", "POST /admin/users/{name}/remove",
-    "POST /admin/users/{name}/reset", "POST /admin/users/{name}/revoke",
+    "POST /admin/users/{name}/reset", "POST /admin/users/{name}/revoke", "POST /admin/users/{name}/email",
 }
 
 

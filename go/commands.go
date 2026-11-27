@@ -419,21 +419,25 @@ func (c *userCommand) setRole() int {
 // isn't one, or another user has it: an address is one person's, as
 // sign-up holds it); --remove takes it out; alone it says the address.
 func (c *userCommand) setEmail() int {
-	current := c.f.User(c.name).Values["email"].Value
+	current, waiting := c.f.User(c.name).Values["email"].Value, c.f.User(c.name).Values["email-pending"].Value
 	switch {
 	case c.removeFlag:
-		if current == "" {
+		if current == "" && waiting == "" {
 			fmt.Fprintf(c.stdout, "%s has no mail address.\n", c.name)
 			return 0
 		}
 		c.f.Unset(c.name, "email")
+		c.f.Unset(c.name, "email-pending")
 		if !c.save() {
 			return 1
 		}
 		fmt.Fprintf(c.stdout, "Took out %s's mail address: no task mails for them.\n", c.name)
 		return 0
 	case c.email == "":
-		if current == "" {
+		if current == "" && waiting != "" {
+			fmt.Fprintf(c.stdout, "%s (not confirmed by %s yet: no mail goes to it. To confirm it here: zonewiki user email %s %s)\n",
+				waiting, c.name, c.name, waiting)
+		} else if current == "" {
 			fmt.Fprintf(c.stdout, "%s has no mail address. Set one with: zonewiki user email %s ADDRESS\n", c.name, c.name)
 		} else {
 			fmt.Fprintln(c.stdout, current)
@@ -447,7 +451,9 @@ func (c *userCommand) setEmail() int {
 			return c.fail("%s has the address %s already: an address is one user's.", u.Name, c.email)
 		}
 	}
+	// Set on the host it is confirmed: whoever runs this owns the server.
 	c.f.Set(c.name, "email", c.email)
+	c.f.Unset(c.name, "email-pending")
 	if !c.save() {
 		return 1
 	}
@@ -772,6 +778,8 @@ func userLine(u *User) string {
 	}
 	if u.Email != "" {
 		facts = append(facts, u.Email)
+	} else if u.EmailPending != "" {
+		facts = append(facts, u.EmailPending+" not confirmed")
 	}
 	if len(facts) == 0 {
 		return "  " + u.Name

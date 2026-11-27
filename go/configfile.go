@@ -82,7 +82,7 @@ var hostKeys = []string{"hosts", "base-url", "git-remote", "trusted-proxies", "s
 var usersOnlyKeys = []string{"noshare", "locale", "date-format"}
 
 // userKeys: the keys of a [user …] section.
-var userKeys = []string{"password", "mcp-token", "role", "disabled", "email", "pending", "groups", "shared"}
+var userKeys = []string{"password", "mcp-token", "role", "disabled", "email", "email-pending", "pending", "groups", "shared"}
 
 func knownKey(key string) bool { return slices.Contains(configKeys, key) }
 
@@ -403,6 +403,10 @@ func fileUsers(f *settingsfile.File) (map[string]*User, error) {
 		if email.Value != "" && !validEmail(email.Value) {
 			return nil, lineError(email.Line, "%s's email %s isn't a mail address.", u.Name, email.Value)
 		}
+		waiting := u.Values["email-pending"]
+		if waiting.Value != "" && !validEmail(waiting.Value) {
+			return nil, lineError(waiting.Line, "%s's email-pending %s isn't a mail address.", u.Name, waiting.Value)
+		}
 		groups, bad := parseGroups(u.Values["groups"].Value)
 		if bad != "" {
 			return nil, lineError(u.Values["groups"].Line, "%s's group %s isn't a group's name: %s (groups = dev, hiring).", u.Name, bad, groupNameRule)
@@ -411,7 +415,7 @@ func fileUsers(f *settingsfile.File) (map[string]*User, error) {
 		// keeps a disabled user out keeps them out.
 		users[u.Name] = &User{Name: u.Name, PasswordHash: hash.Value, MCPToken: token.Value, Role: role,
 			Disabled: truthy(disabled.Value) || truthy(pending.Value), Pending: truthy(pending.Value),
-			Email: strings.ToLower(email.Value), Groups: groups, Shared: truthy(shared.Value)}
+			Email: strings.ToLower(email.Value), EmailPending: strings.ToLower(waiting.Value), Groups: groups, Shared: truthy(shared.Value)}
 	}
 	return users, nil
 }

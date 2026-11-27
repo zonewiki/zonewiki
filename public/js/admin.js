@@ -33,7 +33,7 @@ if (dialog) {
 // are there all along. The Groups field is pills (js/namepick.js): its
 // value is the hidden field's, which says when it changes.
 for (const form of document.querySelectorAll('.user-role-form')) {
-  const field = form.querySelector('select, input[data-pick], input[type=text]');
+  const field = form.querySelector('select, input[data-pick], input[type=text], input[type=email]');
   const button = form.querySelector('[type=submit]');
   if (!field || !button) continue;
   const saved = field.tagName === 'SELECT'

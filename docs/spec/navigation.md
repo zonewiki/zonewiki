@@ -185,6 +185,7 @@ The menu is one template (`module_menu` in `templates/partials/modules.html`) an
 |-----|------|------------|
 | **Assistant** | Connect an assistant: your MCP token and your assistants' connections (`/assistant`, `docs/spec/mcp.md`) | everyone |
 | **Password** | Change password (`/password`, Signing in in `docs/spec/users.md`) | whoever signed in with a password of their own: not a shared account, not a wiki without a login |
+| **Mail** | your mail address, set and confirmed (`/email`, Mail addresses in `docs/spec/users.md`) | a user of a wiki that sends mail |
 | **Groups** | your groups, and where you make one (`/groups`, Groups in `docs/spec/users.md`) | with users |
 | **Usage** | how much the wiki is used, as counts a day (`/usage`, Usage in `docs/spec/users.md`) | admins; without users, whoever is signed in |
 

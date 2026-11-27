@@ -30,7 +30,7 @@ var mailKinds = []string{"assigned", "mentioned", "comments", "digest"}
 // an address, they aren't disabled, and they turned that kind on.
 func mails(s *Settings, user, kind string) bool {
 	u := s.Users[user]
-	return cfg.Mail.Host != "" && u != nil && u.Email != "" && s.assignable(user) &&
+	return cfg.Mail.on() && u != nil && u.Email != "" && s.assignable(user) &&
 		slices.Contains(strings.Split(taskFiles.ReadLists(user).Mine["mail"], ","), kind)
 }
 
@@ -61,7 +61,7 @@ func taskMail(s *Settings, name, subject, intro string, t *Task, text, kindLine 
 // with @name (logMentions), those who turned that mail on.
 func tellMentioned(by string, t *Task, named []string, text ...string) {
 	s := settings()
-	if by == "" || s.Users == nil || cfg.Mail.Host == "" {
+	if by == "" || s.Users == nil || !cfg.Mail.on() {
 		return
 	}
 	for _, name := range named {
@@ -78,7 +78,7 @@ func tellMentioned(by string, t *Task, named []string, text ...string) {
 // who it names.
 func tellComment(by string, t *Task, text string, named []string) {
 	s := settings()
-	if by == "" || s.Users == nil || cfg.Mail.Host == "" || t.Private() {
+	if by == "" || s.Users == nil || !cfg.Mail.on() || t.Private() {
 		return
 	}
 	tellMentioned(by, t, named, text)
@@ -102,7 +102,7 @@ func tellComment(by string, t *Task, text string, named []string) {
 // task one takes oneself, or without users.
 func tellAssigned(by string, before assignedBefore, tasks ...*Task) {
 	s := settings()
-	if by == "" || s.Users == nil || cfg.Mail.Host == "" {
+	if by == "" || s.Users == nil || !cfg.Mail.on() {
 		return
 	}
 	given := map[string][]*Task{}

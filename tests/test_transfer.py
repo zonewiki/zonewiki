@@ -302,6 +302,23 @@ class TestImport:
         for key in ("hosts", "query-log", "storage-max", "notice"):
             assert key not in text, key
 
+    def test_users_only_brings_addresses_not_confirmed(self, source, out, monkeypatch):
+        """On the host a wiki moves to, a user's address waits for its
+        owner (docs/spec/users.md, Mail addresses); a plain import keeps it."""
+        def with_addresses(wiki):
+            config = wiki / ".zone" / "config"
+            config.write_text(config.read_text().replace("[user alice]\n", "[user alice]\nemail = alice@example.org\n")
+                              .replace("[user bob]\n", "[user bob]\nemail-pending = bob@example.org\n"))
+        archive = rebuilt(export(source, out), with_addresses)
+        dest = out / "wiki"
+        assert zonewiki("import", "--users-only", archive, data=dest).returncode == 0
+        text = (dest / ".zone" / "config").read_text()
+        assert "email-pending = alice@example.org" in text and "email-pending = bob@example.org" in text
+        assert "\nemail = " not in text
+        plain = out / "plain"
+        assert zonewiki("import", archive, data=plain).returncode == 0
+        assert "\nemail = alice@example.org" in (plain / ".zone" / "config").read_text()
+
     def test_users_only_takes_no_login_without_users(self, source, out):
         """A wiki with one password and no users: with --users-only its
         login is the host's to give (a first user)."""

@@ -117,7 +117,7 @@ export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Tod
   const moreEl = form.querySelector('.task-add-fields');
   const fieldEl = name => form.querySelector(`[data-field="${name}"]`);
   // (What a click needs later is the form's own: the handlers are wired once.)
-  const mode = () => ({ all: form.dataset.all === '1', mine: form.dataset.mine === '1', list: form.dataset.list === '1', embed: form.dataset.embed === '1', home: form.dataset.home === '1', mail: form.dataset.mail === '1' });
+  const mode = () => ({ all: form.dataset.all === '1', mine: form.dataset.mine === '1', list: form.dataset.list === '1', embed: form.dataset.embed === '1', home: form.dataset.home === '1', mail: form.dataset.mail === '1', mailask: form.dataset.mailask === '1' });
   // Which fields the dialog has here: a filter where there is an embed to
   // write it in (the editor's always is one), keep where a list is named
   // or made, hiding in sharing mode on a list.
@@ -139,6 +139,8 @@ export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Tod
     if (name === 'home') return m.list && m.home;
     // My tasks: Mail me when a task is assigned to me, where Zonewiki can mail the user.
     if (name === 'mail') return m.mine && m.mail && !!f.mail_assigned;
+    // My tasks: where to set a mail address, while Zonewiki has none of the user's to mail.
+    if (name === 'mailask') return m.mine && m.mailask;
     if (name === 'new') return !m.mine;
     return true;
   };
@@ -182,10 +184,11 @@ export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Tod
     ...(f.mail_assigned && mode().mine && mode().mail ? { mail: MAIL.filter(k => f['mail_' + k].checked).join(',') } : {}),
     ...(f.assignee ? { assignee: f.assignee.value.trim() } : {}),   // with users
   });
-  const fill = (params, { all = false, mine = false, list = false, embed = false, home = false, mail = false, ownList = false, defaultView = 'today' } = {}) => {
+  const fill = (params, { all = false, mine = false, list = false, embed = false, home = false, mail = false, mailask = false, ownList = false, defaultView = 'today' } = {}) => {
     const fields = fieldsOf(params, defaultView);
     form.dataset.home = home ? '1' : '';
     form.dataset.mail = mail ? '1' : '';
+    form.dataset.mailask = mailask ? '1' : '';
     form.dataset.all = all ? '1' : '';
     form.dataset.mine = mine ? '1' : '';
     form.dataset.list = list ? '1' : '';
@@ -216,6 +219,7 @@ export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Tod
     showField('keep', fields.keep);
     showField('noshare', fields.noshare);
     showField('home', fields.home);
+    showField('mailask');
     showField('mail');   // always there, where there is mail: nothing is sent until a box is ticked
     syncMore();
     return read();
@@ -258,7 +262,7 @@ export function initTaskSettings(app) {
   let was = null;
 
   function open() {
-    was = fill(params, { all, mine, list: !!list, embed, ownList: !!list && app.privateLists.has(list), defaultView: appEl.dataset.defaultView === 'open' ? 'open' : 'today', home: appEl.dataset.settingsHome === '1', mail: appEl.dataset.settingsMail === '1' });
+    was = fill(params, { all, mine, list: !!list, embed, ownList: !!list && app.privateLists.has(list), defaultView: appEl.dataset.defaultView === 'open' ? 'open' : 'today', home: appEl.dataset.settingsHome === '1', mail: appEl.dataset.settingsMail === '1', mailask: appEl.dataset.settingsMailask === '1' });
     const who = app.privateLists.has(list) ? 'which only you see' : 'for everyone';
     whereEl.textContent = mine ? (document.body.dataset.users === '1' ? 'For My tasks: yours alone.' : 'For My tasks.')
       : all ? 'For All tasks, for everyone.'

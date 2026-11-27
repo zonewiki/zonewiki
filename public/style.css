@@ -1764,6 +1764,22 @@ kbd {
 .groups-new { margin-top: .75rem; }
 .user-fact { font-size: .7rem; padding: 0 .3rem; border: 1px solid var(--border); border-radius: 4px; color: var(--muted); font-weight: normal; }
 .user-email { font-size: .8rem; color: var(--muted); font-weight: normal; }
+/* A user's mail address under their name: a field as quiet as the text it
+   replaces, its Save below it and taking no room until it is edited. */
+.user-email-form { display: flex; flex-direction: column; align-items: flex-start; gap: .25rem; margin-top: .25rem; }
+.user-email-form input {
+  font: inherit; font-size: .8rem; color: var(--muted); width: 8.5rem; max-width: 100%; padding: .15rem .35rem;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--bg);
+}
+.user-email-form input:focus { color: var(--fg); }
+.user-email-form.saves-when-edited:not(.edited) [type=submit] { display: none; }
+/* Settings, Mail (templates/email.html): the address and its state. */
+.email-page a { color: var(--link); }
+.email-page :is(.users-done, .users-error) { margin: 1rem 0; }
+.email-state { margin: 1rem 0; }
+.email-pending { padding: .5rem .75rem; border-radius: 6px; background: var(--code-bg); }
+.email-pending p { margin: 0 0 .5rem; }
+.email-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
 .user-disabled .user-name { color: var(--muted); text-decoration: line-through; }
 .user-tasks { font-size: .85rem; white-space: nowrap; }
 .user-actions { display: flex; flex-wrap: wrap; gap: .3rem; align-items: flex-start; }

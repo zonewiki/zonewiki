@@ -77,6 +77,7 @@ type usersView struct {
 	SignupRole     string
 	SignupDomains  []string
 	SignupApproval bool
+	Mail           bool // the wiki sends mail: a user's address is set here
 	// A link just made, shown once: its address, for whom, which kind.
 	Link, LinkUser, LinkKind string
 }
@@ -85,6 +86,7 @@ type usersView struct {
 type userRow struct {
 	Name, Role      string
 	Email           string
+	EmailPending    string // an address not confirmed yet
 	Groups          string // the groups their section names, "dev, hiring"
 	Also            string // the groups they are in by way of those ("product"), "" none
 	Token, Disabled bool
@@ -114,6 +116,7 @@ func usersPage(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("done") == "revoke" && userNameRE.MatchString(name) {
 		done = "Revoked the link for " + name + ": it no longer works."
 	} else if u := latestSettings().Users[name]; u != nil {
+		done = usersEmailDone(r.URL.Query().Get("done"), name)
 		switch r.URL.Query().Get("done") {
 		case "role":
 			done = name + " is " + withArticle(u.Role) + " now."
@@ -155,14 +158,14 @@ func showUsers(w http.ResponseWriter, r *http.Request, status int, done, refused
 // usersData: what the Users tab lists, the users and the open links.
 func usersData(r *http.Request) *usersView {
 	s, me := latestSettings(), userOf(r)
-	v := &usersView{Me: me.Name, Roles: roles, Groups: groupChoices(s), Links: openLinks(), Tabs: adminTabs, Tab: "users",
+	v := &usersView{Me: me.Name, Mail: cfg.Mail.on(), Roles: roles, Groups: groupChoices(s), Links: openLinks(), Tabs: adminTabs, Tab: "users",
 		Signup: signupOn(s), SignupRole: s.SignupRole, SignupDomains: s.SignupDomains, SignupApproval: s.SignupApproval,
 		BreadcrumbHTML: breadcrumb(newReq(r), []crumb{{"Admin", "/admin"}, {"Users", ""}}, "", false, "", "")}
 	v.Stray = strayPrivate()
 	assigned := assignedOpen()
 	for _, name := range sortedKeys(s.Users) {
 		u := s.Users[name]
-		row := userRow{Name: name, Role: u.Role, Email: u.Email, Groups: strings.Join(u.Groups, ", "), Token: u.MCPToken != "",
+		row := userRow{Name: name, Role: u.Role, Email: u.Email, EmailPending: u.EmailPending, Groups: strings.Join(u.Groups, ", "), Token: u.MCPToken != "",
 			Also:     strings.Join(slices.DeleteFunc(slices.Clone(u.In), func(g string) bool { return slices.Contains(u.Groups, g) }), ", "),
 			Disabled: u.Disabled, Pending: u.Pending, Shared: u.Shared,
 			Me: name == me.Name, Private: isDir(filepath.Join(cfg.Data, privateDir, name))}

@@ -569,6 +569,17 @@ func importedSettings(text string, usersOnly bool) (out string, users, left []st
 			left = append(left, key)
 		}
 	}
+	if usersOnly {
+		// A user's address counts as not confirmed on the host a wiki moves
+		// to, which answers for the mail it sends: its owner confirms it
+		// there (email.go).
+		for _, u := range f.Users {
+			if email := u.Values["email"].Value; email != "" {
+				f.Unset(u.Name, "email")
+				f.Set(u.Name, "email-pending", email)
+			}
+		}
+	}
 	out = f.Text()
 	if f, err = parseConfig(out); err == nil {
 		_, err = loadSettings(f)

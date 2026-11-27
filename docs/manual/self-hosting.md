@@ -331,7 +331,7 @@ See [Self-hosting behind HTTPS](../spec/security.md#self-hosting-behind-https).
 
 ## Mail
 
-Zonewiki sends mail for two things: sign-up, and telling users what is new for them (a task given to them, a mention, a comment, or one summary every morning), for those who turned it on in My tasks' settings.
+Zonewiki sends mail for three things: sign-up, the link that confirms a user's mail address, and telling users what is new for them (a task given to them, a mention, a comment, or one summary every morning), for those who turned it on in My tasks' settings.
 It needs an SMTP server, set in `.env` (with the binary, the same names as environment variables: [Where settings live](#where-settings-live)):
 
 ```bash
@@ -346,7 +346,9 @@ ZONE_MAIL_FROM=wiki@example.org
 Mail is always encrypted unless you set `ZONE_SMTP_TLS=none`, for a relay on the same machine.
 Zonewiki won't start on a mail setting that doesn't make sense, and says why.
 
-A user gets mail only once they have an address: sign-up records it, or an admin sets it with `./run.sh user email anna anna@example.org`.
+A user gets mail only once they have an address they confirmed: they set it on the **Mail** tab of their Settings and confirm it by the link Zonewiki mails them ([Your mail address](teams.md#your-mail-address)); sign-up records it, and so does `./run.sh user email anna anna@example.org`.
+
+A host that sends mail itself (a container without a network, a relay with its own rules) sets `ZONE_MAIL_SPOOL=1` instead of a mail server: Zonewiki then writes each mail as a file into the wiki's `.zone/outbox/` for the host to send ([The mail folder](../spec/deployment.md#the-mail-folder)).
 
 ### Sign-up
 

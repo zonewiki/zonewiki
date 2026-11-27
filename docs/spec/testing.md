@@ -222,6 +222,7 @@ Prefer an API test when the behaviour shows through a route, a Go test when it d
 | `tests/test_mcp.py` | mcp.md | The MCP tools over HTTP: files, guides, reading and writing tools, `zone_help` |
 | `tests/test_narrow.py` | users.md | Who may move a page to fewer readers, asked first |
 | `tests/test_narrowed.py` | mcp.md | Connections given less to see: the leak probes again, the consent page's boxes, a group taken away and given back with Change… |
+| `tests/test_email.py` | users.md, deployment.md | A user's mail address: set with the password, confirmed by its link, no mail before, an admin's, the caps; the mail folder (`ZONE_MAIL_SPOOL`) |
 | `tests/test_legal.py` | users.md | The imprint and privacy links: on the login page, for a visitor and without a login, none for the signed in or in the editor |
 | `tests/test_notice.py` | users.md | The notice line: on every view, the login page and a visitor's, escaped, after a reload |
 | `tests/test_oauth.py` | mcp.md, security.md | OAuth as a client plays it: registration, consent, tokens, connections, `TestReadOnly`, `TestChange` (Change…: less without the password, more with it, through the tokens it has) |

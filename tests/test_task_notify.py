@@ -138,7 +138,9 @@ def test_the_mail_is_turned_off_in_my_tasks_settings(alice, smtp, wiki_dir):
     make_list(alice, "team", headers=HOST)
     assert 'data-settings-mail="1"' in alice.get("/tasks?mine=1", headers=HOST).get_data(as_text=True)
     login(alice, "dan")
-    assert "data-settings-mail" not in alice.get("/tasks?mine=1", headers=HOST).get_data(as_text=True)
+    # dan has no address: no box, and a line that says where to set one (test_email.py).
+    body = alice.get("/tasks?mine=1", headers=HOST).get_data(as_text=True)
+    assert 'data-settings-mail="1"' not in body and 'data-settings-mailask="1"' in body
     login(alice, "bob")
     turn = lambda value, was: alice.post("/api/tasks/settings", headers=HOST,
                                          json={"mine": True, "was": was, "set": {"mail": value}})

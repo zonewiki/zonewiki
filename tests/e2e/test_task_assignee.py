@@ -553,6 +553,27 @@ def test_my_tasks_settings_turn_the_mails_on(page, wiki, monkeypatch):
     page.get_by_role("menuitem", name="List settings…").click()
     expect(dialog).to_be_visible()
     expect(box).to_be_hidden()
+    # The dialog says where he sets one (Settings, Mail), and there he does:
+    # the address waits for the link Zonewiki mails (no server here: it says so).
+    ask = dialog.locator(".task-settings-mailask")
+    expect(ask).to_have_text("Zonewiki can mail you about your tasks: set your mail address first.")
+    ask.get_by_role("link", name="set your mail address").click()
+    expect(page).to_have_url(re.compile(r"/email$"))
+    expect(page.locator(".settings-tabs [aria-current=page]")).to_have_text("Mail")
+    expect(page.locator(".email-state")).to_have_text("You have no mail address here: Zonewiki sends you no mail.")
+    page.get_by_label("Mail address").fill("bob@example.org")
+    page.get_by_label("Your password").fill("pw")
+    page.get_by_role("button", name="Save and send the link").click()
+    expect(page.locator(".email-pending")).to_contain_text("bob@example.org isn't confirmed yet")
+    expect(page.get_by_role("button", name="Send the link again")).to_be_visible()
+    assert "email-pending = bob@example.org" in (wiki.root / ".zone/config").read_text()
+    # alice, who has an address, has no such line.
+    page.request.post("/login", form={"username": "alice", "password": "pw"})
+    page.goto("/tasks?mine=1")
+    more_menu(page)
+    page.get_by_role("menuitem", name="List settings…").click()
+    expect(box).to_be_visible()
+    expect(ask).to_be_hidden()
 
 
 def test_the_tasks_link_says_that_something_is_new_for_you(alice):

@@ -54,7 +54,7 @@ type Config struct {
 	Init       bool       // ZONE_INIT, --init: the folder becomes a wiki though it holds files already (newWikiError)
 	Signup     bool       // ZONE_SIGNUP: people may make an account themselves (signup.go)
 	Public     string     // ZONE_PUBLIC: who isn't signed in reads the wiki (publicView) or edits its pages too (publicEdit); "": signs in first
-	Mail       mailConfig // ZONE_SMTP_HOST …, ZONE_MAIL_FROM: how Zonewiki sends mail (mail.go); Host "": it sends none
+	Mail       mailConfig // ZONE_SMTP_HOST …, ZONE_MAIL_FROM, or ZONE_MAIL_SPOOL: how Zonewiki sends mail (mail.go); neither: it sends none
 }
 
 var cfg *Config
@@ -175,9 +175,9 @@ func loadWiki(getenv func(string) string) (*Config, error) {
 		}
 	}
 	c.Init = truthy(getenv("ZONE_INIT"))
-	if c.Signup = truthy(getenv("ZONE_SIGNUP")); c.Signup && c.Mail.Host == "" {
+	if c.Signup = truthy(getenv("ZONE_SIGNUP")); c.Signup && !c.Mail.on() {
 		return nil, fmt.Errorf("ZONE_SIGNUP needs mail, for the link that confirms an address: " +
-			"set ZONE_SMTP_HOST and ZONE_MAIL_FROM (see .env.example)")
+			"set ZONE_SMTP_HOST and ZONE_MAIL_FROM, or ZONE_MAIL_SPOOL (see .env.example)")
 	}
 	return c, nil
 }

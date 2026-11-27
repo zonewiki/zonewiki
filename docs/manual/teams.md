@@ -27,6 +27,20 @@ Once signed in, the round button with your initial at the top right opens your *
 **Settings** opens three pages that are tabs of each other: **Assistant** ([connect an assistant](assistants.md)), **Password** and **Groups**.
 On a phone the same round button is at the top right, beside the page's breadcrumb, and opens the same menu (without **Sharing mode**).
 
+### Your mail address
+
+Zonewiki mails you only what you ask for, about your tasks ([News about your tasks](tasks.md#news-about-your-tasks)), and only at an address you confirmed.
+Where your wiki sends mail, open the user menu, **Settings**, then the **Mail** tab.
+
+1. Type your address and your password, and click **Save and send the link**.
+2. Open the link in the mail Zonewiki sent you, signed in as yourself, and click **Confirm**.
+   The link works for a day; **Send the link again** on the Mail tab sends a new one.
+3. In **My tasks**, open its menu, **List settings…**, and tick what you want to be mailed about.
+
+**Remove my address**, with your password, stops all mail.
+A new address replaces the old one at once, and waits for its own confirmation.
+The full rules: [Mail addresses](../spec/users.md#mail-addresses).
+
 ### Changing your password
 
 Choose **Settings** in the user menu, then the **Password** tab (the `?` shortcuts dialog links to it too).
@@ -309,9 +323,11 @@ The full rules: [Shared accounts](../spec/users.md#shared-accounts).
 ### Mail addresses
 
 A user's mail address is used for task mails and to tell sign-ups apart.
-Sign-up records it; for anyone else, whoever runs the server sets it with a command (below).
-There is no field for it in the browser.
-Without an address a user gets no mail.
+Where the wiki sends mail, the **Users** tab has a field for it under each name: type the address and click **Save**.
+Zonewiki mails that address a link, and no other mail goes there until its owner opened the link and confirmed; until then the row says **not confirmed yet**.
+Users set their own the same way ([Your mail address](#your-mail-address)).
+Sign-up records an address as confirmed, and so does the command whoever runs the server uses (below).
+Without a confirmed address a user gets no mail.
 
 ### Guides are admin-only
 

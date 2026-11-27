@@ -55,7 +55,9 @@ What each file and folder of the repository is for.
 │   ├── admin.go            # The admin page (/admin, admins), its Users tab: roles, each user's groups (of those there are; groups themselves are on /groups), disable, remove, writing the settings file as the commands do
 │   ├── links.go            # Invite and reset links: .zone/links, /welcome/<token>
 │   ├── signup.go           # Sign-up: /signup, the mail with its link, the account a sign-up link makes, the names it may not take (.zone/removed-users)
-│   ├── mail.go             # Mail through the deployment's SMTP server (ZONE_SMTP_*), for sign-up, the tasks' news and the morning's mail
+│   ├── mail.go             # Mail through the deployment's SMTP server (ZONE_SMTP_*) or into the mail folder, for sign-up, confirming an address, the tasks' news and the morning's mail
+│   ├── spool.go            # The mail folder (ZONE_MAIL_SPOOL): each mail a file in .zone/outbox/, which the host sends
+│   ├── email.go            # Your mail address (/email): set in the browser with your password, an admin's on the Users tab, confirmed by a mailed link before any mail goes to it; .zone/confirms
 │   ├── notify.go           # A task given to a user is told to them: the mail (tellAssigned, called by the task writes), who gets one; the kinds of mail a user turns on
 │   ├── digest.go           # The morning's mail: once a day, what is new for a user since the last one (their tasks' updates, the pages they watch) and what is due; .zone/digest.json
 │   ├── assistant.go        # Connect an assistant (/assistant): your MCP token made and revoked in the browser, with your password again; your assistants' connections changed (less without the password, more with it) or ended
