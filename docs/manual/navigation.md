@@ -141,7 +141,7 @@ Where it says `g` then `h`, press the two keys one after the other.
 | `↑` `↓` | Move through the results |
 | `Enter` | Open a result |
 
-The search syntax (`"a phrase"`, `-word`, `#tag`, `edited:`, `after:`, `before:`) is in [Search](search.md#search-syntax).
+The search syntax (`"a phrase"`, `-word`, `#tag`, `edited:`, `after:`, `before:`, `is:`, `in:`) is in [Search](search.md#search-syntax).
 
 ### In Tasks
 

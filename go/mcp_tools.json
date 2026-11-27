@@ -8,7 +8,7 @@
    "properties": {
     "query": {
      "type": "string",
-     "description": "What to look for: words or a question. Also: \"exact phrase\", -word to leave out, #tag for pages (frontmatter tags) and tasks with a tag, -#tag, and edited:2026-09 / after:2026-07-01 / before:2026-08 for when a page was last edited (a task: its last activity)."
+     "description": "What to look for: words or a question. Also: \"exact phrase\", -word to leave out, #tag / -#tag (a page's frontmatter tags, a task's tags), edited:2026-09 / after:2026-07-01 / before:2026-08 (a page's last edit, a task's last activity), is:page/task/note, in:everyone/private/<group>."
     },
     "limit": {
      "type": "integer",
@@ -68,7 +68,7 @@
     },
     "query": {
      "type": "string",
-     "description": "Words to look for in title, description and tags; \"exact phrase\", -word and edited:/after:/before: (last activity, e.g. after:2026-09-01) work too."
+     "description": "Words to look for in title, description and tags; \"exact phrase\", -word and edited:/after:/before: (last activity, e.g. after:2026-09-01) work too, and in:private/<group>/everyone."
     },
     "order": {
      "type": "string",

@@ -1504,11 +1504,41 @@ func (x *docIndex) filter(q *textsearch.Query, keep func(*SearchDoc) bool) func(
 			excluded[x.doc(id)] = true
 		}
 	}
-	filtered := q.HasFilters()
+	filtered, where := q.HasFilters(), q.HasWhere()
 	return func(id int, d *SearchDoc) bool {
-		return (keep == nil || keep(d)) && !excluded[d] &&
+		return (keep == nil || keep(d)) && !excluded[d] && (!where || acceptsWhere(q, d)) &&
 			(!filtered || q.AcceptsWith(func(p string) bool { return x.hasPhrase(id, d, p) }, d.Tags, d.date()))
 	}
+}
+
+// acceptsWhere: the doc passes the query's is: and in: filters: its kind
+// (a task, a note, any other page) and its place (placeOfDoc) as the query
+// names them. They only narrow what the asker may see, which is left out
+// before (docHider), so a place of no one's or someone else's never shows
+// through them.
+func acceptsWhere(q *textsearch.Query, d *SearchDoc) bool {
+	kind := textsearch.KindPage
+	switch {
+	case d.isTask():
+		kind = textsearch.KindTask
+	case isQuicknote(d.Slug):
+		kind = textsearch.KindNote
+	}
+	return q.AcceptsWhere(kind, placeName(placeOfDoc(d).place))
+}
+
+// placeName: a place as in: names it: everyone, private (a user's own) or
+// the group's name; "" for no one's.
+func placeName(p place) string {
+	switch p.kind {
+	case ofEveryone:
+		return textsearch.PlaceEveryone
+	case ofUser:
+		return textsearch.PlacePrivate
+	case ofGroup:
+		return p.name
+	}
+	return ""
 }
 
 // phraseFirst: ranked with the docs containing the query as a phrase moved
@@ -1652,11 +1682,11 @@ func firstN[T any](xs []T, n int) []T { return xs[:min(n, len(xs))] }
 // fail the query's filters, or keep when given, take no part.
 func rankedDocs(q *textsearch.Query, x *docIndex, keep func(*SearchDoc) bool, limit int) []*SearchDoc {
 	if strings.TrimSpace(q.RankingText()) == "" {
-		if len(q.Dates) == 0 {
+		if !q.Lists() {
 			return nil
 		}
-		// Only date filters ("edited:2026-09"): everything that passes,
-		// newest first. There are no words to rank by.
+		// Only filters ("edited:2026-09", "is:task in:dev"): everything
+		// that passes, newest first. There are no words to rank by.
 		var docs []*SearchDoc
 		passes := x.filter(q, keep)
 		for id, d := range x.all() {

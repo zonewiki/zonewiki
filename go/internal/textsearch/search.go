@@ -220,7 +220,7 @@ func cutQuery(raw string) string {
 	return raw
 }
 
-// ---- the query syntax: "phrase", -word, -"phrase", #tag, -#tag, dates ----
+// ---- the query syntax: "phrase", -word, -"phrase", #tag, -#tag, dates, is:, in: ----
 
 // nonSpaceClass: a character that isn't white space (as package mdtext's).
 const nonSpaceClass = `[^\s\v\pZ\x{85}]`
@@ -228,6 +228,19 @@ const nonSpaceClass = `[^\s\v\pZ\x{85}]`
 var (
 	queryPartRE  = regexp.MustCompile(`(-?)(?:"([^"]+)"|(` + nonSpaceClass + `+))`)
 	dateFilterRE = regexp.MustCompile(`^(?i)(edited|after|before):(\p{Nd}{4}(?:-\p{Nd}{2}(?:-\p{Nd}{2})?)?)$`)
+	kindFilterRE = regexp.MustCompile(`^(?i)is:(page|task|note)$`)
+	// placeFilterRE: in:everyone, in:private or a group's name (as a group
+	// is named: users.go's groupNameRE, in any case).
+	placeFilterRE = regexp.MustCompile(`^(?i)in:([a-z0-9][a-z0-9-]{0,39})$`)
+)
+
+// The kinds of docs is: names, and the places in: names besides a group.
+const (
+	KindPage      = "page" // a wiki page that is no note
+	KindTask      = "task"
+	KindNote      = "note"
+	PlaceEveryone = "everyone" // what everyone who uses the wiki sees
+	PlacePrivate  = "private"  // one user's own
 )
 
 type dateFilter struct{ Kind, Value string }
@@ -242,6 +255,10 @@ type Query struct {
 	Tags           []string     `json:"tags"`          // sorted
 	ExcludeTags    []string     `json:"exclude_tags"`  // sorted
 	Dates          []dateFilter `json:"dates"`
+	Kinds          []string     `json:"kinds"`          // is:, sorted
+	ExcludeKinds   []string     `json:"exclude_kinds"`  // -is:, sorted
+	Places         []string     `json:"places"`         // in:, sorted
+	ExcludePlaces  []string     `json:"exclude_places"` // -in:, sorted
 }
 
 // ParseQuery: the query raw says, of its first MaxQueryChars (cutQuery).
@@ -250,6 +267,7 @@ func ParseQuery(raw string) *Query {
 	q := &Query{}
 	var ws, phrases []string
 	excl, tags, extags := map[string]bool{}, map[string]bool{}, map[string]bool{}
+	kinds, exkinds, places, explaces := map[string]bool{}, map[string]bool{}, map[string]bool{}, map[string]bool{}
 	for _, m := range queryPartRE.FindAllStringSubmatchIndex(raw, -1) {
 		negative := m[3] > m[2]
 		if m[4] >= 0 {
@@ -272,6 +290,10 @@ func ParseQuery(raw string) *Query {
 				kind = map[string]string{"after": "before", "before": "after", "edited": "not-edited"}[kind]
 			}
 			q.Dates = append(q.Dates, dateFilter{kind, d[2]})
+		} else if k := kindFilterRE.FindStringSubmatch(plain); k != nil {
+			map[bool]map[string]bool{false: kinds, true: exkinds}[negative][strings.ToLower(k[1])] = true
+		} else if p := placeFilterRE.FindStringSubmatch(plain); p != nil {
+			map[bool]map[string]bool{false: places, true: explaces}[negative][strings.ToLower(p[1])] = true
 		} else if strings.HasPrefix(plain, "#") && strings.Trim(plain, "#") != "" {
 			tag := strings.ToLower(strings.TrimLeft(plain, "#"))
 			if negative {
@@ -289,6 +311,8 @@ func ParseQuery(raw string) *Query {
 	}
 	q.Text = strings.Join(append(phrases, ws...), " ")
 	q.ExcludeStems, q.Tags, q.ExcludeTags = slices.Sorted(maps.Keys(excl)), slices.Sorted(maps.Keys(tags)), slices.Sorted(maps.Keys(extags))
+	q.Kinds, q.ExcludeKinds = slices.Sorted(maps.Keys(kinds)), slices.Sorted(maps.Keys(exkinds))
+	q.Places, q.ExcludePlaces = slices.Sorted(maps.Keys(places)), slices.Sorted(maps.Keys(explaces))
 	return q
 }
 
@@ -301,7 +325,29 @@ func (q *Query) Phrase() string {
 }
 
 func (q *Query) HasFilters() bool {
-	return len(q.Phrases)+len(q.ExcludePhrases)+len(q.ExcludeStems)+len(q.Tags)+len(q.ExcludeTags)+len(q.Dates) > 0
+	return len(q.Phrases)+len(q.ExcludePhrases)+len(q.ExcludeStems)+len(q.Tags)+len(q.ExcludeTags)+len(q.Dates) > 0 || q.HasWhere()
+}
+
+// HasWhere: the query says which kinds of docs or which places it wants
+// (is:, in:).
+func (q *Query) HasWhere() bool {
+	return len(q.Kinds)+len(q.ExcludeKinds)+len(q.Places)+len(q.ExcludePlaces) > 0
+}
+
+// Lists: a query without words that still lists what passes, newest first:
+// one with a date, kind or place to keep (not only tags, which rank, nor
+// only exclusions, which keep nearly everything).
+func (q *Query) Lists() bool {
+	return len(q.Dates)+len(q.Kinds)+len(q.Places) > 0
+}
+
+// AcceptsWhere: a doc of the kind (KindPage, KindTask, KindNote) kept in
+// the place (PlaceEveryone, PlacePrivate, a group's name; "" for no one's)
+// passes the query's is: and in: filters. Several of one are either
+// (is:page is:note: pages and notes); a - one is never.
+func (q *Query) AcceptsWhere(kind, place string) bool {
+	return (len(q.Kinds) == 0 || slices.Contains(q.Kinds, kind)) && !slices.Contains(q.ExcludeKinds, kind) &&
+		(len(q.Places) == 0 || slices.Contains(q.Places, place)) && (place == "" || !slices.Contains(q.ExcludePlaces, place))
 }
 
 // RankingText: the words and phrases, or for only tags the tag words.

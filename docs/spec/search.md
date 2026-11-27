@@ -28,8 +28,12 @@ A query is words, and what filters them (`Query`, the same in `/api/search`, `/s
 | `-edited:` | Not then | `-edited:2026-09` |
 | `-after:` | = `before:` | `-after:2026-07-01` |
 | `-before:` | = `after:` | `-before:2026-08` |
+| `is:` | Only this kind: `page` (a page that is no note), `task`, `note` | `is:task` |
+| `-is:` | Not this kind | `-is:note` |
+| `in:` | Only what is kept there: `everyone`, `private` (your own), a group's name | `in:dev` |
+| `-in:` | Not what is kept there | `-in:private` |
 
-An unclosed quote, a lone `-` or `#`, or an invalid date (`edited:soon`) stay text.
+An unclosed quote, a lone `-` or `#`, an invalid date (`edited:soon`), another kind (`is:tasks`) or a name no group could have (`in:a_b`) stay text.
 
 ### A query is a few words
 
@@ -37,22 +41,36 @@ A query is at most 500 characters (`MaxQueryChars`): a longer one is cut at its 
 It ranks by its distinct words, each once and at most 32 of them (`queryWords`), and only the first 8 of those that match no word of the index are looked for as typos (`fuzzyWords`, How words match).
 Each such word is compared with every word of the index, so before these limits a query as long as an address may be (a megabyte, the search modal's GET or a public wiki's visitor's) kept a processor busy for hours.
 
+### Kinds and places
+
+`is:` and `in:` say which docs a search wants, by what they are and where they are kept (`Query.Kinds`, `Places` and their exclusions, parsed by `ParseQuery`; `acceptsWhere` in `go/retrieval.go` asks them of a doc):
+
+- **The kind** is a task's for a task, a note's for a page whose slug is a note's (`isQuicknote`: at the top level or at the top of a user's private folder, as the Notes page lists them), a page's for any other page or section.
+- **The place** is a page's (`placeOf`) or a task's (`ownerPlace`, its list's): `everyone` for what everyone sees (and everything in a wiki without users), `private` for a user's own, the group's name for a group's, nothing for no one's, which no `in:` names.
+- **Several of one are either**: `is:page is:note` keeps pages and notes, `in:dev in:private` the group's and your own.
+  A `-` one leaves its kind or place out, whatever else the query says.
+- **They only narrow**: what the asker may not see is left out before (`docHider`), so `in:dev` finds nothing for someone outside dev, as it would if there were no such group, and `in:private` is always the asker's own.
+  `everyone` and `private` are words of the syntax: a group of either name can't be named by `in:`.
+
+They are filters like the others (What ranks and what filters): they rank nothing, an excerpt marks nothing of them, and the semantic hits obey them too.
+The search modal's chips and Where menu write them (Filters in `docs/spec/navigation.md`); `search_wiki` and `search_tasks` take them in their query, so an assistant asks for a group's pages or a user's private tasks as the browser does.
+
 ### Date filters
 
 A page's date is its last edit, a task's its last activity (`lastActivity`: the latest of completion, history events, comments and creation).
 Partial dates compare as prefixes, so `before:2026-08` is July and earlier.
 Undated docs fail a date filter (`SearchDoc.date`).
-A query of only date filters lists everything passing, newest first (`rankedDocs`), e.g. `edited:2026-09`.
+A query of only filters lists everything passing, newest first (`rankedDocs`, `Query.Lists`), e.g. `edited:2026-09` or `is:task in:dev`, as long as one of them is a date, a kind or a place to keep: only tags rank by the tag words, and only exclusions find nothing.
 
 ### What ranks and what filters
 
 `Query.Text` (words and phrases, no operators) ranks, both by keyword and by meaning, and is what excerpts mark;
 the rest are filters (`Accepts`, applied before ranking, so meaning hits obey them too).
 A query of only tags ranks by the tag words (`RankingText`); one of only exclusions finds nothing.
-`search_tasks` is the exception: a query without words (only `-word`, `#tag` or date filters) filters the tasks asked for and keeps the tool's `order`, so one of only exclusions lists the tasks without them.
+`search_tasks` is the exception: a query without words (only `-word`, `#tag`, date, `is:` or `in:` filters) filters the tasks asked for and keeps the tool's `order`, so one of only exclusions lists the tasks without them.
 Docs carry lowercased `Tags` for this (`mdtext.PageTags`, `taskSearchDocs`).
 
-In the search modal the instant title filter fuzzy-matches only the query's words (`queryWords` in `js/search.js`, mirroring `Query`: quotes dropped, `-…`, `#tag` and date-filter parts left out, so a query of only `#tag` shows no title hits),
+In the search modal the instant title filter fuzzy-matches only the query's words (`queryWords` in `js/mdtext.js`, mirroring `Query`: quotes dropped, `-…`, `#tag`, date-filter, `is:` and `in:` parts left out, so a query of only `#tag` shows no title hits),
 while Content matches get the raw query.
 
 ### Stopwords

@@ -1083,7 +1083,7 @@ main > .sheet > h2 { font-family: var(--serif); font-size: 1.45rem; font-weight:
     display: grid; gap: 0 1.25rem;
     grid-template: auto minmax(0, 1fr) / minmax(0, 32rem) minmax(0, 1fr);
   }
-  .search-modal-controls { grid-column: 1 / -1; }
+  .search-modal-controls, .search-filters { grid-column: 1 / -1; }
   .search-preview {
     display: block; overflow-y: auto; min-width: 0;
     border-left: 1px solid var(--border); padding: .25rem 0 1rem 1.25rem;
@@ -1118,6 +1118,48 @@ main > .sheet > h2 { font-family: var(--serif); font-size: 1.45rem; font-weight:
   font-size: .8125rem;
   outline: none;
   cursor: pointer;
+}
+
+/* The filters (js/search.js): chips for the kind, a menu for the place,
+   Unlinked only; each writes its operator into the query. */
+.search-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem .75rem;
+  margin: -.375rem 0 .875rem;
+  flex-shrink: 0;
+}
+.search-chips { display: inline-flex; flex-wrap: wrap; gap: .3rem; }
+.search-chip {
+  padding: .2rem .65rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font: inherit;
+  font-size: .8125rem;
+  cursor: pointer;
+}
+.search-chip:hover { color: var(--fg); }
+.search-chip[aria-pressed="true"] {
+  background: var(--btn-primary);
+  border-color: var(--btn-primary);
+  color: var(--btn-primary-fg);
+}
+#modal-where {
+  padding: .2rem .45rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--fg);
+  font-size: .8125rem;
+  cursor: pointer;
+}
+#modal-where[hidden] { display: none; }
+@media (max-width: 640px) {
+  .search-chip { padding: .35rem .8rem; }
+  #modal-where { padding: .35rem .5rem; }
 }
 
 .modal-results {

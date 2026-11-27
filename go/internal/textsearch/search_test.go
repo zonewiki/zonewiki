@@ -71,6 +71,43 @@ func TestParseQuery(t *testing.T) {
 	}
 }
 
+func TestKindsAndPlaces(t *testing.T) {
+	q := ParseQuery(`roof is:Task is:note -is:page in:dev IN:private -in:everyone is:tasks in:a_b`)
+	if q.Text != "roof is:tasks in:a_b" || !slices.Equal(q.Kinds, []string{"note", "task"}) || !slices.Equal(q.ExcludeKinds, []string{"page"}) ||
+		!slices.Equal(q.Places, []string{"dev", "private"}) || !slices.Equal(q.ExcludePlaces, []string{"everyone"}) {
+		t.Fatalf("got %+v", q)
+	}
+	if !q.HasFilters() || !q.HasWhere() || !q.Lists() {
+		t.Error("is: and in: are filters, and list without words")
+	}
+	for _, c := range []struct {
+		q, kind, place string
+		want           bool
+	}{
+		{"is:task", KindTask, "", true},
+		{"is:task", KindNote, PlaceEveryone, false},
+		{"is:page is:note", KindNote, PlaceEveryone, true}, // several: either
+		{"-is:note", KindNote, PlaceEveryone, false},
+		{"-is:note", KindPage, PlaceEveryone, true},
+		{"in:dev", KindPage, "dev", true},
+		{"in:dev", KindPage, PlacePrivate, false},
+		{"in:dev in:private", KindTask, PlacePrivate, true},
+		{"in:dev", KindPage, "", false}, // no one's: no in: names it
+		{"-in:dev", KindPage, "", true},
+		{"-in:dev", KindPage, "dev", false},
+		{"is:task in:dev", KindTask, "dev", true},
+		{"is:task in:dev", KindPage, "dev", false},
+		{"", KindPage, "", true},
+	} {
+		if got := ParseQuery(c.q).AcceptsWhere(c.kind, c.place); got != c.want {
+			t.Errorf("%q accepts a %s in %q: %v, want %v", c.q, c.kind, c.place, got, c.want)
+		}
+	}
+	if (&Query{ExcludeKinds: []string{"task"}}).Lists() || ParseQuery("#tag").Lists() {
+		t.Error("only exclusions or only tags list nothing")
+	}
+}
+
 func TestExcerptAndMatchedWords(t *testing.T) {
 	text := "Intro line.\nWe were running late & the <dogs> ran. Running again; runners run. "
 	for i := 0; i < 80; i++ {

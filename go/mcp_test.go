@@ -130,8 +130,10 @@ func TestMCPToolDefinitions(t *testing.T) {
 	// own order of My tasks, which they rank in the browser.
 	// From 37150 for watch_page and history's watched (2026-11): what a
 	// person watches in the browser, their assistant watches for them.
+	// From 38000 for is: and in: in search_wiki's and search_tasks' query
+	// (2026-11): the search modal's filters by kind and place, at both doors.
 	// tests/test_mcp.py caps what is served (the same list, compact).
-	if len(mcpToolsJSON) > 38000 {
+	if len(mcpToolsJSON) > 38100 {
 		t.Errorf("the definitions grew to %d bytes: every session loads them", len(mcpToolsJSON))
 	}
 }

@@ -53,12 +53,34 @@
         <option value="title-desc">Title Z–A</option>
         <option value="links-desc">Most linked</option>
       </select>
-      <label class="unlinked-label">
-        <input type="checkbox" id="modal-unlinked"> Unlinked only
-      </label>
       {{- /* Whether content matches are found by meaning too; js/search.js
           words it and keeps it current from /api/search's X-Zone-Semantic. */}}
       <span id="search-mode" class="search-mode" data-state="{{.Shell.Semantic}}"></span>
+    </div>
+    {{- /* The filters (Filters in docs/spec/navigation.md): each writes its
+        operator into the query (is:, in:), and the query sets them. */}}
+    <div class="search-filters" role="group" aria-label="Filter results">
+      <span class="search-chips">
+        <button type="button" class="search-chip" data-kind="" aria-pressed="true">All</button>
+        <button type="button" class="search-chip" data-kind="page" aria-pressed="false">Pages</button>
+        {{- if not .Shell.Visitor}}
+        <button type="button" class="search-chip" data-kind="task" aria-pressed="false">Tasks</button>
+        <button type="button" class="search-chip" data-kind="note" aria-pressed="false">Notes</button>
+        {{- end}}
+      </span>
+      {{- if .Shell.Users}}
+      <select id="modal-where" class="search-where" aria-label="Where" title="Whose: everyone's, your private ones, a group's">
+        <option value="">Anywhere</option>
+        <option value="everyone">Everyone's</option>
+        <option value="private">🔒 Private</option>
+        {{- range .Shell.Groups}}
+        <option value="{{.}}">👥 {{.}}</option>
+        {{- end}}
+      </select>
+      {{- end}}
+      <label class="unlinked-label">
+        <input type="checkbox" id="modal-unlinked"> Unlinked only
+      </label>
     </div>
     <div class="modal-results">
       <ul id="modal-page-list" class="page-list"></ul>

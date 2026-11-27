@@ -941,6 +941,7 @@ func apiPagesList(w http.ResponseWriter, r *http.Request) {
 		private := placeOf(p.Slug).user() != "" // not hidden above: the user's own
 		pages = append(pages, M{"slug": p.Slug, "title": title, "links": counts[p.Slug], "private": private,
 			"group": placeOf(p.Slug).group(), // a group's page (not hidden above: one of the user's groups)
+			"note":  isQuicknote(p.Slug),     // the search modal's Notes filter
 			"mtime": st.ModTime().Unix(), "created": fmtDate(changeTime(st)), "edited": fmtDate(st.ModTime())})
 	}
 	sort.SliceStable(pages, func(i, j int) bool {

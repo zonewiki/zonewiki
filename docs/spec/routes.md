@@ -84,7 +84,7 @@ A name in another place (who sees the page changes) comes back with `rename_ask`
 `&notes=1`: only notes (Notes page's filter; then `limit` goes up to 1000);
 `&limit=N` (default 15, max 100).
 
-`/api/pages-list` gives each page with `slug`, `title`, `links` (backlinks), `private`, `group`, `mtime`, `created`, `edited`, plus the built-in entries (Changes, Deleted Pages with git; Tasks, Notes).
+`/api/pages-list` gives each page with `slug`, `title`, `links` (backlinks), `private`, `group`, `note` (a note: the search modal's Notes filter), `mtime`, `created`, `edited`, plus the built-in entries (Changes, Deleted Pages with git; Tasks, Notes).
 
 ### History and changes
 

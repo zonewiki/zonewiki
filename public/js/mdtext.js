@@ -65,8 +65,51 @@ export function wikilinkHref(inner) {
 export function queryWords(raw) {
   return [...cutQuery(raw).matchAll(/(-?)(?:"([^"]+)"|(\S+))/g)]
     .filter(m => !m[1] && !(m[3] && m[3].startsWith('#') && m[3].replace(/^#+|#+$/g, '') !== '')
-                 && !(m[3] && /^(edited|after|before):\d{4}(-\d\d(-\d\d)?)?$/i.test(m[3])))
+                 && !(m[3] && /^(edited|after|before):\d{4}(-\d\d(-\d\d)?)?$/i.test(m[3]))
+                 && !(m[3] && whereFilter(m[3])))
     .map(m => m[2] ?? m[3]).join(' ').trim();
+}
+
+// The is: and in: filters (kindFilterRE, placeFilterRE in
+// go/internal/textsearch): is:page, is:task, is:note; in:everyone,
+// in:private or a group's name.
+const KIND_FILTER_RE = /^is:(page|task|note)$/i;
+const PLACE_FILTER_RE = /^in:([a-z0-9][a-z0-9-]{0,39})$/i;
+
+function whereFilter(part) {
+  const m = part.match(KIND_FILTER_RE) || part.match(PLACE_FILTER_RE);
+  return m ? { op: part.slice(0, 2).toLowerCase(), value: m[1].toLowerCase() } : null;
+}
+
+// queryWhere: the kinds and places a query keeps and leaves out (is:, in:,
+// -is:, -in:), as textsearch's ParseQuery reads them.
+export function queryWhere(raw) {
+  const w = { kinds: [], exKinds: [], places: [], exPlaces: [] };
+  for (const m of cutQuery(raw).matchAll(/(-?)(?:"([^"]+)"|(\S+))/g)) {
+    const f = m[3] && whereFilter(m[3]);
+    if (!f) continue;
+    const list = f.op === 'is' ? (m[1] ? w.exKinds : w.kinds) : (m[1] ? w.exPlaces : w.places);
+    if (!list.includes(f.value)) list.push(f.value);
+  }
+  return w;
+}
+
+// acceptsWhere: a thing of the kind ('page', 'task', 'note') kept in the
+// place ('everyone', 'private', a group's name) passes w (queryWhere), as
+// Query.AcceptsWhere says.
+export function acceptsWhere(w, kind, place) {
+  return (!w.kinds.length || w.kinds.includes(kind)) && !w.exKinds.includes(kind)
+    && (!w.places.length || w.places.includes(place)) && !(place && w.exPlaces.includes(place));
+}
+
+// withFilter: raw with its is: (op 'is') or in: (op 'in') filters replaced
+// by op:value, at the end; value '' only drops them. The search modal's
+// chips and Where menu write the query this way.
+export function withFilter(raw, op, value) {
+  const kept = [...raw.matchAll(/-?(?:"[^"]+"|\S+)/g)].map(m => m[0])
+    .filter(part => { const f = whereFilter(part); return !f || f.op !== op; });
+  if (value) kept.push(`${op}:${value}`);
+  return kept.join(' ');
 }
 
 // textsearch.MaxQueryChars: how long a query is; a longer one is cut there,

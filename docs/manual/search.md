@@ -1,7 +1,7 @@
 # Search
 
 One search finds your pages, notes and tasks, by title and by what they say.
-This page covers the search dialog, the full results page, the search syntax (phrases, tags, dates, leaving words out) and who finds what.
+This page covers the search dialog, the full results page, the search syntax (phrases, tags, dates, kinds and places, leaving words out) and who finds what.
 Search is also the quickest way to jump to a page you know.
 
 ## Open the search
@@ -21,6 +21,8 @@ Above the list:
 |---------|------|
 | **Sort by** | **Recently edited**, **Title A–Z**, **Title Z–A** or **Most linked**. Zonewiki remembers your choice. |
 | **Unlinked only** | Shows only pages no other page links to: good for finding pages that got lost. |
+
+The other filters are for searching: see [Filter by kind and place](#filter-by-kind-and-place).
 
 **Changes** and **Deleted Pages** are pinned at the top of the list (see [History and undo](history.md)).
 **Tasks** and **Notes** are found by typing their names.
@@ -45,6 +47,22 @@ When there are more, click **All results →** for a page with up to 50 and a co
 
 A long file name next to a title is cut at its start, so you still see the whole title and the end of the name.
 
+## Filter by kind and place
+
+Under the search box:
+
+| Filter | Shows |
+|--------|-------|
+| **All** · **Pages** · **Tasks** · **Notes** | Everything, or only pages, tasks or notes |
+| **Where**: **Anywhere**, **Everyone's**, **🔒 Private**, **👥** a group | Only what is everyone's, only your private things, or only a group's (in a wiki with users) |
+
+A filter writes itself into the search box: click **Tasks** and `is:task` is added to your words, pick **👥 dev** and `in:dev`.
+You can type these yourself too, and the filters follow what you type.
+Click **All** or pick **Anywhere** to drop the filter again.
+
+With only a filter and no words, such as `is:task in:dev`, you get everything that matches, newest first.
+The filters only narrow what you can see anyway: a group you're not in finds nothing.
+
 ## Search syntax
 
 Words find pages and tasks that have any of them.
@@ -63,8 +81,12 @@ Add these to narrow a search down:
 | `after:` | Edited on or after that date | `after:2026-07-01` |
 | `before:` | Edited before that date | `before:2026-08` (July and earlier) |
 | `-edited:` | Not edited then | `-edited:2026` |
+| `is:` | Only pages, tasks or notes: `is:page`, `is:task`, `is:note` | `roof is:task` |
+| `in:` | Only what is everyone's, private or a group's: `in:everyone`, `in:private`, `in:dev` | `budget in:dev` |
+| `-is:` `-in:` | Leave out that kind or place | `garden -is:note` |
 
-You can combine them: `budget #work after:2026-09 -draft`.
+You can combine them: `budget #work after:2026-09 -draft in:dev`.
+The full rules are in [the spec](../spec/search.md#query-syntax).
 
 ### Dates in a search
 

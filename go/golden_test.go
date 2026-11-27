@@ -112,7 +112,13 @@ func TestGolden(t *testing.T) {
 		check("heading_id", text, mdtext.HeadingID(text), c["heading_id"])
 		wlPage, wlSection, wlLabel := mdtext.SplitWikilink(text)
 		check("split_wikilink", text, []string{wlPage, wlSection, wlLabel}, c["split_wikilink"])
-		check("query_text", text, textsearch.ParseQuery(text).Text, c["query_text"])
+		q := textsearch.ParseQuery(text)
+		check("query_text", text, q.Text, c["query_text"])
+		where := [][]string{}
+		for _, l := range [][]string{q.Kinds, q.ExcludeKinds, q.Places, q.ExcludePlaces} {
+			where = append(where, append([]string{}, l...))
+		}
+		check("query_where", text, where, c["query_where"])
 		check("plain_task_title", text, mdtext.PlainTaskTitle(text), c["plain_task_title"])
 		check("slug_display_name", text, mdtext.SlugDisplayName(text), c["slug_display_name"])
 		targets := []string{}

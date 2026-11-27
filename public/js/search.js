@@ -2,7 +2,7 @@ import { closeOnBackdropClick, hashTarget, he, localizeDates } from './util.js';
 import { sharingOn } from './actions.js';
 import { revealElement } from './fold.js';
 import { renderFigures } from './figures.js';
-import { queryWords } from './mdtext.js';
+import { acceptsWhere, queryWhere, queryWords, withFilter } from './mdtext.js';
 
 // ── Search modal ──────────────────────────────────────────────────────────────
 
@@ -12,6 +12,8 @@ const modalPageList  = document.getElementById('modal-page-list');
 const modalSort      = document.getElementById('modal-sort');
 const modalUnlinked  = document.getElementById('modal-unlinked');
 const modalCM        = document.getElementById('modal-content-matches');
+const modalChips     = [...document.querySelectorAll('#search-modal .search-chip')];
+const modalWhere     = document.getElementById('modal-where');
 
 let modalPages = null;
 let modalActiveIdx = -1;
@@ -159,6 +161,44 @@ modalSort?.addEventListener('change', () => {
 });
 modalUnlinked?.addEventListener('change', applyModalControls);
 
+// ── Filters ──────────────────────────────────────────────────────────────────
+// The chips (All, Pages, Tasks, Notes) and the Where menu write their
+// operator into the query (is:, in:), replacing the one there, and follow
+// the query as it is typed: the query is what filters, on the server and
+// in the title list, so a filter is seen and can be typed or shared too.
+modalChips.forEach(chip => chip.addEventListener('click', () => {
+  setModalFilter('is', chip.dataset.kind);
+}));
+modalWhere?.addEventListener('change', () => setModalFilter('in', modalWhere.value));
+
+function setModalFilter(op, value) {
+  modalFilter.value = withFilter(modalFilter.value.trim(), op, value);
+  modalFilter.focus();
+  applyModalControls();
+}
+
+// showModalFilters: the chips and the Where menu as the query says (a chip
+// pressed for one kind, All for none; the menu blank for a place it has
+// not, or several).
+function showModalFilters(w) {
+  const kind = w.kinds.length === 1 ? w.kinds[0] : w.kinds.length ? null : '';
+  modalChips.forEach(c => c.setAttribute('aria-pressed', String(c.dataset.kind === kind)));
+  if (modalWhere) {
+    const place = w.places.length === 1 ? w.places[0] : '';
+    if (w.places.length > 1 || ![...modalWhere.options].some(o => o.value === place)) modalWhere.selectedIndex = -1;
+    else modalWhere.value = place;
+    // Sharing mode shows no group's name.
+    modalWhere.hidden = sharingOn();
+  }
+}
+
+// whereOf: a title-list entry's kind and place, as the server's
+// acceptsWhere has a doc's; a built-in page has neither and is left out by
+// any filter.
+function whereOf(p) {
+  return { kind: p.note ? 'note' : 'page', place: p.private ? 'private' : p.group || 'everyone' };
+}
+
 modalFilter?.addEventListener('keydown', e => {
   if (e.key === 'Enter') {
     const item = modalVisibleItems()[modalActiveIdx];
@@ -270,13 +310,22 @@ function applyModalControls() {
   const q = queryWords(raw);
   const sort = modalSort.value;
   const unlinked = modalUnlinked.checked;
+  const where = queryWhere(raw);
+  showModalFilters(where);
+  const filtered = where.kinds.length + where.exKinds.length + where.places.length + where.exPlaces.length > 0;
+  const passes = p => {
+    if (!filtered) return true;
+    if (p.builtin) return false;
+    const { kind, place } = whereOf(p);
+    return acceptsWhere(where, kind, place);
+  };
 
   if (raw) {
     // Fuzzy mode: score, rank by quality, render with highlights. A query
     // of only filters (#tag, -word) has no words for titles: no title hits.
     const scored = [];
     for (const p of (q ? modalPages : [])) {
-      if (unlinked && p.links !== 0) continue;
+      if (unlinked && p.links !== 0 || !passes(p)) continue;
       const best = titleMatch(q, p);
       if (!best) continue;
       scored.push({ p, ...best, ...tieBreak(p, best.field) });

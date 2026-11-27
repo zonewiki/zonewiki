@@ -235,7 +235,7 @@ func searchTasks(args jsonObj, base string, user asker) (string, error) {
 		for w := range want {
 			all = all && have[w]
 		}
-		if all && inScope(d.Task, scope, lists) && assigneeParamMatches(d.Task, assignee, user) && (!q.HasFilters() || q.Accepts(d.text(), d.Tags, d.date()) && !q.HoldsExcluded(d.tokens())) {
+		if all && inScope(d.Task, scope, lists) && assigneeParamMatches(d.Task, assignee, user) && (!q.HasFilters() || acceptsWhere(q, d) && q.Accepts(d.text(), d.Tags, d.date()) && !q.HoldsExcluded(d.tokens())) {
 			docs = append(docs, d)
 		}
 	}

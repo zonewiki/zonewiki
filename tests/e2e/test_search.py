@@ -5,6 +5,7 @@ import re
 from playwright.sync_api import expect
 
 from conftest import TOUCH_PHONE, box_of, wait_until
+from tests import settings
 
 
 def seed(wiki):
@@ -485,6 +486,79 @@ def test_the_meaning_indicator_fits_the_dialog_on_a_phone(new_page, wiki):
     assert mode["width"] > 0
     assert dialog["x"] <= mode["x"] and mode["x"] + mode["width"] <= dialog["x"] + dialog["width"]
     page.screenshot(path="tests/e2e/_screenshots/search-mode-phone.png")
+
+
+def test_chips_write_the_kind_into_the_query(page, wiki):
+    # A chip writes is:… into the query, replacing the one there; All drops
+    # it; typing is:… presses its chip. The title list and content matches
+    # follow the query.
+    wiki.write("heron", "# Heron\n\nThe heron waits.\n")
+    wiki.write("2026-10-27_09-00-00_heron-sighting", "# Heron sighting\n\nA heron again.\n")
+    page.request.post("/api/tasks", data={"title": "Photograph the heron"})
+    page.goto("/page/index")
+    page.keyboard.press("Control+p")
+    query = page.locator("#modal-filter")
+    query.fill("heron")
+    titles = page.locator("#modal-page-list .page-list-item")
+    cards = page.locator("#modal-content-matches .search-result-card")
+    expect(titles).to_have_count(2)
+    expect(cards).to_have_count(3)
+    chip = lambda kind: page.locator(f".search-chip[data-kind='{kind}']")
+    expect(chip("")).to_have_attribute("aria-pressed", "true")
+
+    chip("note").click()
+    expect(query).to_have_value("heron is:note")
+    expect(query).to_be_focused()
+    expect(chip("note")).to_have_attribute("aria-pressed", "true")
+    expect(chip("")).to_have_attribute("aria-pressed", "false")
+    expect(titles).to_have_count(1)
+    expect(titles.first).to_have_attribute("data-slug", "2026-10-27_09-00-00_heron-sighting")
+    expect(cards).to_have_count(1)
+
+    chip("task").click()
+    expect(query).to_have_value("heron is:task")
+    expect(titles).to_have_count(0)                    # tasks aren't in the title list
+    expect(cards).to_have_count(1)
+    expect(cards.first).to_contain_text("Photograph the heron")
+
+    chip("").click()
+    expect(query).to_have_value("heron")
+    expect(cards).to_have_count(3)
+
+    query.fill("heron is:page")
+    expect(chip("page")).to_have_attribute("aria-pressed", "true")
+    expect(titles).to_have_count(1)
+    expect(titles.first).to_have_attribute("data-slug", "heron")
+
+
+def test_the_where_menu_writes_the_place(page, wiki, monkeypatch):
+    monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "t1"), "bob": ("pw", "t2")})
+    monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"groups": "dev"}})
+    page.request.post("/login", form={"username": "alice", "password": "pw"})
+    wiki.write("egret", "# Egret\n\nAn egret.\n")
+    wiki.write("private/alice/egret-mine", "# My egret\n\nAn egret.\n")
+    wiki.write("groups/dev/egret-dev", "# Dev egret\n\nAn egret.\n")
+    page.goto("/page/index")
+    page.keyboard.press("Control+p")
+    query = page.locator("#modal-filter")
+    query.fill("egret")
+    titles = page.locator("#modal-page-list .page-list-item")
+    expect(titles).to_have_count(3)
+    where = page.locator("#modal-where")
+    expect(where.locator("option")).to_have_text(["Anywhere", "Everyone's", "🔒 Private", "👥 dev"])
+    where.select_option("dev")
+    expect(query).to_have_value("egret in:dev")
+    expect(titles).to_have_count(1)
+    expect(titles.first).to_have_attribute("data-slug", "groups/dev/egret-dev")
+    expect(page.locator("#modal-content-matches .search-result-card")).to_have_count(1)
+    where.select_option("private")
+    expect(query).to_have_value("egret in:private")
+    expect(titles.first).to_have_attribute("data-slug", "private/alice/egret-mine")
+    query.fill("egret in:everyone")
+    expect(where).to_have_value("everyone")
+    expect(titles).to_have_count(1)
+    where.select_option("")
+    expect(query).to_have_value("egret")
 
 
 def test_a_long_file_name_leaves_the_title_its_room(page, wiki):

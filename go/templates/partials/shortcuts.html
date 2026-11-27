@@ -153,6 +153,8 @@
           <dt><kbd>#tag</kbd> <kbd>-#tag</kbd></dt><dd>Only / not this tag</dd>
           <dt><kbd>edited:2026-09</kbd></dt><dd>Edited that year, month or day</dd>
           <dt><kbd>after:</kbd> <kbd>before:</kbd></dt><dd>Edited from / before</dd>
+          {{- /* is:page/task/note, in:everyone/private/<group>: one row, so the sheet fits a laptop's screen */}}
+          <dt><kbd>is:task</kbd>{{if .Users}} <kbd>in:<i>group</i></kbd>{{end}}</dt><dd>Only tasks, pages, notes{{if .Users}} / a place{{end}}</dd>
         </dl>
       </section>
     </div>

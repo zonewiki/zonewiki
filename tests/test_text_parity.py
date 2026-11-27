@@ -2,9 +2,10 @@
 
 Each of them does in the browser what a Go function does on the server (a
 slug, a heading's id, a wikilink's parts, the checkboxes of a text, a tick,
-a query's words). go/golden_test.go holds the Go functions to the answers
-in go/testdata/golden.json.gz; this holds the JavaScript to the same file,
-in Node, so a change on one side fails until the other follows.
+a query's words and its is:/in: filters). go/golden_test.go holds the Go
+functions to the answers in go/testdata/golden.json.gz; this holds the
+JavaScript to the same file, in Node, so a change on one side fails until
+the other follows.
 """
 
 import gzip
@@ -40,6 +41,7 @@ const out = texts.map(text => {
     toggle: [0, 1, 2, 3].map(i => T.toggleCheckboxText(text, T.taskCheckboxOffsets(text, true)[i], now)),
     toggle_notes: [0, 1].map(i => T.toggleCheckboxText(text, T.taskCheckboxOffsets(text, false)[i], now)),
     query_words: T.queryWords(text),
+    query_where: (w => [w.kinds, w.exKinds, w.places, w.exPlaces].map(l => [...l].sort()))(T.queryWhere(text)),
     clean_list: T.cleanList(text) || null,
     parse_date_word: C.default.parseDateWord(text, today) || null,
   };
@@ -105,6 +107,13 @@ def test_a_querys_words_agree(answers):
     their place, so they are compared as sets of words."""
     diffs = _differences(answers, "query_words", want=lambda c, _: sorted(c["query_text"].split()),
                          got=lambda j, k: sorted(j[k].split()))
+    assert not diffs, _report(diffs)
+
+
+def test_a_querys_kinds_and_places_agree(answers):
+    """is:, -is:, in: and -in: (queryWhere: the search modal's chips and
+    title list read them as the server's ParseQuery does)."""
+    diffs = _differences(answers, "query_where")
     assert not diffs, _report(diffs)
 
 

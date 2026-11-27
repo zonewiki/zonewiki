@@ -14,7 +14,7 @@ The search/browse UI lives in a modal dialog, not a dedicated page.
 Opened via the "Search" nav button or **Ctrl+P** (⌘P on Mac), closed with **Esc** or clicking the backdrop.
 Backdrop click detection: `e.target === searchModal` (not coordinate comparison — coordinates break with `<select>` dropdowns).
 
-Page data is loaded lazily on first open from `GET /api/pages-list` (JSON: slug, title, links, mtime) and cached for the session.
+Page data is loaded lazily on first open from `GET /api/pages-list` (JSON: slug, title, links, mtime, and whose and what it is: private, group, note) and cached for the session.
 Each list item shows the page title and slug — dates are not shown in the modal.
 The title keeps its width, up to 70% of the row (wrapping past that); the slug takes what is left and is cut at its start (`…-file-name-end`, `direction: rtl` around a `<bdi>`), so a long file name never squeezes the title to a few letters and the file name's end stays in sight.
 
@@ -56,6 +56,23 @@ in the title list and in the Content matches: the modal sends `/api/search?…&u
 and the server keeps only such pages,
 no tasks (`doSearch(…, unlinked=true, …)`, same counts as the list's, `allBacklinkCounts`) before it cuts the results to 15.
 Toggling it re-runs the content search.
+
+### Filters
+
+A row under the input (`.search-filters`) narrows the results by kind and by place:
+
+| Control | Writes | Shown |
+|---------|--------|-------|
+| **All** · **Pages** · **Tasks** · **Notes** (chips) | `is:page`, `is:task`, `is:note`; **All** none | always; **Tasks** and **Notes** not for a public wiki's visitor |
+| **Where** menu: **Anywhere**, **Everyone's**, **🔒 Private**, **👥 *group*** for each of your groups (`pageShell.Groups`, `groupsFor`) | `in:everyone`, `in:private`, `in:<group>`; **Anywhere** none | with users; hidden in sharing mode, which shows no group's name |
+| **Unlinked only** | `&unlinked=1` (Unlinked only, above) | always |
+
+**The query is the filter** (`withFilter`, `queryWhere` in `js/mdtext.js`): a chip or a pick in the menu replaces the query's `is:` (or `in:`) with its own, at the end, and puts the cursor back in the input;
+typing `is:…` or `in:…` presses the chip or picks the place (several kinds press none, a place the menu hasn't leaves it blank).
+So what filters is in sight, can be typed, and goes along in **All results →**, and the server applies it as any query's (Kinds and places in `docs/spec/search.md`).
+
+**The title list follows it** in the browser: `/api/pages-list` says of each page whether it is a note (`note`), private (`private`) or a group's (`group`), and `acceptsWhere` in `js/mdtext.js` keeps those that pass, as the server's does;
+any filter leaves the built-in pages out, and **Tasks** leaves the title list empty, since tasks aren't in it.
 
 ### Search mode
 

@@ -238,6 +238,7 @@ Prefer an API test when the behaviour shows through a route, a Go test when it d
 | `tests/test_roles.py` | users.md | Viewers: every write refused, the interface; guides written by admins only |
 | `tests/test_routes.py` | routes.md, editor.md, security.md, deployment.md | The wiki's routes: pages, save and merge, uploads, search, Host and Origin checks, body limits, `TestUsage`, the binary started on its own (`TestTheBinaryAlone`) |
 | `tests/test_run_sh.py` | deployment.md | `run.sh`'s container calls and what each command says it does, in a checkout and beside `compose.yaml` alone (the prebuilt image, `update`, the checkout's commands refused, `.env`'s address and user), and the pre-commit hook, against a stub engine; the pre-push hook |
+| `tests/test_search_filters.py` | search.md, navigation.md | The search's `is:` and `in:` filters through each door (`/api/search`, `/search`, `search_wiki`, `search_tasks`), that they only narrow, the Where menu's groups |
 | `tests/test_section_editing.py` | editor.md | Section editing over HTTP: a stale ✎, Keep mine |
 | `tests/test_semantic.py` | search.md | Semantic search through the server with the fake embedder |
 | `tests/test_settings_pages.py` | navigation.md | The menu's Settings and the settings pages' tabs |
@@ -283,7 +284,7 @@ Prefer an API test when the behaviour shows through a route, a Go test when it d
 | `test_private.py` | users.md, mcp.md | The user menu, private home, Make shared, Change password, Connect an assistant |
 | `test_public.py` | security.md | A public wiki in the browser |
 | `test_quiet_tab.py` | navigation.md | A tab nobody is at asks nothing until the pointer moves |
-| `test_search.py` | navigation.md, search.md | The search modal, Notes filter, the semantic mode indicator |
+| `test_search.py` | navigation.md, search.md | The search modal (its filters, a long file name), Notes filter, the semantic mode indicator |
 | `test_security.py` | security.md | What only a browser shows: CSP, `srcdoc`, `ping`, framing, ids as text |
 | `test_sharing.py` | navigation.md | Sharing mode |
 | `test_shortcuts.py` | navigation.md | The shortcuts dialog: fits a desktop screen, scrolls inside a phone's, names every key the code answers |
@@ -302,7 +303,7 @@ A case added for one side is a case for both.
 
 | File | Server side | Browser side |
 |------|-------------|--------------|
-| `go/testdata/golden.json.gz` | `TestGolden` (`go/golden_test.go`) | `tests/test_text_parity.py` (`public/js/mdtext.js`: slugs, heading ids, a wikilink's parts, the checkboxes of a text and a tick (the browser's alone: no Go function gives them now), a query's words, a list's name, a date word) |
+| `go/testdata/golden.json.gz` | `TestGolden` (`go/golden_test.go`) | `tests/test_text_parity.py` (`public/js/mdtext.js`: slugs, heading ids, a wikilink's parts, the checkboxes of a text and a tick (the browser's alone: no Go function gives them now), a query's words and its `is:`/`in:` filters, a list's name, a date word) |
 | `go/testdata/mine_cases.json` | `TestInMineCases` (`go/tasklists_test.go`) | `TestMyTasks` (`tests/test_tasks_core.py`) |
 | `go/testdata/news_cases.json` | `TestNewsCases` (`go/tasklogic_test.go`) | `TestNewsCases` (`tests/test_tasks_core.py`) |
 | `go/testdata/filter_cases.json` | `TestFilterCases` (`go/tasklists_test.go`) | `TestFilterCases` (`tests/test_tasks_core.py`) |

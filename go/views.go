@@ -420,6 +420,9 @@ type pageShell struct {
 	// come back to this view.
 	Visitor bool
 	SignIn  string
+	// Groups: the groups whose places are theirs (groupsFor), for the
+	// search modal's Where menu; nil without users or actions.
+	Groups []string
 }
 
 // view: what every view's data embeds, its fields the template's; page
@@ -455,6 +458,9 @@ func page(w http.ResponseWriter, rq *Req, status int, name, title string, o shel
 		// make but, where visitors edit, pages.
 		sh.User, sh.Users, sh.Viewer, sh.Visitor = "", false, true, true
 		sh.SignIn = "/login?next=" + url.QueryEscape(rq.r.URL.Path)
+	}
+	if sh.Users {
+		sh.Groups = groupsFor(rq.user)
 	}
 	sh.Settings, sh.SettingsTab = settingsTabs(rq), o.settings
 	sh.Usage = seesUsage(rq)
