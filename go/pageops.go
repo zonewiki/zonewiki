@@ -153,53 +153,102 @@ func restorePageOp(user asker, slug, sha, suffix string) (old *string, kept bool
 
 // createPageOp makes the page slug with content; refused when it
 // exists, or can't be made there by user (another user's folder answers
-// as missing).
+// as missing): writePagesOp with one new page.
 func createPageOp(user asker, slug, content, suffix string) error {
-	path := safePath(slug)
-	switch {
-	case path == "":
-		return refuse("“" + slug + "”: pages can't go in folders starting with '_' or '.'")
-	case !canWrite(user, slug):
-		return notWritable(user, slug, "“"+slug+"”: "+notYoursFolder(slug))
-	case exists(path):
-		return refuseAs(refusedExists, "A page named "+strconv.Quote(slug)+" already exists")
-	}
-	if err := checkRoom(int64(len(content))); err != nil {
-		return err
-	}
-	if err := writeText(path, content); err != nil {
-		return err
-	}
-	added(int64(len(content)))
-	return notCommitted(gitCommit(user.Name, "Create "+slug+suffix, path))
+	_, err := writePagesOp(user, pagesWrite{
+		pages:   []pageWrite{{slug: slug, text: content, isNew: true}},
+		message: "Create " + slug + suffix,
+	})
+	return err
 }
 
 // pageNewText: a page and the text it is to hold (replacePagesOp).
-type pageNewText struct{ slug, path, text string }
+type pageNewText struct{ slug, text string }
 
-// replacePagesOp writes each page's new text, all in one commit message;
-// what the pages held uncommitted is committed first (keepPendingPages:
-// what, as the note about it names the pages), so the commit holds only
-// the replacement. Every page must be one user may write: one that isn't
-// refuses the whole of it, with nothing written. Returns how many pages
-// had text kept.
+// replacePagesOp writes each page's new text, all in one commit message:
+// writePagesOp with pages that are all there already. what names the
+// pages in the note about text kept first (keepPendingPages). Returns how
+// many pages had text kept.
 func replacePagesOp(user asker, pages []pageNewText, message, what string) (kept int, err error) {
-	paths := make([]string, len(pages))
-	for i, p := range pages {
-		if _, err := writablePage(user, p.slug); err != nil {
-			return 0, err
-		}
-		paths[i] = p.path
+	w := pagesWrite{message: message, what: what}
+	for _, p := range pages {
+		w.pages = append(w.pages, pageWrite{slug: p.slug, text: p.text})
 	}
-	if kept, err = keepPendingPages(paths, what); err != nil {
+	return writePagesOp(user, w)
+}
+
+// pageWrite: a page writePagesOp writes, the text it is to hold, and
+// whether it is to be new (not there yet) or there already.
+type pageWrite struct {
+	slug, text string
+	isNew      bool
+}
+
+// pagesWrite: what writePagesOp writes, in one commit.
+type pagesWrite struct {
+	pages   []pageWrite
+	message string // the commit's message, its suffix included
+	what    string // names the pages in "Save <what>", the commit of text kept first
+}
+
+// writePagesOp writes pages, each new or there already, in one commit:
+// the rules of making and of replacing a page, said once. A new page must
+// have a path (safePath), be user's to write (canWrite) and not be there
+// yet; one there already must be user's to write (writablePage). One page
+// that isn't as it was said to be, or is named twice, refuses the whole of
+// it, with nothing written; so does a wiki without room for the new pages'
+// text (checkRoom; replacing a page's text never asks). What the pages
+// there already held uncommitted is committed first (keepPendingPages:
+// what, as the note about it names the pages), so the commit holds only
+// this write. Returns how many pages had text kept.
+func writePagesOp(user asker, w pagesWrite) (kept int, err error) {
+	paths := make([]string, len(w.pages))
+	var there []string
+	var room int64
+	seen := map[string]bool{}
+	for i, p := range w.pages {
+		if p.isNew {
+			path := safePath(p.slug)
+			switch {
+			case path == "":
+				return 0, refuse("“" + p.slug + "”: pages can't go in folders starting with '_' or '.'")
+			case !canWrite(user, p.slug):
+				return 0, notWritable(user, p.slug, "“"+p.slug+"”: "+notYoursFolder(p.slug))
+			case exists(path):
+				return 0, refuseAs(refusedExists, "A page named "+strconv.Quote(p.slug)+" already exists")
+			}
+			paths[i] = path
+			room += int64(len(p.text))
+		} else {
+			path, err := writablePage(user, p.slug)
+			if err != nil {
+				return 0, err
+			}
+			paths[i] = path
+			there = append(there, path)
+		}
+		if seen[paths[i]] {
+			return 0, refuse("“" + p.slug + "” is named twice")
+		}
+		seen[paths[i]] = true
+	}
+	if err := checkRoom(room); err != nil {
 		return 0, err
 	}
-	for _, p := range pages {
-		if err := writeText(p.path, p.text); err != nil {
-			return kept, err
+	if len(there) > 0 {
+		if kept, err = keepPendingPages(there, w.what); err != nil {
+			return 0, err
 		}
 	}
-	return kept, notCommitted(gitCommit(user.Name, message, paths...))
+	for i, p := range w.pages {
+		if err := writeText(paths[i], p.text); err != nil {
+			return kept, err
+		}
+		if p.isNew {
+			added(int64(len(p.text)))
+		}
+	}
+	return kept, notCommitted(gitCommit(user.Name, w.message, paths...))
 }
 
 // setAsideOp: the editor's text mine, which lost to theirs (what the page

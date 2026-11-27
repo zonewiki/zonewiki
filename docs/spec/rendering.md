@@ -474,6 +474,13 @@ The doors take it, not the operations: a route that writes pages is registered a
 The lock order is `pagesMu`, then the task files' lock (`taskFiles.Lock`), then `commitMu`.
 Task reads don't take the task files' lock: they wait only while a write replaces its files (`taskFiles.Hold` … `Release`, Storage in `docs/spec/tasks.md`), so code that writes a task file itself calls `taskFiles.Hold()` first, and a section under `taskFiles.Lock` calls only the store's `…Locked` readers.
 
+Pages made or replaced in one commit are one operation, `writePagesOp`: a list of pages, each new or there already, the commit's message, and what to call them in the commit of text kept first.
+A new page must have a path (`safePath()`), be the asker's to write (`canWrite`) and not be there yet;
+one there already must be the asker's to write (`writablePage`), and what it held not yet in git is committed first (`keepPendingPages`, "Save <what>", a commit per author).
+`checkRoom` asks for the new pages' text (a replacement adds nothing), and what is written new is counted (`added`).
+One page that isn't the asker's or isn't as it was said to be (a new one there already, one there already missing, a page named twice), or a wiki without room, refuses the whole write: nothing is written or committed, not even the text kept first.
+`createPageOp` (a new page in the browser, `write_page`) is a call of it with one new page, `replacePagesOp` (`replace_in_pages`) with pages all there already, so the rules of making a page are written once.
+
 A page is written with `writeText` (UTF-8, through `atomicfile.Write`: a link written through, a new file 0666 less the umask), after `safePath()` and `os.MkdirAll` for its folder.
 `gitCommit` returns an error, which the write returns (`notCommitted`); links a move couldn't re-point are no failure (`linksLeft`: logged, and the MCP tools say so).
 

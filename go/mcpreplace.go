@@ -384,7 +384,7 @@ func replaceInPages(args jsonObj, base string, user asker) (string, error) {
 	what := "pages before replacing " + find
 	pages := make([]pageNewText, len(hits))
 	for i, h := range hits {
-		pages[i] = pageNewText{h.slug, h.path, h.new}
+		pages[i] = pageNewText{h.slug, h.new}
 	}
 	keptPages, err := replacePagesOp(user, pages, msg, what)
 	if err != nil {
