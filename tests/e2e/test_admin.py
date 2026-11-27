@@ -6,7 +6,7 @@ import re
 import pytest
 from playwright.sync_api import expect
 
-from conftest import box_of
+from conftest import PHONE, TOUCH_PHONE, box_of
 from tests import settings
 
 
@@ -100,3 +100,43 @@ def test_save_shows_once_a_field_is_edited(admin, wiki):
     admin.locator('.sheet a[href="/groups"]').click()
     admin.wait_for_url("**/groups")
     expect(admin.get_by_role("button", name="Make a group of groups")).to_be_visible()
+
+
+def test_a_phone_shows_a_user_in_a_few_lines(new_page, wiki, monkeypatch):
+    """On a phone a user is a short card (docs/spec/users.md, The Users tab):
+    the role beside the name, the groups on one line under it, no "Active",
+    and a Save only once there is something to save."""
+    monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "t1"), "bob": ("pw", "t2"), "dave": ("pw", "")})
+    monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"role": "admin"}, "dave": {"disabled": "yes"}})
+    phone = new_page(**TOUCH_PHONE)
+    phone.request.post("/login", form={"username": "alice", "password": "pw"})
+    phone.request.post("/groups", form={"name": "dev", "people": "bob"})
+    phone.request.post("/admin/users/invite", form={"name": "erin", "role": "editor"})
+    phone.goto("/admin/users")
+    row = phone.locator(".users-list tr", has_text="bob")
+    name, role, groups = box_of(row.locator(".user-name")), box_of(row.locator("select")), box_of(row.locator(".pick"))
+    actions = box_of(row.locator(".user-actions"))
+    assert role["y"] < name["y"] + name["height"] and name["y"] < role["y"] + role["height"]   # one line
+    assert role["x"] + role["width"] > PHONE["width"] - 30                                      # the role at its right end
+    assert groups["y"] >= role["y"] + role["height"] and groups["width"] > 250                  # the groups under them, wide
+    assert actions["y"] >= groups["y"] + groups["height"]
+    assert actions["y"] + actions["height"] - name["y"] < 150                                   # three lines, not five
+    expect(row.locator(".user-status")).to_be_hidden()                                          # Active isn't said
+    off = phone.locator(".users-list tr", has_text="dave").locator(".user-status")
+    expect(off).to_have_text("Disabled")
+    expect(off).to_be_visible()
+    # A Save takes no room until there is something to save, then saves.
+    save = row.locator('button[aria-label="Save the role of bob"]')
+    expect(save).to_be_hidden()
+    row.locator("select").select_option("viewer")
+    expect(save).to_be_visible()
+    assert box_of(save)["x"] + box_of(save)["width"] <= PHONE["width"]
+    save.click()
+    phone.wait_for_url("**/admin/users?done=role**")
+    assert "role = viewer" in (wiki.root / ".zone" / "config").read_text()
+    # An open link: Revoke beside the name, what it is and until when under it.
+    link = phone.locator(".users-links tr", has_text="erin")
+    who, revoke = box_of(link.locator(".user-name")), box_of(link.get_by_role("button", name="Revoke"))
+    assert revoke["y"] < who["y"] + who["height"] and revoke["x"] > who["x"]
+    assert link.locator(".link-until").evaluate("e => getComputedStyle(e, '::before').content") == '"Works until "'
+    assert phone.evaluate("document.documentElement.scrollWidth <= innerWidth")                 # nothing wider than the phone

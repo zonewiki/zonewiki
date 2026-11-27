@@ -738,6 +738,12 @@ The top row is every view's: the module switcher and `Admin › Users` (`breadcr
 Then the list: each user's name, "(you)", "MCP" if they have a token, their address, their role, and Active or Disabled (with "2 open tasks to hand on" under a disabled user or a viewer who has any: Handing on someone's tasks, below).
 Then the invite form, the open links (Invite and reset links, below) and what the roles mean.
 
+**On a phone** (up to 640px) the table is a short card per user, not a line per column:
+the name with the role's select at its right, the groups on one line under them (after the word "Groups", the table's head being gone), then the row's buttons.
+"Active" isn't said there, as most users are: "Disabled", "Waiting for approval" and the tasks to hand on stand under the name.
+A Save takes no room until its field is edited.
+An open link is who it is for with **Revoke** beside it, then what it is and "Works until …" (`.users-list`, `.users-links` in `style.css`).
+
 Below the users a line says that a user's Groups field takes the groups there are, and that groups are made, renamed and made of other groups on **Groups** (`/groups`), where an admin manages every group (An admin on Groups, above).
 The "Seen by no one" note here names the folders in `private/` of a user who is gone (`strayPrivate`), by their paths alone; those in `groups/` are on Groups.
 
@@ -771,7 +777,7 @@ As the last user is always the admin themselves, this is also why the last user 
 ### How the admin page saves
 
 Each change is a POST (behind the Origin check, like every write), and the page works without JavaScript, which opens the Remove dialog and keeps the list quiet:
-a row's Save buttons show once the field beside them is edited (`js/admin.js`, `.saves-when-edited`; hidden, not gone, so nothing moves), and hide again when the edit is taken back (a pill picked or taken out counts).
+a row's Save buttons show once the field beside them is edited (`js/admin.js`, `.saves-when-edited`; hidden, not gone, so nothing moves; on a phone gone, so the field has the line), and hide again when the edit is taken back (a pill picked or taken out counts).
 Picking a role saves nothing by itself; Enter in a field saves as its button does (in the Groups box, Enter with nothing typed).
 Without JavaScript the buttons are there all along.
 Done, it answers with a redirect to `/admin/users?done=…&user=…`, and the page says what was done from a fixed set of messages, so a link can't make it say anything else.

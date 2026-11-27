@@ -1859,6 +1859,30 @@ kbd {
   .users-table, .users-table tbody, .users-table tr, .users-table td { display: block; width: 100%; }
   .users-table tr { padding: .5rem 0; border-bottom: 1px solid var(--border); }
   .users-table td { border: none; padding: .2rem 0; }
+  /* The users, a short card each: the name with the role beside it, the
+     groups under it, then what to do. "Active" isn't said, as most are, and a
+     Save takes its place only once there is something to save. */
+  .users-list tr, .users-links tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .5rem .75rem; align-items: center; padding: .75rem 0; }
+  :is(.users-list, .users-links) td { width: auto; min-width: 0; padding: 0; }
+  .users-list :is(.user-status, .user-groups, .user-does), .users-links :is(.link-what, .link-until) { grid-column: 1 / -1; }
+  .users-list .user-name { overflow-wrap: anywhere; }
+  .users-list .user-status { order: 1; font-size: .85rem; color: var(--muted); margin-top: -.3rem; }
+  .users-list .user-status-active { display: none; }
+  .users-list .user-groups { order: 2; display: flex; flex-wrap: wrap; align-items: center; gap: .15rem .6rem; }
+  .users-list .user-groups::before { content: "Groups"; font-size: .85rem; color: var(--muted); }
+  .users-list .user-groups form { flex: 1; min-width: 0; }
+  .users-list .user-groups :is(.pick, input[type="text"]) { flex: 1; width: auto; min-width: 0; }
+  .users-list .user-also { flex-basis: 100%; margin: 0; }
+  .users-list .user-does { order: 3; }
+  .users-list .saves-when-edited:not(.edited) [type=submit] { display: none; }
+  /* An open link: who it is for and Revoke, then what it is and until when. */
+  .users-links :is(.link-what, .link-until) { order: 1; font-size: .85rem; color: var(--muted); }
+  .users-links .link-until { margin-top: -.35rem; }
+  .users-links .link-until::before { content: "Works until "; }
+  /* 16px, or iOS zooms into the field. */
+  .users-table select, .users-invite :is(input, select) { font-size: 16px; }
+  .users-invite input { flex: 1; min-width: 8rem; }
+  .users-invite + .users-help { margin-top: .6rem; }
 }
 
 /* The notice setting's line (layout.html): fixed across the top, and what

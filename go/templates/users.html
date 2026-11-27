@@ -27,13 +27,13 @@
 </div>
 {{- end}}
 <datalist id="user-groups">{{range .Groups}}<option value="{{.}}">{{end}}</datalist>
-<table class="users-table">
+<table class="users-table users-list">
   <thead><tr><th>Name</th><th>Role</th><th>Groups</th><th>Status</th><th></th></tr></thead>
   <tbody>
   {{- range .Users}}
   <tr{{if .Disabled}} class="user-disabled"{{end}}>
     <td class="user-name">{{.Name}}{{if .Me}} <span class="user-you">(you)</span>{{end}}{{if .Token}} <span class="user-fact" title="Has an MCP token: an assistant can act as them">MCP</span>{{end}}{{if .Shared}} <span class="user-fact" title="Several people sign in to this account: its password and token are set on the host, not in the browser">shared</span>{{end}}{{with .Email}}<br><span class="user-email">{{.}}</span>{{end}}</td>
-    <td>
+    <td class="user-role">
       <form method="post" action="/admin/users/{{.Name}}/role" class="user-role-form">
         <select name="role" aria-label="Role of {{.Name}}">
           {{- $role := .Role}}
@@ -44,7 +44,7 @@
         <button type="submit" class="btn" aria-label="Save the role of {{.Name}}">Save</button>
       </form>
     </td>
-    <td>
+    <td class="user-groups">
       {{- /* Who belongs together: what is for a group (a task list) is theirs. */}}
       <form method="post" action="/admin/users/{{.Name}}/groups" class="user-role-form user-groups-form">
         <input type="text" name="groups" value="{{.Groups}}" aria-label="Groups of {{.Name}}" placeholder="none" list="user-groups" data-pick="groups" autocomplete="off" spellcheck="false" size="12">
@@ -52,10 +52,10 @@
       </form>
       {{- with .Also}}<span class="user-also" title="By way of a group they are in (on Groups)">also in {{.}}</span>{{end}}
     </td>
-    <td>{{if .Pending}}Waiting for approval{{else if .Disabled}}Disabled{{else}}Active{{end}}
+    <td class="user-status{{if not (or .Pending .Disabled .Tasks)}} user-status-active{{end}}">{{if .Pending}}Waiting for approval{{else if .Disabled}}Disabled{{else}}Active{{end}}
       {{- /* Tasks still assigned to someone who can't be given any: to hand on. */}}
       {{- if .Tasks}}<br><a class="user-tasks" href="/tasks?view=open&amp;assignee={{.Name}}" title="Still assigned to {{.Name}}, who can't be given tasks: they count as no one's. Select them there and Assign… to hand them on">{{.Tasks}} open task{{if ne .Tasks 1}}s{{end}} to hand on</a>{{end}}</td>
-    <td><div class="user-actions">
+    <td class="user-does"><div class="user-actions">
       {{- if .Me}}{{/* not yourself: another admin can (admin.go) */}}
       {{- else if .Pending}}
       <form method="post" action="/admin/users/{{.Name}}/enable"><button type="submit" class="btn btn-primary" title="They signed up: let them sign in">Approve</button></form>
@@ -99,15 +99,15 @@
 {{- end}}
 {{- with .Links}}
 <h2>Open links</h2>
-<table class="users-table">
+<table class="users-table users-links">
   <thead><tr><th>For</th><th>What</th><th>Works until</th><th></th></tr></thead>
   <tbody>
   {{- range .}}
   <tr>
     <td class="user-name">{{.User}}</td>
-    <td>{{if eq .Kind "reset"}}New password{{else}}Invite, as {{.Role}}{{end}} <span class="user-you">by {{.By}}</span></td>
-    <td>{{.Expires}}</td>
-    <td><form method="post" action="/admin/users/{{.User}}/revoke"><button type="submit" class="btn">Revoke</button></form></td>
+    <td class="link-what">{{if eq .Kind "reset"}}New password{{else}}Invite, as {{.Role}}{{end}} <span class="user-you">by {{.By}}</span></td>
+    <td class="link-until">{{.Expires}}</td>
+    <td class="link-revoke"><form method="post" action="/admin/users/{{.User}}/revoke"><button type="submit" class="btn">Revoke</button></form></td>
   </tr>
   {{- end}}
   </tbody>
