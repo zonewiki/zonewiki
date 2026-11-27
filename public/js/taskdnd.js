@@ -20,6 +20,32 @@ function carryChip(e, item) {
   setTimeout(() => image.remove());
 }
 
+// The line where a card dragged in an order lands is on one card at a time
+// and changes only when that card or its side does. It stays while the
+// pointer crosses the card's insides (each fires a dragleave that bubbles
+// up to the card) and the gap between two cards (no card's: the list's
+// own), so it doesn't flicker. A drop in the gap lands at the line
+// (dropAt, set by the view's setup).
+let marked = null, markedSide = null, dropAt = null;
+function markDrop(item, side) {
+  if (item === marked && side === markedSide) return;
+  marked?.classList.remove('task-drop-before', 'task-drop-after');
+  marked = item; markedSide = side;
+  item?.classList.add(`task-drop-${side}`);
+}
+document.addEventListener('dragover', e => {
+  if (!marked) return;
+  if (e.target === app.listEl) { e.preventDefault(); return; }   // in the gap: the line stays
+  if (!app.listEl.contains(e.target) || !e.target.closest('.task-item')) markDrop(null);
+});
+app.listEl.addEventListener('drop', e => {
+  if (e.target !== app.listEl || !marked) return;
+  e.preventDefault();
+  const item = marked, side = markedSide;
+  markDrop(null);
+  dropAt?.(item, side);
+});
+
 // Plan board: make cards draggable; the list-level dragover/drop handlers
 // (attached once at init) re-plan the task to the section it's dropped on.
 // A drop on a card in a section (`data-ordered`) lands above or below it,
@@ -63,6 +89,8 @@ function setupBoardDragAndDrop() {
       ? executeBoardItemDrop(target, side) : app.dropOnBucket(st.draggedId, target),
   };
 
+  dropAt = executeBoardItemDrop;
+
   app.listEl.querySelectorAll('.task-item[data-drag]').forEach(item => {
     item.addEventListener('dragstart', e => {
       // Touch has its own long-press drag (see touchDrop); selecting, nothing drags.
@@ -77,26 +105,26 @@ function setupBoardDragAndDrop() {
       item.classList.remove('task-dragging');
       st.draggedId = null;
       app.clearBoardDropOver();
-      app.listEl.querySelectorAll('.task-drag-over, .task-drop-before, .task-drop-after')
-        .forEach(el => el.classList.remove('task-drag-over', 'task-drop-before', 'task-drop-after'));
+      markDrop(null);
+      app.listEl.querySelectorAll('.task-drag-over')
+        .forEach(el => el.classList.remove('task-drag-over'));
     });
     item.addEventListener('dragover', e => {
       if (!st.draggedId) return;
       e.preventDefault();
       e.stopPropagation();  // suppress list-level bucket-highlight when over a task item
       e.dataTransfer.dropEffect = 'move';
-      if (item.dataset.id === st.draggedId) return;
-      if (!orderedCard(item)) { item.classList.add('task-drag-over'); return; }
+      if (item.dataset.id === st.draggedId) { markDrop(null); return; }
+      if (!orderedCard(item)) { markDrop(null); item.classList.add('task-drag-over'); return; }
       app.clearBoardDropOver();
-      const side = app.dropSide(item, e.clientY);
-      item.classList.toggle('task-drop-before', side === 'before');
-      item.classList.toggle('task-drop-after', side === 'after');
+      markDrop(item, app.dropSide(item, e.clientY));
     });
-    item.addEventListener('dragleave', () => item.classList.remove('task-drag-over', 'task-drop-before', 'task-drop-after'));
+    item.addEventListener('dragleave', () => item.classList.remove('task-drag-over'));
     item.addEventListener('drop', e => {
       e.preventDefault();
       e.stopPropagation();  // prevent list-level handler from also firing
-      item.classList.remove('task-drag-over', 'task-drop-before', 'task-drop-after');
+      item.classList.remove('task-drag-over');
+      markDrop(null);
       executeBoardItemDrop(item, app.dropSide(item, e.clientY));
     });
   });
@@ -117,9 +145,9 @@ function setupDragAndDrop() {
     drop: (target, side) => executeDrop(target.dataset.id, side),
   };
 
+  dropAt = (target, side) => executeDrop(target.dataset.id, side);
+
   const items = app.listEl.querySelectorAll('.task-item[data-drag]');
-  const clearDropOver = () => app.listEl.querySelectorAll(app.DROP_CLASSES.map(c => '.' + c).join(', '))
-    .forEach(el => el.classList.remove(...app.DROP_CLASSES));
   items.forEach(item => {
     item.addEventListener('dragstart', e => {
       if (st.lastPointerType === 'touch' || st.selectMode) { e.preventDefault(); return; }
@@ -132,22 +160,16 @@ function setupDragAndDrop() {
     item.addEventListener('dragend', () => {
       item.classList.remove('task-dragging');
       st.draggedId = null;
-      clearDropOver();
+      markDrop(null);
     });
     item.addEventListener('dragover', e => {
       e.preventDefault();
       e.dataTransfer.dropEffect = 'move';
-      if (item.dataset.id === st.draggedId) return;
-      const side = app.dropSide(item, e.clientY);
-      item.classList.toggle('task-drop-before', side === 'before');
-      item.classList.toggle('task-drop-after', side === 'after');
-    });
-    item.addEventListener('dragleave', () => {
-      item.classList.remove('task-drop-before', 'task-drop-after');
+      markDrop(item.dataset.id === st.draggedId ? null : item, app.dropSide(item, e.clientY));
     });
     item.addEventListener('drop', e => {
       e.preventDefault();
-      item.classList.remove('task-drop-before', 'task-drop-after');
+      markDrop(null);
       executeDrop(item.dataset.id, app.dropSide(item, e.clientY));
     });
   });

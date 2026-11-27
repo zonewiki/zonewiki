@@ -72,8 +72,11 @@ function dropSide(item, y) {
 }
 const DROP_CLASSES = ['task-drag-over', 'board-drop-over', 'task-drop-before', 'task-drop-after'];
 
+// In the gap between two cards (the list's own) the target stays, so the
+// line doesn't flicker as the finger crosses it.
 function touchDropTarget(x, y) {
   const el = document.elementFromPoint(x, y);
+  if (el === app.listEl) return st.touchDrag.target;
   return el && app.listEl.contains(el) && st.touchDrop ? st.touchDrop.target(el) : null;
 }
 function setTouchTarget(target) {

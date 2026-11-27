@@ -999,6 +999,7 @@ The dragged card stays in its place, faded, and the pointer carries a small chip
 a copy as big as the card sat over the place it would land and hid the line that marks it.
 With the mouse the chip is the browser's drag image (`carryChip`, `setDragImage`), below and right of the pointer; on touch it is above the finger (Long-press drag).
 Where it lands in an order is a line in the gap on that side of the card dropped on, with a dot at its left end (The manual order).
+The line is on one card at a time and changes only when that card or its side does (`markDrop`): it stays while the pointer crosses the card's insides, whose `dragleave`s bubble up to the card, and the gap between two cards, which is the list's, not a card's; a drop in the gap lands at the line, with the mouse and on touch.
 
 Wiring: `setupBoardDragAndDrop` per card plus list-level handlers attached once.
 

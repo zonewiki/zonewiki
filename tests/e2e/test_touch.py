@@ -652,6 +652,26 @@ def test_touch_drag_reorders_all_tab(new_page, wiki):
         pg.request.get("/api/tasks").json(), key=lambda t: t["sort_order"])] == ["Three", "One", "Two"])
 
 
+def test_touch_drop_in_the_gap_between_cards_lands_at_the_line(new_page, wiki):
+    # Regression: in the gap between two cards the finger was over no card,
+    # so the line went off as it crossed the gap and a drop there did
+    # nothing. Now the line stays on the card it was on, and the drop lands.
+    pg = new_page(**TOUCH_PHONE)
+    ids = [pg.request.post("/api/tasks", data={"title": t}).json()["id"] for t in ("Alpha", "Bravo", "Charlie")]
+    rank(pg, ids)
+    wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
+    pg.goto("/page/tasks?view=open&group=none")
+    open_tab(pg, "open")
+    alpha, bravo = box_of(card(pg, "Alpha")), box_of(card(pg, "Bravo"))
+    gap = (alpha["y"] + alpha["height"] + bravo["y"]) / 2
+    send = touch_drag(pg, card(pg, "Charlie"), card(pg, "Bravo"), release=False,
+                      at=(gap - bravo["y"]) / bravo["height"])
+    assert pg.evaluate(f"document.elementFromPoint({bravo['x'] + bravo['width'] / 2}, {gap}).id") == "tasks-list"
+    expect(card(pg, "Bravo")).to_have_class(re.compile(r"\btask-drop-before\b"))
+    send("touchEnd", [])
+    expect(pg.locator(".task-item .task-title")).to_have_text(["Alpha", "Charlie", "Bravo"])
+
+
 def test_touch_drag_reorders_a_plan_day(new_page, wiki):
     pg = new_page(**TOUCH_PHONE)
     ids = [pg.request.post("/api/tasks", data={"title": t, "start_date": day(0)}).json()["id"]

@@ -2511,6 +2511,39 @@ def test_a_mouse_drag_carries_a_chip_beside_the_pointer(page, wiki):
     wait_until(page, lambda: _open_titles(page) == ["Charlie", "Alpha", "Bravo"])
 
 
+def test_the_drop_line_holds_still_and_a_drop_in_the_gap_lands_there(page, wiki):
+    # Regression: the line flickered: each element inside a card fires a
+    # dragleave that bubbles up to the card, which took the line off until
+    # the next dragover, and the gap between two cards (no card's) took it
+    # off too, where a drop did nothing. Now the line changes only with the
+    # card or its side, stays over the gap, and a drop there lands at it.
+    page.set_viewport_size({"width": 1000, "height": 1200})
+    ids = [page.request.post("/api/tasks", data={"title": t}).json()["id"] for t in ("Alpha", "Bravo", "Charlie")]
+    rank(page, ids)
+    page.goto("/tasks?view=open&group=none")
+    start = box_of(card(page, "Charlie").locator(".task-content"))
+    alpha, bravo = box_of(card(page, "Alpha")), box_of(card(page, "Bravo"))
+    y = bravo["y"] + bravo["height"] * 0.3
+    page.mouse.move(start["x"] + 10, start["y"] + start["height"] / 2)
+    page.mouse.down()
+    page.mouse.move(start["x"] + 10, y, steps=6)
+    expect(card(page, "Bravo")).to_have_class(re.compile(r"\btask-drop-before\b"))
+    # From here on, count each time the line goes off Bravo.
+    card(page, "Bravo").evaluate("""el => { window.__offs = 0;
+      new MutationObserver(() => { if (!el.classList.contains('task-drop-before')) window.__offs++; })
+        .observe(el, { attributes: true, attributeFilter: ['class'] }); }""")
+    for x in (bravo["x"] + 12, bravo["x"] + 60, bravo["x"] + bravo["width"] - 20, bravo["x"] + 200):
+        page.mouse.move(x, y, steps=4)                                   # across checkbox, title, ⋯
+    gap = (alpha["y"] + alpha["height"] + bravo["y"]) / 2
+    page.mouse.move(bravo["x"] + 200, gap, steps=3)                      # into the gap above Bravo
+    page.wait_for_timeout(100)
+    expect(card(page, "Bravo")).to_have_class(re.compile(r"\btask-drop-before\b"))
+    assert page.evaluate("window.__offs") == 0
+    page.mouse.up()
+    wait_until(page, lambda: _open_titles(page) == ["Alpha", "Charlie", "Bravo"])
+    expect(page.locator(".task-drop-before, .task-drop-after")).to_have_count(0)
+
+
 def test_drop_lands_where_the_pointer_is_from_anywhere(page, wiki):
     # Regression: a new task landed after the task dropped on, one from
     # within the order (moving up) before it. Now the pointer decides, the
