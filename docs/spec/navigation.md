@@ -162,8 +162,8 @@ Who is signed in,
 **Admin** (admins; Managing users in `docs/spec/users.md`),
 **Sharing mode** (`.menu-sharing`, **Turn sharing mode off** while it is on; desktop only, see Sharing mode),
 **Help** (the manual, `/help`: Help in `docs/spec/routes.md`) and Sign out are in the **user menu**,
-opened by the **user button** at the top right on desktop.
-Phones have Admin and Sign out in the page's top row, where the name opens the menu's pages, and the pages' links in the shortcuts dialog.
+opened by the **user button** at the top right, a round initial, on every screen.
+On a phone it is at the right end of the breadcrumb's row and opens the same menu, as a sheet from the bottom edge, without Sharing mode (a desktop's): Settings, Admin, Help and Sign out are there, and nothing of them in a row of the page's own (Top actions, below).
 
 **A wiki without users has the menu too**, so that what is about the wiki has one place in every wiki:
 three lines (`.top-menu`, "Menu") stand where the user button would, and open
@@ -172,7 +172,7 @@ three lines (`.top-menu`, "Menu") stand where the user button would, and open
 A wiki that asks for no login has one settings page, so its menu names it, **Connect an assistant** (the wiki's token), and has **Set a login** after it (the first run's form, `/setup`;
 in a wiki open to the network on purpose the manual's section on it, `/help/self-hosting#setting-a-login`, since its login is set on the host: A login on purpose in `docs/spec/security.md`).
 No name: there is nobody.
-On phones the three lines are at the right of the page's top row (`.signout-menu`), beside Sign out when there is one.
+On phones the three lines are where the user button would be too, at the right end of the breadcrumb's row.
 A public wiki's visitor has no menu, only **Sign in**.
 The menu is one template (`module_menu` in `templates/partials/modules.html`) and one entry of `moduleLinks` for everyone but a visitor; `SetLogin` in the page shell is where **Set a login** leads (`setLoginHref`), empty in a wiki with a login.
 
@@ -224,7 +224,8 @@ in this order:
 Sharing mode takes no room here while it is off: it is switched now and then, so the top row's place goes to Search, and the switch on is **S** and the user menu.
 There are no "new" buttons on desktop: a new note is `c n` (`openNewNote`), a new task `c t` (`openDefaultTask`); the row stays calm, and phones have both in the action bar.
 The pill and the chip have fixed widths, so the row's width (`--top-actions-w`, which the breadcrumb's padding and the status badges' position use) doesn't depend on the font; its border ends on the content's right edge.
-Hidden at ≤640px.
+**On a phone (≤640px) only the last shows**, the menu's button (a visitor's **Sign in**), at the right end of the breadcrumb's row: Search is in the tab bar, and the Sharing chip is a desktop's.
+So a phone's page starts with the breadcrumb, with no row above it: the breadcrumb is as high as the button (2.25rem, a finger's size) and keeps its room free (`--top-actions-w` is the button's width there).
 They replaced the round New and Search buttons in the bottom-right corner, so desktop toasts and Sign out have the bottom corners to themselves again.
 
 ### New task from anywhere
@@ -300,19 +301,23 @@ The server renders them into the page (`taskCounts`, once per request, into `par
 
 ### Status badges
 
-The **status badges** (`.top-badges`) are the uncommitted count and Sign out when auth is on.
+The **status badges** (`.top-badges`) are the uncommitted count and, in a view without the top actions, Sign out or Sign in (below).
 The uncommitted count is asked from `/api/uncommitted` when a page loads, when its tab comes back and every 30 seconds while someone uses the page (`whileUsed`, as the Tasks counts above).
 The tasks' due count is on the Tasks module links (Counts, above).
 
 They are the first thing in `<main>`, after the remote 🌐 `.remote-badge`, which on desktop sits left of the module switcher, in the margin outside the content's edge, on the row's centre line, and in the editor at the top right.
 On desktop they sit in the top row,
 left of the top actions,
-centred on the row (the breadcrumb keeps their room free; Sign out, though inside, is fixed to the bottom-right);
+centred on the row (the breadcrumb keeps their room free);
 in the editor fixed at the top right, since its breadcrumb starts at the window's left edge.
 The row aligns to `main`'s side padding (`--main-pad`): the switcher starts on the content's left edge, the search pill ends on its right edge.
-At ≤640px they join the page flow above the breadcrumb, so they no longer cover it, Sign out on the right of that row (the bottom edge is the tab bar's), and 🌐 is hidden, since on a phone remote access is a given.
-That row keeps its height whether the uncommitted count shows or not: the count comes after the page is drawn, and a row that appeared (or a top padding that changed) with it moved the whole page under the reader's finger.
-Only a page with nothing that could show there (a visitor without Sign in) has no row.
+At ≤640px they are in the breadcrumb's row too, left of the menu's button, and 🌐 is hidden, since on a phone remote access is a given.
+The breadcrumb keeps the count's room free once it shows, and the row keeps its height, so nothing moves down or up when the count comes after the page is drawn.
+
+**A view without the top actions** (the editor, the pages before a login: Top actions are not there) has no menu, so there the badges hold what the menu would:
+**Sign in** for a public wiki's visitor, and in a wiki without users **Sign out** (`.signout-form`), fixed to the bottom-right corner on desktop.
+On a phone such a view keeps a row of its own for them above its content (the bottom edge is the keyboard's or the tab bar's), Sign out on its right, out of sight while typing; the row keeps its height whether the count shows or not.
+With users such a view has no Sign out: it is in the menu of the page one comes back to.
 
 ---
 

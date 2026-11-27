@@ -39,6 +39,9 @@ At the top right of each page, on a computer:
 | Your initial | With users: the user menu, with **Settings**, **Admin** (for admins), **Sharing mode**, **Help** and **Sign out** |
 | Three lines | Without users: the menu, with **Settings** (while the wiki has no login: **Connect an assistant** and **Set a login**), **Sharing mode**, **Help** and **Sign out** |
 
+On a phone only the last of these is at the top right, your initial or the three lines, on the same line as the breadcrumb: tap it for **Settings**, **Admin**, **Help** and **Sign out**.
+Search is in the tab bar there.
+
 There are no "new" buttons here: a new note is `c n` and a new task `c t`.
 A new page comes from a link to it (see [Pages](pages.md)); the home page of a group and your private home also have a **New page** button.
 

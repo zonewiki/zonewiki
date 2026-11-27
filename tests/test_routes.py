@@ -1780,7 +1780,10 @@ class TestAuth:
     def test_sign_out_only_when_signed_in(self, auth_client):
         assert "signout-form" not in auth_client.get("/login", headers=HOST).data.decode()
         auth_client.post("/login", data={"password": "testpassword"}, headers=HOST)
-        assert "signout-form" in auth_client.get("/page/index", headers=HOST).data.decode()
+        body = auth_client.get("/page/index", headers=HOST).data.decode()
+        assert 'action="/logout" class="menu-signout"' in body and "signout-form" not in body   # in the menu
+        # A view without the menu (the editor) has the button itself.
+        assert '<form method="post" action="/logout" class="signout-form">' in auth_client.get("/edit/index", headers=HOST).data.decode()
 
     def test_login_page_shows_remote_badge_in_its_form(self, auth_client, monkeypatch):
         monkeypatch.setattr(settings, "ZONE_ALLOW_REMOTE", True)

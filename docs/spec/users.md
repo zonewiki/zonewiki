@@ -729,7 +729,7 @@ A step that is made but for its commit counts as made (`writtenAnyway`): the rem
 ## Managing users
 
 **The admin page** (`/admin`, `go/admin.go`) is the admins' way to manage the wiki in the browser, as `zonewiki user` is on the host.
-"Admin" in the user menu opens it (phones: beside Sign out at the top), shown to admins only; for anyone else, and in a wiki without users, `/admin` and everything under it is a 404, as for a page that isn't there.
+"Admin" in the user menu opens it (on a phone too), shown to admins only; for anyone else, and in a wiki without users, `/admin` and everything under it is a 404, as for a page that isn't there.
 It has section tabs (`adminTabs`), of which **Users** (`/admin/users`, `users.html`) is the one so far: `/admin` opens the first tab.
 
 ### The Users tab
@@ -927,8 +927,8 @@ Wrong tries are throttled per client and the user name it tries, with a total fo
 
 ### Who is signed in
 
-The user's name is shown beside Sign out (`.signout-user`, "Signed in as alice") on phones, in the page's top row, and opens the account menu there (Groups, Connect an assistant, Change password, Help: what the row itself doesn't have; so a group is made, a token made and a password changed from a phone too).
-On desktop both are in the user menu (Private pages, below): the form is hidden there (`.signout-in-menu`).
+The user's name is the first line of the user menu ("Signed in as alice", `.menu-who`), and its initial is the menu's button (`.top-user`, the name as its tooltip and in its accessible name), on a phone as on desktop (The Private module and the user menu, below).
+From a phone too, then, a group is made, a token made and a password changed: Settings is in the menu.
 Without users there is no name: three lines open the menu instead (The user menu in `docs/spec/navigation.md`).
 
 ### Sessions and passwords
@@ -1057,8 +1057,8 @@ Signed out it goes to the login; a viewer has no private home (404); without use
 **Private** is a module (Modules in `docs/spec/navigation.md`): in the switcher's first pill, Wiki · Private (the pages; Tasks · Notes, the tools, are the second), with a small lock as Notes has (`.module-lock`, tooltip "Private: only you see it"), and a tab on phones; **g p** goes to Private home.
 Private views (a page in your folder, the home included) make it current, notes make Notes current.
 
-**The user menu** holds who is signed in and **Sign out** (desktop; phones have them in the page's top row, where the name opens the menu's other entries).
-It opens from the **user button** (`.top-user`, a round initial with the name as its tooltip) at the top right, after Search.
+**The user menu** holds who is signed in and **Sign out**, on every screen.
+It opens from the **user button** (`.top-user`, a round initial with the name as its tooltip) at the top right, after Search; on a phone alone at the right end of the breadcrumb's row.
 A wiki without users has the same menu without the name, behind three lines (The user menu in `docs/spec/navigation.md`).
 
 ### The lock

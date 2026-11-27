@@ -1255,7 +1255,7 @@ main > .sheet > h2 { font-family: var(--serif); font-size: 1.45rem; font-weight:
 .module-menu-backdrop[hidden], .module-menu[hidden] { display: none !important; }
 .module-menu .menu-icon { margin-right: .5rem; }
 .groups-menu .groups-menu-all { margin-top: .2rem; padding-top: .5rem; border-top: 1px solid var(--border); border-radius: 0 0 4px 4px; color: var(--muted); }
-/* Who is signed in and Sign out: desktop only (a phone has them in the page's top row). */
+/* Who is signed in, and Sign out last, under a rule. */
 .module-menu .menu-who { padding: .35rem .8rem .45rem; font-size: .8rem; color: var(--muted); border-bottom: 1px solid var(--border); margin-bottom: .2rem; }
 .module-menu .menu-who strong { color: var(--fg); }
 .module-menu .menu-signout { margin: .2rem 0 0; padding-top: .2rem; border-top: 1px solid var(--border); }
@@ -1647,17 +1647,6 @@ kbd {
   gap: .5rem;
 }
 
-/* Who is signed in (with users), beside Sign out. */
-/* On a phone the name (without users: three lines) opens the menu (Settings,
-   Help): the desktop's is behind the
-   button at the top right. */
-.signout-user { color: var(--muted); font-size: .85rem; background: none; border: 0; padding: .35rem .25rem; font-family: inherit; cursor: pointer; }
-.signout-user:focus-visible { outline: 2px solid var(--btn-primary); outline-offset: 1px; border-radius: 4px; }
-/* Desktop has the name and Sign out in the menu at the top right instead. */
-@media (min-width: 641px) { .signout-form.signout-in-menu { display: none; } }
-/* Without users the opener is three lines, not a name. */
-.signout-menu { display: flex; align-items: center; }
-.signout-admin { text-decoration: none; }
 
 /* ── The admin page (admins; users.html, its Users tab) ──────────────────────── */
 
@@ -2551,8 +2540,8 @@ body.editor-page main {
   .breadcrumb .module-link:not([data-module="wiki"]), .breadcrumb .module-label,
   .breadcrumb .module-group + .module-group,
   .breadcrumb .module-menu-btn { display: none; }
-  /* The account menu, opened by the name beside Sign out: what that row doesn't have. */
-  .module-menu :is(.menu-who, .menu-signout, .menu-admin, .menu-sharing) { display: none; }
+  /* The menu is the desktop's, without sharing mode (a desktop's). */
+  .module-menu .menu-sharing { display: none; }
   .module-menu-backdrop { background: rgba(0, 0, 0, .35); }
   /* Keep the end of the page and the toasts clear of the bar. */
   body:has(.action-buttons) main { padding-bottom: calc(5.5rem + env(safe-area-inset-bottom)); }
@@ -2578,12 +2567,33 @@ body.editor-page main {
   .top-badges:has(> *) { min-height: 1.6rem; }
   .remote-badge { display: none; }
   .signout-form { position: static; margin-left: auto; }
-  .top-actions { display: none; }
-  main:has(> .top-actions) > .breadcrumb { min-height: 0; padding-right: 0; }
   /* The badges' row already spaces the page from the top edge, so main's
      own top padding shrinks: always, not when the badge shows (that moved
      the page up as it came). */
   body:has(.top-badges > *) main { padding-top: .5rem; }
+  /* That row is only for a view without the top actions (the editor, the
+     pages before a login). Every other view starts with the breadcrumb,
+     and has the menu's button at its right end, as on desktop: the round
+     initial with users, three lines without, Sign in for a visitor, and
+     nothing else of the top actions (Search is the bar's, sharing mode a
+     desktop's). The uncommitted count sits left of it on the same row, and
+     the breadcrumb keeps the room of both free, so nothing moves when the
+     count comes. */
+  main { --top-actions-w: var(--top-user-w, 0rem); }
+  main:has(> .top-actions .top-user) { --top-user-w: 2.25rem; }
+  main:has(> .top-actions .top-signin) { --top-actions-w: 5.25rem; }
+  body main:has(> .top-actions) { padding-top: .75rem; }
+  .top-actions { top: .75rem; right: 1rem; height: 2.25rem; }
+  .top-actions :is(.top-search, .top-sharing) { display: none; }
+  .top-actions .top-user { margin-left: 0; }
+  .top-actions .top-signin { padding-block: .3rem; }   /* inside the row's height */
+  main:has(> .top-actions) > .breadcrumb { min-height: 2.25rem; padding-right: calc(var(--top-actions-w) + .5rem); }
+  main:has(> .top-actions) > .top-badges {
+    position: absolute; top: .75rem; left: auto; right: calc(1rem + var(--top-actions-w) + .5rem);
+    height: 2.25rem; min-height: 0;
+  }
+  main:has(> .top-actions) > .top-badges > * { margin-top: 0; }
+  main:has(> .top-actions):has(> .top-badges > [style*="inline-flex"]) > .breadcrumb { padding-right: calc(var(--top-actions-w) + 4.5rem); }
 
   /* Bigger touch targets */
   .btn { padding: .45rem 1rem; }
@@ -2719,8 +2729,8 @@ mark.search-hl.current {
 .welcome-note { margin: 0; font-size: .9rem; color: var(--muted); }
 
 /* A public wiki's visitor (body[data-visitor], nobody signed in): Sign in
-   is in the top actions on a desktop and in the page's top row on a phone
-   and in the editor; the editor's bar has nothing of tasks or uploads. */
+   is in the top actions, on a phone too, and in the status badges
+   in the editor; the editor's bar has nothing of tasks or uploads. */
 .top-signin { flex: none; text-decoration: none; }
 .signin-link { text-decoration: none; }
 @media (min-width: 641px) { body:not(.editor-page) .signin-link { display: none; } }

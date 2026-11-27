@@ -309,7 +309,7 @@ class TestLinks:
         resp = post(client, link, password="dave-password", again="dave-password")
         assert resp.status_code == 303
         assert "role = viewer" in section(git_wiki_dir, "dave")
-        assert ">dave</span>" in client.get("/page/index", headers=HOST).data.decode()
+        assert "Signed in as <strong>dave</strong>" in client.get("/page/index", headers=HOST).data.decode()
         # Once only.
         client.post("/logout", headers=HOST)
         assert client.get(link, headers=HOST).status_code == 404
@@ -340,7 +340,7 @@ class TestLinks:
         client.post("/logout", headers=HOST)
         resp = post(client, link, password="new-password", again="new-password")
         assert resp.status_code == 303 and section(git_wiki_dir, "bob") != before
-        assert ">bob</span>" in client.get("/page/index", headers=HOST).data.decode()   # signed in by the link
+        assert "Signed in as <strong>bob</strong>" in client.get("/page/index", headers=HOST).data.decode()   # signed in by the link
         client.set_cookie("session", old_session)
         assert client.get("/page/index", headers=HOST).status_code == 302   # the old session ended
 
@@ -369,7 +369,7 @@ class TestLinks:
         link = make_link(admin, "/admin/users/bob/reset")
         client.post("/logout", headers=HOST)
         post(client, link, password="the admin's own", again="the admin's own")
-        assert ">bob</span>" in client.get("/page/index", headers=HOST).data.decode()
+        assert "Signed in as <strong>bob</strong>" in client.get("/page/index", headers=HOST).data.decode()
 
     def test_a_new_link_replaces_the_old(self, admin, client):
         old = make_link(admin, "/admin/users/bob/reset")

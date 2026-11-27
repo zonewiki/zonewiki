@@ -51,10 +51,11 @@ class TestLogin:
         resp = login(client, "Alice", "alice-pw")   # names are lowercase; case and spaces don't matter
         assert resp.status_code == 302
         body = client.get("/page/index", headers=HOST).data.decode()
-        assert 'class="signout-user module-menu-btn"' in body and 'title="Signed in as alice"><span>alice</span>' in body
+        assert 'class="top-user module-menu-btn"' in body and 'aria-label="alice: account menu" title="alice"' in body
+        assert "signout-form" not in body and body.count('action="/logout"') == 1   # Sign out: in the menu alone
         client.post("/logout", headers=HOST)
         assert login(client, "bob", "bob-pw").status_code == 302
-        assert ">bob</span>" in client.get("/page/index", headers=HOST).data.decode()
+        assert "Signed in as <strong>bob</strong>" in client.get("/page/index", headers=HOST).data.decode()
 
     def test_wrong_login_keeps_the_name_and_says_so(self, client, users):
         for name, password in [("alice", "nope"), ("carol", "alice-pw"), ("", "")]:
@@ -144,10 +145,11 @@ class TestLogin:
         monkeypatch.setattr(settings, "PASSWORD", "pw")
         client.post("/login", data={"password": "pw"}, headers=HOST)
         body = client.get("/page/index", headers=HOST).data.decode()
-        assert "signout-form" in body and "Signed in as" not in body and "account menu" not in body
+        assert "signout-form" not in body and "Signed in as" not in body and "account menu" not in body
         # The menu is there all the same: three lines open it, at the top
-        # right and, on a phone, beside Sign out.
-        assert 'class="top-user top-menu module-menu-btn"' in body and 'class="signout-user signout-menu module-menu-btn"' in body
+        # right on every screen, and Sign out is in it.
+        assert body.count('class="top-user top-menu module-menu-btn"') == 1 and "signout-user" not in body
+        assert body.count('action="/logout"') == 1 and 'action="/logout" class="menu-signout"' in body
         menu = body.split('class="module-menu page-menu"', 1)[1].split("</div>", 1)[0]
         assert re.findall(r'href="([^"]*)"', menu) == ["/assistant", "/help"] and ">Settings</a>" in menu   # Change password: a tab of Settings
         assert 'action="/logout"' in menu and ">Sign out</button>" in menu and "menu-sharing" in menu
@@ -511,8 +513,8 @@ class TestModuleMenu:
         assert 'aria-label="Menu"' in menu
         assert re.findall(r'href="([^"]*)"', menu) == ["/assistant", "/help/self-hosting#setting-a-login", "/help"]
         assert "menu-sharing" in menu and "Signed in as" not in menu and "/logout" not in body
-        # Phones: the same three lines in the page's top row.
-        assert '<div class="signout-form signout-in-menu"><button type="button" class="signout-user signout-menu module-menu-btn"' in body
+        # Phones: the same three lines, the same button.
+        assert "signout-" not in body and body.count("module-menu-btn") == 1
         # Where it leads is there.
         assert client.get("/assistant", headers=HOST).status_code == 200
         assert 'id="setting-a-login"' in client.get("/help/self-hosting", headers=HOST).data.decode()

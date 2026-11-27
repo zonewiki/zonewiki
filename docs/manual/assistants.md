@@ -7,7 +7,7 @@ This page gets you connected first, then explains what a connection may do and h
 ## Connect in five minutes
 
 Every way starts from the wiki's assistant address: your wiki's address followed by `/mcp`, for example `https://wiki.example.com/mcp`, or `http://localhost:5080/mcp` for a wiki on your own computer.
-You find it at the top of **Connect an assistant**, with a **Copy** button: **Settings** in the menu at the top right opens it (your initial; without users, the three lines), and on a phone behind your name or the three lines at the top of the page.
+You find it at the top of **Connect an assistant**, with a **Copy** button: **Settings** in the menu at the top right opens it (your initial; without users, the three lines), on a phone too.
 
 There are two ways in:
 

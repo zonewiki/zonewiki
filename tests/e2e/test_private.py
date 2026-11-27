@@ -208,7 +208,7 @@ def test_quicknote_pill_and_g_p_goes_home(alice):
 
 def test_sign_out_is_in_the_menu_on_desktop(alice):
     alice.goto("/page/index")
-    expect(alice.locator(".signout-form")).to_be_hidden()
+    expect(alice.locator(".signout-form")).to_have_count(0)
     alice.locator(".top-user").click()
     alice.get_by_role("menuitem", name="Sign out").click()
     alice.wait_for_url("**/login**")
@@ -221,7 +221,7 @@ def test_without_users_the_menu_is_at_the_top_right(page, wiki):
     expect(page.locator(".breadcrumb .module-link[data-module=notes]")).to_be_visible()
     btn = page.locator(".top-actions .top-menu")
     expect(btn).to_be_visible()
-    expect(page.locator(".signout-form")).to_be_hidden()   # the phone's opener
+    expect(page.locator(".signout-form")).to_have_count(0)   # no Sign out without a login
     search, b = box_of(page.locator(".top-search")), box_of(btn)
     assert b["x"] >= search["x"] + search["width"] and abs(b["width"] - b["height"]) < 1
     menu = page.locator(".module-menu")
@@ -265,9 +265,10 @@ def test_the_phone_has_private_and_quicknote_tabs(new_page, wiki, monkeypatch):
     expect(lock).to_be_visible()
     t, l, lab = box_of(tab), box_of(lock), box_of(tab.locator(".action-label"))
     assert t["x"] <= l["x"] and l["x"] + l["width"] <= t["x"] + t["width"] and l["y"] + l["height"] <= lab["y"]
-    # The user button is for desktops; the name and Sign out stay in the top row.
-    expect(phone.locator(".top-user")).to_be_hidden()
-    expect(phone.get_by_role("button", name="Sign out")).to_be_visible()
+    # The user button is the desktop's, alone at the top right; Sign out is in its menu.
+    expect(phone.locator(".top-user")).to_be_visible()
+    expect(phone.locator(".top-search")).to_be_hidden()
+    expect(phone.get_by_role("button", name="Sign out")).to_be_hidden()
     bar.get_by_role("link", name="Private").tap()
     phone.wait_for_url("**/page/private/alice/index")
     expect(bar.locator(".module-link[data-module=private]")).to_have_attribute("aria-current", "page")

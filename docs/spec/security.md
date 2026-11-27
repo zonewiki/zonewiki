@@ -144,8 +144,8 @@ It is valid only while they are a user and their password is the one it was sign
 A wrong name costs the same time as a wrong password.
 A wiki password or MCP token together with users refuses to start.
 
-**Sign out** is a button in the bottom-right corner while someone is signed in (not on the login page).
-On phones it sits in the status-badge row at the top, out of sight while typing.
+**Sign out** is the last entry of the menu at the top right while someone is signed in (The user menu in `docs/spec/navigation.md`), on a phone too.
+A view without that menu (the editor) has it as a button in a wiki without users: in the bottom-right corner, on phones in a row at the top, out of sight while typing (Status badges in `docs/spec/navigation.md`).
 It is hidden with `visibility`, keeping its place: taken out, the page would jump when a field loses the focus, and a tap on a form's button right after typing would miss.
 
 With `ZONE_ALLOW_REMOTE`, the login page shows the 🌐 remote-access badge in its form's heading row (it has no breadcrumb for the badge to sit beside).
@@ -414,7 +414,7 @@ The page itself they open and read.
 
 **The interface** (`pageShell.Visitor`, `body[data-visitor]`):
 
-- **Sign in** at the top right (on a phone in the page's top row), which comes back to the page.
+- **Sign in** at the top right (on a phone too, at the right end of the breadcrumb's row), which comes back to the page.
 - The module switcher shows the wiki alone; no New note or New task, no uncommitted badge, no Commit.
 - With `view` no Edit, as for a viewer.
 - With `edit`, Edit and the editor, without Rename, Delete, Attach, Task list, Make task and Link to a task.

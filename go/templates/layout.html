@@ -110,15 +110,16 @@
       <span id="uncommitted-count">0</span>
     </a>
     {{- end}}
-    {{- /* A public wiki's visitor: where to sign in (phones; the desktop's is in the top actions). */}}
+    {{- /* A view without the top actions (the editor, the pages before a
+        login): Sign in for a public wiki's visitor, and Sign out in a wiki
+        without users. Every other view has both at the top right, on every
+        screen: Sign in in the top actions, Sign out in the menu their last
+        button opens (top_actions, module_menu), with users too. */}}
+    {{- if not .Shell.ShowActions}}
     {{- with .Shell.SignIn}}<a class="btn signin-link" href="{{.}}">Sign in</a>{{end}}
-    {{- /* Phones: the menu's opener (the name with users, three lines
-        without) and Sign out; the desktop has both behind the button at the
-        top right (top_actions), where the view has it (.signout-in-menu). */}}
-    {{- if .Shell.SignOut}}
-    <form method="post" action="/logout" class="signout-form{{if or .Shell.User .Shell.ShowActions}} signout-in-menu{{end}}">{{if .Shell.User}}<button type="button" class="signout-user module-menu-btn" aria-haspopup="menu" aria-expanded="false" aria-label="{{.Shell.User}}: account menu" title="Signed in as {{.Shell.User}}"><span>{{.Shell.User}}</span> <span aria-hidden="true">▾</span></button>{{else if .Shell.ShowActions}}<button type="button" class="signout-user signout-menu module-menu-btn" aria-haspopup="menu" aria-expanded="false" aria-label="Menu" title="Menu">{{template "icon_menu"}}</button>{{end}}{{if .Shell.Admin}}<a class="btn signout-admin" href="/admin">Admin</a>{{end}}<button class="btn" type="submit">Sign out</button></form>
-    {{- else if and .Shell.ShowActions .Shell.SetLogin}}
-    <div class="signout-form signout-in-menu"><button type="button" class="signout-user signout-menu module-menu-btn" aria-haspopup="menu" aria-expanded="false" aria-label="Menu" title="Menu">{{template "icon_menu"}}</button></div>
+    {{- if and .Shell.SignOut (not .Shell.User)}}
+    <form method="post" action="/logout" class="signout-form"><button class="btn" type="submit">Sign out</button></form>
+    {{- end}}
     {{- end}}
   </div>
   {{- if .Shell.ShowActions}}{{template "top_actions" .Shell}}{{end}}

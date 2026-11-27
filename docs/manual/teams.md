@@ -25,7 +25,7 @@ A wrong name or password says "Incorrect user name or password.", without saying
 Once signed in, the round button with your initial at the top right opens your **user menu**:
 **Settings**, **Admin** (for admins only), **Sharing mode** (on a computer), **Help** and **Sign out**.
 **Settings** opens three pages that are tabs of each other: **Assistant** ([connect an assistant](assistants.md)), **Password** and **Groups**.
-On a phone, your name in the top row opens the same menu.
+On a phone the same round button is at the top right, beside the page's breadcrumb, and opens the same menu (without **Sharing mode**).
 
 ### Changing your password
 

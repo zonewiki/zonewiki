@@ -5,7 +5,7 @@ and what they answer are tests/test_public.py's."""
 import pytest
 from playwright.sync_api import expect
 
-from conftest import list_page
+from conftest import box_of, list_page
 from tests import settings
 
 
@@ -89,6 +89,14 @@ def test_a_visitor_on_a_phone_signs_in_from_the_top_row(visitor, wiki, monkeypat
     page.set_viewport_size({"width": 400, "height": 700})
     page.goto("/page/garden")
     expect(page.locator("a:visible", has_text="Sign in")).to_have_count(1)
+    # On the breadcrumb's row, at its right end, clear of the breadcrumb: no row of its own.
+    signin, row = box_of(page.locator(".top-signin")), box_of(page.locator(".breadcrumb"))
+    assert row["y"] <= signin["y"] and signin["y"] + signin["height"] <= row["y"] + row["height"] + 1, (signin, row)
+    assert abs(signin["x"] + signin["width"] - (400 - 16)) <= 1 and row["y"] <= 14, (signin, row)
+    for crumb in page.locator(".breadcrumb > *").all():
+        if crumb.is_visible():
+            c = box_of(crumb)
+            assert c["x"] + c["width"] <= signin["x"], (c, signin)
     expect(page.locator(".action-buttons .action-module")).to_have_count(1)        # the wiki alone
     expect(page.locator(".action-buttons .action-new-note")).to_be_hidden()
     expect(page.locator(".action-buttons .action-task")).to_be_hidden()

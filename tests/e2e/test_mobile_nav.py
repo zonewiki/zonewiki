@@ -8,7 +8,7 @@ from datetime import date
 import pytest
 from playwright.sync_api import expect
 
-from conftest import TABLET, TOUCH_PHONE, box_of, list_page, make_list, open_tab, still, wait_until
+from conftest import SCREENSHOT_DIR, TABLET, TOUCH_PHONE, box_of, list_page, make_list, open_tab, still, wait_until
 from test_touch import touch_drag
 from tests import settings
 
@@ -268,6 +268,12 @@ def test_tab_bar_takes_taps_below_its_box(new_page, wiki):
     phone.evaluate("document.querySelector('.action-buttons').style.bottom = '40px'")
     tab = phone.locator(".action-module[data-module=notes]")
     b = box_of(tab)
+    # The strip is over a card, not over the gap between two: the first card
+    # that ends below it is scrolled to have its middle there.
+    phone.evaluate("""y => {
+      const r = [...document.querySelectorAll('.task-item')].map(c => c.getBoundingClientRect()).find(r => r.bottom > y);
+      scrollBy(0, r.top + r.height / 2 - y);
+    }""", b["y"] + b["height"] + 20)
     under = phone.evaluate(f"document.elementFromPoint({b['x'] + b['width'] / 2}, {b['y'] + b['height'] + 20}).closest('.task-item') !== null")
     assert under   # a card is what the browser finds there
     with phone.expect_navigation():
@@ -322,10 +328,13 @@ def _clear_of_the_breadcrumb(page, box):
     assert b["x"] + b["width"] - pad <= box["x"]
 
 
-def test_top_actions_hidden_on_phones(new_page, wiki):
+def test_a_phone_has_the_menus_button_alone_of_the_top_actions(new_page, wiki):
+    # Search is in the bar.
     phone = new_page(**TOUCH_PHONE)
     phone.goto("/page/index")
-    expect(phone.locator(".top-actions")).to_be_hidden()
+    expect(phone.locator(".top-actions > :visible")).to_have_count(1)
+    expect(phone.locator(".top-actions .top-user")).to_be_visible()
+    expect(phone.locator(".top-search")).to_be_hidden()
     expect(phone.locator(".action-buttons")).to_be_visible()
 
 
@@ -692,8 +701,17 @@ def test_badges_do_not_cover_breadcrumb_on_phone(new_page, wiki):
     phone.goto("/page/draft")
     badge = phone.locator("#uncommitted-badge")
     expect(badge).to_be_visible()
-    assert not _overlap(box_of(badge), box_of(phone.locator(".breadcrumb")))
+    _clear_of_the_crumbs(phone, badge)
 
+
+def _clear_of_the_crumbs(phone, el):
+    """el is on the breadcrumb's row, right of everything the breadcrumb shows."""
+    b, row = box_of(el), box_of(phone.locator(".breadcrumb"))
+    assert row["y"] <= b["y"] and b["y"] + b["height"] <= row["y"] + row["height"] + 1, (b, row)
+    for crumb in phone.locator(".breadcrumb > *").all():
+        if crumb.is_visible():
+            c = box_of(crumb)
+            assert c["x"] + c["width"] <= b["x"], (c, b)
 
 
 @pytest.mark.parametrize("users", [False, True])
@@ -701,7 +719,8 @@ def test_the_badge_coming_moves_nothing_on_phone(new_page, wiki, monkeypatch, us
     # Regression: the uncommitted badge comes with /api/uncommitted's answer,
     # after the page is drawn. Without users its row appeared then and moved
     # the page down 9.6px; with users (Sign out already in that row) main's
-    # top padding shrank as it came and moved the page up a whole rem.
+    # top padding shrank as it came and moved the page up a whole rem. It is
+    # on the breadcrumb's row now, which keeps its room.
     if users:
         monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "token")})
     wiki.write("draft", "# Draft\n\nNot committed yet.\n")   # → uncommitted badge
@@ -721,7 +740,10 @@ def test_the_badge_coming_moves_nothing_on_phone(new_page, wiki, monkeypatch, us
     expect(badge).to_be_visible()
     still(phone)
     assert {sel: box_of(phone.locator(sel))["y"] for sel in (".breadcrumb", "h1")} == before
-    assert not _overlap(box_of(badge), box_of(phone.locator(".breadcrumb")))
+    _clear_of_the_crumbs(phone, badge)
+    # Left of the menu's button, on its row.
+    b, u = box_of(badge), box_of(phone.locator(".top-user"))
+    assert b["x"] + b["width"] <= u["x"] and abs((b["y"] + b["height"] / 2) - (u["y"] + u["height"] / 2)) <= 2, (b, u)
 
 
 # ── Compact Plan board ───────────────────────────────────────────────────────
@@ -772,22 +794,47 @@ def test_board_layout_does_not_change_when_a_drag_starts(new_page, wiki):
     send("touchEnd", [])
 
 
-# ── Sign out on phones ───────────────────────────────────────────────────────
+# ── The menu on phones ───────────────────────────────────────────────────────
 
-def test_sign_out_does_not_cover_the_phone_buttons(new_page, wiki, monkeypatch):
-    # Regression: Sign out sat in the bottom-right corner, under the New note
-    # and Search buttons. With the tab bar along the bottom edge it sits at
-    # the top, in the row of status badges.
+def test_sign_out_is_in_the_menu_on_a_phone(new_page, wiki, monkeypatch):
+    # Sign out sat in a row of its own above the breadcrumb (before that in
+    # the bottom-right corner, under the bar's buttons). It is in the menu,
+    # whose button is on the breadcrumb's row.
     monkeypatch.setattr(settings, "PASSWORD", "pw")
     phone = new_page(**TOUCH_PHONE)
     phone.request.post("/login", form={"password": "pw"})
     phone.goto("/page/index")
-    signout = phone.get_by_role("button", name="Sign out")
-    expect(signout).to_be_visible()
-    s, a = box_of(signout), box_of(phone.locator(".action-buttons"))
-    assert s["y"] + s["height"] <= a["y"], (s, a)
-    assert s["x"] + s["width"] <= 390 and s["y"] < 100
-    assert not _overlap(s, box_of(phone.locator(".breadcrumb")))
+    expect(phone.locator(".signout-form")).to_have_count(0)
+    expect(phone.get_by_role("button", name="Sign out")).to_be_hidden()
+    phone.locator(".top-user").tap()
+    menu = phone.locator(".module-menu")
+    expect(menu.locator('[role="menuitem"]:visible')).to_have_text(["Settings", "Help", "Sign out"])
+    menu.get_by_role("menuitem", name="Sign out").tap()
+    phone.wait_for_url("**/login**")
+
+
+def test_the_menus_button_is_on_the_breadcrumbs_row_on_a_phone(new_page, wiki, monkeypatch):
+    """A phone's page starts with the breadcrumb: no row above it. The round
+    user button is at the row's right end, the breadcrumb clear of it."""
+    monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "")})
+    wiki.write("garden/beds/a-page-with-a-rather-long-name", "# A page with a rather long name for a phone's row\n")
+    phone = new_page(**TOUCH_PHONE)
+    phone.request.post("/login", form={"username": "alice", "password": "pw"})
+    for url in ("/page/index", "/page/garden/beds/a-page-with-a-rather-long-name", "/tasks?mine=1", "/notes"):
+        phone.goto(url)
+        btn = phone.locator(".top-user")
+        expect(btn).to_be_visible()
+        expect(btn).to_have_text("A")
+        b, row = box_of(btn), box_of(phone.locator(".breadcrumb"))
+        assert abs(b["width"] - b["height"]) < 1 and b["width"] >= 36, (url, b)           # round, a finger's size
+        assert btn.evaluate("el => getComputedStyle(el).borderRadius") == "50%"
+        assert abs(b["x"] + b["width"] - (390 - 16)) <= 1, (url, b)                       # on the content's right edge
+        assert abs((b["y"] + b["height"] / 2) - (row["y"] + row["height"] / 2)) <= 1, (url, b, row)
+        _clear_of_the_crumbs(phone, btn)
+        # Nothing above the row but the page's edge; nothing else of the top actions.
+        assert row["y"] <= 14 and phone.locator(".top-badges").evaluate("el => getComputedStyle(el).position") == "absolute", (url, row)
+        expect(phone.locator(".top-search")).to_be_hidden()
+    phone.screenshot(path=str(SCREENSHOT_DIR / "phone-user-button.png"))
 
 
 def test_breadcrumb_crumbs_wait_for_the_trail_so_they_dont_jump(page, wiki):
@@ -811,14 +858,15 @@ def test_breadcrumb_crumbs_wait_for_the_trail_so_they_dont_jump(page, wiki):
 
 
 def test_three_lines_open_the_menu_on_a_phone_without_users(new_page, wiki):
-    """Without users a phone has the menu too: three lines at the right of
-    the page's top row open Connect an assistant, Set a login and Help."""
+    """Without users a phone has the menu too: three lines at the right end
+    of the breadcrumb's row open Connect an assistant, Set a login and Help."""
     phone = new_page(**TOUCH_PHONE)
     phone.goto("/page/index")
-    opener = phone.locator(".signout-menu")
+    opener = phone.locator(".top-user.top-menu")
     expect(opener).to_be_visible()
     box = box_of(opener)
     assert box["x"] + box["width"] > phone.viewport_size["width"] - 40   # at the right edge
+    _clear_of_the_crumbs(phone, opener)
     opener.tap()
     menu = phone.locator(".module-menu")
     expect(menu).to_be_visible()
@@ -829,23 +877,38 @@ def test_three_lines_open_the_menu_on_a_phone_without_users(new_page, wiki):
     phone.wait_for_url("**/assistant")
 
 
-def test_the_name_opens_the_account_menu_on_a_phone(new_page, wiki, monkeypatch):
-    """On a phone the account menu is behind the name beside Sign out:
-    Settings (its Groups tab also for who is in none: that is where one is
-    made) and Help. Admin and Sign out are in the row itself."""
-    monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "")})
+def test_the_user_button_opens_the_account_menu_on_a_phone(new_page, wiki, monkeypatch):
+    """On a phone the account menu is behind the round user button, as on
+    desktop: who is signed in, Settings (its Groups tab also for who is in
+    none: that is where one is made), Admin for an admin, Help and Sign
+    out; not Sharing mode, a desktop's."""
+    monkeypatch.setattr(settings, "USERS", {"alice": ("pw", ""), "bob": ("bob-pw", "")})
+    monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"role": "admin"}})
     phone = new_page(**TOUCH_PHONE)
-    phone.request.post("/login", form={"username": "alice", "password": "pw"})
+    phone.request.post("/login", form={"username": "bob", "password": "bob-pw"})
+    phone.goto("/page/index")
+    phone.locator(".top-user").tap()
+    expect(phone.locator('.module-menu:not(.groups-menu) [role="menuitem"]:visible')).to_have_text(["Settings", "Help", "Sign out"])   # no admin: no Admin
+    phone.request.post("/logout")
+    phone.request.post("/login", form={"username": "alice", "password": "pw"})   # an admin
     phone.goto("/page/index")
     expect(phone.locator('.action-buttons [data-module="groups"]')).to_have_count(0)   # in no group: no tab
-    name = phone.locator(".signout-user")
-    expect(name).to_be_visible()
-    name.tap()
+    expect(phone.get_by_role("link", name="Admin")).to_be_hidden()                    # nothing of it in the page's top
+    btn = phone.locator(".top-user")
+    btn.tap()
+    expect(btn).to_have_attribute("aria-expanded", "true")
     menu = phone.locator(".module-menu:not(.groups-menu)")
     expect(menu).to_be_visible()
-    expect(menu.locator('[role="menuitem"]:visible')).to_have_text(["Settings", "Help"])
-    box = box_of(menu)
+    expect(menu.locator(".menu-who")).to_have_text("Signed in as alice")
+    expect(menu.locator('[role="menuitem"]:visible')).to_have_text(["Settings", "Admin", "Help", "Sign out"])
+    box = box_of(menu)   # a sheet at the bottom, as a phone's menus are
     assert box["x"] >= 0 and box["x"] + box["width"] <= phone.viewport_size["width"]
+    assert box["y"] + box["height"] <= phone.viewport_size["height"] + 1
+    assert all(box_of(i)["height"] >= 32 for i in menu.locator('[role="menuitem"]:visible').all())
+    phone.screenshot(path=str(SCREENSHOT_DIR / "phone-user-menu.png"))
+    menu.get_by_role("menuitem", name="Admin").tap()
+    phone.wait_for_url("**/admin/users")
+    phone.locator(".top-user").tap()
     menu.get_by_role("menuitem", name="Settings").tap()
     phone.wait_for_url("**/assistant")
     tabs = phone.get_by_role("navigation", name="Settings").get_by_role("link")
