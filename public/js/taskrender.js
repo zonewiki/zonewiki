@@ -543,12 +543,13 @@ function render() {
 }
 
 // Updates' Mark all read, beside the page's heading (templates/updates.html):
-// there while a task has news, for who may write tasks, or a mention on a
-// page is unread (js/updates.js reads those, and says when it did).
+// there while a task has news, for who may write tasks, or a row of the
+// page's own is unread (a mention, a watched page: js/updates.js reads
+// those, and says when it did).
 const readAllBtn = app.initUpdates && app.appEl.dataset.writes === '1' ? document.getElementById('updates-read-btn') : null;
 readAllBtn?.addEventListener('click', () => app.markAllSeen());
 function syncReadAll() {
-  if (readAllBtn) readAllBtn.hidden = !app.updatesNow().length && !document.querySelector('.updates-mention:not(.updates-read)');
+  if (readAllBtn) readAllBtn.hidden = !app.updatesNow().length && !document.querySelector('.updates-row:not(.updates-read)');
 }
 if (readAllBtn) document.addEventListener('zone:updates-read', syncReadAll);
 

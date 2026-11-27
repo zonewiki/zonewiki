@@ -41,8 +41,8 @@
 {{- /* The menu at the top right, in every wiki. In groups, as a task's ⋯
     menu is, a line between them:
     - what changed: Changes (with git) and Watched pages, the changes to
-      what the user watches, with how many pages have news (js/chrome.js
-      keeps it current);
+      what the user watches (which of them are news is Updates', counted on
+      the top bar's bell);
     - the settings: Settings (the settings pages, which are tabs of each
       other: Connect an assistant, Change password, Groups, Usage;
       settingsTabs in views.go), in a wiki without a login Connect an
@@ -61,7 +61,7 @@
 {{- with .user}}<div class="menu-who">Signed in as <strong>{{.}}</strong></div>{{end -}}
 {{- if or .changes .watches}}
 {{- if .changes}}<a href="/changes" role="menuitem" class="menu-changes" data-key="g c">Changes</a>{{end -}}
-{{- if .watches}}<a href="/changes?watched=1" role="menuitem" class="menu-watched">Watched pages<span class="menu-count"{{if not .watched}} hidden{{end}}>{{if .watched}}{{.watched}}{{end}}</span></a>{{end -}}
+{{- if .watches}}<a href="/changes?watched=1" role="menuitem" class="menu-watched">Watched pages</a>{{end -}}
 <hr class="task-menu-sep">
 {{- end -}}
 {{- with .settings}}<a href="{{(index . 0).Href}}" role="menuitem" class="menu-settings">Settings</a>
@@ -95,5 +95,5 @@
 <span class="action-sep" aria-hidden="true"></span>
 <button type="button" class="action-search" aria-label="Search" title="Search (Ctrl+P)">{{template "icon_search"}}<span class="action-label">Search</span></button>
 </nav>
-{{- range .ModuleLinks}}{{if .Menu}}{{template "module_menu" (dict "link" . "user" $.User "sign_out" $.SignOut "settings" $.Settings "set_login" $.SetLogin "admin" $.Admin "sharing" $.Sharing "watches" $.Watches "watched" $.Watched "changes" $.Changes)}}{{end}}{{end}}
+{{- range .ModuleLinks}}{{if .Menu}}{{template "module_menu" (dict "link" . "user" $.User "sign_out" $.SignOut "settings" $.Settings "set_login" $.SetLogin "admin" $.Admin "sharing" $.Sharing "watches" $.Watches "changes" $.Changes)}}{{end}}{{end}}
 {{- end}}

@@ -308,11 +308,6 @@ export async function refreshDueBadge(poll = false) {
     });
     // What is new for the user, of every kind: the top bar's bell (Updates).
     document.querySelectorAll('.top-updates-count').forEach(el => showCount(el, c.updates || 0));
-    // The watched pages with news: the menu's entry says how many, its
-    // button that there are some.
-    const watched = c.watched || 0;
-    document.querySelectorAll('.menu-watched .menu-count').forEach(el => showCount(el, watched));
-    document.querySelectorAll('.top-user-new').forEach(el => { el.hidden = !watched; });
     places.forEach(a => {
       const p = c.places?.[a.dataset.place];
       showCount(a.querySelector('.module-due'), p ? p.count : 0);

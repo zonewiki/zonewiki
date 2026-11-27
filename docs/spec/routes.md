@@ -231,8 +231,8 @@ A change users see updates its manual page in the same commit, as it updates the
 
 | Method | Path                  | Description                                     |
 |--------|-----------------------|-------------------------------------------------|
-| GET    | `/updates`            | Updates: what is new for you, a section a kind: the pages that mention you, and its Tasks section, which is the task app with the tasks that have news (Updates in `docs/spec/navigation.md`); without users, in sharing mode and for a visitor a redirect to `/` |
-| POST   | `/updates/read`       | Every mention of you on a page is read (Mark all read on Updates; Mentions on pages in `docs/spec/navigation.md`): your own, no commit; 204, or 404 for who has no Updates |
+| GET    | `/updates`            | Updates: what is new for you, a section a kind: the pages that mention you, the pages you watch that changed, and its Tasks section, which is the task app with the tasks that have news (Updates in `docs/spec/navigation.md`); without users, in sharing mode and for a visitor a redirect to `/` |
+| POST   | `/updates/read`       | Every mention of you on a page and every watched page's news is read (Mark all read on Updates; Mentions on pages in `docs/spec/navigation.md`): your own, no commit; 204, or 404 for who has no Updates |
 | GET    | `/tasks`              | The built-in tasks page (`tasksPage()`): every open task, or a list, the Inbox or My tasks; see The tasks page, below |
 | POST   | `/tasks/rename`       | Rename a task tag (fields `tag`, `new_name`, `merge`; the Rename tag… dialog of `/tasks?tag=<tag>`, Renaming a tag in `docs/spec/tasks.md`); see below |
 | POST   | `/tasks/new-list`     | Make a task list, pinned for who makes it (fields `name`, `for`: empty for everyone, `group:<g>` for a group of theirs, `private`; `pin`: `0` leaves it unpinned); see below |

@@ -314,20 +314,7 @@ func digestFor(name string, since, t time.Time) digest {
 			d.OlderPages++
 			continue
 		}
-		by := commitAuthor(c.author)
-		if m := (commitMark{Assistant: c.assistant}); m.ByAssistant() {
-			if by == "" {
-				by = "an assistant"
-			} else if by == name {
-				by = "your assistant"
-			} else {
-				by += "'s assistant"
-			}
-			if m.Via() != "" {
-				by += " (" + m.Via() + ")"
-			}
-		}
-		d.Pages = append(d.Pages, digestPage{slug, by})
+		d.Pages = append(d.Pages, digestPage{slug, c.changedBy(name)})
 	}
 	sort.Slice(d.Pages, func(i, j int) bool { return d.Pages[i].Slug < d.Pages[j].Slug })
 	// What is due, of My tasks: the earliest first.

@@ -198,14 +198,7 @@ main:has(> .top-actions .top-user) { --top-user-w: 2.6rem; }
   background: var(--surface); font: inherit; font-size: .85rem; font-weight: 600; color: var(--fg);
 }
 .top-actions .top-menu { color: var(--muted); }
-/* A watched page changed: a dot on the user button, the count in its menu (Watched pages). */
-.top-user { position: relative; }
-.top-user-new {
-  position: absolute; top: -1px; right: -1px; width: .55rem; height: .55rem; border-radius: 50%;
-  background: var(--link); border: 2px solid var(--bg); box-sizing: content-box;
-}
-.top-user-new[hidden] { display: none; }
-.module-menu .menu-watched { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+/* A count on a corner or at a line's end: the bell's (Updates). */
 .menu-count {
   min-width: 1.15rem; padding: 0 .3rem; border-radius: 99px; text-align: center;
   font-size: .7rem; font-weight: 600; line-height: 1.15rem; background: var(--link); color: var(--bg);
@@ -2985,15 +2978,17 @@ a.external-image::before { content: "🖼 "; }
 .updates-section > h2 { margin: 0 0 .15rem; font-size: 1.1rem; }
 .updates-section-line { margin: 0 0 .6rem; font-size: .85rem; color: var(--muted); }
 .updates-page ul.updates-list { list-style: none; margin: .4rem 0 0; padding: 0; display: flex; flex-direction: column; gap: .35rem; }
-.updates-page li.updates-mention {
+.updates-page li.updates-row {
   margin: 0;
   display: flex; flex-wrap: wrap; align-items: baseline; gap: .15rem .6rem;
   padding: .5rem .75rem; border: 1px solid var(--border); border-radius: 6px; background: var(--bg);
 }
-.updates-page a.updates-mention-page { font-weight: 600; color: var(--fg); text-decoration: none; }
-.updates-page a.updates-mention-page:hover { text-decoration: underline; }
-.updates-mention-what { font-size: .85rem; color: var(--link); }
-.updates-mention-what strong { font-weight: 600; }
-.updates-mention-when { font-size: .85rem; color: var(--muted); }
-.updates-mention.updates-read { opacity: .55; }
-.updates-mention.updates-read .updates-mention-what { color: var(--muted); }
+.updates-page a.updates-row-page { font-weight: 600; color: var(--fg); text-decoration: none; }
+.updates-page a.updates-row-page:hover { text-decoration: underline; }
+.updates-row-what { font-size: .85rem; color: var(--link); }
+.updates-row-what strong { font-weight: 600; }
+.updates-row-when { font-size: .85rem; color: var(--muted); }
+.updates-page a.updates-row-diff { margin-left: auto; font-size: .85rem; }
+.updates-row.updates-read { opacity: .55; }
+.updates-row.updates-read .updates-row-what { color: var(--muted); }
+.updates-page .updates-more { margin-top: .5rem; }

@@ -29,6 +29,19 @@ def count(client):
     return client.get("/api/tasks/due-count", headers=HOST).get_json().get("watched", 0)
 
 
+def bell(client):
+    """The number on the top bar's bell: what is new for who is signed in."""
+    return client.get("/api/tasks/due-count", headers=HOST).get_json().get("updates", 0)
+
+
+def updates_rows(client):
+    """Updates' Pages you watch: (the page's title, who changed it, where it leads)."""
+    html = client.get("/updates", headers=HOST).get_data(as_text=True)
+    return [(title, by, href) for href, title, by in re.findall(
+        r'<li class="updates-row updates-watch"><a class="updates-row-page" href="([^"]*)">([^<]*)</a> '
+        r'<span class="updates-row-what"><strong>([^<]*)</strong> changed it</span>', html)]
+
+
 def watched_rows(client, **query):
     """The rows of the watched changes: (what, new, [page])."""
     resp = client.get("/changes", query_string={"watched": "1", **query}, headers=HOST)
@@ -102,9 +115,12 @@ def test_someone_elses_change_is_news_until_you_look(alice, wiki_dir):
     assert rows[0] == ("Update roadmap", True, ["roadmap"])      # bob's, marked new
     assert all(pages == ["roadmap"] for _, _, pages in rows)     # only the page she watches
     assert [new for _, new, _ in rows[1:]] == [False] * (len(rows) - 1)
-    # The menu's button and its entry say so on every page.
+    # The top bar's bell says so on every page, and Updates lists it: who, and what the change did.
     home = alice.get("/page/index", headers=HOST).get_data(as_text=True)
-    assert '<span class="menu-count">1</span>' in home and 'class="top-user-new" title="Watched pages changed"></span>' in home
+    assert '<span class="top-updates-count menu-count">1</span>' in home
+    assert 'class="menu-watched">Watched pages</a>' in home and "top-user-new" not in home     # no count of its own
+    assert updates_rows(alice) == [("Roadmap", "bob", "/page/roadmap")]
+    assert bell(alice) == 1
     # bob has no news of his own change, and watches nothing.
     login(alice, "bob")
     assert count(alice) == 0 and watched_rows(alice) == []
@@ -114,7 +130,9 @@ def test_someone_elses_change_is_news_until_you_look(alice, wiki_dir):
     assert count(alice) == 0
     assert watched_rows(alice)[0] == ("Update roadmap", False, ["roadmap"])
     home = alice.get("/page/index", headers=HOST).get_data(as_text=True)
-    assert '<span class="menu-count" hidden></span>' in home
+    assert '<span class="top-updates-count menu-count" hidden></span>' in home
+    assert updates_rows(alice) == [] and bell(alice) == 0
+    assert "Nothing you watch changed since you last looked." in alice.get("/updates", headers=HOST).get_data(as_text=True)
     # Changed again, twice: one page with news; her own change after it takes the news away.
     as_user(alice, "bob", "roadmap", "# Roadmap\n\nQ1 to Q4.\n")
     as_user(alice, "bob", "roadmap", "# Roadmap\n\nQ1 to Q5.\n")
@@ -285,4 +303,34 @@ def test_sharing_mode_shows_no_count(alice, wiki_dir):
     assert count(alice) == 1
     alice.set_cookie("zone-sharing", "1")
     assert count(alice) == 0
-    assert '<span class="menu-count" hidden></span>' in alice.get("/page/index", headers=HOST).get_data(as_text=True)
+    assert "top-updates" not in alice.get("/page/index", headers=HOST).get_data(as_text=True)   # no bell in sharing mode
+
+
+def test_updates_lists_the_watched_pages_and_mark_all_read_reads_them(alice, wiki_dir):
+    """Updates has the watched pages someone else changed, the latest first,
+    each with what the change did; Mark all read reads them, and who watches
+    nothing is told how to."""
+    page = lambda: alice.get("/updates", headers=HOST).get_data(as_text=True)
+    assert '<h2 id="updates-watched-h">Pages you watch</h2>' in page() and "You watch no page." in page()
+    save(alice, "roadmap", "# Roadmap\n")
+    save(alice, "projects/plan", "# Plan\n")
+    watch(alice, page="roadmap")
+    watch(alice, folder="projects")
+    assert "Nothing you watch changed since you last looked." in page()
+    as_user(alice, "bob", "roadmap", "# Roadmap\n\nQ1.\n")
+    as_user(alice, "bob", "projects/plan", "# Plan\n\nStep 1.\n")
+    assert sorted(updates_rows(alice)) == [("Plan", "bob", "/page/projects/plan"), ("Roadmap", "bob", "/page/roadmap")]
+    assert bell(alice) == 2 and count(alice) == 2
+    html = page()
+    assert re.search(r'<a class="updates-row-diff" href="/diff/roadmap/[0-9a-f]{7}">What changed</a>', html)
+    assert '<a href="/changes?watched=1">Every change to what you watch</a>' in html
+    assert 'id="updates-read-btn" title="Mark every update as read">' in html          # shown from the first paint
+    # bob, who watches nothing and made the changes, has none of it.
+    login(alice, "bob")
+    assert updates_rows(alice) == [] and bell(alice) == 0
+    login(alice, "alice")
+    before = commit_messages(wiki_dir)
+    assert alice.post("/updates/read", headers=HOST).status_code == 204
+    assert updates_rows(alice) == [] and bell(alice) == 0 and count(alice) == 0
+    assert commit_messages(wiki_dir) == before
+    assert list(kept(wiki_dir, "alice")["seen"]) == ["projects/plan", "roadmap"]

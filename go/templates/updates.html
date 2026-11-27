@@ -1,16 +1,18 @@
 {{- /* /updates: Updates (updates.go; Updates in docs/spec/navigation.md):
     what is new for whoever is signed in, a section a kind. Mentions on
     pages: a row a page that names the user since they last opened it
-    (mentions.go), which leads to the place. Tasks: the task app in its
-    Updates mode, as a page embeds it (the cards, what happened on each,
-    Mark read). Mark all read is the page's, beside its heading, for both:
-    js/updates.js reads the mentions, js/taskrender.js the tasks' news, and
-    it shows while either has some. */ -}}
+    (mentions.go), which leads to the place. Pages you watch: a row a
+    watched page someone else changed since they last looked (watch.go),
+    which leads to the page, and to what the change did. Tasks: the task app
+    in its Updates mode, as a page embeds it (the cards, what happened on
+    each, Mark read). Mark all read is the page's, beside its heading, for
+    all three: js/updates.js reads the rows, js/taskrender.js the tasks'
+    news, and it shows while any has some. */ -}}
 {{define "body"}}
 {{.BreadcrumbHTML}}
 <div class="sheet updates-page">
 <header class="page-header"><h1>Updates</h1>
-<div class="page-header-actions"><button type="button" class="btn" id="updates-read-btn" title="Mark every update as read"{{if not .Mentions}} hidden{{end}}>Mark all read</button></div>
+<div class="page-header-actions"><button type="button" class="btn" id="updates-read-btn" title="Mark every update as read"{{if not .Unread}} hidden{{end}}>Mark all read</button></div>
 </header>
 <article class="page-content">
 <p class="tasks-list-home tasks-updates-line">What is new for you. Opening something marks it read.</p>
@@ -19,13 +21,30 @@
 {{- if .Mentions}}
 <ul class="updates-list">
 {{- range .Mentions}}
-<li class="updates-mention"><a class="updates-mention-page" href="{{.Href}}">{{.Title}}</a> <span class="updates-mention-what"><strong>{{.By}}</strong> mentioned you</span> <time class="updates-mention-when" datetime="{{.At.Format "2006-01-02T15:04:05Z07:00"}}">{{.At.Format "Jan 2 15:04"}}</time></li>
+<li class="updates-row updates-mention"><a class="updates-row-page" href="{{.Href}}">{{.Title}}</a> <span class="updates-row-what"><strong>{{.By}}</strong> mentioned you</span> <time class="updates-row-when" datetime="{{.At.Format "2006-01-02T15:04:05Z07:00"}}">{{.At.Format "Jan 2 15:04"}}</time></li>
 {{- end}}
 </ul>
 {{- else}}
 <p class="updates-section-line updates-none">Nobody mentioned you on a page since you last looked. Write @name on a page to tell someone.</p>
 {{- end}}
 </section>
+{{- if .Watches}}
+<section class="updates-section updates-watched" aria-labelledby="updates-watched-h">
+<h2 id="updates-watched-h">Pages you watch</h2>
+{{- if .Watched}}
+<ul class="updates-list">
+{{- range .Watched}}
+<li class="updates-row updates-watch"><a class="updates-row-page" href="{{.Href}}">{{.Title}}</a> <span class="updates-row-what">{{if .By}}<strong>{{.By}}</strong> changed it{{else}}changed{{end}}</span> <time class="updates-row-when" datetime="{{.At.Format "2006-01-02T15:04:05Z07:00"}}">{{.At.Format "Jan 2 15:04"}}</time> <a class="updates-row-diff" href="{{.DiffHref}}">What changed</a></li>
+{{- end}}
+</ul>
+<p class="updates-section-line updates-more"><a href="/changes?watched=1">Every change to what you watch</a></p>
+{{- else if .Watching}}
+<p class="updates-section-line updates-none">Nothing you watch changed since you last looked. <a href="/changes?watched=1">Every change to what you watch</a></p>
+{{- else}}
+<p class="updates-section-line updates-none">You watch no page. <strong>Watch</strong> in a page's menu tells you here when someone else changes it.</p>
+{{- end}}
+</section>
+{{- end}}
 <section class="updates-section updates-tasks" aria-labelledby="updates-tasks-h">
 <h2 id="updates-tasks-h">Tasks</h2>
 <p class="updates-section-line">What others did on your tasks: one given to you, a comment, a mention, one closed.</p>

@@ -179,7 +179,7 @@ Your other lists and all tasks are one click from there, in the task app's **lis
 
 The **user menu**, opened by the **user button** at the top right, a round initial, on every screen, has who is signed in, then its items in groups, a line between them (`.task-menu-sep`, as in a task's ⋯ menu):
 
-1. what changed: **Changes** (`/changes`, **g c**; with git: Version history in `docs/spec/routes.md`) and **Watched pages** (with users: the changes to what you watch, with how many pages have news; Watching pages, below);
+1. what changed: **Changes** (`/changes`, **g c**; with git: Version history in `docs/spec/routes.md`) and **Watched pages** (with users: every change to what you watch; which of them are news is on Updates; Watching pages, below);
 2. the settings: **Settings** (the settings pages, below) and **Admin** (admins; Managing users in `docs/spec/users.md`);
 3. **Sharing mode** (`.menu-sharing`, **Turn sharing mode off** while it is on; desktop only, see Sharing mode) and **Help** (the manual, `/help`: Help in `docs/spec/routes.md`);
 4. **Sign out**.
@@ -360,14 +360,15 @@ With users such a view has no Sign out: it is in the menu of the page one comes 
 | Its number | how many things are new for you (`updatesCount`), on the bell's corner (`.top-updates-count`); no number when there is nothing, and the bell stays |
 | The page | a section a kind of news, each with a line that says what it holds |
 | **Mentions on pages** | the pages that name you since you last opened them, the latest first: the page, who wrote it, when. A row leads to the page, at the name (Mentions on pages, below) |
+| **Pages you watch** | the watched pages someone else changed since you last looked, the latest change first: the page, who changed it (an assistant's change says so), when, and **What changed**, the change's diff. Under them **Every change to what you watch**, the watched changes in Changes. Who watches nothing is told how to (Watching pages, below); without git there is no such section |
 | **Tasks** | the tasks with news for you: the task app in its Updates mode, embedded as a page embeds a task list, so a card is opened, commented and ticked off as anywhere (Updates in `docs/spec/tasks.md`: what a card says, reading one, a task read) |
-| **Mark all read** | beside the heading, while there is news: everything read at once, the mentions and the tasks' news. What was read stays where it was, dimmed, until you leave the page |
+| **Mark all read** | beside the heading, while there is news: everything read at once, the mentions, the watched pages and the tasks' news. What was read stays where it was, dimmed, until you leave the page |
 | Who has it | with users, whoever is signed in, a viewer too; not in sharing mode (what others wrote to you isn't shown), not a visitor. Without it `/updates` goes to the home page and there is no bell |
 
 It is grouped by kind, not one list by time: a kind is read as a whole, as in the morning's mail.
 The list switcher of Tasks keeps its **Updates** entry, which leads here, and `/tasks?updates=1` redirects here.
 
-How: `go/updates.go` (`updatesPage`, `updatesCount`: the tasks with news and the mentions together; `POST /updates/read` reads the mentions, `js/updates.js`), `templates/updates.html`; the bell is the page shell's (`pageShell.Updates`, `partials/top_actions.html`), and its number comes with the Tasks counts every minute and after a write (`updates` in `GET /api/tasks/due-count`, `refreshDueBadge` in `js/chrome.js`).
+How: `go/updates.go` (`updatesPage`, `updatesCount`: the tasks with news, the mentions and the watched pages with news together; `POST /updates/read` reads the mentions and the watched pages, `js/updates.js`), `templates/updates.html`; the bell is the page shell's (`pageShell.Updates`, `partials/top_actions.html`), and its number comes with the Tasks counts every minute and after a write (`updates` in `GET /api/tasks/due-count`, `refreshDueBadge` in `js/chrome.js`).
 Tests: `test_updates_is_a_page_with_the_tasks_that_have_news` in `tests/test_task_notify.py`, `tests/e2e/test_task_assignee.py`.
 
 ## Mentions on pages
@@ -431,10 +432,11 @@ What an assistant reads for you is no look of yours.
 
 ### Where the news shows
 
-- **The user button** at the top right has a dot (`.top-user-new`) while a watched page has news, on every page and on a phone, and **Watched pages** in its menu says how many pages (`.menu-count`).
+- **Updates** has them under **Pages you watch**, and the top bar's bell counts them with everything else that is new for you, on every page and on a phone (Updates, above).
+  The user menu's **Watched pages** has no count of its own, and its button no dot.
 - **Watched pages** opens Changes with **Only what I watch** ticked (`/changes?watched=1`): the changes to the pages you watch and nothing else, with the other filters as ever.
   A change that is news is marked **new** (`.changes-new`), in the unfiltered Changes too.
-- **Mark all read** beside the heading there, while there is news.
+- **Mark all read** beside the heading there, while there is news, and on Updates.
 - The morning's mail has them too, for who turned it on (The morning's mail in `docs/spec/tasks.md`).
 
 ### How watching works
@@ -454,7 +456,7 @@ Lost with Zonewiki's folder, nobody watches anything, and nothing else happens.
 **The rule** is asked of the pages' last commits, which Zonewiki keeps in memory for the search results (`lastCommits` in `go/lastchange.go`, by path: author, assistant, time, hash), so the count costs no walk of the history:
 `watched.news` for a page (`covers`: the page's own watch or a folder's around it; `newer`: after the watch began and after the commit seen, and not `ownChange`), `newsIn` for all of a user's.
 With a watched folder every page's last commit is asked, with none only the pages watched.
-`rq.watchCount()` counts once a request, for the page shell (`Watched`) and for `GET /api/tasks/due-count`, which answers `watched` beside the tasks' counts, so an open page asks once a minute, not twice (`refreshDueBadge` in `js/chrome.js`).
+`rq.watchCount()` counts once a request, for the bell's number (`updatesCount`) and for `GET /api/tasks/due-count`, which answers `watched` beside the tasks' counts and `updates`, the bell's, so an open page asks once a minute, not twice (`refreshDueBadge` in `js/chrome.js`).
 
 **The list** is Changes' own (`wikiChanges` with `changesOf.Watched`): git is asked for the watched pages and folders alone (`watched.pathspecs`), of a watched folder only its pages are listed (not its task files or uploads), and each file as its reader may see it, as ever.
 `freshFor` marks a row: it changed a page that has news, after the commit seen.

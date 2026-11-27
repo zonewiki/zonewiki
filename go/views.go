@@ -409,7 +409,6 @@ type pageShell struct {
 	SettingsTab string
 	User        string // who is signed in, with users
 	Watches     bool   // they can watch pages: the menu has Watched pages
-	Watched     int    // how many watched pages have news for them (watchCount)
 	Changes     bool   // git keeps the wiki's history: the menu has Changes
 	// Updates: they have Updates (hasUpdates): the top bar has its bell,
 	// with UpdatesNew, how many things are new for them (updatesCount);
@@ -478,9 +477,7 @@ func page(w http.ResponseWriter, rq *Req, status int, name, title string, o shel
 		if sh.Updates = rq.hasUpdates(); sh.Updates {
 			sh.UpdatesNew, sh.UpdatesOpen = rq.updatesCount(), rq.r != nil && rq.r.URL.Path == updatesHref
 		}
-		if sh.Watches = mayWatch(rq.user) && cfg.GitEnabled; sh.Watches {
-			sh.Watched = rq.watchCount()
-		}
+		sh.Watches = mayWatch(rq.user) && cfg.GitEnabled
 	}
 	// The build's commit, shown in the corner: "abc1234 2026-09-26 12:00 +dirty".
 	if fields := strings.Fields(cfg.Build); cfg.Build != "unknown" && len(fields) > 0 {

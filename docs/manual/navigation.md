@@ -78,6 +78,7 @@ In a wiki with users, the **bell** at the top right, beside the search, says how
 Click it to open **Updates**, the page that lists them:
 
 - **Mentions on pages**: the pages where someone wrote your name ([Mentioning someone](writing.md#mentioning-someone)). Click one to go to the place.
+- **Pages you watch**: the pages you watch that someone else changed ([Watching pages](history.md#watching-pages)), each with **What changed**.
 - **Tasks**: every task with news, such as one given to you, a comment or a mention ([News about your tasks](tasks.md#news-about-your-tasks)).
 
 Opening something marks it read, and **Mark all read** beside the heading clears everything.

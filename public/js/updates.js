@@ -1,11 +1,12 @@
 // Updates (templates/updates.html): Mark all read, beside the heading, reads
-// the mentions on pages too (the tasks' news the task app reads itself:
-// js/taskrender.js). A mention read stays where it was, dimmed, until the
-// page is left, as a task read does.
+// the page's own rows too, the mentions on pages and the watched pages that
+// changed (the tasks' news the task app reads itself: js/taskrender.js). A
+// row read stays where it was, dimmed, until the page is left, as a task
+// read does.
 import { refreshDueBadge } from './chrome.js';
 
 const button = document.getElementById('updates-read-btn');
-const unread = () => document.querySelectorAll('.updates-mention:not(.updates-read)');
+const unread = () => document.querySelectorAll('.updates-row:not(.updates-read)');
 
 if (button && document.querySelector('.updates-page')) {
   button.addEventListener('click', async () => {

@@ -18,7 +18,9 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 	"zonewiki/internal/atomicfile"
+	"zonewiki/internal/mdtext"
 )
 
 // watched: what a user watches and what they have seen of it, their file
@@ -282,6 +284,50 @@ func (w watched) news(user asker, slug string, c lastCommit) bool {
 func (w watched) newer(user asker, slug string, at int64, sha, author, assistant string) bool {
 	since, ok := w.covers(slug)
 	return ok && at >= since && w.Seen[slug].after(at, sha) && !ownChange(user, author, assistant)
+}
+
+// changedBy: who made the commit, as its reader name is told: the author,
+// "your assistant" or "bob's assistant" for what an assistant wrote, with
+// the connection it came through; "" where Zonewiki names no author.
+func (c lastCommit) changedBy(name string) string {
+	by := commitAuthor(c.author)
+	if m := (commitMark{Assistant: c.assistant}); m.ByAssistant() {
+		if by == "" {
+			by = "an assistant"
+		} else if by == name {
+			by = "your assistant"
+		} else {
+			by += "'s assistant"
+		}
+		if m.Via() != "" {
+			by += " (" + m.Via() + ")"
+		}
+	}
+	return by
+}
+
+// shownWatched: a watched page with news, as Updates shows it: the page,
+// who changed it last and when, and what that change did (its diff).
+type shownWatched struct {
+	Slug, Title, By, Href, DiffHref string
+	At                              time.Time
+}
+
+// watchedShown: the watched pages with news for the request's user, the
+// latest change first.
+func watchedShown(rq *Req) []shownWatched {
+	var out []shownWatched
+	for slug, c := range watchNews(rq) {
+		out = append(out, shownWatched{Slug: slug, Title: mdtext.SlugDisplayName(slug), By: c.changedBy(rq.who().Name),
+			Href: pathURL("page", slug), DiffHref: pathURL("diff", slug) + "/" + runePrefix(c.sha, 7), At: time.Unix(c.at, 0)})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if !out[i].At.Equal(out[j].At) {
+			return out[i].At.After(out[j].At)
+		}
+		return out[i].Slug < out[j].Slug
+	})
+	return out
 }
 
 // watchNews: the watched pages with news for the request's user, by slug,

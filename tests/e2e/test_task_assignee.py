@@ -1393,18 +1393,18 @@ def test_updates_has_the_pages_that_mention_you(alice, new_page):
     alice.goto("/")
     expect(alice.locator(".top-updates-count")).to_have_text("3")          # two pages and a task
     alice.locator(".top-updates").click()
-    expect(alice.locator(".updates-section h2")).to_have_text(["Mentions on pages", "Tasks"])
+    expect(alice.locator(".updates-section h2")).to_have_text(["Mentions on pages", "Pages you watch", "Tasks"])
     rows = alice.locator(".updates-mention")
-    expect(rows.locator(".updates-mention-page")).to_have_text(["Minutes", "Roadmap"], use_inner_text=True)   # the latest first
-    expect(rows.first.locator(".updates-mention-what")).to_have_text("bob mentioned you")
+    expect(rows.locator(".updates-row-page")).to_have_text(["Minutes", "Roadmap"], use_inner_text=True)   # the latest first
+    expect(rows.first.locator(".updates-row-what")).to_have_text("bob mentioned you")
     expect(alice.locator(".task-item.task-update .task-title")).to_have_text(["From bob"])
     # A row leads to the page, at the name: opened, it is read.
-    rows.locator(".updates-mention-page", has_text="Roadmap").click()
+    rows.locator(".updates-row-page", has_text="Roadmap").click()
     expect(alice).to_have_url(re.compile(r"/page/roadmap"))
     expect(alice.locator(".top-updates-count")).to_have_text("2")
     alice.go_back()
     alice.reload()
-    expect(rows.locator(".updates-mention-page")).to_have_text(["Minutes"])
+    expect(rows.locator(".updates-row-page")).to_have_text(["Minutes"])
     # Mark all read: the mention and the task, both dimmed and still there; the bell is quiet.
     button = alice.locator("#updates-read-btn")
     expect(button).to_be_visible()
@@ -1415,7 +1415,7 @@ def test_updates_has_the_pages_that_mention_you(alice, new_page):
     expect(alice.locator(".top-updates-count")).to_be_hidden()
     alice.reload()
     expect(alice.locator(".updates-mention")).to_have_count(0)
-    expect(alice.locator(".updates-none")).to_contain_text("Nobody mentioned you on a page since you last looked.")
+    expect(alice.locator(".updates-mentions .updates-none")).to_contain_text("Nobody mentioned you on a page since you last looked.")
 
 
 def test_a_viewer_reads_the_mentions_of_them(alice, new_page):
@@ -1425,7 +1425,7 @@ def test_a_viewer_reads_the_mentions_of_them(alice, new_page):
     carol = new_page()
     carol.request.post("/login", form={"username": "carol", "password": "pw"})
     carol.goto("/updates")
-    expect(carol.locator(".updates-mention-page")).to_have_text(["Handbook"])
+    expect(carol.locator(".updates-row-page")).to_have_text(["Handbook"])
     expect(carol.locator(".top-updates-count")).to_have_text("1")
     carol.locator("#updates-read-btn").click()
     expect(carol.locator(".updates-mention.updates-read")).to_have_count(1)

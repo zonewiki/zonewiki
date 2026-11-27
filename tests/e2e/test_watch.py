@@ -1,6 +1,8 @@
 """Watching a page in the browser (docs/spec/navigation.md, Watching pages):
-Watch in the page's menu, the dot on the user button and the count in its
-menu when someone else changed the page, the row marked new in Changes."""
+Watch in the page's menu, the number on the top bar's bell and the row on
+Updates when someone else changed the page, the row marked new in Changes."""
+
+import re
 
 import pytest
 from playwright.sync_api import expect
@@ -27,7 +29,7 @@ def test_watch_a_page_and_see_what_changed(alice, wiki):
     wiki.git("add", "-A")
     wiki.git("commit", "-qm", "seed")
     alice.goto("/page/roadmap")
-    dot = alice.locator(".top-user-new")
+    dot = alice.locator(".top-updates-count")
     expect(dot).to_be_hidden()
     alice.locator(".page-menu-btn").first.click()
     alice.get_by_role("menuitem", name="Watch", exact=True).click()
@@ -36,13 +38,19 @@ def test_watch_a_page_and_see_what_changed(alice, wiki):
     alice.locator(".page-menu-btn").first.click()
     expect(alice.get_by_role("menuitem", name="Unwatch")).to_be_visible()
     alice.keyboard.press("Escape")
-    # bob changes it: on another page the button has a dot, its menu the count.
+    # bob changes it: on another page the bell has the number, and Updates the page.
     bobs_change(wiki, "roadmap", "# Roadmap\n\nQ1 and Q2.\n")
     alice.goto("/page/index")
-    expect(dot).to_be_visible()
+    expect(dot).to_have_text("1")
+    alice.locator(".top-updates").click()
+    row = alice.locator(".updates-watch")
+    expect(row.locator(".updates-row-page")).to_have_text(["Roadmap"])
+    expect(row.locator(".updates-row-what")).to_have_text("bob changed it")
+    expect(row.get_by_role("link", name="What changed")).to_have_attribute("href", re.compile(r"^/diff/roadmap/[0-9a-f]{7}$"))
+    # The menu's Watched pages has every change to what she watches, and no count of its own.
     alice.locator(".top-user").click()
     entry = alice.get_by_role("menuitem", name="Watched pages")
-    expect(entry.locator(".menu-count")).to_have_text("1")
+    expect(entry.locator(".menu-count")).to_have_count(0)
     entry.click()
     alice.wait_for_url("**/changes?watched=1")
     wait_ready(alice)

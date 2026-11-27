@@ -35,8 +35,8 @@ def rows(client):
     """Updates' mentions: (the page's title, who, where it leads)."""
     html = client.get("/updates", headers=HOST).get_data(as_text=True)
     return [(title, by, href) for href, title, by in re.findall(
-        r'<li class="updates-mention"><a class="updates-mention-page" href="([^"]*)">([^<]*)</a> '
-        r'<span class="updates-mention-what"><strong>([^<]*)</strong> mentioned you</span>', html)]
+        r'<li class="updates-row updates-mention"><a class="updates-row-page" href="([^"]*)">([^<]*)</a> '
+        r'<span class="updates-row-what"><strong>([^<]*)</strong> mentioned you</span>', html)]
 
 
 def as_user(client, name, slug, text):

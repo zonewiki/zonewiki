@@ -99,9 +99,8 @@ In a wiki with users you can watch a page, and Zonewiki tells you when someone e
 - **Watch a folder**: open **Changes**, click **Filter**, type the folder into **In the folder**, click **Show**, then **Watch this folder**.
   You are then told about every page in it, including pages made later.
 
-When a page you watch has changed, the round button with your initial at the top right gets a dot.
-Open it and choose **Watched pages**: the number beside it says how many pages have news.
-You get the changes to what you watch, newest first, and each change you haven't looked at is marked **new**.
+When someone else changes a page you watch, the **bell** at the top right counts it, and **Updates** lists it under **Pages you watch**, with who changed it and a link to **What changed** ([Updates](navigation.md#updates)).
+For every change to what you watch, open the round button with your initial and choose **Watched pages**: the changes, newest first, and each change you haven't looked at is marked **new**.
 Click the page's name in a row to see what the change did.
 
 A change is read once you open the page, or open what its latest change did.
