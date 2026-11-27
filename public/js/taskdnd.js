@@ -3,9 +3,22 @@
 // Each render wires the cards (setupBoardDragAndDrop, setupDragAndDrop) and
 // sets st.touchDrop, through which js/tasktouch.js drops a card carried by
 // a finger. What it uses of the app comes in app (its state in app.st).
+import { dragChip } from './taskutil.js';
 
 export function initTaskDnd(app) {
 const { st } = app;
+
+// The browser's drag image is the chip below and right of the pointer
+// (transparent padding puts it there), not the card under it: the browser
+// takes a picture of it, off screen, as the drag starts, so it may go then.
+function carryChip(e, item) {
+  const image = document.createElement('div');
+  image.className = 'task-drag-image';
+  image.appendChild(dragChip(item));
+  document.body.appendChild(image);
+  e.dataTransfer.setDragImage(image, 0, 0);
+  setTimeout(() => image.remove());
+}
 
 // Plan board: make cards draggable; the list-level dragover/drop handlers
 // (attached once at init) re-plan the task to the section it's dropped on.
@@ -58,6 +71,7 @@ function setupBoardDragAndDrop() {
       st.draggedId = item.dataset.id;
       item.classList.add('task-dragging');
       e.dataTransfer.effectAllowed = 'move';
+      carryChip(e, item);
     });
     item.addEventListener('dragend', () => {
       item.classList.remove('task-dragging');
@@ -113,6 +127,7 @@ function setupDragAndDrop() {
       st.draggedId = item.dataset.id;
       item.classList.add('task-dragging');
       e.dataTransfer.effectAllowed = 'move';
+      carryChip(e, item);
     });
     item.addEventListener('dragend', () => {
       item.classList.remove('task-dragging');

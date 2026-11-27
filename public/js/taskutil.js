@@ -352,3 +352,12 @@ export function plainTitle(text) {
   return String(text || '').replace(TITLE_LINK_RE, (all, wiki, label, url, bare) =>
     wiki !== undefined ? wikilinkHref(wiki).label : url !== undefined ? (label || url) : bare);
 }
+// What a dragged card carries, with the mouse and on touch: a chip with
+// its title beside the pointer, not a copy of the card over the list, so
+// the line where it lands stays in sight (tasks.css "Dragging").
+export function dragChip(item) {
+  const chip = document.createElement('div');
+  chip.className = 'task-drag-chip';
+  chip.textContent = item.querySelector('.task-title')?.textContent.trim() || '';
+  return chip;
+}

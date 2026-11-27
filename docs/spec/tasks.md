@@ -456,7 +456,7 @@ A list's view shows its tasks in it, All tasks every task you see, so two tasks 
 So a new task is above every task, those its maker doesn't see too (another user's private tasks, a group's they are not in), and a task dragged to the top or the bottom of what you see is first or last of all (`manualOrder.ends` in `go/tasks.go`, `OthersOrderEnds` in `go/internal/taskfiles`: only the two numbers leave the files you don't read).
 My tasks is the one view with an order of its own, yours (My tasks' own order): there the Order menu says **My order**.
 
-A task dropped on a task lands where the pointer is: above it on its upper half, below it on the lower half, a line on that edge showing it while dragging (`dropSide`, `.task-drop-before`/`-after`, mouse and touch; `orderDrop`).
+A task dropped on a task lands where the pointer is: above it on its upper half, below it on the lower half, a line in the gap on that side, with a dot at its left end, showing it while dragging (`dropSide`, `.task-drop-before`/`-after`, mouse and touch; `orderDrop`).
 Ctrl+Shift+↑/↓ moves the selection one place (`orderKeyMove`).
 Only the moved tasks change place in the full order: each goes right after the visible task now above it (or right before the one below, when first), and every task the view or filter hides keeps its place (`placeShown`, `TasksCore.placeInOrder`).
 So on Today, sorting in one item never shuffles the catalogue around it.
@@ -994,6 +994,11 @@ A card is dragged with the mouse, or on touch after a long press (Long-press dra
 | a day of the Plan board | its start date, and within a section its place (The Plan board) |
 | a section By person | who has it (Sections by person) |
 | a section By list | its list (Sections by list) |
+
+The dragged card stays in its place, faded, and the pointer carries a small chip with its title (`dragChip`), not a copy of the card:
+a copy as big as the card sat over the place it would land and hid the line that marks it.
+With the mouse the chip is the browser's drag image (`carryChip`, `setDragImage`), below and right of the pointer; on touch it is above the finger (Long-press drag).
+Where it lands in an order is a line in the gap on that side of the card dropped on, with a dot at its left end (The manual order).
 
 Wiring: `setupBoardDragAndDrop` per card plus list-level handlers attached once.
 
@@ -1918,7 +1923,7 @@ A background reload keeps the selected tasks still shown.
 ### Long-press drag
 
 350 ms without moving over 10px picks a card up and selects it (without scrolling).
-A floating copy (`.task-touch-ghost`) follows the finger, the page auto-scrolls near the edges, and release drops through the same code as a mouse drop (`touchDrop` adapters registered by each render; list touch listeners attached once).
+A chip with the card's title (`.task-drag-chip`, as with the mouse: Drag and drop) follows the finger, above it where the finger doesn't cover it (below it near the top of the screen; `placeChip`), the page auto-scrolls near the edges, and release drops through the same code as a mouse drop (`touchDrop` adapters registered by each render; list touch listeners attached once).
 A touch `pointerdown` sets the card's `draggable` to false (mouse sets it back; cards are marked `data-drag`), and native `dragstart` is cancelled for touch, because Android Chrome and iOS Safari otherwise start their own HTML5 drag mid-gesture.
 Moving over 10px earlier is no long press: up or down a normal scroll, sideways a swipe where the card has one (Swipes) and nothing where it hasn't; a finished drag isn't a tap.
 Let go without having moved over 10px, the long press starts selection mode with that card instead of dropping it; where nothing drags (Closed, or a view without dragging) the press only selects the card (`holdCard`), letting go starts selection mode, and moving over 10px first cancels it.

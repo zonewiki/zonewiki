@@ -266,7 +266,7 @@ def test_select_mode_has_no_swipes_or_drags(selecting):
     pg = selecting
     touch_drag(pg, card(pg, "Bolts"), card(pg, "Saw"))
     pg.wait_for_timeout(200)
-    expect(pg.locator(".task-touch-ghost")).to_have_count(0)
+    expect(pg.locator(".task-drag-chip")).to_have_count(0)
     expect(pg.locator(".task-item .task-title")).to_have_text(["Saw", "Glue", "Nuts", "Bolts"])
     assert sorted(tasks_by_title(pg), key=lambda t: tasks_by_title(pg)[t]["sort_order"]) == ["Saw", "Glue", "Nuts", "Bolts"]
 
@@ -594,7 +594,7 @@ def test_touch_drag_on_board_sets_start_date(phone):
     target = phone.locator(".board-day-divider[data-drop-day]", has_text="Tomorrow")
     touch_drag(phone, card(phone, "Water plants"), target)
     wait_until(phone, lambda: tasks_by_title(phone)["Water plants"]["start_date"] == day(1))
-    expect(phone.locator(".task-touch-ghost")).to_have_count(0)
+    expect(phone.locator(".task-drag-chip")).to_have_count(0)
     # The drop is not also a tap: the editor stays closed.
     expect(phone.locator("#task-edit-modal")).to_be_hidden()
 
@@ -633,10 +633,19 @@ def test_touch_drag_reorders_all_tab(new_page, wiki):
     pg.goto("/page/tasks?view=open&group=none")
     open_tab(pg, "open")
     send = touch_drag(pg, card(pg, "Three"), card(pg, "One"), release=False, at=0.25)
-    # Mid-drag: a floating copy follows the finger, a line marks where it
-    # lands (above One: the finger is on its upper half).
-    expect(pg.locator(".task-touch-ghost")).to_have_count(1)
+    # Mid-drag: a chip with the title follows the finger, a line marks where
+    # it lands (above One: the finger is on its upper half).
+    chip = pg.locator(".task-drag-chip")
+    expect(chip).to_have_count(1)
+    expect(chip).to_have_text("Three")
     expect(card(pg, "One")).to_have_class(re.compile(r"\btask-drop-before\b"))
+    # The chip is above the finger and leaves the line in sight: it doesn't
+    # cover the gap above One, where the line is.
+    one, c = box_of(card(pg, "One")), box_of(chip)
+    assert c["y"] + c["height"] <= one["y"] - 4
+    line = card(pg, "One").evaluate(
+        "el => { const s = getComputedStyle(el, '::before'); return [s.content, s.position] }")
+    assert line == ['""', "absolute"]
     send("touchEnd", [])
     expect(pg.locator(".task-item .task-title")).to_have_text(["Three", "One", "Two"])
     wait_until(pg, lambda: [t["title"] for t in sorted(
@@ -662,7 +671,7 @@ def test_quick_swipe_scrolls_instead_of_dragging(phone):
     target = phone.locator(".board-day-divider[data-drop-day]", has_text="Tomorrow")
     touch_drag(phone, card(phone, "Water plants"), target, hold_ms=0)
     phone.wait_for_timeout(600)
-    expect(phone.locator(".task-touch-ghost")).to_have_count(0)
+    expect(phone.locator(".task-drag-chip")).to_have_count(0)
     assert tasks_by_title(phone)["Water plants"]["start_date"] == day(0)
 
 
@@ -672,7 +681,7 @@ def test_long_press_in_place_starts_selection_mode(phone):
     touch_drag(phone, c, c)
     expect(phone.locator(".tasks-app")).to_contain_class("tasks-selecting")
     expect(phone.locator("#task-selbar .tasks-selbar-count")).to_have_text("1 selected")
-    expect(phone.locator(".task-touch-ghost")).to_have_count(0)
+    expect(phone.locator(".task-drag-chip")).to_have_count(0)
     expect(phone.locator("#task-edit-modal")).to_be_hidden()     # not a tap either
     assert tasks_by_title(phone)["Water plants"]["start_date"] == day(0)
     assert selected(phone) == ["Water plants"]
@@ -743,10 +752,8 @@ def test_touch_press_turns_off_native_drag(new_page, wiki):
     assert one.evaluate("el => el.draggable")
     send = touch_drag(pg, card(pg, "Two"), one, release=False, at=0.25)
     assert not pg.locator("#tasks-list .task-dragging").evaluate("el => el.draggable")
-    # Picking a card up selects it (visible feedback, as with a mouse press);
-    # the carried copy shows the selection too.
+    # Picking a card up selects it (visible feedback, as with a mouse press).
     expect(pg.locator("#tasks-list .task-dragging")).to_have_class(re.compile(r"\btask-selected\b"))
-    expect(pg.locator(".task-touch-ghost")).to_have_class(re.compile(r"\btask-selected\b"))
     send("touchEnd", [])
     expect(pg.locator(".task-item .task-title")).to_have_text(["Two", "One"])
     card(pg, "Two").dispatch_event("pointerdown", {"pointerType": "mouse", "bubbles": True})

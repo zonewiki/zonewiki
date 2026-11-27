@@ -4,7 +4,7 @@
 // task, a long press let go selects; and the right-click menu. What it uses
 // of the app comes in app (its state in app.st).
 import TasksCore from '../tasks-core.js';
-import { isDueNow, todayStr } from './taskutil.js';
+import { dragChip, isDueNow, todayStr } from './taskutil.js';
 
 const { isFocus } = TasksCore;
 
@@ -28,7 +28,7 @@ const { st } = app;
 // only holds the card for that (holdCard), and moving drops the hold.
 const LONG_PRESS_MS = 350;
 st.touchDrop = null;
-st.touchDrag = null;  // { item, x, y, x0, y0, timer, active, held, moved, swiping, swipe, ghost, grabY, target, raf }
+st.touchDrag = null;  // { item, x, y, x0, y0, timer, active, held, moved, swiping, swipe, ghost, target, raf }
 // What a swipe does on this task in the current view: { right, left },
 // each 'start' (start today), 'unplan' (clear the start date) or null.
 function swipeActions(task) {
@@ -99,8 +99,17 @@ function holdCard() {
   app.updateSelectionClasses();
   navigator.vibrate?.(15);
 }
+// The chip the finger carries sits above it, where the finger doesn't
+// cover it (below it near the top of the screen), so the line where the
+// card lands, at the finger, stays in sight.
+function placeChip(t) {
+  const r = t.ghost.getBoundingClientRect(), gap = 28, margin = 8;
+  const above = t.y - gap - r.height;
+  t.ghost.style.left = Math.max(margin, Math.min(t.x - 24, window.innerWidth - r.width - margin)) + 'px';
+  t.ghost.style.top = (above >= margin ? above : t.y + gap) + 'px';
+}
 function startTouchDrag() {
-  const t = st.touchDrag, rect = t.item.getBoundingClientRect();
+  const t = st.touchDrag;
   t.active = true;
   st.draggedId = t.item.dataset.id;
   // Picking a card up selects it, as a mouse press does, so the long press
@@ -110,12 +119,9 @@ function startTouchDrag() {
   st.selectedIds = new Set([st.draggedId]);
   app.updateSelectionClasses();
   t.item.classList.add('task-dragging');
-  t.grabY = t.y - rect.top;
-  t.ghost = t.item.cloneNode(true);
-  t.ghost.classList.remove('task-dragging');
-  t.ghost.classList.add('task-touch-ghost');
-  Object.assign(t.ghost.style, { left: rect.left + 'px', top: rect.top + 'px', width: rect.width + 'px' });
+  t.ghost = dragChip(t.item);
   document.body.appendChild(t.ghost);
+  placeChip(t);
   navigator.vibrate?.(15);
   // Near the top or bottom edge the page scrolls, so a drop target that is
   // off screen can still be reached.
@@ -205,7 +211,7 @@ app.listEl.addEventListener('touchmove', e => {
   if (Math.hypot(p.clientX - st.touchDrag.x0, p.clientY - st.touchDrag.y0) > 10) st.touchDrag.moved = true;
   st.touchDrag.x = p.clientX;
   st.touchDrag.y = p.clientY;
-  st.touchDrag.ghost.style.top = (p.clientY - st.touchDrag.grabY) + 'px';
+  placeChip(st.touchDrag);
   setTouchTarget(touchDropTarget(p.clientX, p.clientY));
 }, { passive: false });
 app.listEl.addEventListener('touchend', e => {

@@ -54,6 +54,7 @@ A keep task can't repeat: both say what happens after done.
 
 The dialog says under the title where the task goes, and with several users who will see it ("Adds to your Inbox: only you see it.").
 A new task goes on top of the list, where you see it; drag it (or press **Ctrl+Shift+↓**) to where it belongs.
+While you drag, its title goes along beside the pointer, and a line between the cards shows where it will land.
 
 ### Quick-add
 

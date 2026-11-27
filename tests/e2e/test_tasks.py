@@ -2475,6 +2475,42 @@ def test_open_drag_places_a_task_and_writes_no_other(page, wiki):
     assert _open_titles(page) == ["Bravo", "Two", "Alpha", "One"]
 
 
+def test_a_mouse_drag_carries_a_chip_beside_the_pointer(page, wiki):
+    # The browser's drag image was the whole card, over the place it would
+    # land, which hid the line that marks it. Now it is a chip with the
+    # title, below and right of the pointer, and the line is in the gap
+    # between the cards with a dot at its left end.
+    page.add_init_script("""
+      const set = DataTransfer.prototype.setDragImage;
+      DataTransfer.prototype.setDragImage = function (el, x, y) {
+        const cs = getComputedStyle(el), chip = el.querySelector('.task-drag-chip');
+        window.__dragImage = { text: chip && chip.textContent, x, y,
+                               left: parseFloat(cs.paddingLeft), top: parseFloat(cs.paddingTop) };
+        return set.call(this, el, x, y);
+      };
+    """)
+    page.set_viewport_size({"width": 1000, "height": 1200})
+    ids = [page.request.post("/api/tasks", data={"title": t}).json()["id"] for t in ("Alpha", "Bravo", "Charlie")]
+    rank(page, ids)
+    page.goto("/tasks?view=open&group=none")
+    start, target = box_of(card(page, "Charlie").locator(".task-content")), box_of(card(page, "Alpha"))
+    page.mouse.move(start["x"] + 10, start["y"] + start["height"] / 2)
+    page.mouse.down()
+    for i in range(1, 6):
+        page.mouse.move(start["x"] + 10, start["y"] + (target["y"] + target["height"] * 0.25 - start["y"]) * i / 5, steps=2)
+    expect(card(page, "Alpha")).to_have_class(re.compile(r"\btask-drop-before\b"))
+    image = page.evaluate("window.__dragImage")
+    assert image["text"] == "Charlie"
+    assert (image["x"], image["y"]) == (0, 0) and image["left"] > 0 and image["top"] > 0
+    expect(page.locator(".task-drag-image")).to_have_count(0)    # pictured, then gone
+    line = card(page, "Alpha").evaluate(
+        "el => { const s = getComputedStyle(el, '::before'), r = el.getBoundingClientRect();"
+        " return { content: s.content, top: parseFloat(s.top), left: parseFloat(s.left) } }")
+    assert line["content"] == '""' and line["top"] < 0
+    page.mouse.up()
+    wait_until(page, lambda: _open_titles(page) == ["Charlie", "Alpha", "Bravo"])
+
+
 def test_drop_lands_where_the_pointer_is_from_anywhere(page, wiki):
     # Regression: a new task landed after the task dropped on, one from
     # within the order (moving up) before it. Now the pointer decides, the

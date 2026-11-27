@@ -767,7 +767,7 @@ def test_board_layout_does_not_change_when_a_drag_starts(new_page, wiki):
     before = [box_of(r) for r in rows.all()]
     card = phone.locator(".task-item").filter(has=phone.get_by_text("Water plants", exact=True))
     send = touch_drag(phone, card, rows.nth(3), release=False)
-    expect(phone.locator(".task-touch-ghost")).to_have_count(1)
+    expect(phone.locator(".task-drag-chip")).to_have_count(1)
     assert [box_of(r) for r in rows.all()] == before
     send("touchEnd", [])
 

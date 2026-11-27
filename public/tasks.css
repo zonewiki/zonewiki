@@ -459,24 +459,36 @@ div.chip-input:has(> .tag-chip:not(.tag-chip-locked)) > .chip-input-clear { disp
 }
 .task-item.task-swipe-armed[data-swipe="start"]::after { color: var(--link); }
 .task-item.task-swipe-armed[data-swipe="unplan"]::after { color: #d97706; }
-/* Touch drag: the card the finger carries (a clone of the picked-up card). */
-.task-touch-ghost {
-  position: fixed; z-index: 1000; margin: 0; pointer-events: none; list-style: none;
-  background: var(--surface); box-shadow: 0 6px 20px rgba(0,0,0,.25); opacity: .95;
-  transform: scale(1.03);  /* lifted off the list */
+/* Dragging: the card stays in its place, faded (.task-dragging); the
+   pointer or finger carries a chip with its title (dragChip), beside it
+   and small, so the list under it and where the card lands stay in sight. */
+.task-drag-chip {
+  position: fixed; z-index: 1000; pointer-events: none; box-sizing: border-box;
+  max-width: min(18rem, calc(100vw - 16px)); padding: .3rem .75rem;
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  font-size: .875rem; line-height: 1.4; color: var(--fg);
+  background: var(--surface); border: 1px solid var(--btn-primary); border-radius: 999px;
+  box-shadow: 0 4px 14px rgba(0,0,0,.2);
 }
-/* It carries the selection ring (picking a card up selects it) plus the lift shadow. */
-.task-item.task-selected.task-touch-ghost {
-  box-shadow:
-    inset 0 0 0 999px color-mix(in srgb, var(--fg) 8%, transparent),
-    0 0 0 4px color-mix(in srgb, var(--btn-primary) 25%, transparent),
-    0 6px 20px rgba(0,0,0,.25);
-}
+/* The mouse's (carryChip): the browser takes a picture of it off screen;
+   the transparent padding puts the chip below and right of the pointer. */
+.task-drag-image { position: fixed; top: -200px; left: 0; padding: 14px 0 0 16px; pointer-events: none; }
+.task-drag-image .task-drag-chip { position: static; display: block; }
 .task-item.task-drag-over { border-color: var(--btn-primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--btn-primary) 25%, transparent); }
 /* In a sorted list (Open, Focus) the drop lands above or below the card,
-   by the pointer: a line on that edge shows where. */
-.task-item.task-drop-before { box-shadow: 0 -3px 0 0 var(--btn-primary); }
-.task-item.task-drop-after { box-shadow: 0 3px 0 0 var(--btn-primary); }
+   by the pointer: a line in the gap on that side shows where, with a dot
+   at its left end. (The dot stays within the card's width: the list clips
+   sideways, and its clip margin holds only where both axes clip.) */
+.task-item:is(.task-drop-before, .task-drop-after) { position: relative; }
+.task-item:is(.task-drop-before, .task-drop-after)::before {
+  content: ""; position: absolute; left: -1px; right: -1px; height: 10px; pointer-events: none;
+  background:
+    radial-gradient(circle at 5px 50%, var(--btn-primary) 4px, transparent 4.5px),
+    linear-gradient(var(--btn-primary), var(--btn-primary)) 0 50% / 100% 3px no-repeat;
+}
+/* Centred in the .3rem gap between cards (the 1px is the card's border). */
+.task-item.task-drop-before::before { top: calc(-.15rem - 6px); }
+.task-item.task-drop-after::before { bottom: calc(-.15rem - 6px); }
 .task-item.task-urg-overdue  { background: color-mix(in srgb, #dc2626 8%, var(--card-bg, var(--bg))); border-color: color-mix(in srgb, #dc2626 40%, var(--border)); }
 .task-item.task-urg-today    { background: color-mix(in srgb, #f97316 7%, var(--card-bg, var(--bg))); border-color: color-mix(in srgb, #f97316 35%, var(--border)); }
 .task-item.task-urg-soon     { background: color-mix(in srgb, #eab308 5%, var(--card-bg, var(--bg))); border-color: color-mix(in srgb, #eab308 28%, var(--border)); }
