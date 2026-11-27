@@ -308,7 +308,13 @@ def test_forgejo_publishes_to_the_other_repository_only_as_it_is():
                  'if [ -z "$PUBLISH_KEY" ]; then', 'git push publish "$sha:refs/heads/main"',
                  'git push publish "$GITHUB_REF"', "-o BatchMode=yes"):
         assert line in job, line
-    assert "--force" not in job and "git push -f" not in job and ' "+' not in job
+    # Never forced: no push with --force, -f or a "+" refspec. (The tag's
+    # fetch is forced on purpose: it replaces the lightweight tag that
+    # actions/checkout leaves in the runner's clone with the annotated one.)
+    pushes = [l for l in job.splitlines() if "git push" in l]
+    assert len(pushes) == 2
+    assert not any("--force" in l or " -f" in l or ' "+' in l for l in pushes), pushes
+    assert job.count("--force") == 1 and 'git fetch -q --force origin "+$GITHUB_REF:$GITHUB_REF"' in job
     assert "StrictHostKeyChecking" not in job
     # The key and the check come from secrets, the repository from a variable.
     for name in ("PUBLISH_KEY", "PUBLISH_CHECK"):
