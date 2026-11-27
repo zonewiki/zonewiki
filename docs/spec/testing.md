@@ -234,6 +234,7 @@ Prefer an API test when the behaviour shows through a route, a Go test when it d
 | `tests/test_run_sh.py` | deployment.md | `run.sh`'s container calls and what each command says it does, in a checkout and beside `compose.yaml` alone (the prebuilt image, `update`, the checkout's commands refused, `.env`'s address and user), and the pre-commit hook, against a stub engine; the pre-push hook |
 | `tests/test_section_editing.py` | editor.md | Section editing over HTTP: a stale ✎, Keep mine |
 | `tests/test_semantic.py` | search.md | Semantic search through the server with the fake embedder |
+| `tests/test_settings_pages.py` | navigation.md | The menu's Settings and the settings pages' tabs |
 | `tests/test_setup.py` | security.md | The first-run page (`/setup`) |
 | `tests/test_signup.py` | users.md | Sign-up against `FakeSMTP`, approval |
 | `tests/test_socket.py` | deployment.md | Zonewiki on a Unix socket and one handed over, idle exit |

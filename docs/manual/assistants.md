@@ -7,7 +7,7 @@ This page gets you connected first, then explains what a connection may do and h
 ## Connect in five minutes
 
 Every way starts from the wiki's assistant address: your wiki's address followed by `/mcp`, for example `https://wiki.example.com/mcp`, or `http://localhost:5080/mcp` for a wiki on your own computer.
-You find it at the top of **Connect an assistant**, with a **Copy** button: it is in the menu at the top right (your initial; without users, the three lines), and on a phone behind your name or the three lines at the top of the page.
+You find it at the top of **Connect an assistant**, with a **Copy** button: **Settings** in the menu at the top right opens it (your initial; without users, the three lines), and on a phone behind your name or the three lines at the top of the page.
 
 There are two ways in:
 
@@ -66,7 +66,7 @@ Other clients follow the same standard, but how each one sets up a server is up 
 
 ### A token for any client
 
-1. Open **Connect an assistant** in the menu at the top right.
+1. Open **Settings** in the menu at the top right: it opens **Connect an assistant**.
 2. Under **Your token** (**The wiki's token** in a wiki without users), type your password and click **Make a token**.
    A wiki without a login asks for no password.
 3. Copy the token.

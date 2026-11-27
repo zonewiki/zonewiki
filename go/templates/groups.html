@@ -78,6 +78,7 @@
 {{define "body"}}
 {{.BreadcrumbHTML}}
 <div class="sheet groups-page">
+{{- template "settings_tabs" .Shell}}
 <h1>Groups</h1>
 {{- with .Done}}<p class="users-done" role="status">{{.}}</p>{{end}}
 {{- with .Error}}<p class="users-error" role="alert">{{.}}</p>{{end}}

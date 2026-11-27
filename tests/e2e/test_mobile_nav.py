@@ -664,7 +664,7 @@ def test_desktop_sign_out_is_in_the_menu_without_users(page, wiki, monkeypatch):
     page.locator(".top-actions .top-menu").click()
     menu = page.locator(".module-menu")
     expect(menu.locator('[role="menuitem"]')).to_have_text(
-        ["Connect an assistant", "Change password", "Sharing mode", "Help", "Sign out"])
+        ["Settings", "Sharing mode", "Help", "Sign out"])
     menu.get_by_role("menuitem", name="Sign out").click()
     page.wait_for_url("**/login**")
 
@@ -830,9 +830,9 @@ def test_three_lines_open_the_menu_on_a_phone_without_users(new_page, wiki):
 
 
 def test_the_name_opens_the_account_menu_on_a_phone(new_page, wiki, monkeypatch):
-    """On a phone the account menu is behind the name beside Sign out: Groups
-    (also for who is in none: that is where one is made), Connect an
-    assistant, Change password, Help. Admin and Sign out are in the row itself."""
+    """On a phone the account menu is behind the name beside Sign out:
+    Settings (its Groups tab also for who is in none: that is where one is
+    made) and Help. Admin and Sign out are in the row itself."""
     monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "")})
     phone = new_page(**TOUCH_PHONE)
     phone.request.post("/login", form={"username": "alice", "password": "pw"})
@@ -843,9 +843,13 @@ def test_the_name_opens_the_account_menu_on_a_phone(new_page, wiki, monkeypatch)
     name.tap()
     menu = phone.locator(".module-menu:not(.groups-menu)")
     expect(menu).to_be_visible()
-    expect(menu.locator('[role="menuitem"]:visible')).to_have_text(["Groups", "Connect an assistant", "Change password", "Help"])
+    expect(menu.locator('[role="menuitem"]:visible')).to_have_text(["Settings", "Help"])
     box = box_of(menu)
     assert box["x"] >= 0 and box["x"] + box["width"] <= phone.viewport_size["width"]
-    menu.get_by_role("menuitem", name="Groups").tap()
+    menu.get_by_role("menuitem", name="Settings").tap()
+    phone.wait_for_url("**/assistant")
+    tabs = phone.get_by_role("navigation", name="Settings").get_by_role("link")
+    expect(tabs).to_have_text(["Assistant", "Password", "Groups"])
+    tabs.nth(2).tap()
     phone.wait_for_url("**/groups")
     expect(phone.get_by_role("button", name="Make the group")).to_be_visible()

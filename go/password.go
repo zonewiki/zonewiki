@@ -52,12 +52,12 @@ func sharedPasswordMsg(name string) string {
 }
 
 func showPassword(w http.ResponseWriter, r *http.Request, status int, v *passwordView) {
-	v.BreadcrumbHTML = breadcrumb(newReq(r), []crumb{{"Password", ""}}, "", false, "", "")
+	v.BreadcrumbHTML = breadcrumb(newReq(r), settingsCrumb(newReq(r), "Password"), "", false, "", "")
 	title := "Change the password"
 	if v.User != "" {
 		title = "Change your password"
 	}
-	page(w, newReq(r), status, "password.html", title, shell{}, v)
+	page(w, newReq(r), status, "password.html", title, shell{settings: "password"}, v)
 }
 
 // passwordPage: GET /password. ?done says it was changed (a link can make

@@ -249,7 +249,8 @@ def test_make_a_group_say_who_is_in_it_and_rename_it(page, wiki, monkeypatch):
     page.goto("/page/index")
     expect(page.locator('.module-switch .module-link[data-module="groups"]')).to_have_count(0)     # in no group: no pill
     page.locator(".top-user").click()
-    page.get_by_role("menuitem", name="Groups").click()
+    page.get_by_role("menuitem", name="Settings").click()   # Groups is a tab of the settings pages
+    page.get_by_role("navigation", name="Settings").get_by_role("link", name="Groups").click()
     page.wait_for_url("**/groups")
     expect(page.locator(".groups-none")).to_have_text("You are in no group.")
     page.get_by_label("The group's name").fill("apollo")

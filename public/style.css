@@ -1648,8 +1648,8 @@ kbd {
 }
 
 /* Who is signed in (with users), beside Sign out. */
-/* On a phone the name (without users: three lines) opens the menu (Groups,
-   Connect an assistant, Change password): the desktop's is behind the
+/* On a phone the name (without users: three lines) opens the menu (Settings,
+   Help): the desktop's is behind the
    button at the top right. */
 .signout-user { color: var(--muted); font-size: .85rem; background: none; border: 0; padding: .35rem .25rem; font-family: inherit; cursor: pointer; }
 .signout-user:focus-visible { outline: 2px solid var(--btn-primary); outline-offset: 1px; border-radius: 4px; }
@@ -1665,6 +1665,9 @@ kbd {
 .admin-tabs a { padding: .4rem .8rem; color: var(--muted); text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -1px; }
 .admin-tabs a:hover { color: var(--fg); }
 .admin-tabs a[aria-current="page"] { color: var(--fg); border-bottom-color: var(--link); font-weight: 500; }
+/* The settings pages' tabs (partials/settings_tabs.html): the same row,
+   above the page's heading. */
+.settings-tabs { margin: 0 0 1.25rem; }
 
 .users-table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
 .users-table th, .users-table td { text-align: left; padding: .45rem .5rem; border-bottom: 1px solid var(--border); vertical-align: top; }

@@ -36,8 +36,8 @@ At the top right of each page, on a computer:
 |--------|------|
 | **Sharing** | Only while [Sharing mode](#sharing-mode) is on: turns it off |
 | **Search** | Opens the search, as `Ctrl+P` does (see [Search](search.md)) |
-| Your initial | With users: the user menu, with **Groups**, **Connect an assistant**, **Change password**, **Sharing mode**, **Admin** (for admins), **Help** and **Sign out** |
-| Three lines | Without users: the menu, with **Connect an assistant**, **Change password** (or **Set a login**, while the wiki has none), **Sharing mode**, **Help** and **Sign out** |
+| Your initial | With users: the user menu, with **Settings**, **Admin** (for admins), **Sharing mode**, **Help** and **Sign out** |
+| Three lines | Without users: the menu, with **Settings** (while the wiki has no login: **Connect an assistant** and **Set a login**), **Sharing mode**, **Help** and **Sign out** |
 
 There are no "new" buttons here: a new note is `c n` and a new task `c t`.
 A new page comes from a link to it (see [Pages](pages.md)); the home page of a group and your private home also have a **New page** button.

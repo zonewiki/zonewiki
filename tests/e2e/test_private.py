@@ -30,7 +30,7 @@ def test_the_menu_opens_by_click_and_closes_on_escape(alice):
     btn.click()
     expect(menu).to_be_visible()
     expect(btn).to_have_attribute("aria-expanded", "true")
-    expect(menu.get_by_role("menuitem")).to_have_text(["Groups", "Connect an assistant", "Change password", "Sharing mode", "Help", "Sign out"])
+    expect(menu.get_by_role("menuitem")).to_have_text(["Settings", "Sharing mode", "Help", "Sign out"])
     expect(menu.locator(".menu-who")).to_have_text("Signed in as alice")
     # The first item has the focus; it sits under the button.
     expect(menu.get_by_role("menuitem").first).to_be_focused()
@@ -54,11 +54,7 @@ def test_the_menu_works_from_the_keyboard_and_closes_on_a_click_elsewhere(alice)
     btn.focus()
     alice.keyboard.press("ArrowDown")
     expect(menu).to_be_visible()
-    expect(menu.get_by_role("menuitem", name="Groups")).to_be_focused()
-    alice.keyboard.press("ArrowDown")
-    expect(menu.get_by_role("menuitem", name="Connect an assistant")).to_be_focused()
-    alice.keyboard.press("ArrowDown")
-    expect(menu.get_by_role("menuitem", name="Change password")).to_be_focused()
+    expect(menu.get_by_role("menuitem", name="Settings")).to_be_focused()
     alice.keyboard.press("ArrowDown")
     expect(menu.get_by_role("menuitem", name="Sharing mode")).to_be_focused()
     alice.keyboard.press("ArrowDown")
@@ -71,11 +67,41 @@ def test_the_menu_works_from_the_keyboard_and_closes_on_a_click_elsewhere(alice)
     expect(menu).to_be_hidden()
 
 
+def test_settings_are_tabs_of_each_other(alice, wiki):
+    """Settings in the menu opens Connect an assistant; Password and Groups
+    are tabs beside it, each a page of its own, and the row fits a phone."""
+    alice.goto("/page/index")
+    alice.locator(".top-user").click()
+    alice.get_by_role("menuitem", name="Settings").click()
+    alice.wait_for_url("**/assistant")
+    tabs = alice.get_by_role("navigation", name="Settings").get_by_role("link")
+    expect(tabs).to_have_text(["Assistant", "Password", "Groups"])
+    expect(tabs.nth(0)).to_have_attribute("aria-current", "page")
+    # The row is above the heading, inside the sheet.
+    row, h1, sheet = box_of(alice.locator(".settings-tabs")), box_of(alice.locator("h1")), box_of(alice.locator(".sheet"))
+    assert sheet["y"] < row["y"] and row["y"] + row["height"] <= h1["y"]
+    tabs.nth(2).click()
+    alice.wait_for_url("**/groups")
+    expect(alice.locator("h1")).to_have_text("Groups")
+    expect(tabs.nth(2)).to_have_attribute("aria-current", "page")
+    tabs.nth(1).click()
+    alice.wait_for_url("**/password")
+    expect(alice.locator("h1")).to_have_text("Change your password")
+    alice.go_back()
+    alice.wait_for_url("**/groups")
+    # On a phone's width the three tabs stay on one line, inside the page.
+    alice.set_viewport_size({"width": 360, "height": 740})
+    boxes = [box_of(tabs.nth(i)) for i in range(3)]
+    assert len({round(b["y"]) for b in boxes}) == 1
+    assert boxes[0]["x"] >= 0 and boxes[2]["x"] + boxes[2]["width"] <= 360
+    assert alice.evaluate("document.documentElement.scrollWidth") <= 360
+
+
 def test_the_menu_leads_to_connect_an_assistant(alice, wiki):
     """The token is made with the password, shown once, and revoked (/assistant)."""
     alice.goto("/page/index")
     alice.locator(".top-user").click()
-    alice.get_by_role("menuitem", name="Connect an assistant").click()
+    alice.get_by_role("menuitem", name="Settings").click()
     alice.wait_for_url("**/assistant")
     expect(alice.locator("h1")).to_have_text("Connect an assistant")
     expect(alice.get_by_role("button", name="Make a new token")).to_be_visible()   # she has one (t1)
@@ -123,7 +149,8 @@ def test_the_menu_leads_to_change_password(alice, wiki):
     """The password is changed with the one she has; she stays signed in (/password)."""
     alice.goto("/page/index")
     alice.locator(".top-user").click()
-    alice.get_by_role("menuitem", name="Change password").click()
+    alice.get_by_role("menuitem", name="Settings").click()
+    alice.get_by_role("navigation", name="Settings").get_by_role("link", name="Password").click()
     alice.wait_for_url("**/password")
     expect(alice.locator("h1")).to_have_text("Change your password")
     alice.get_by_label("Your password now").fill("wrong")

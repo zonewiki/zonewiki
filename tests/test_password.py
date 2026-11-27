@@ -53,7 +53,7 @@ class TestWithUsers:
 
     def test_the_menu_and_the_help_dialog_offer_it(self, bob):
         body = bob.get("/page/index", headers=HOST).data.decode()
-        assert '<a href="/password" role="menuitem" class="menu-password">Change password</a>' in body
+        assert '<a href="/assistant" role="menuitem" class="menu-settings">Settings</a>' in body   # its tab: test_settings_pages.py
         assert '· <a href="/password">Change password</a> · <a href="/groups">Groups</a></p>' in body
         resp = bob.get("/password", headers=HOST)
         body = resp.data.decode()
@@ -189,7 +189,7 @@ class TestASharedAccount:
     def test_the_menu_and_the_help_dialog_leave_it_out(self, demo):
         body = demo.get("/page/index", headers=HOST).data.decode()
         assert 'href="/password"' not in body
-        assert 'class="menu-signout"' in body and 'class="menu-assistant"' in body   # the rest of the menu is there
+        assert 'class="menu-signout"' in body and 'class="menu-settings"' in body   # the rest of the menu is there
 
     def test_the_page_says_why_and_has_no_form(self, demo):
         resp = demo.get("/password?done", headers=HOST)

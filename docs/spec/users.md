@@ -446,7 +446,7 @@ What it can't do is what would lock the others out, since each of them knows the
 
 | In the browser | A shared account |
 |----------------|------------------|
-| **Change password** | Not in the menu or the shortcuts dialog; `/password` says "… is an account several people sign in to: its password is set by whoever runs this wiki, not here." and has no form; a `POST` is 403 and changes nothing |
+| **Change password** | No **Password** tab on the settings pages and no link in the shortcuts dialog; `/password` says "… is an account several people sign in to: its password is set by whoever runs this wiki, not here." and has no form; a `POST` is 403 and changes nothing |
 | **Connect an assistant**: the token | No **Make a token** and no **Revoke**; both `POST`s are 403. A token set with `zonewiki user token` goes on working |
 | **Connect an assistant**: connections | As for anyone: each assistant that signs in is its own connection, to be changed or ended on the page, by whoever is signed in |
 | The Users tab | A **shared** mark beside the name |
@@ -596,7 +596,7 @@ A group without a section is its name on users, as above.
 ### A group of your own
 
 A project is six names from three teams, and nobody should wait for an admin to have a place for it (`go/groups.go`, `groups.html`).
-On **Groups** (`/groups`: the user menu's entry, **All your groups** in the pill's menu, a link in the shortcuts dialog) whoever may write makes a group: a name, and who else is in it.
+On **Groups** (`/groups`: a tab of the user menu's **Settings**, **All your groups** in the pill's menu, a link in the shortcuts dialog) whoever may write makes a group: a name, and who else is in it.
 They are in it and are its **owner**; from the next request `groups/<name>/` is its people's and a task list can be for `@<name>`, as with any group.
 **Make the group** then goes to the group's home (`/groups/<name>?made`, which makes it: A group's home in Group pages, below), where they say what the group is for and start its first page.
 Should the settings not be in effect yet (they change between requests, and another request may still run), `?made` goes to `/groups` instead, saying "Made the group …" (`groupsDone`, of a group there is only), never to a 404.
@@ -946,8 +946,8 @@ so changing a password is how to sign out a stolen session.
 ### Change password
 
 `GET`/`POST /password` (`go/password.go`, `password.html`): whoever is signed in sets a new password in the browser, without a shell on the host.
-With users it is in the user menu ("Change password") and changes the password of whoever is signed in, never another user's (no field names one; an admin gives someone else a reset link);
-without users, with the wiki's one password, it is in the menu at the top right too and changes that, for everyone (as `zonewiki config passwd`).
+With users it is the **Password** tab of the user menu's **Settings** (The settings pages in `docs/spec/navigation.md`) and changes the password of whoever is signed in, never another user's (no field names one; an admin gives someone else a reset link);
+without users, with the wiki's one password, it is the same tab of the menu at the top right and changes that, for everyone (as `zonewiki config passwd`).
 The shortcuts dialog (`?`) links to it too, wherever there is a login, which is how a phone reaches it.
 A wiki without a login has no such page (404).
 A viewer may change theirs (`viewerWrites`).
@@ -975,7 +975,7 @@ The request checks (`checks` in `go/server.go`) put the session's user into the 
 With users, `/mcp` takes any user's token (`mcp-token` in their section) and the tools run as that user (`mcpAuthorized` returns the user, `callMCPTool` passes it to every tool).
 A user's assistant can also sign in through the browser (OAuth): the user allows it, and it gets a connection of its own, listed on Connect an assistant (Connecting with OAuth in `docs/spec/mcp.md`).
 A call without a token is a 401 that says where to sign in (with `mcp-oauth = no`: `/mcp` is off, 403, while no user has a token); a wrong token is a 401 and throttled as before (`docs/spec/mcp.md`).
-A user makes and revokes their own token in the browser, on **Connect an assistant** in the user menu (`/assistant`, with their password; `docs/spec/mcp.md`); `zonewiki user token NAME` does it on the host, for any user.
+A user makes and revokes their own token in the browser, on **Connect an assistant**, which the user menu's **Settings** opens (`/assistant`, with their password; `docs/spec/mcp.md`); `zonewiki user token NAME` does it on the host, for any user.
 
 An assistant sees and changes what its user does in the browser, no more (`docs/spec/mcp.md` has the tools).
 
@@ -1174,7 +1174,7 @@ A team inside a larger wiki keeps there what only the team should read.
 
 ### Using a group's folder
 
-Make a group on **Groups** (`/groups`, in the user menu: a name and who is in it; you own it and say who else joins), or have an admin put the people in one (`zonewiki user group anna +dev`, or the Users tab; a group can be made of other groups, so `groups/product/` is for whoever is in dev or in design: Groups, above).
+Make a group on **Groups** (`/groups`, a tab of the user menu's **Settings**: a name and who is in it; you own it and say who else joins), or have an admin put the people in one (`zonewiki user group anna +dev`, or the Users tab; a group can be made of other groups, so `groups/product/` is for whoever is in dev or in design: Groups, above).
 From then on `groups/dev/` is theirs: make a page there with **New page** on the group's home or beside the group on Groups (`/new` with For at the group),
 from a link on one of its pages (`[[` offers "New page for @dev"; a link to a page there isn't asks, Make it a page of @dev),
 by sharing one of your private pages with it (Share…),

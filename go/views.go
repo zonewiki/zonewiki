@@ -403,9 +403,14 @@ type pageShell struct {
 	Notice             string // the notice setting: a line at the top of every page, for everyone
 	ChangePassword     bool   // signed in, and the password is theirs to change (no shared account's)
 	SetLogin           string // the wiki asks for no login: where the menu's Set a login leads (setLoginHref)
-	User               string // who is signed in, with users
-	Admin              bool   // they are an admin: the user menu offers Admin
-	Viewer             bool   // they are a viewer: nothing to make (no New note, New task)
+	// Settings: the settings pages as tabs (settingsTabs): the menu's
+	// Settings opens the first; nil where there is one page alone, which the
+	// menu then names. SettingsTab: the one this view is, "" on any other.
+	Settings    []settingsTab
+	SettingsTab string
+	User        string // who is signed in, with users
+	Admin       bool   // they are an admin: the user menu offers Admin
+	Viewer      bool   // they are a viewer: nothing to make (no New note, New task)
 	// Visitor: nobody is signed in, and the wiki is public (access.go): the
 	// wiki's pages alone, no tasks or notes; SignIn: where they sign in, to
 	// come back to this view.
@@ -435,7 +440,7 @@ func page(w http.ResponseWriter, rq *Req, status int, name, title string, o shel
 		AppName: appName, Version: version, Build: cfg.Build, SourceURL: sourceURL, AllowRemote: cfg.AllowRemote,
 		Locale: s.Locale, DateFormat: s.DateFormat,
 		// Only signed in: the login page has no one to sign out.
-		SignOut: s.authOn() && isSignedIn(rq.r), ChangePassword: s.authOn() && isSignedIn(rq.r) && !s.sharedAccount(rq.user.Name), SetLogin: setLoginHref(), User: rq.user.Name, Users: s.Users != nil, Admin: s.isAdmin(rq.user.Name),
+		SignOut: s.authOn() && isSignedIn(rq.r), ChangePassword: mayChangePassword(rq), SetLogin: setLoginHref(), User: rq.user.Name, Users: s.Users != nil, Admin: s.isAdmin(rq.user.Name),
 		Viewer: s.isViewer(rq.user.Name), Notice: s.Notice,
 	}
 	if rq.user.Name == visitor {
@@ -444,6 +449,7 @@ func page(w http.ResponseWriter, rq *Req, status int, name, title string, o shel
 		sh.User, sh.Users, sh.Viewer, sh.Visitor = "", false, true, true
 		sh.SignIn = "/login?next=" + url.QueryEscape(rq.r.URL.Path)
 	}
+	sh.Settings, sh.SettingsTab = settingsTabs(rq), o.settings
 	if !o.editor {
 		sh.Module = currentModule(rq)
 	}
@@ -470,7 +476,56 @@ func page(w http.ResponseWriter, rq *Req, status int, name, title string, o shel
 }
 
 // shell: how a view sits in the page shell.
-type shell struct{ editor, noActions, wide, badgeInForm bool }
+//
+// settings: the view is one of the settings pages, this tab of theirs
+// (settingsTabs).
+type shell struct {
+	editor, noActions, wide, badgeInForm bool
+	settings                             string
+}
+
+// settingsTab: one of the settings pages, a tab of the row they share.
+type settingsTab struct{ Key, Label, Href string }
+
+// mayChangePassword: who asks is signed in with a password that is theirs
+// to change in the browser (not a shared account's).
+func mayChangePassword(rq *Req) bool {
+	s := settings()
+	return s.authOn() && isSignedIn(rq.r) && !s.sharedAccount(rq.user.Name)
+}
+
+// settingsTabs: the pages about whoever is signed in (with no users, about
+// the wiki), which the menu has as one entry, Settings, and which show each
+// other as a row of tabs (partials/settings_tabs.html): Connect an
+// assistant, Change password where there is one of theirs to change, and
+// with users Groups. Each keeps its own address; the menu's entry opens the
+// first. Nil where there is one page alone (a wiki without users and
+// without a login), which the menu names instead, and for a visitor.
+func settingsTabs(rq *Req) []settingsTab {
+	if rq == nil || rq.r == nil || rq.user.Name == visitor {
+		return nil
+	}
+	tabs := []settingsTab{{"assistant", "Assistant", "/assistant"}}
+	if mayChangePassword(rq) {
+		tabs = append(tabs, settingsTab{"password", "Password", "/password"})
+	}
+	if rq.user.Name != "" {
+		tabs = append(tabs, settingsTab{"groups", "Groups", "/groups"})
+	}
+	if len(tabs) < 2 {
+		return nil
+	}
+	return tabs
+}
+
+// settingsCrumb: a settings page's breadcrumb: Settings where the pages are
+// tabs, the page's own name (own) where it stands alone.
+func settingsCrumb(rq *Req, own string) []crumb {
+	if settingsTabs(rq) != nil {
+		return []crumb{{"Settings", ""}}
+	}
+	return []crumb{{own, ""}}
+}
 
 // sharingCookie: set to 1 by a browser in sharing mode (js/actions.js).
 const sharingCookie = "zone-sharing"

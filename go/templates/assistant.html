@@ -10,6 +10,7 @@
 {{define "body"}}
 {{.BreadcrumbHTML}}
 <div class="sheet assistant">
+{{- template "settings_tabs" .Shell}}
 <h1>Connect an assistant</h1>
 <p class="assistant-lead">An AI assistant (any MCP client) can search, read and write this wiki and its tasks{{if .User}} as you, <strong>{{.User}}</strong>: it sees and changes what you do, no more{{end}}.{{if .Viewer}} You are a viewer: your assistant reads, and changes nothing.{{end}}{{with .Changes}} What it changed is in the history, where you can take it back: <a href="{{.}}">{{if $.User}}your assistants' changes{{else}}assistants' changes{{end}}</a>.{{end}}</p>
 <div class="assistant-address">

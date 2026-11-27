@@ -23,12 +23,13 @@ Open the wiki, type your **User name** and **Password**, and click **Sign in**.
 A wrong name or password says "Incorrect user name or password.", without saying which one was wrong.
 
 Once signed in, the round button with your initial at the top right opens your **user menu**:
-**Groups**, **Connect an assistant**, **Change password**, **Sharing mode** (on a computer), **Admin** (for admins only) and **Sign out**.
+**Settings**, **Admin** (for admins only), **Sharing mode** (on a computer), **Help** and **Sign out**.
+**Settings** opens three pages that are tabs of each other: **Assistant** ([connect an assistant](assistants.md)), **Password** and **Groups**.
 On a phone, your name in the top row opens the same menu.
 
 ### Changing your password
 
-Choose **Change password** in the user menu (the `?` shortcuts dialog links to it too).
+Choose **Settings** in the user menu, then the **Password** tab (the `?` shortcuts dialog links to it too).
 Type **Your password now**, then the new one twice, at least 8 characters, and click **Change password**.
 
 Every other place you were signed in is signed out, so changing your password is also how you end a session someone else got hold of.
@@ -36,7 +37,7 @@ An assistant you connected stays connected; you end that on **Connect an assista
 
 Forgot your password? Zonewiki doesn't mail one: ask an admin for a reset link ([Reset links](#reset-links)).
 
-An account several people share (a demo's) has no **Change password**: see [A shared account](#a-shared-account).
+An account several people share (a demo's) has no **Password** tab: see [A shared account](#a-shared-account).
 
 ## Where a page lives decides who sees it
 
@@ -108,7 +109,7 @@ A group can also be made of other groups.
 
 ### Seeing your groups
 
-**Groups** in the user menu opens the Groups page (so does **All your groups** in the group pill's menu).
+**Settings** in the user menu, then the **Groups** tab, opens the Groups page (so does **All your groups** in the group pill's menu).
 It lists the groups you are in or own: who is in each, its owners and how many pages it has.
 Beside each are **New page** and **New list**, for a page or task list only that group sees.
 
@@ -283,7 +284,7 @@ Tasks still assigned to a disabled user or a viewer show under their status as "
 
 For a demo, or a screen in the office, several people sign in to one account with one password.
 Mark it with `./run.sh user shared NAME`, so that none of them locks the others out:
-**Change password** is gone from its menu, and **Connect an assistant** offers no token to make or revoke.
+The **Password** tab is gone from its **Settings**, and **Connect an assistant** offers no token to make or revoke.
 You set its password and token with `./run.sh user passwd NAME` and `./run.sh user token NAME`.
 
 Each assistant that signs in through the browser is still a connection of its own.

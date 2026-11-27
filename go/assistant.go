@@ -81,7 +81,7 @@ func assistantData(r *http.Request) *assistantView {
 	v := &assistantView{URL: siteURL(s.BaseURL, r, "/mcp"), User: name, Has: kept != "",
 		Shared:      s.sharedAccount(name),
 		AskPassword: s.authOn(), Viewer: s.isViewer(name), OAuth: oauthOn(s), Connections: grantsOf(name),
-		BreadcrumbHTML: breadcrumb(newReq(r), []crumb{{"Assistant", ""}}, "", false, "", "")}
+		BreadcrumbHTML: breadcrumb(newReq(r), settingsCrumb(newReq(r), "Assistant"), "", false, "", "")}
 	for i := range v.Connections {
 		c := &v.Connections[i]
 		c.Reach, _ = chooseReach(s, userOf(r), c.had, nil)
@@ -99,7 +99,7 @@ func assistantData(r *http.Request) *assistantView {
 func showAssistant(w http.ResponseWriter, r *http.Request, status int, v *assistantView) {
 	// The page may hold a token: no cache keeps it.
 	w.Header().Set("Cache-Control", "no-store")
-	page(w, newReq(r), status, "assistant.html", "Connect an assistant", shell{}, v)
+	page(w, newReq(r), status, "assistant.html", "Connect an assistant", shell{settings: "assistant"}, v)
 }
 
 // assistantPage: GET /assistant. ?done=revoke says so, from a fixed set

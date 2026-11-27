@@ -158,24 +158,42 @@ Your other lists and all tasks are one click from there, in the task app's **lis
 ### The user menu
 
 Who is signed in,
-**Groups** (your groups, and where you make one: `/groups`, Groups in `docs/spec/users.md`),
-**Connect an assistant** (your MCP token, `/assistant`, `docs/spec/mcp.md`),
-**Change password** (`/password`, Signing in in `docs/spec/users.md`),
+**Settings** (the settings pages, below),
+**Admin** (admins; Managing users in `docs/spec/users.md`),
 **Sharing mode** (`.menu-sharing`, **Turn sharing mode off** while it is on; desktop only, see Sharing mode),
 **Help** (the manual, `/help`: Help in `docs/spec/routes.md`) and Sign out are in the **user menu**,
 opened by the **user button** at the top right on desktop.
-Phones have Sign out in the page's top row, where the name opens the menu's pages, and the pages' links in the shortcuts dialog.
+Phones have Admin and Sign out in the page's top row, where the name opens the menu's pages, and the pages' links in the shortcuts dialog.
 
 **A wiki without users has the menu too**, so that what is about the wiki has one place in every wiki:
 three lines (`.top-menu`, "Menu") stand where the user button would, and open
-**Connect an assistant** (the wiki's token),
-**Change password** (the wiki's, when it has one) or **Set a login** (when it asks for none: the first run's form, `/setup`;
-in a wiki open to the network on purpose the manual's section on it, `/help/self-hosting#setting-a-login`, since its login is set on the host: A login on purpose in `docs/spec/security.md`),
+**Settings** (when it has a password),
 **Sharing mode**, **Help**, and **Sign out** when there is a password.
-No name and no Groups: there is nobody and there are none.
+A wiki that asks for no login has one settings page, so its menu names it, **Connect an assistant** (the wiki's token), and has **Set a login** after it (the first run's form, `/setup`;
+in a wiki open to the network on purpose the manual's section on it, `/help/self-hosting#setting-a-login`, since its login is set on the host: A login on purpose in `docs/spec/security.md`).
+No name: there is nobody.
 On phones the three lines are at the right of the page's top row (`.signout-menu`), beside Sign out when there is one.
 A public wiki's visitor has no menu, only **Sign in**.
 The menu is one template (`module_menu` in `templates/partials/modules.html`) and one entry of `moduleLinks` for everyone but a visitor; `SetLogin` in the page shell is where **Set a login** leads (`setLoginHref`), empty in a wiki with a login.
+
+### The settings pages
+
+**Settings** in the menu opens the pages about you (without users, about the wiki), which show each other as a row of tabs above their heading:
+
+| Tab | Page | Who has it |
+|-----|------|------------|
+| **Assistant** | Connect an assistant: your MCP token and your assistants' connections (`/assistant`, `docs/spec/mcp.md`) | everyone |
+| **Password** | Change password (`/password`, Signing in in `docs/spec/users.md`) | whoever signed in with a password of their own: not a shared account, not a wiki without a login |
+| **Groups** | your groups, and where you make one (`/groups`, Groups in `docs/spec/users.md`) | with users |
+
+Settings opens the first, Connect an assistant: the one a new user looks for.
+The breadcrumb of Connect an assistant and Change password says Settings; Groups is also the Groups module's page (The Groups pill), and keeps its own.
+Sharing mode, Help and Sign out are not settings and stay in the menu, as Admin does: it is about the wiki's people, not about you.
+
+How it works: each tab is a page of its own at the address it always had, so a link to one, the back button and a browser without JavaScript need nothing new, and there is no `/settings` route.
+`settingsTabs` in `go/views.go` says which pages who asks has; the page shell carries them (`Settings`) for the menu, and the view that is one of them says which (`shell{settings: …}`, `SettingsTab`), for the row (`settings_tabs` in `templates/partials/settings_tabs.html`, the admin page's `.admin-tabs`).
+With fewer than two pages there is no row and no Settings: the menu names the one page.
+Tests: `tests/test_settings_pages.py`, and from the menu in a browser in `tests/e2e/test_private.py`.
 
 ### Current module
 

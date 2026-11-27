@@ -78,7 +78,7 @@ def test_whoever_may_write_makes_a_group(client, wiki):
     sign_in(client, "alice")
     body = page(client)
     assert "You are in no group." in body and 'action="/groups"' in body
-    assert 'class="menu-groups">Groups</a>' in body                      # the user menu's way here
+    assert 'class="menu-settings">Settings</a>' in body and '<a href="/groups" aria-current="page">Groups</a>' in body   # the user menu's way here: a tab of Settings
     resp = make(client, "Apollo", "bob")
     assert resp.status_code == 303 and resp.headers["Location"] == "/groups/apollo?made"   # on to its home
     assert section(wiki, "user alice") == ["groups = apollo"] and section(wiki, "user bob") == ["groups = apollo"]

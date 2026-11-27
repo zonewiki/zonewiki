@@ -152,9 +152,10 @@ class TestALoginOnPurpose:
         assert resp.status_code == 303 and resp.headers["Location"] == "/"
         assert re.search(r"^password = pbkdf2-sha256:600000:", config(local), re.M) and "[user" not in config(local)
         assert (local / ".zone" / "config").stat().st_mode & 0o777 == 0o600
-        # Signed in with it; the menu has Change password now, and the form is gone.
+        # Signed in with it; the menu has Settings now (Change password is a tab of it), and the form is gone.
         menu = self.menu(client)
-        assert 'href="/password"' in menu and "Set a login" not in menu
+        assert 'class="menu-settings"' in menu and "Set a login" not in menu
+        assert '<a href="/password">Password</a>' in client.get("/assistant", headers=HOST).get_data(as_text=True)
         assert client.get("/setup", headers=HOST).status_code == 302
         client.post("/logout", headers=HOST)
         assert "/login" in client.get("/page/plans", headers=HOST).headers["Location"]

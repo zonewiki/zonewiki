@@ -1,0 +1,13 @@
+{{- /* The settings pages' row of tabs (settingsTabs in views.go): Connect
+    an assistant, Change password and Groups show each other, the one open
+    marked. Links, each to a page of its own; the look is the admin page's
+    tabs. Nothing where there is one page alone. */ -}}
+{{define "settings_tabs" -}}
+{{- if and .Settings .SettingsTab}}
+<nav class="admin-tabs settings-tabs" aria-label="Settings">
+  {{- range .Settings}}
+  <a href="{{.Href}}"{{if eq .Key $.SettingsTab}} aria-current="page"{{end}}>{{.Label}}</a>
+  {{- end}}
+</nav>
+{{- end}}
+{{- end}}

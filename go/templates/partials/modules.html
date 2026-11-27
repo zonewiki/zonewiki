@@ -38,21 +38,21 @@
 </nav>
 {{- end}}
 
-{{- /* The menu at the top right, in every wiki: Connect an assistant (the MCP
-    token, assistant.go), Change password (password.go) or, in a wiki
-    without a login, Set a login (the form of the first run, setup.go; in
-    a wiki open to the network on purpose the manual's section: there it is
-    set on the host), Sharing mode, Help (the manual, help.go) and Sign out. With users
-    it is the user menu: who is signed in and Groups first, Admin for an
-    admin. Phones have Admin and Sign out in the page's top row. Opened by
+{{- /* The menu at the top right, in every wiki: Settings (the settings
+    pages, which are tabs of each other: Connect an assistant, Change
+    password, Groups; settingsTabs in views.go), in a wiki without a login
+    Connect an assistant, the one there is, and Set a login (the form of
+    the first run, setup.go; in a wiki open to the network on purpose the
+    manual's section: there it is set on the host), Sharing mode, Help (the
+    manual, help.go) and Sign out. With users it is the user menu: who is
+    signed in first, Admin for an admin. Phones have Admin and Sign out in the page's top row. Opened by
     the top right's button (js/chrome.js). Outside the tab bar's nav: its
     touch handling picks a tab by position. */}}
 {{define "module_menu" -}}
 <div class="module-menu-backdrop" hidden></div><div class="module-menu page-menu" role="menu" aria-label="{{if .user}}Account{{else}}Menu{{end}}" hidden>
 {{- with .user}}<div class="menu-who">Signed in as <strong>{{.}}</strong></div>{{end -}}
-{{- if .user}}<a href="/groups" role="menuitem" class="menu-groups">Groups</a>{{end -}}
-{{- ""}}<a href="/assistant" role="menuitem" class="menu-assistant">Connect an assistant</a>
-{{- if .password}}<a href="/password" role="menuitem" class="menu-password">Change password</a>{{end -}}
+{{- with .settings}}<a href="{{(index . 0).Href}}" role="menuitem" class="menu-settings">Settings</a>
+{{- else}}<a href="/assistant" role="menuitem" class="menu-assistant">Connect an assistant</a>{{end -}}
 {{- with .set_login}}<a href="{{.}}" role="menuitem" class="menu-login">Set a login</a>{{end -}}
 {{- if .admin}}<a href="/admin" role="menuitem" class="menu-admin">Admin</a>{{end -}}
 {{- ""}}<button type="button" role="menuitem" class="menu-sharing">{{if .sharing}}Turn sharing mode off{{else}}Sharing mode{{end}}</button>
@@ -81,5 +81,5 @@
 <span class="action-sep" aria-hidden="true"></span>
 <button type="button" class="action-search" aria-label="Search" title="Search (Ctrl+P)">{{template "icon_search"}}<span class="action-label">Search</span></button>
 </nav>
-{{- range .ModuleLinks}}{{if .Menu}}{{template "module_menu" (dict "link" . "user" $.User "sign_out" $.SignOut "password" $.ChangePassword "set_login" $.SetLogin "admin" $.Admin "sharing" $.Sharing)}}{{end}}{{end}}
+{{- range .ModuleLinks}}{{if .Menu}}{{template "module_menu" (dict "link" . "user" $.User "sign_out" $.SignOut "settings" $.Settings "set_login" $.SetLogin "admin" $.Admin "sharing" $.Sharing)}}{{end}}{{end}}
 {{- end}}

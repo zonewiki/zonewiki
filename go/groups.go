@@ -177,7 +177,7 @@ func showGroups(w http.ResponseWriter, r *http.Request, status int, done, refuse
 			}
 		}
 	}
-	page(w, rq, status, "groups.html", "Groups", shell{}, v)
+	page(w, rq, status, "groups.html", "Groups", shell{settings: "groups"}, v)
 }
 
 // groupLinks: the groups named, as /groups lists them for user.
