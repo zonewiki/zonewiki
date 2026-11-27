@@ -965,6 +965,26 @@ class TestCheckLinks:
             "tickets/t: [[Missing]]"]
         assert call(client, "check_links", under="tickets")[0].endswith("\ntickets/t: [[Missing]]")
 
+    def test_the_one_page_of_the_same_name_is_the_guess(self, client, pages):
+        # A page moved into a folder: links to its old place find it by its last path part,
+        # wikilinks and markdown links alike, though its slug is far from the link's.
+        write_page(pages, "journal/2026/standup-notes", "# Standup notes\n")
+        write_page(pages, "a", "# A\n\n[[Standup Notes]], [[old/standup-notes]], [s](meetings/Standup-Notes.md)\n")
+        text, err = call(client, "check_links")
+        assert not err
+        assert text.splitlines()[1:] == [
+            "a: [[Standup Notes]] (maybe [[journal/2026/standup-notes]]?), "
+            "[[old/standup-notes]] (maybe [[journal/2026/standup-notes]]?), "
+            "[s](meetings/Standup-Notes.md) (maybe [[journal/2026/standup-notes]]?)"]
+
+    def test_several_pages_of_the_same_name_fall_back_to_the_closest_slug(self, client, pages):
+        # Two pages named golf: neither is the guess by its name; the slug close to the link's is.
+        write_page(pages, "cars/golf", "# Golf\n")
+        write_page(pages, "a", "# A\n\n[[car/golf]] and [[sports/golf]]\n")
+        text, err = call(client, "check_links")
+        assert not err
+        assert text.splitlines()[1:] == ["a: [[car/golf]] (maybe [[cars/golf]]?), [[sports/golf]]"]
+
     def test_relative_markdown_links_are_checked_too(self, client, pages):
         # Relative to the page's folder, absolute /page/ links too; files, folders, anchors and external links are not pages.
         write_page(pages, "notes/index", "# Notes\n")

@@ -13,6 +13,7 @@ import (
 	"maps"
 	"net/http"
 	"os"
+	"path"
 	"slices"
 	"sort"
 	"strconv"
@@ -187,9 +188,11 @@ func checkLinks(args jsonObj, base string, user asker) (string, error) {
 	// A link to a page user may not see isn't broken, nor suggested.
 	slugs := slugSet()
 	var all []string
+	byBase := map[string][]string{} // a page's last path part → the pages that have it
 	for _, s := range allSlugs() {
 		if canSee(user, s) {
 			all = append(all, s)
+			byBase[path.Base(s)] = append(byBase[path.Base(s)], s)
 		}
 	}
 	var out []string
@@ -208,12 +211,8 @@ func checkLinks(args jsonObj, base string, user asker) (string, error) {
 		}
 		var links []string
 		for _, link := range sortedKeys(missing) {
-			name := missing[link]
-			if strings.HasPrefix(link, "[[") {
-				name = mdtext.ToSlug(name)
-			}
-			if near := textsearch.CloseMatches(name, all, 1, 0.8); len(near) > 0 {
-				link += " (maybe [[" + near[0] + "]]?)"
+			if guess := linkGuess(mdtext.ToSlug(missing[link]), all, byBase); guess != "" {
+				link += " (maybe [[" + guess + "]]?)"
 			}
 			links = append(links, link)
 		}
@@ -226,6 +225,21 @@ func checkLinks(args jsonObj, base string, user asker) (string, error) {
 	}
 	return fmt.Sprintf("%d links%s point to pages that don't exist, on %d pages "+
 		"(fix the link, or create the page):\n", total, where, len(out)) + strings.Join(out, "\n"), nil
+}
+
+// linkGuess: the page a broken link to name (a slug) was probably meant
+// for, among all, the pages the asker sees (byBase: them by their last
+// path part). The one page whose last path part is the link's comes
+// first, as for a page moved into a folder ([[foo]] for journal/foo);
+// with none or several, the closest slug, if one is close enough.
+func linkGuess(name string, all []string, byBase map[string][]string) string {
+	if same := byBase[path.Base(name)]; len(same) == 1 {
+		return same[0]
+	}
+	if near := textsearch.CloseMatches(name, all, 1, 0.8); len(near) > 0 {
+		return near[0]
+	}
+	return ""
 }
 
 // How much of a long line grep_wiki and replace_in_pages show.

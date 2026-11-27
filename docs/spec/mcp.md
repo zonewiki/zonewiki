@@ -316,7 +316,11 @@ Tool descriptions stay in the model's context like the instructions, but aren't 
 #### `check_links`
 
 Every link leading to no page, by page: `[[wikilinks]]` (`missingLinks`, the renderer's rule) and markdown links that resolve to a page slug (relative to the page's folder, `/page/` links too; `mdLinkMisses`; external links, anchors, folders and files such as `_assets/` aside), code aside.
-Each comes with the existing slug it was probably meant for (`difflib.get_close_matches`, cutoff 0.8).
+Each comes with the existing page it was probably meant for, if there is one, "(maybe [[journal/foo]]?)" (`linkGuess`):
+the one page whose last path part is the link's (`[[foo]]` or `[[old/foo]]` for `journal/foo`, a page moved into a folder),
+else, with none or several of that name, the closest slug (`textsearch.CloseMatches`, cutoff 0.8).
+Only pages the asker sees are guessed or counted: a private page of another user is never offered, nor makes a visible page of its name one of several.
+A guess is help to fix the link, not how links resolve: a wikilink is still a path from the wiki's root (Wikilinks in `docs/spec/rendering.md`).
 Writes name the new ones in a note in the same form (Wikilink check).
 
 ### Writing

@@ -1450,6 +1450,21 @@ def test_link_warnings_dont_tell_which_private_pages_exist(client, wiki):
     assert "alice" not in mcp(client, "edit_page", slug="probe", old="nope-shared", new="private/alice/zzz")
 
 
+def test_link_guesses_are_only_pages_the_asker_sees(client, wiki):
+    """check_links guesses the one page with a broken link's last path part: never alice's
+    diary for bob's [[diary]], and her diary doesn't make his shared one of that name one of
+    several (which would tell him hers exists)."""
+    (wiki / "probe.md").write_text("# Probe\n\n[[diary]]\n")
+    out = mcp(client, "check_links")
+    assert "[[diary]]" in out and "maybe" not in out and "alice" not in out
+    (wiki / "journal").mkdir()
+    (wiki / "journal/diary.md").write_text("# Diary\n")
+    out = mcp(client, "check_links")
+    assert "probe: [[diary]] (maybe [[journal/diary]]?)" in out and "alice" not in out
+    # alice sees both: for her, the name is no longer one page's.
+    assert "\nprobe: [[diary]]\n" in mcp(client, "check_links", token="alice-token") + "\n"
+
+
 def test_search_statistics_ignore_private_pages(client, wiki):
     """Fuzzy matching only runs for a word no page has. If alice's pages counted,
     bob's typo "quokkaflutte" would stop finding his page the moment her
